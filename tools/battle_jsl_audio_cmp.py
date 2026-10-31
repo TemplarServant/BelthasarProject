@@ -3,19 +3,20 @@ r"""Does the music keep playing through the battle's two sound JSLs? The attract
 
     python tools/battle_jsl_audio_cmp.py
 
-USER REPORT: "when battles start/end the music stutters". The battle's driver-mode posts (C0/1BAB at entry,
-C0/1BE6 at the end -- on the attract's battle `70 01` and `70 00`) are SYNCHRONOUS `JSL $C7:0004`s: the field's CPU
-waits in C7's handshake for 14 and 11 frames while the SPC keeps running, and the S-DSP keeps sounding. The port prices
-that time on its loader clock and used to output the frames it had paid for as SILENCE (and to lose all but the last
-two frames of the samples the DSP had emitted meanwhile). This grades the output STREAM on both machines -- the 534
-DSP samples a frame, ct.exe --peek PEEK_PCM against Belthasar CT_AUDIO_PCM -- over the 33 frames from each post:
-  * SILENT frames (all zero): the old port's output on every frame the JSL had paid for;
-  * CONTINUITY: a stream that advances by exactly its frame joins each frame to the last with a step no bigger than
-    the steps inside a frame; one that re-reads the DSP's newest samples (the frame is not the NEXT 534) jumps at every
+The battle's driver-mode posts (C0/1BAB at entry, C0/1BE6 at the end -- on the attract's battle `70 01` and `70 00`)
+are synchronous `JSL $C7:0004`s: the field's CPU waits in C7's handshake for 14 and 11 frames while the SPC keeps
+running, and the S-DSP keeps sounding. The port prices that time on its loader clock; its output must carry the
+samples the DSP emits meanwhile, not silence. This grades the output stream on both machines -- the 534 DSP samples a
+frame, ct.exe --peek PEEK_PCM against Belthasar CT_AUDIO_PCM -- over the 33 frames from each post:
+  * silent frames (all zero, or a held value);
+  * continuity: a stream that advances by exactly its frame joins each frame to the last with a step no bigger than
+    the steps inside a frame; one that re-reads the DSP's newest samples (the frame is not the next 534) jumps at every
     boundary. The window's mean boundary step over its mean in-frame step is ~0.6-1.1 on the cartridge and on a
     continuous port; re-reading the ring gives 3.7. Continuous = below 2.
 The timelines are aligned by the posts themselves (the cartridge's C0:1BDF / C0:1C89 writer frames, the port's
 `[snd] field fN C0/1BDF` lines), not by a frame number.
+
+Regression check: battle-jsl-audio-keeps-playing.
 """
 import os
 import re
@@ -25,8 +26,8 @@ import sys
 
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
-STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
-RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json)
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 TMP = 'build/_jslaudio'
 WINDOW = 33
 FRAME = 534 * 2 * 2
@@ -38,10 +39,9 @@ def pcm_frames(path):
 
 
 def window(frames, at):
-    """(silent frames, boundary-step / in-frame-step ratio) over WINDOW frames from `at`. A SILENT frame is one that does
-    not move: all zero, or each channel one held value (a DC hold is silence too -- 2026-09-27, audio.c's short read pads
-    a frame with its last sample, and a stream starved to 1-2 samples a frame became 13 flat frames the all-zero test and
-    the step ratio both passed)."""
+    """(silent frames, boundary-step / in-frame-step ratio) over WINDOW frames from `at`. A silent frame is one that does
+    not move: all zero, or each channel one held value (a DC hold is silence too: audio.c's short read pads a frame with
+    its last sample, so a starved stream shows as flat frames that pass both the all-zero test and the step ratio)."""
     silent = 0
     bd = wd = 0
     nb = nw = 0

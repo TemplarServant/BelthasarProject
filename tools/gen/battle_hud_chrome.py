@@ -1,26 +1,26 @@
 #!/usr/bin/env python
-"""The battle HUD strip's CHROME as the ROM builds it: BG1 tiles out of the tilemap rows 16..21 ($7E:0B40).
+"""The battle HUD strip's chrome as the ROM builds it: BG1 tiles out of the tilemap rows 16..21 ($7E:0B40).
 
     python tools/gen/battle_hud_chrome.py [out.h]      (default src/data/battle_hud_chrome.h)
 
-THE MECHANISM (disasm/notes/battle_hud_command_windows.md). In the strip's lines every BG reads the tilemap at VRAM
+The mechanism (disasm/notes/battle_hud_command_windows.md): in the strip's lines every BG reads the tilemap at VRAM
 word $7800 (the HDMA channel 0 register block $BE9B = 78 78 78 78); BG3 draws the text rows 1..7, BG1 the frame rows
 16..21, whose WRAM image is $7E:0B40 (6 rows x $40 bytes, DMA'd beside the text buffer $0CC0). The ROM writes it in
 two places only:
-  * C1/1C3A (and the boot's CC/E4ED): copy the BASE $D1:5800 -- the enemy-name window (cols 0..11) + the party window
+  * C1/1C3A (and the boot's CC/E4ED): copy the base $D1:5800 -- the enemy-name window (cols 0..11) + the party window
     (cols 12..31) -- $180 bytes;
-  * C1/081E -> C1/0929: for every ENQUEUED seat s ($A6D9,s != FF), the command window's frame $D1:59FC (7 cells x 6
+  * C1/081E -> C1/0929: for every enqueued seat s ($A6D9,s != FF), the command window's frame $D1:59FC (7 cells x 6
     rows) at cols 6s..6s+6 -- or its last 6 cells at cols 6s+1..6s+6 when seat s-1 is enqueued too, so s-1 keeps
     its right edge. (C1/0547/054C/0564: only with $A6DE != 0, $A86B == 0 and no submenu, $95DB == 0.)
-So the chrome is a function of the queue. The pixels of a tile depend on the tile and the LINE (the COLDATA gradient
+So the chrome is a function of the queue. The pixels of a tile depend on the tile and the line (the COLDATA gradient
 runs per line; the dither is in the tile), never on the column.
 
-WHAT THIS DOES. The three chrome bakes the port shipped (src/data/battle_hud.h ctBattleHudBg1Enemy / ctBattleHudBg1Cmd,
+What this does: the three chrome bakes (src/data/battle_hud.h ctBattleHudBg1Enemy / ctBattleHudBg1Cmd,
 src/data/battle_hud_sub.h ctBattleHudBg1Tgt -- PEEK_ISOBG=0 captures of the cartridge, see tools/gen/battle_hud.py /
 tools/gen/battle_hud_sub.py) are three queue states of that one machine: no seat enqueued, seats {0,1}, seat {1} (the "target
 picker" bake is the seat-1-only window: the fixture gato_target.raw.wram has $A6D9 = FF 01 and $9609 = 0). Laid over
 the ROM's tilemap for its queue, every bake pixel becomes a sample of (tile word, strip line, x & 7); this script
-checks that the 36864 samples never disagree, that every (tile, line) the law can produce for ANY queue is sampled,
+checks that the samples never disagree, that every (tile, line) the law can produce for any queue is sampled,
 and writes the table. The renderer then draws any queue state -- seat 0 alone, 3 PCs -- from $0B40.
 """
 import os as _ctos, sys as _ctsys

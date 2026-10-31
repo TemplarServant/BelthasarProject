@@ -1,20 +1,20 @@
 #!/usr/bin/env python
-# GENERATOR for the Stage-1 GATO pose-engine baked data.
-# Emits three TRACKED headers from the ROM + an oracle WRAM sheet dump:
+# Generator for the stage-1 GATO pose-engine data. Emits three tracked headers from the ROM + an oracle WRAM
+# sheet dump:
 #   src/data/animeng_e3_gato.h     -- E3 assembly records (positions + cell-words), base $E30000 stride 0x78
-#   src/data/animeng_e4_gato.h     -- resolved per-facing pose windows (oracle-captured $9907[6] cycles + dwells)
-#   src/data/animeng_sheet_gato.h  -- the $7F8000 sprite sheet (INTERIM FIXTURE: decompressor is O3/C5 open)
+#   src/data/animeng_e4_gato.h     -- per-facing pose windows (the oracle's $9907[6] cycles + dwells)
+#   src/data/animeng_sheet_gato.h  -- the $7F8000 sprite sheet (a fixture from oracle WRAM; open items O3/C5)
 #
-# Provenance / how to reproduce:
+# Sources:
 #   ROM   = repo-root Chrono_Trigger_USA_SNES.sfc (unheadered 4MB, HiROM).
 #   SHEET = $7F8000 region of gato_noatk.state's WRAM, captured via:
 #             ct.exe --peek gato_noatk.state g.raw --btnscript "0:70"
-#           then g.raw.wram[0x18000:] (=$7F8000). A canonical copy lives at
-#           saves/battle_re/gato_sheet_noatk_f70.wram (a private capture); any in-battle WRAM of the fight serves.
-#   The E3 record layout ([48 cell-words +0x00][12 dx,dy +0x60]) is resolved in
-#   disasm/notes/battle_anim_engine.md ADDENDUM 1 (contradiction C1).
-#   The per-facing windows are the oracle $9907[6] cursor cycles captured this session
-#   (gato_noatk idle; corpus/crono_far{left,right} walks; gato_moving_lake UP walk).
+#           then g.raw.wram[0x18000:] (=$7F8000). A copy is saves/battle_re/gato_sheet_noatk_f70.wram
+#           (a private capture); any in-battle WRAM of the fight serves.
+#   The E3 record layout ([48 cell-words +0x00][12 dx,dy +0x60]): disasm/notes/battle_anim_engine.md
+#   ADDENDUM 1 (contradiction C1).
+#   The per-facing windows are the oracle's $9907[6] cursor cycles
+#   (gato_noatk idle; corpus/crono_far{left,right} walks; gato_moving_lake up walk).
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
@@ -26,7 +26,7 @@ ROM = _romlib.load(os.path.join(ROOT, "Chrono_Trigger_USA_SNES.sfc"))
 # WRAM of GATO's fight serves (the recipe gato_inbattle, tools/recipes/; a raw 128 KB .wram dump also works).
 SHEET_WRAM = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "recipes", "gato_inbattle.state")
 
-E3_BASE = (0xE3 - 0xC0) << 16       # $E30000  (= $1C78[pidx] for GATO, live-confirmed)
+E3_BASE = (0xE3 - 0xC0) << 16       # $E30000  (= $1C78[pidx] for GATO on the oracle)
 STRIDE  = 0x78
 N_REC   = 0x20                       # stage-1 idle/walk 0x00..0x0B + stage-2 song sway 0x0D..0x0F +
                                      #   attack blocks UP 0x10-13 / FRONT 0x14-17 / LEFT 0x18-1B / RIGHT 0x1C-1F
@@ -93,11 +93,10 @@ def w_e4():
         s = ' '.join("{0x%02X,%d}," % (i,d) for i,d in steps)
         o.append("  { { %s } },  // facing %d %s" % (s, f, name))
     o += ["};", ""]
-    # ---- STAGE 2: the ATTACK (rear-up + strike per facing), FRONT tile-stream, and SONG windows ----
-    # Pinned this session by DIRECT ROM E3 extraction, cross-validated BYTE-EXACT against BOTH the corpus
-    # captures (crono_{left,right,up}/gato_mid) AND the retired bakes (ctGatoAtkFace/ctGatoSwipe/ctGatoSong):
-    #   position sub-block (+0x60) == the capture rel-to-live-foot cells; cell-word gather (+0x00) from the
-    #   $7F8000 sheet == the capture VRAM (see tools/ notes / the E3 dump). facing 0=UP 1=DOWN/front 2=LEFT 3=RIGHT.
+    # ---- stage 2: the attack (rear-up + strike per facing), front tile stream, and song windows ----
+    # From the ROM's E3 records; they match the corpus captures (crono_{left,right,up}/gato_mid): the position
+    # sub-block (+0x60) equals the capture's cells relative to the live foot, and the cell-word gather (+0x00)
+    # from the $7F8000 sheet equals the capture VRAM. facing 0=UP 1=DOWN/front 2=LEFT 3=RIGHT.
     o += [
       "// STAGE 2 (attack/hurt/song) -- the E3 assembly INDICES the CD action script selects, pinned this",
       "// session from the ROM + the corpus captures + the retired bakes (all byte-exact). See w_e4()/generator.",

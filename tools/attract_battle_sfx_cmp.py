@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-r"""The attract demo battle's SOUND BRACKET against the cartridge: what the field posts around the battle, and the
+r"""The attract demo battle's sound bracket against the cartridge: what the field posts around the battle, and the
 SFX set the driver holds in ARAM during and after it.
 
     python tools/attract_battle_sfx_cmp.py
 
 Loc 0AD sets $2A1F bit6, which sends the field's two battle routines down their `70` arms (C0/1BAB -> 1BD5
 `70 01`, C0/1BE6 -> 1C7F `70 00`): the battle SFX set without a battle song, and back. Command $70 is C7/08E3,
-which uploads the $2F00 set through C7/0922. The port used to run C0/1BE6's restore chain unconditionally, whose
-`81 00 00 FF` ... `81 40 FF FF` pulled the master volume to 0 and faded it back -- the music dipped when the battle
-ended.
+which uploads the $2F00 set through C7/0922. C0/1BE6's restore chain (`81 00 00 FF` ... `81 40 FF FF`, the master
+volume pulled to 0 and faded back) is not on this arm; running it dips the music when the battle ends.
 
-Port: the LIVE battle path (no --selftest; the headless --selftest battle resolves synchronously and runs neither
+Port: the live battle path (no --selftest; the headless --selftest battle resolves synchronously and runs neither
 routine), CT_SNDTRACE=1 for the posts, CT_AUDIO_PROBE(+_ARAM) for the 64 KB ARAM at a frame inside the battle and one
 after it. Cartridge: saves/attract_demo_battle_f1850.state (inside the battle, after its `70 01`) and
 saves/attract_demo_battle_f1850.state + 400 frames (after its `70 00`: the JSL at f322 line 238 returns at f337
-line 43, $1E10 1 -> 0 by C7/08F5), ARAM via PEEK_ARAM. NOT attract_loc0AD_flea.state: its driver latch $1E05 is $18
-(bit7 clear), so C7/0157 skips every command in that run and set A would be there without any upload.
+line 43, $1E10 1 -> 0 by C7/08F5), ARAM via PEEK_ARAM. Note: not attract_loc0AD_flea.state: its driver latch $1E05
+is $18 (bit7 clear), so C7/0157 skips every command in that run and set A would be there without any upload.
 Compared: ARAM $2F00-$4702 -- the 6144-byte set plus the three bytes a one-unit-too-long stream would write.
+
+Regression check: attract-battle-sfx-bracket-vs-oracle.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""src/data/ow_gullmap.h -- which slot of the gull atlas (CT_ASSET_WORLDSPR id 1) each ROM gull tile name is, BY PIXEL
-IDENTITY.
+"""src/data/ow_gullmap.h -- which slot of the gull atlas (CT_ASSET_WORLDSPR id 1) each ROM gull tile name is, matched
+by pixels.
 
     python tools/gen/ow_gullmap.py [--capture] [--out PATH]
 
@@ -30,7 +30,7 @@ def main():
     ap.add_argument('--capture', action='store_true', help='read saves/ow_w0.state and saves/ow_gulls.spr')
     ap.add_argument('--out', default=OUT)
     a = ap.parse_args()
-    os.environ.pop('CT_ORACLE_LOGICAL', None)          # the peek reads the plain oracle, as the original did
+    os.environ.pop('CT_ORACLE_LOGICAL', None)          # the peek reads the plain oracle
     if a.capture:
         w0 = os.path.join(ROOT, 'saves', 'ow_w0.state')
         spr = open(os.path.join(ROOT, 'saves', 'ow_gulls.spr'), 'rb').read()

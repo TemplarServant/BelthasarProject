@@ -75,7 +75,7 @@ def cmd_objs(args):
 
 def cmd_owamb(args):
     """Print the live overworld ambient-object blocks ($0B30-$1B30 stride 0x40,
-    sig 0x0F63): pc, attr, pos, vel per block. Only meaningful for OVERWORLD-mode
+    sig 0x0F63): pc, attr, pos, vel per block. Only meaningful for overworld-mode
     WRAM (the field engine reuses this RAM; stale sig matches possible)."""
     kind = wram.detect(args.state)
     w = wram.load(args.state)

@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
-r"""Diff the ENGINE's title-intro swing frame against the ORACLE's own framebuffer, pixel for pixel.
+r"""Diff the engine's title-intro swing frame against the oracle's own framebuffer, pixel for pixel.
 
     python tools/title_intro_cmp.py <swing frame> [<swing frame> ...]
 
-The engine's swing frame k is the oracle's boot frame k + CT_INTRO_BASE (141, measured: it is the
-frame the driver task $7E:5BCF first runs, and the alignment was found by sweeping it until the diff
-went to zero rather than by counting frames in the boot).
+The engine's swing frame k is the oracle's boot frame k + CT_INTRO_BASE (141: the frame the driver task
+$7E:5BCF first runs). The frames graded span the copyright block (until frame ~109), the swing and the
+mode-2 logo phase (from frame ~589); disasm/notes/title_intro.md.
 
-⚠ The oracle's 512x480 dump is not a plain 2x image: ppu_putPixels writes scanline y to buffer row
-y*2 + 16, so the 224 visible lines are IMAGE rows 8..231 of the 256x240 that ctlib/fb.py decodes.
-Comparing row 0 to row 0 shows ~6000 "mismatches" that look exactly like a rendering defect.
-
-The swing is byte-exact against the oracle for frames ~110..588. OUTSIDE that window two layers the
-port does not draw yet are on screen and account for every differing pixel: the COPYRIGHT block until
-frame ~109 (668 px) and the mode-2 LOGO phase from frame ~589 (1489 px). Both are named as open in
-disasm/notes/title_intro.md §5.
+Note: the oracle's 512x480 dump is not a plain 2x image: ppu_putPixels writes scanline y to buffer row
+y*2 + 16, so the 224 visible lines are image rows 8..231 of the 256x240 that ctlib/fb.py decodes.
 """
 import os
 import subprocess
@@ -29,19 +23,16 @@ FIELD = os.path.abspath('build/Belthasar.exe')
 CT_INTRO_BASE = 141
 
 
-# ⚠ PER-PROCESS temp names. TWO checks run this script -- title-intro-swing-vs-oracle and
-# title-intro-logo-vs-oracle -- and regress.py schedules checks in PARALLEL (--jobs defaults to
-# min(12, CPUs-1)). With one fixed pair of paths the two races: `compare` DELETES the shot before
-# each frame precisely so a stale file cannot be graded, and the sibling's delete lands on the file
-# this run just wrote. Observed as an intermittent 0.1s 'signature missing' on whichever lost, while
-# running the same argv alone passes 8/8 at 0 px in 99s -- a red that is not a regression is worse
-# than useless, because it trains you to discount the suite.
+# Per-process temp names: two checks run this script (title-intro-swing-vs-oracle and
+# title-intro-logo-vs-oracle) and regress.py runs checks in parallel. `compare` deletes the shot
+# before each frame so a stale file cannot be graded; with shared paths the sibling's delete would
+# land on the file this run just wrote.
 _TMP = 'build/_introcmp_%d' % os.getpid()
 
 def compare(k):
     shot = _TMP + '_ours.raw'
-    # ⚠ The engine only writes the shot if it REACHES that frame of the sequence; without this the
-    # comparison would silently grade the previous run's file, which is the worst kind of green.
+    # Note: the engine writes the shot only if it reaches that frame of the sequence; without this
+    # delete the comparison would grade the previous run's file.
     if os.path.exists(shot):
         os.remove(shot)
     env = dict(os.environ, CT_SRAM_FRESH='1', CT_NAMEAS='Crono',

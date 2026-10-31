@@ -1,17 +1,17 @@
-# Bake the EQUIP screen's ROM data into src/data/menu_equip.h, so the menu stays ROM-free.
-# Derived in disasm/notes/menu2_equip_change.md; every table below is read straight out of the ROM
-# at the address named, and the three ITEM PROPERTY PAGES are REBUILT here exactly the way the menu
-# open builds them in RAM (C2/98B5 -> C2/9906 -> C2/992B -> C2/994C):
+# Bake the Equip screen's ROM data into src/data/menu_equip.h, so the menu reads no ROM.
+# disasm/notes/menu2_equip_change.md. Every table below is read from the ROM at the address named, and
+# the three item property pages are rebuilt the way the menu open builds them in RAM
+# (C2/98B5 -> C2/9906 -> C2/992B -> C2/994C):
 #
 #   C2/8881(id)  class = the first k with id < C2/88A7[k+1]      (C2/88A7 = 00 5A 7B 94 BC F2)
 #   C2/88AD      X  = FF/CF0E[class] + off * FF/CF18[class]      -> the "A" record, bank $CC
 #   C2/88D8      X2 = FF/CF1D[class] + off * FF/CF27[class]      -> the "B" record, bank $CC
 #   1. for id 0..0xF1 : $7A00[id] = CC:0003+X ; $7B00[id] = CC:0004+X
 #   2. clear $7A00[0xBC..0xF1] (C2/9906) and $7B00[0x94..0xF1] (C2/9918)  -- MVN copies A+1 bytes
-#   3. for id 0x94..0xBB : if (CC:0001+X2 & 0x40) $7B00[id] = CC:0002+X2   <- X2, and it STARTS at 0x94
+#   3. for id 0x94..0xBB : if (CC:0001+X2 & 0x40) $7B00[id] = CC:0002+X2   <- X2, and it starts at 0x94
 #   4. for id 0..0x93 : $7C00[id] = CC:0000+X2
 #
-# Validated against a live oracle page (a --peek .wram of an open menu): 0 mismatches on all three.
+# The optional cross-check at the end compares the pages with a live oracle page (a --peek .wram of an open menu).
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
@@ -40,7 +40,7 @@ for i in range(0xF2):
     bonus[i] = ROM[0x0C0000 + X + 4]
 for i in range(0xBC, 0xF2): mask[i] = 0      # MVN copies A+1 bytes: $7ABC..$7AF1 (C2/9906)
 for i in range(0x94, 0xF2): bonus[i] = 0     # ... and $7B94..$7BF1 (C2/9918)
-for i in range(0x94, 0xBC):                  # C2/9924: the loop STARTS at 0x94 and runs to 0xBB
+for i in range(0x94, 0xBC):                  # C2/9924: the loop starts at 0x94 and runs to 0xBB
     X, X2 = locate(i)
     if ROM[0x0C0000 + X2 + 1] & 0x40: bonus[i] = ROM[0x0C0000 + X2 + 2]
 for i in range(0x94):

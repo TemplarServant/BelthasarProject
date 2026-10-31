@@ -4,8 +4,8 @@
 Consumes an execution trace produced by `ct.exe --trace N` (one line per
 executed opcode: "KK PPPP M X E", i.e. program bank, PC, M flag, X flag, emu
 flag) plus the ROM, and emits an annotated assembly listing of the executed
-path. Because the trace carries the *real* M/X flags at each instruction, the
-immediate operand widths are always correct (no REP/SEP guesswork).
+path. The trace carries the M/X flags of each executed instruction, so the
+immediate operand widths need no REP/SEP tracking.
 
 Usage:
   python tools/disasm65816.py <trace.txt> [rom.sfc] > out.asm

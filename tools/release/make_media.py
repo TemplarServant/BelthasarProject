@@ -3,13 +3,14 @@ r"""Make the README's screenshots and clip (docs/media/) from the port running t
 
     python tools/release/make_media.py [--out docs/media]
 
-Every picture is the C engine's own output (build/Belthasar.exe --boot, headless), never the oracle's: two runs of the
-cold start through the attract demo, one with every option at its default (CT_SHOTS) and two with every graphics mod
-on (WIDE_INI: the widescreen at 16:9, the Steam margins, the scene adjustments, the bottom lines filled; CT_WIDESHOTS:
-the stills, then the clip's every frame). The Steam margins need ct_wide.dat in the repository's root (tools/setup.py
-makes it from the owner's Steam copy); without it the margins stay off and the sides show the room alone. The frames picked are listed in SHOTS and CLIP; each is
-scaled 2x with nearest-neighbour. The clip (the Zombor fight's Luminaire, widescreen) is encoded with ffmpeg, which
-must be on PATH. The F1 overlay shot comes from CT_OVERLAY_SHOT. See docs/DEBUG_SURFACE.md for the variables.
+Every picture is the C engine's own output (build/Belthasar.exe --boot, headless), never the oracle's: three runs of
+the cold start through the attract demo, one with every option at its default (CT_SHOTS) and two with every graphics
+mod on (WIDE_INI: the widescreen at 16:9, the Steam margins, the scene adjustments, the bottom lines filled;
+CT_WIDESHOTS: first the stills, then every frame of the clip). The Steam margins need ct_wide.dat in the repository's
+root (tools/setup.py makes it from the owner's Steam copy); without it the margins stay off and the sides show the room
+alone. The frames picked are listed in SHOTS and CLIP; each is scaled 2x with nearest-neighbour. The clip (the Zombor
+fight's Luminaire, widescreen) is encoded with ffmpeg, which must be on PATH. The F1 overlay shot comes from
+CT_OVERLAY_SHOT. See docs/DEBUG_SURFACE.md for the variables.
 
 These files are the one place the public tree carries pictures of the game; tools/release/scan_rom_leaks.py accepts
 binaries only under docs/media/ (docs/ROM.md, "What is never distributed").
@@ -34,8 +35,8 @@ SHOTS = {                                       # name: (run, frame) -- 'v' vani
 }
 CLIP = (9610, 9892)                             # widescreen frames [from, to) of the clip
 OVERLAY = 9910                                  # the F1 overlay's Video tab over the widescreen picture; ends the run
-WIDE_INI = '[video]\nwidescreen=16:9\nsteam_margins=1\nscene_adjustments=1\nfill_bottom_lines=1\n'   # (the frames
-#   between and the internal resolution change no still: CT_WIDESHOTS takes the engine's own 1x frame)
+# The frames-between and internal-resolution mods change no still (CT_WIDESHOTS takes the engine's own 1x frame).
+WIDE_INI = '[video]\nwidescreen=16:9\nsteam_margins=1\nscene_adjustments=1\nfill_bottom_lines=1\n'
 
 
 def load_raw(path):
@@ -68,7 +69,7 @@ def main():
     vf = sorted({f for r, f in SHOTS.values() if r == 'v'})
     run({'CT_SETTINGS': none_ini, 'CT_SHOTS': os.path.join(tmp, 'v'), 'CT_SHOTS_AT': ','.join(map(str, vf)),
          'CT_SHOTS_EXIT': '1'}, tmp, 'vanilla.log')
-    os.makedirs(os.path.join(tmp, 'w'))                      # the widescreen stills: every 90th frame (all of them are)
+    os.makedirs(os.path.join(tmp, 'w'))                      # the widescreen stills: every 90th frame (each 'w' frame in SHOTS is one)
     run({'CT_SETTINGS': wide_ini, 'CT_WIDESHOTS': os.path.join(tmp, 'w', 'w'), 'CT_WIDESHOTS_EVERY': '90',
          'CT_OVERLAY_SHOT': '%s@%d:0' % (os.path.join(tmp, 'overlay.bmp'), OVERLAY)}, tmp, 'wide.log')
     os.makedirs(os.path.join(tmp, 'c'))                      # the clip: every frame of its window

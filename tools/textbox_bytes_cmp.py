@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-r"""The textbox machine's bytes, port against the rule's cartridge, every frame (the alignment of ct-frame-alignment-p2).
+r"""The textbox machine's bytes, port against the rule's cartridge, every frame (the alignment in docs/TESTING.md).
 
     python tools/textbox_bytes_cmp.py <drive>...
 
 The box machine C0/1F87 -- $0129 its state (1-5 the open ramp, 6 the typewriter, 7 waiting, 0D the close ramp), $0126
-the window, $0131 the LINE cursor C0/2126 steps, $0134 the accepted-press latch -- read on both sides from the same
+the window, $0131 the line cursor C0/2126 steps, $0134 the accepted-press latch -- read on both sides from the same
 state with the same presses: the cartridge on `ct.exe --monitor` (CT_ORACLE_LOGICAL=1), the port on CT_FIELD_MEMMON
 from the state's WRAM with its sound processor seeded from the state (CT_AUDIO_SEEDSTATE: a song load costs the SPC
-time it costs the cartridge). The field's WRAM aligns at the SAME frame number, and the port's frame N carries the
+time it costs the cartridge). The field's WRAM aligns at the same frame number, and the port's frame N carries the
 cartridge's pad of frame N-1, so the port's presses are the cartridge's + 1 (as door_list_cmp.py / dash_run_cmp.py
 drive them).
 
 Why not the lockstep projection (CT_FIELDLOCK + CT_PROJECT=box): there the oracle runs its whole frame before the
 port's and both get the same pad, so on a state saved at a frame's end (every recipe state) every transition the
 script makes by itself reads one frame apart (the oracle's late commit against the port's not-yet), and every press
-reaction reads together. The owner's s439 capture had the opposite phase (its first frame ran no main-loop iteration),
-which is what made that projection CLEAN on it.
+reaction reads together. Only a state with the opposite phase (its first frame runs no main-loop iteration) reads
+clean under that projection.
 
   s439   saves/field_re/s439_marle_choice_lake.state: Marle's pendant dialogue (scene 439), A every 100 frames from
          f100 -- str 0x29's pages and decision, str 0x2B's, the join's song load (45 frames of SPC on both sides), the

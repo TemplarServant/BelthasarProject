@@ -2,7 +2,7 @@
 """Extract Work RAM ($7E0000-$7FFFFF, 128KB) + VRAM (64KB) from a snes9x save state.
 
 snes9x save states are gzip-compressed, signature "#!s9xsnp", then blocks "NAME:LLLLLL:<data>".
-We want RAM (the 128KB WRAM) and VRA (64KB VRAM). Used to render the overworld EXACTLY from a live
+The blocks read are RAM (the 128KB WRAM) and VRA (64KB VRAM). Used to render the overworld from a live
 engine snapshot (the displayed world map is assembled at runtime in WRAM; see assets/overworld_live.py).
 
 Usage: python assets/snes9x_extract.py <save.state> [out_dir=build]

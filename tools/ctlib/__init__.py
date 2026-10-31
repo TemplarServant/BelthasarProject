@@ -1,9 +1,8 @@
-"""ctlib -- shared RE-tooling library for the Chrono Trigger decomp.
+"""ctlib -- shared reverse-engineering helpers for the Chrono Trigger port.
 
-Canonical, stdlib-only consolidation of the plumbing that was copy-pasted
-across the one-off tools/_*.py probes. OBSERVATION ONLY: these modules read
-the ROM / savestates / oracle dumps; they never alter engine behavior.
-See tools/README.md for the legacy-script -> ctlib map.
+Stdlib-only. These modules only read the ROM, savestates and oracle dumps;
+they never change engine behaviour. tools/README.md maps the older
+tools/_*.py probes to the ctlib module that replaces each.
 
 Modules:
   s9x    - snes9x '#!s9xsnp:0011' savestate access (wraps tools/parse_ppu_state.py)
@@ -26,7 +25,7 @@ TOOLS_DIR = os.path.dirname(_CTLIB_DIR)          # .../tools
 REPO_DIR = os.path.dirname(TOOLS_DIR)            # repo root
 ASSETS_DIR = os.path.join(REPO_DIR, 'assets')
 
-# The canonical single-file tools (parse_ppu_state.py, disasm65816.py) live in
-# tools/ -- make them importable no matter where ctlib is imported from.
+# Make the single-file tools in tools/ (parse_ppu_state.py, disasm65816.py)
+# importable wherever ctlib is imported from.
 if TOOLS_DIR not in sys.path:
     sys.path.insert(0, TOOLS_DIR)

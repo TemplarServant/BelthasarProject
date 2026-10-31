@@ -1,9 +1,9 @@
-"""Many oracle frames from ONE `ct.exe --peek` run (src/main.c PEEK_SHOTS).
+"""Many oracle frames from one `ct.exe --peek` run (src/main.c PEEK_SHOTS).
 
 A frame of `--peek <state> <out> --btnscript S` is a pure function of the state and the buttons up to it, so the dump
 after n frames is the same whether the run stops at n or goes on. `shots(state, script, frames)` runs the script once,
-cut to the last frame wanted, and returns {n: path of the dump after n frames} -- byte-identical to what
-`--peek <state> <out> --btnscript <S cut to n frames>` writes to <out> (graded by tools/peekshots_selftest.py).
+cut to the last frame wanted, and returns {n: path of the dump after n frames}, identical to what
+`--peek <state> <out> --btnscript <S cut to n frames>` writes to <out> (checked by tools/peekshots_selftest.py).
 
     from ctlib import peekshots
     got = peekshots.shots('saves/x.state', '0:4,200:2,0:100', [10, 11, 12], env=dict(os.environ, CT_ORACLE_LOGICAL='1'))

@@ -4,12 +4,11 @@ jump as a fight begins or ends.
 
     python tools/fill_battle_hold_check.py
 
-The owner, 2026-10-25: "when battles start the screen goes up 1 px, and when they end it goes down 1 px". With the mod
-on and the ROM's camera at a room's bottom the field draws the picture one line lower than the SNES (its origin held so
-the room's last row stays on line 223, src/field.c fillHold); the fights composed theirs at the SNES's origin, so the
-whole picture went up a line at the fight's first frame and down at the field's first frame after it. The attract's 0AD
-fight (the camera at the bottom of its room: mask rows 256-480, camera 256) shows both edges: f3807 (the fight begins)
-and f4211 (the field again).
+With the mod on and the ROM's camera at a room's bottom the field draws the picture one line lower than the SNES (its
+origin held so the room's last row stays on line 223, src/field.c fillHold). A fight composed at the SNES's origin would
+move the whole picture up a line at the fight's first frame and down at the field's first frame after it. The attract's
+0AD fight (the camera at the bottom of its room: mask rows 256-480, camera 256) shows both edges: f3807 (the fight
+begins) and f4211 (the field again). Regression check: options-fill-bottom-lines-fight-keeps-the-held-picture.
 
 Two interactive runs of the attract (CT_OVERLAY_SHOT forces the interactive presentation the mod needs; CT_SETTINGS
 names the options): the mod on (and the 16:9 widescreen, so the fight's wide arena is composed too) and the mod off.
@@ -19,7 +18,7 @@ Printed:
     fill-hold: fight f<n>: the mod-off picture one line lower, rows 1-210: <k> px differ
 
 The step is the dy in -3..3 that makes the two frames' rows 20-149 most alike (0: no jump). In the fight, rows 1-210 of
-the mod-on picture against rows 0-209 of the mod-off one: the arena AND what the fight places on the screen (the
+the mod-on picture against rows 0-209 of the mod-off one: the arena and what the fight places on the screen (the
 combatants, the effects, the cursors) moved down together (0 px: nothing left at the SNES's line).
 """
 import os

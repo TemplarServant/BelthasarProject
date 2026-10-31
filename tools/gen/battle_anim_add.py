@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""ADDITIVE companion bake to src/data/battle_anim.h -- the sprite/anim COMPLETENESS pass (T1/T2/T3).
-Emits src/data/battle_anim_add.h; does NOT touch battle_anim.h (existing arrays
-stay byte-identical). Kept separate because tools/gen/battle_anim.py is concurrently owned.
+"""Companion bake to src/data/battle_anim.h (items T1/T2/T3): emits src/data/battle_anim_add.h and does not
+touch battle_anim.h.
 
-Dossiers: battle_stance.md ADD.5 (T1 Crono idle tile-stream, T3 GATO idle re-derive),
-          battle_actionfx.md ADD.A4 (T2 GATO claw-swipe tile-stream).
-Base state gato_press_action.state (Crono seat0 + Marle seat1 vs GATO). tile 0x006 = the active-PC
-selection BRACKET (its own asset battle_bracket.h), NOT a combatant -- excluded everywhere (matches
+Dossiers: battle_stance.md ADD.5 (T1 Crono idle tile stream, T3 GATO idle),
+          battle_actionfx.md ADD.A4 (T2 GATO claw-swipe tile stream).
+Base state gato_press_action.state (Crono seat0 + Marle seat1 vs GATO). Tile 0x006 is the active-PC
+selection bracket (its own asset battle_bracket.h), not a combatant -- excluded everywhere (as in
 tools/gen/battle_anim.py). fb row = OAM y + 8 (as the stance bake).
 
   T1  ctCronoIdleAddKf[3]  -- Crono's active-idle streams sub-tiles 0x0C/0x0D/0x19/0x1B; the 3 tile
       variants map 1:1 to ctCronoIdleBob.state (0/1/2, locked exact f400-500). rep f400/f408/f420.
-  T2  ctGatoSwipeKf[3]     -- GATO's claw-swipe streams tiles 0x80-0x9F over the FIXED rear-up OAM;
+  T2  ctGatoSwipeKf[3]     -- GATO's claw-swipe streams tiles 0x80-0x9F over the fixed rear-up OAM;
       3 swipe frames (windup f508-526 / strike f529-532 / follow f535-553). rel = frame - f505.
-  T3  ctGatoIdleTrajV2[]   -- CORRECTED steady idle (no-attack capture): body bob +-1px (the shipped
-      ctGatoIdleTraj loops the 6px ENTRANCE-SETTLE f384-433 + a -4px wrap pop = the 'estranho').
+  T3  ctGatoIdleTrajV2[]   -- the steady idle (no-attack capture): body bob +-1px (ctGatoIdleTraj instead
+      loops the 6px entrance settle f384-433, with a -4px pop at the wrap).
 
 Run from repo root: CT_EXE=<scratch>/ct_probe.exe CT_SCRATCH=<scratch> python tools/gen/battle_anim_add.py [--verify] [--emit]
 """
@@ -37,7 +36,7 @@ CRONO_IDLE_KEYS = [(5, 'CI0_rest', 400, 0), (5, 'CI1_down', 408, 1), (5, 'CI2_si
 GATO_SWIPE_KEYS = [(1, 'GS1_windup', 520, 0, 24), (1, 'GS2_strike', 531, 24, 30), (1, 'GS3_follow', 544, 30, 49)]
 # rel windows tile the rear-up gap-free: GS1 [0,24) (measured content f508-526; == G1_rearup, also covers the
 # rel0-2 idle->rearup transition), GS2 [24,30) (strike, flash-on-Crono @rel27), GS3 [30,49) (follow f535-553).
-GATO_V2_F0, GATO_V2_F1 = 67, 186     # one A(87f)+B(33f)=120f steady period (ADD8: F0=72 clipped arm-A by 5f -> 115 drifted 5f/cycle); loops A->A
+GATO_V2_F0, GATO_V2_F1 = 67, 186     # one A(87f)+B(33f)=120f steady period; loops A->A (ADD8)
 
 # ---- drivers / probes
 def hold_bs(F, K=8): return "100:%d" % F if F <= K else "100:%d,0:%d" % (K, F - K)
@@ -232,7 +231,7 @@ def verify_kfs(title, kfs, tiles):
 def verify_t3(v2):
     cur = read_committed_gato_idle()
     cbt = [62 + r[1] for r in cur]; vbt = [62 + r[2] for r in v2]
-    curfoot = sorted(set(r[3] for r in cur))     # footDY column in the committed table (0 post bracket-fix)
+    curfoot = sorted(set(r[3] for r in cur))     # footDY column in the committed table (0: the bracket is excluded)
     print("[T3 GATO-idle divergence] committed ctGatoIdleTraj (looped) vs corrected ctGatoIdleTrajV2:")
     print("  committed footDY column = %s (0 = concurrent bracket fix already removed the spurious foot-bob;" % curfoot)
     print("     this V2 addresses the REMAINING body-bob = the entrance-settle rows looped as if idle)")

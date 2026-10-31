@@ -7,8 +7,7 @@ The fight saves/field_re/m81_nuns_lake.state starts by itself (no input on eithe
 back on their own (the movement modes, C1/3714, and the walkers, CF/F978), and their turns -- the kiss with its name box
 (CD/0295), the moves with no action -- hold the main loop inside the handler. What a Cyclone or a Fire Whirl hits is the
 enemies within radius^2 9 of the target in 16-px cells (C1/C1DD -> C1/C586 area 3 -> C1/2701, `$1D0C` / `$1D23 >> 4`),
-so a pixel there decides a victim. (The user, 2026-10-04: "when crono used cyclone hitting 3 of them, only 1 took
-damage / with fire whirl this also happened".)
+so a pixel there decides a victim: a position one pixel off changes which enemies a tech hits.
 
   cartridge  build/ct.exe --monitor 7E1D0F:4,7E1D26:4 (the rule: CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1)
   port       build/Belthasar.exe --scene 129 --loadwram saves/field_re/m81_nuns_lake.lakewram, CT_BATTLE_POSTRACE

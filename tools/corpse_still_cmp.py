@@ -4,25 +4,21 @@ ambush: two Beetles and an Avian Chaos, A held through the fight on both sides).
 
     python tools/corpse_still_cmp.py
 
-The user, 2026-10-13 (translated from Portuguese): "after the final blow on an enemy, it moves a little before the
-dissolve". Two of these enemies die with a walk segment in flight (`$98A7,X = 01`). The death scan CF/FE20 clears it
-(CF/FE33 `STZ $98A4,X`) before the corpse's routine, so on the cartridge the corpse holds its foot; the port stepped it
-on through the dissolve.
+Two of these enemies die with a walk segment in flight (`$98A7,X = 01`). The death scan CF/FE20 clears it (CF/FE33
+`STZ $98A4,X`) before the corpse's routine, so the corpse holds its foot through the dissolve.
 
 Cartridge: build/ct.exe under the rule, `--monitor` of the alive list $AF02, the segment flags $98A7 and the feet
 $1D0C / $1D23 from saves/battle_re/forest_wait_ambush_active.state. Port: the same WRAM (forest_wait_ambush_active.lakewram),
 CT_BATTLE_MASHA, CT_FIELD_MEMMON of the same bytes (and $A0FD). For each delist ($AF02,slot := FF), over the 80 frames
 from it; then the frames from it that $A0FD still reads 1 -- the loop's head C1/1073 `STZ $A0FD` waits for the death scan
 (every corpse's routine CD/0043), so the NMI's stepper CF/F978 moves nobody through a dissolve -- and, over those frames,
-the moves of every OTHER enemy's foot (the living walkers):
+the moves of every other enemy's foot (the living walkers, e.g. the Avian Chaos through the second Beetle's dissolve):
 
     corpse-still: death<k> slot <s> foot (<x>,<y>): cartridge <n> move(s), port <m> move(s); segment flag at the delist: cartridge <a> port <b>
     corpse-still: death<k> $A0FD held from the delist: cartridge <n> frame(s), port <m>; other enemies' moves meanwhile: cartridge <a> port <b>
     corpse-still: <k> of <n> corpse(s) moved on the port
 
-The user, 2026-10-15 (translated from Portuguese): "when a final blow kills more than one enemy, they keep moving a little before the
-dissolve". The port's head ran on the delist's frame: the living Avian Chaos stepped 7 px through the second Beetle's
-dissolve (cartridge 0).
+Regression check: battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge.
 """
 import os
 import re

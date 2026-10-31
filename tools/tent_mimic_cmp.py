@@ -3,13 +3,12 @@ r"""The tent of horrors (loc 1B2) after the mimic game is won, port against the 
 
     python tools/tent_mimic_cmp.py
 
-The user, 2026-10-08: "after winning the mimicry game in the tent of horrors, it got stuck" (build/ct_debug_020.state).
 Bekkler (obj11) waits in his talk fn1 on the game, `0590: 04 00 33` (CALL obj0 fn3 and wait; his latch $7F0980 = 1).
-The won game's end calls HIS fn3 at priority 0, `0091: 04 16 03`, and waits for it. The ROM pre-empts the waiter
+The won game's end calls his fn3 at priority 0, `0091: 04 16 03`, and waits for it. The ROM pre-empts the waiter
 (C0/6168-616D: return slot 1 := $1180 = the parked 04 byte), runs fn3 (`89 40 / 96 08 06`: he steps up to tile 8,6)
-with the latch still set, and the RETURN lands back on the 04, which polls again (C0/61A7) and finds obj0 done. The
-port polled the latch on every visit, whatever the object was running: fn3 never ran and the two objects waited on
-each other for good. (ct_vm.c ssParked.)
+with the latch still set, and the RETURN lands back on the 04, which polls again (C0/61A7) and finds obj0 done.
+Polling the latch on every visit, whatever the object is running, would never run fn3 and leave the two objects
+waiting on each other (ct_vm.c ssParked).
 
 The cartridge: saves/field_re/s1b2_mimic_won_lake.state (the game won on the logical oracle: the tent entered by its
 door from tent_keeper_lake.state, Bekkler talked to, 40 points poked into $7F021A, every round's pose -- $7F0220 --

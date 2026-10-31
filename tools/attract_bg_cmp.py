@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Compare the port's attract against the CARTRIDGE on rows no sprite reaches.
+r"""Compare the port's attract against the cartridge on rows no sprite reaches.
 
     python tools/attract_bg_cmp.py <port_frame> <oracle_frame> <row0> <row1> [<row0> <row1> ...]
 
@@ -10,14 +10,11 @@ CT_ORACLE_VIRTUAL_BEAM, CLAUDE.md) from saves/attract_cena_inicial_rule.state --
 The two numberings differ by a constant on the field (the vehicle's frame p is the state's p - 2067: --scene
 433 plays the power-on, docs/TESTING.md 'The attract vehicle'), but --selftest runs the fights synchronously,
 so after a battle the pair is found inside the same leg; only row bands where no sprite passes are compared.
-Both sides are measured live every run. (Until 2026-10-22 the oracle ran the owner's real-time snes9x capture
-saves/attract_cena_inicial.state, another history: docs/ROADMAP.md 1.1.)
+Both sides are measured live every run.
 
 Oracle framebuffer = 512x480 [pad,B,G,R], downsampled 2x; the port's row y is the oracle's row y+8.
-ATTRACT_CMP_DY=<n> adds n to that row mapping -- a measuring knob, nothing compensates with it any more.
-It was introduced for the overworld's one-scanline residual (dy = -1); that is CLOSED: the composite
-sampled BG line `vofs + y` where the PPU shows `vofs + y + 1` and pulled the OBJ line to `y - 1` to
-follow it (disasm/notes/ow_bg_vline.md). Loc 16E's own one-line residual (9.23) is still open.
+ATTRACT_CMP_DY=<n> adds n to that row mapping -- a measuring knob only (the BG line rule: disasm/notes/ow_bg_vline.md).
+Open: loc 16E's one-line residual (9.23).
 """
 import os
 import struct

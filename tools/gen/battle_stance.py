@@ -1,28 +1,25 @@
 #!/usr/bin/env python3
-"""Bake the CT battle ENTRY STANCE (combatant idle OBJ) into src/data/battle_stance.h + verify vs oracle.
+"""Bake the battle entry stance (combatant idle OBJ) into src/data/battle_stance.h + verify against the oracle.
 
-Derivation dossier: disasm/notes/battle_stance.md. The battle module (bank C1/CC) CLEARS the field
-object arrays at boot (C1:CE04) and renders combatants through its OWN OBJ engine, building the OAM
-shadow $7E0700 (== the live OAM, proven 512/512 byte-exact) from per-combatant battle-animation state.
-Each combatant's battle pose is a fresh boot UPLOAD to the OBJ VRAM (char base word 0): the OBJ
-region 0x0000-0x1400 & 0x3000-0x3BFF is fully rewritten pre->in-battle (S1) -- the tile NUMBERS are
-reused (Crono 0x08.., Marle 0x20.., GATO 0x68..+0x06) but the CONTENT is battle poses, NOT the field
-sheet.
+disasm/notes/battle_stance.md. The battle module (bank C1/CC) clears the field object arrays at boot
+(C1:CE04) and renders combatants through its own OBJ engine, building the OAM shadow $7E0700 (== the
+live OAM) from per-combatant battle-animation state. Each combatant's battle pose is a fresh boot upload
+to the OBJ VRAM (char base word 0): the OBJ region 0x0000-0x1400 & 0x3000-0x3BFF is rewritten on entry
+(S1) -- the tile numbers are reused (Crono 0x08.., Marle 0x20.., GATO 0x68..) but the content is battle
+poses, not the field sheet.
 
-This bakes the SETTLED idle stance of the canonical GATO fight (party Crono seat0 + Marle seat1 vs
-GATO enemy-slot3) at frame f460 -- regenerated deterministically from gato_press_action.state via
-btnscript "100:8,0:452" (verified fb+vram+oam byte-identical to the committed idle_f460 capture).
-At f460: Crono is the ACTIVE PC (command open, cur=0), Marle the WAITING PC (rock-static), GATO the
-combat-idle enemy (12-sprite body + a 4x mirrored tile-0x06 foot quad).
+This bakes the settled idle stance of the GATO fight (party Crono seat0 + Marle seat1 vs GATO
+enemy-slot3) at frame f460, from gato_press_action.state with btnscript "100:8,0:452". At f460 Crono is
+the active PC (command open, cur=0), Marle the waiting PC (static), GATO the combat-idle enemy
+(12-sprite body; the tile-0x006 quad is the active-PC bracket, excluded below).
 
 Baked per combatant (S2/S3): the OAM sprite assembly (x,y,tile,attr), the referenced OBJ 4bpp tiles,
-and the OBJ CGRAM palettes. The LOOP (S2/S4) -- a ~2px idle bob (Crono/GATO) driven by the ROM anim
-engine (anim-slots $0520+n*0xC, FD:E3A9; streams a few OBJ tiles/frame) -- is a documented BOUNDARY;
-the settled static stance is the byte-exact implementable minimum (mandate: pin frame 0, mark loop OPEN).
+and the OBJ CGRAM palettes. Not baked: the idle loop (S2/S4), a ~2px bob (Crono/GATO) driven by the ROM
+anim engine (anim slots $0520+n*0xC, FD:E3A9; it streams a few OBJ tiles per frame).
 
 Run from repo root. Emits src/data/battle_stance.h. With --verify, reconstructs each combatant sprite from
-the baked data, composites in OAM-priority order, and pixel-diffs vs the oracle fb over the combatant
-bounding box (verified 0/2672 opaque px mismatch, d>24).
+the baked data, composites in OAM-priority order, and pixel-diffs against the oracle fb over the combatant
+bounding box (a pixel mismatches when its colour distance d > 24).
 """
 import os, sys, subprocess
 sys.path.insert(0, 'tools')
@@ -32,11 +29,11 @@ ROM   = os.environ.get('CT_ROM', 'Chrono_Trigger_USA_SNES.sfc')
 EXE   = os.environ.get('CT_EXE', 'build/ct.exe')
 STATE = (sys.argv[sys.argv.index('--state') + 1] if '--state' in sys.argv else os.environ.get('CT_GEN_STATE', 'build/recipes/battle_gato_press_action.state'))
 SP    = os.environ.get('CT_SCRATCH', 'build')
-BTN   = '100:8,0:452'                     # A-press boots battle; settle to f460 (verified reproducible)
+BTN   = '100:8,0:452'                     # A-press boots battle; settle to f460
 OUT_H = os.environ.get('CT_GEN_OUT', 'src/data/battle_stance.h')
 NTILE = 0xA0                              # OBJ 8x8 tiles 0x00..0x9F cover all combatant cells (GATO max 0x9F)
 
-# combatant palette -> name (S1: pal5 Crono, pal6 Marle, pal1 GATO; boot-dossier "GATO=pal6" was Marle)
+# combatant palette -> name (S1: pal5 Crono, pal6 Marle, pal1 GATO)
 ACTORS = [(5, 'Crono'), (6, 'Marle'), (1, 'GATO')]
 
 def regen():
@@ -52,10 +49,9 @@ def load(prefix):
     fbraw = open(prefix, 'rb').read()
     return vram, cgram, sprites, fbraw
 
-# tile 0x006 = the active-PC BRACKET corner (OAM #0-3, pal1-attr, prio3). It is NOT a combatant
-# sprite (NOT "GATO's foot quad" -- that was a misID): it is the pulsing white selection frame around
-# the ACTIVE PC, and belongs to its own asset (src/data/battle_bracket.h, tools/_gen_battlebracket.py).
-# Excluded here so the stance bake is the combatant bodies ONLY (de-contamination, battle_stance.md T1).
+# tile 0x006 = the active-PC bracket corner (OAM #0-3, pal1 attr, prio3): the pulsing white selection
+# frame around the active PC, not a combatant sprite. It has its own asset (src/data/battle_bracket.h),
+# so it is excluded here and the stance bake holds the combatant bodies only (battle_stance.md T1).
 BRACKET_TILE = 0x006
 
 def onscreen(sprites):
@@ -69,7 +65,7 @@ def bracket_sprites(sprites):
 
 def bracket_ink_pixels(sprites, vram):
     """Screen (X,Y) of every non-transparent pixel of the tile-0x006 bracket sprites -- the pixels the
-    bracket OWNS in the oracle fb. Excluded from the combatant verify (the bracket is a separate asset)."""
+    bracket owns in the oracle fb. Excluded from the combatant verify (the bracket is a separate asset)."""
     mask = set()
     for s in bracket_sprites(sprites):
         for cy in range(2):
@@ -110,7 +106,7 @@ def emit(fp, on, vram, cgram):
     W("// A stance OBJ pixel at OAM (x,y) lands at oracle fb true-pixel (x, y+8) (verified).\n")
     W("#ifndef CT_BATTLE_STANCE_H\n#define CT_BATTLE_STANCE_H\n#include <stdint.h>\n\n")
 
-    # --- flat OBJ list (OAM-index order; draw HIGH->LOW index so idx0 ends on top) ---
+    # --- flat OBJ list (OAM-index order; draw high->low index so idx0 ends on top) ---
     W("// The settled combatant OBJ list = the $7E0700 OAM shadow (onscreen combatant sprites),\n")
     W("// in OAM-index order. Composite by drawing HIGHEST oidx first (SNES: low index = on top).\n")
     W("// x is signed 9-bit screen x; y is OAM y (screen row = y, fb row = y+8). tile = 9-bit OBJ\n")
@@ -136,7 +132,7 @@ def emit(fp, on, vram, cgram):
         W('  { "%s", %d, %4d, %3d, %d },\n' % (name, pal, ax, ay, len(grp)))
     W("};\n\n")
 
-    # --- OBJ tiles 0x00..0x9F (4bpp, 32 bytes each) verbatim from VRAM (battle-pose boot upload) ---
+    # --- OBJ tiles 0x00..0x9F (4bpp, 32 bytes each) from VRAM (battle-pose boot upload) ---
     W("// OBJ 8x8 tiles 0x00..0x%02X (4bpp SNES planar, 32 B each) -- the battle-pose upload the\n" % (NTILE-1))
     W("// module writes at boot (S1: OBJ VRAM 0x0000-0x1400/0x3000-0x3BFF rewritten; NOT the field sheet).\n")
     W("// A 16x16 sprite of tile T uses 8x8 tiles T, T+1, T+0x10, T+0x11 (16-wide sheet).\n")
@@ -191,7 +187,7 @@ def verify(on, vram, cgram, fbraw, brk_mask=frozenset()):
             c = buf[y][x]
             if c is None:
                 continue
-            if (x, y) in brk_mask:                     # bracket-owned pixel -> its own asset, EXCLUDE
+            if (x, y) in brk_mask:                     # bracket-owned pixel -> its own asset, excluded
                 excl += 1
                 continue
             tot += 1

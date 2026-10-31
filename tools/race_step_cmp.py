@@ -3,7 +3,7 @@ r"""The race's per-frame task $7E:485D, native (src/seq_race.c) against the cart
 
     python tools/race_step_cmp.py [--step N] [--drives a,b,...]
 
-From saves/race_re/race_user.state (the user's capture at Lab 32, A at f30 starts the race), each DRIVE is walked in
+From saves/race_re/race_user.state (a capture at Lab 32, A at f30 starts the race), each drive is walked in
 segments of N frames (`ct.exe --peek` with PEEK_SAVE, the WRAM sidecar beside it); at every stop the same frame's state is
 handed to both:
   - the cartridge: `ct.exe --callrom 7E485D --from <state> --regdp 0000 --m16 --x16 --writes` (the task run once, every
@@ -72,7 +72,7 @@ def oracle_writes(state, pokes=None):
     w = {}
     for m in re.finditer(r'w ([0-9A-F]{6}) = ([0-9A-F]{2})  \(by ([0-9A-F]{2}):([0-9A-F]{4})\)', out):
         pc = int(m.group(4), 16)
-        # $39A7 / $39B1 unwind the TASK DISPATCHER's pushes, which --callrom does not have: from the first write by the
+        # $39A7 / $39B1 unwind the task dispatcher's pushes, which --callrom does not have: from the first write by the
         # dispatcher's code ($398A-$39BC) the micro-execution is not the cartridge's any more, so the grade stops there.
         if 0x398A <= pc <= 0x39BC:
             break
@@ -132,7 +132,7 @@ def poked_cases(state, wram):
     cases = [('lose $78=8', {0x7E0078: 0x08, 0x7E0079: 0x00})]
     for score in (0x0612, 0x00F6, 0x09A4, 0x07D0, 0x0FA0, 0x1770, 0x0400, 0x0A28, 0x0BB8, 0x0FA2):
         cases.append(('win $69=%04X' % score, {0x7E0053: 0x08, 0x7E0054: 0x00, 0x7E0069: score & 0xFF, 0x7E006A: score >> 8}))
-    # the BUMPS: both racers on one spot ($51-$53 = $76-$78, $4E = $73), so $A4 = 0, and every side $A8 says they came from
+    # the bumps: both racers on one spot ($51-$53 = $76-$78, $4E = $73), so $A4 = 0, and every side $A8 says they came from
     for code in (0x01, 0x02, 0x10, 0x11, 0x12, 0x20, 0x21, 0x22):
         pk = {0x7E0051: base[0x76], 0x7E0052: base[0x77], 0x7E0053: base[0x78], 0x7E0054: base[0x79],
               0x7E004E: base[0x73], 0x7E004F: base[0x74], 0x7E00A8: code, 0x7E00A9: 0x00}

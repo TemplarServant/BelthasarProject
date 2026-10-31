@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-r"""Op 0xE4 in a LIVE object script ends the object's visit -- port against the LOGICAL oracle.
+r"""Op 0xE4 in a live object script ends the object's visit -- port against the logical oracle.
 
     python tools/e4_visit_cmp.py
 
 C0/3D97 (op 0xE4) copies the rect in the WRAM map at once (`3DBD JSR C0/AF4E`) and then exits `3DC0 LDX $C7 / INX /
-CLC / RTS`; the runner's `5AB4 BCC ->5ABA` ends the visit on CLC, so the op after an E4 runs on the object's NEXT
-visit (disasm/notes/field_tile_copy_e5.md section 5). The slot-1 runner C0/595C ignores the carry; this is about a
-live object.
+CLC / RTS`; the runner's `5AB4 BCC ->5ABA` ends the visit on CLC, so the op after an E4 runs on the object's next
+visit (disasm/notes/field_tile_copy_e5.md sec. 5). The slot-1 runner C0/595C ignores the carry; this is about a
+live object. Regression check: field-e4-visit-end-vs-logical-oracle.
 
   lever  saves/field_re/s236_lever.state (loc $0EC, the oracle's own --teleport from saves/truce_market.state to tile
          24,36 facing up): A at the lever (obj9, fn1) twice. The 1st press takes the flag-clear arm (E3 00, E5, WAIT, E5,
@@ -31,7 +31,7 @@ CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 OUT = os.path.join(ROOT, 'build', '_e4visit')
 
-# The oracle's word for frame f reaches the ROM's logic on frame f+1 (memory ct-frame-alignment-p2): the port's drive
+# The oracle's word for frame f reaches the ROM's logic on frame f+1 (docs/TESTING.md, the alignment): the port's drive
 # is the oracle's shifted one frame later, as in tools/e5_copy_cmp.py.
 DRIVES = {
     'lever': dict(state='saves/field_re/s236_lever.state', seed='saves/field_re/s236_lever.lakewram', scene=236,

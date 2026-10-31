@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# Decode a $C3 SEQUENCE SCRIPT -- the byte-code the interpreter at C3/0B03 runs with DP = $0A00
-# (so its "registers" ARE the overlay's shadow cells: reg0 = $0A00, reg1 = $0A02, ...; the script
+# Decode a $C3 sequence script -- the byte-code the interpreter at C3/0B03 runs with DP = $0A00
+# (so its "registers" are the overlay's shadow cells: reg0 = $0A00, reg1 = $0A02, ...; the script
 # pointer is $0A20, the CALL return slot $0A30 and the 16 loop counters $0A22+2n).
 #
 #   python tools/c3script.py <wram.bin> <hexaddr> [len]
@@ -19,7 +19,7 @@
 #   ..D aaaa         JUMP aaaa + yield      ..E aaaa  JUMP aaaa (keep running)
 #   ..F              END: $7E:0000 = 1 (the sequence's done flag)
 #   8n cccc tttt     loop counter n: ++, jump tttt until it reaches cccc, then fall through (no yield)
-#   9n cccc tttt     the same, but yields every iteration -- i.e. WAIT cccc FRAMES
+#   9n cccc tttt     the same, but yields every iteration -- i.e. wait cccc frames
 import sys
 
 W = open(sys.argv[1], "rb").read()

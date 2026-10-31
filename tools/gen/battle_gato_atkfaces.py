@@ -1,36 +1,32 @@
 #!/usr/bin/env python3
-"""GATO directional ATTACK-pose bake (disasm/notes/battle_animeng_corpus.md CAPTURE 1) ->
+"""GATO directional attack-pose bake (disasm/notes/battle_animeng_corpus.md CAPTURE 1) ->
 src/data/battle_gato_atkfaces.h.
 
-The corpus proved GATO's ATTACK is fully directional: FOUR byte-distinct rear-up + strike pose
-sets (front/left/right/up) selected by his walk-arrival facing $96DE, exactly like his idle/walk
-facings. Same tile NUMBERS (0x68-0x8E), hf=vf=0 everywhere; the direction is the OAM assembly +
-streamed tile CONTENT (all VRAM-distinct). This bake carries the THREE off-front facings
-(UP/LEFT/RIGHT); FRONT (facing 1) stays the shipped kf8 rear-up + ctGatoSwipeKf GS stream (front
-strike is a tile-stream on a FIXED OAM; the side strikes REARRANGE the OAM -- LEFT lunges the claw
--34px, RIGHT extends it +34px -- so each side carries its OWN strike assembly + tiles, not just a
-stream, corpus 1.2).
+GATO's attack is directional: four distinct rear-up + strike pose sets (front/left/right/up)
+selected by his walk-arrival facing $96DE, like his idle/walk facings. Same tile numbers
+(0x68-0x8E), hf=vf=0 everywhere; the direction is the OAM assembly + streamed tile content. This
+bake carries the three off-front facings (up/left/right); front (facing 1) is the kf8 rear-up +
+ctGatoSwipeKf GS stream (the front strike is a tile stream on a fixed OAM; the side strikes
+rearrange the OAM -- left lunges the claw -34px, right extends it +34px -- so each side carries
+its own strike assembly + tiles, corpus 1.2).
 
-Rep frames (corpus 1.1 rear-up / 1.2 strike), all byte-verified against the dossier assemblies
-(verify_atk.py, anchors 110,56 / 102,37 / 86,37 / 128,37 / 128,37 / 110,27 all OK):
+Frames (corpus 1.1 rear-up / 1.2 strike; anchors 110,56 / 102,37 / 86,37 / 128,37 / 128,37 / 110,27):
     UP    (facing 0)  rear-up  U_f185                    (no side-strike capture -> hold rear-up)
 
-The corpus took UP at f195 of the capture gato_press_action.state. From the recipe (the rule's cartridge) GATO's UP
-rear-up -- the ROM's assembly 0x11, which field.c's animengcheck-atk gathers -- holds f175-f194 at anchor (110,27) and
-f195 is already the next frame of his stream (tiles 0x6C/0x6F/0x7C/0x7F): the capture's own lag frames had put its
-dwell a frame or more later. f185 is the middle of the dwell. The LEFT/RIGHT frames are inside the recipe's dwells as
-they are (L rear-up f100-f119, L strike f120-f125, R the capture's bytes).
+From the recipe, GATO's up rear-up (the ROM's assembly 0x11, which field.c's animengcheck-atk
+gathers) holds f175-f194 at anchor (110,27); f185 is the middle of the dwell. (The corpus took it
+at f195 of the real-time capture gato_press_action.state, whose lag frames put the dwell a frame or
+more later.) The left/right frames are inside the recipe's dwells (L rear-up f100-f119, L strike
+f120-f125, R the capture's bytes).
     LEFT  (facing 2)  rear-up  L_f108   strike  L_f122
     RIGHT (facing 3)  rear-up  R_f153   strike  R_f166
 
-Cells stored RELATIVE TO GATO'S LIVE FOOT ($1D0C+6/$1D23+6 from the capture .wram), drawn at the
-render-side live foot verbatim -- position-independent, the same convention as battle_gato_faces.h.
-strikeAt = rel (rear-up onset) at which the pose flips rear-up -> strike, from the corpus 1.3
-timeline (rear-up onset == our actStart rel 0; LEFT rear-up f99-118 => strike onset rel 20; RIGHT
-rear-up f143-163 => rel 21). The strike beat CT_GATO_STRIKE=27 then lands ~7f into the strike pose,
-matching the corpus "strike lands mid-rear-up, flash 7f later" (CAPTURE 4). These become FIXTURES
-for the future anim-engine port (one rep frame per phase; the within-pose tile stream stays the
-C1/CC streamer boundary).
+Cells are stored relative to GATO's live foot ($1D0C+6/$1D23+6 from the capture .wram) and drawn at
+the render-side live foot -- the same convention as battle_gato_faces.h. strikeAt = rel (rear-up
+onset) at which the pose flips rear-up -> strike, from the corpus 1.3 timeline (rear-up onset ==
+actStart rel 0; left rear-up f99-118 => strike onset rel 20; right rear-up f143-163 => rel 21). The
+strike beat CT_GATO_STRIKE=27 then lands ~7f into the strike pose (corpus CAPTURE 4). One frame per
+phase; not baked: the within-pose tile stream (the C1/CC streamer).
 
 Run from repo root:  CT_SCRATCH=<scratchpad>/corpus python tools/gen/battle_gato_atkfaces.py
 """
@@ -92,9 +88,9 @@ def bodymd5(vram):
 # ---- capture set: (name, facing, strikeAt, rear-prefix, expected rear anchor, strike-prefix, expected strike anchor)
 #      strike-prefix None => no side-strike capture (UP) -> strike phase reuses the rear-up pose+sheet.
 CAPS = [
-    ('GA0_up',    0, 49, 'U_f185', (110, 27), None,     None),        # UP: no PC sits above in the GATO formation
-    ('GA2_left',  2, 20, 'L_f108', (102, 37), 'L_f122', (86, 37)),    # LEFT strike lunges the claw -34px
-    ('GA3_right', 3, 21, 'R_f153', (128, 37), 'R_f166', (128, 37)),   # RIGHT strike extends the claw +34px
+    ('GA0_up',    0, 49, 'U_f185', (110, 27), None,     None),        # up: no PC sits above in the GATO formation
+    ('GA2_left',  2, 20, 'L_f108', (102, 37), 'L_f122', (86, 37)),    # left strike lunges the claw -34px
+    ('GA3_right', 3, 21, 'R_f153', (128, 37), 'R_f166', (128, 37)),   # right strike extends the claw +34px
 ]
 
 # ---- decode + bake ----

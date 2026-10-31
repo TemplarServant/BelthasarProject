@@ -11,8 +11,9 @@ ctItemFx*    = the effect of the consumables 0xBC..0xCF, decoded the way C2/B0AB
                multiplier, 0F -> $0DC0 = 40 = to the maximum, byte 3 & 3F = the base), the scope (($CC:1BB5[sub] + 1)
                & 3) << 2 (bit 3 = all the party), and the kind by the dispatch C2/B0FA / ($B0EE,X) on byte 0: bit 7 ->
                C2/B17F (HP/MP restore), bit 4 -> C2/B107 (the Power Meal: C2/B10D's first arm, $0DBD = C2 and
-               $0DC0 = 40 -> HP+MP to the maximum), bit 3 -> C2/B1F8 (the Shelter: $0DBD = CA, the record's $0DC0), nothing set down to bit 3 -> C2/B200 (the tabs: power for CD, magic
-               for CE, speed for the rest). An item the field cannot use ($7700 bit 1 clear) is ITFX_NONE.
+               $0DC0 = 40 -> HP+MP to the maximum), bit 3 -> C2/B1F8 (the Shelter: $0DBD = CA, the record's $0DC0),
+               nothing set down to bit 3 -> C2/B200 (the tabs: power for CD, magic for CE, speed for the rest). An
+               item the field cannot use ($7700 bit 1 clear) is ITFX_NONE.
 ctOrg*       = Organize's group ranges, C2/AC12 (start ids) and C2/AC17 (lengths).
 
     python tools/gen/menu_itemuse.py [--state S] [--out src/data/menu_itemuse.h]

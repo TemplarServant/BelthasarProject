@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""The Telepod's whole transition -- scene 8 up to `DD 71 02 08 07 / FF 80`, the op's own fade, the gate warp's tunnel,
-the black and the load, and the 600 A.D. arrival -- port against the cartridge FROM THE SAME WRAM.
+the black and the load, and the 600 A.D. arrival -- port against the cartridge from the same WRAM.
 
     python tools/gate_transition_cmp.py
 
@@ -14,8 +14,8 @@ The port is seeded, not driven there: the check drive of field-scene8-gate-warp-
 cartridge's own WRAM the two sides reach the DD on the same frame (the same monitor label: `--monitor` on the
 cartridge, CT_FIELD_MEMMON on the port). Each stretch is graded at its own relation (a pixel differs when a channel
 differs by more than 24 -- one INIDISP step does not; 128x112):
-  * scene 8 and the arrival are the FIELD: the image of the logic P is the cartridge's thumbnail P+2 and the port's
-    frame P (ct-frame-alignment-p2). The arrival is compared one frame later than that, P+1: its logic runs one frame
+  * scene 8 and the arrival are the field: the image of the logic P is the cartridge's thumbnail P+2 and the port's
+    frame P (docs/TESTING.md, the alignment). The arrival is compared one frame later than that, P+1: its logic runs one frame
     behind the cartridge's (the iris's `$0139 = 1` at label 1065 against 1064 -- the load clock);
   * the op's fade is the field's too (C0/3FBB-3FD1 run in the field's frame): graded at P+2, and by the mean brightness,
     which sees an INIDISP step the pixel threshold does not;
@@ -26,7 +26,7 @@ differs by more than 24 -- one INIDISP step does not; 128x112):
                    tunnel + load c<J+1>..c<L-1>: <b> / <n> differ; arrival from the lit c<L> at P+1 (the load one frame
                    long): <k> / 300 differ, max <m> px
 
-(disasm/notes/gate_warp_fd_family.md sec. 10.)
+(disasm/notes/gate_warp_fd_family.md sec. 10. Regression check: field-gate-transition-vs-cartridge-from-its-wram.)
 """
 import os, re, struct, subprocess, sys
 

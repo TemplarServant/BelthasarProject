@@ -5,17 +5,16 @@ r"""The widescreen (a mod) against the vanilla picture for a screen-fixed overla
 
 Loads a port scene snapshot (F5's CtSceneSaveState; default saves/field_re/wide_box_07a.state, loc 07A = scene 122, made
 by tools/fixtures/rest.json from tools/recipes/fxr_chamber_touch.json; its top box is open at f100),
-presses A every 30 frames so the cutscene's next box opens, and captures the PRESENTED frame (CT_OVERLAY_SHOT: the
+presses A every 30 frames so the cutscene's next box opens, and captures the presented frame (CT_OVERLAY_SHOT: the
 picture the player sees, the widescreen's assembly included) twice -- once with the settings at 16:9, once with the
 widescreen off -- at the same frame. The box is screen-fixed: in the wide picture it stands in the middle, and its 256
 columns must be the vanilla box's, pixel for pixel. Prints
 
     wide-box: f<N> box rows <y0>-<y1>, widescreen (<w> wide) vs vanilla: <differing> differing pixel(s)
 
-The user, 2026-10-13 (translated from Portuguese): "remnants of the background over the dialogue box" in widescreen --
-loc 07A's camera stops at the room's edge, so fieldWideAssemble moves the screen-fixed pixels to the middle, and it told
-them from the world by colour: the box's darkest pixels ((0,0,8), BG3 colour 0 on the backdrop) equal to the black floor
-under them stayed with the world, and the middle showed the room past the edge through them.
+Loc 07A's camera stops at the room's edge, so fieldWideAssemble moves the screen-fixed pixels to the middle. Telling
+them from the world by colour would fail here: the box's darkest pixels ((0,0,8), BG3 colour 0 on the backdrop) equal
+the black floor under them, and the room past the edge would show through them.
 """
 import os
 import struct

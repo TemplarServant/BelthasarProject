@@ -16,12 +16,10 @@ WRAM poked on both sides (the cartridge's PEEK_POKE, the port's seed), Left held
 
 The state is the rule's oracle's own (PEEK_SAVE at a frame's end), so the cartridge's first --monitor frame runs an event
 pass as the port's first tick does: the poked countdowns are the same on both sides, and the port's walk starts one
-frame later ('.:1': its keys are the oracle's + 1, as every *_cmp tool here). (The owner's snes9x capture this replaced,
-2026-10-22, was saved mid-frame: its first --monitor frame ran no pass, and the port's countdowns were poked one higher.)
-The song case's countdown is 05 (the capture's): on today's song-load pricing (C7's dispatch by path, origin/main
-4bdb397) the upload of song 18 ends one frame apart from the cartridge's with 06 or 07 (with 04, 05, 08, 09 on its frame;
-before 4bdb397 it was 04, 05, 07 that missed) -- the song-load pricing's phase residual (memory spc-phase-sensitivity),
-not this mechanism.
+frame later ('.:1': its keys are the oracle's + 1, as every *_cmp tool here).
+The song case's countdown is 05: with 06 or 07 the upload of song 18 ends one frame apart from the cartridge's (with 04,
+05, 08, 09 on its frame) -- the song-load pricing's phase residual, not this mechanism.
+Regression check: field-lead-walks-only-on-his-b0-ticket-vs-rule-cartridge.
 Per case:
 
     lead-step: <case> Crono's position identical on <k>/<n> frames (moved on <m> frames)

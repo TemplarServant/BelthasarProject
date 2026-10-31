@@ -4,7 +4,7 @@ E498 / E4BE with the colour window) -- port against the rule's cartridge: pictur
 
     python tools/ow_wave_cmp.py [cartridge frame ...]       (default 1030 1040 1120 1340 1430 2100 2400)
 
-From saves/field_re/pre_scene_19f.state (the user's capture, tools/ocean_aftermath_cmp.py's start), no input: the cartridge
+From saves/field_re/pre_scene_19f.state (tools/ocean_aftermath_cmp.py's start), no input: the cartridge
 reaches 1F5 at f869, the wave from f993 (the 224-line table a frame, HDMA channel 3 over $210E), window 1's beam f1024-1055
 (channel 1 over $2126), both beams from f1303. Each cartridge `--peek` frame N against the port's shots N + d for d in
 -8..+12: prints the best d and its differing pixels and lines. The world's WRAM runs 6 frames behind until 1EE and 10 after
@@ -65,7 +65,7 @@ def main():
                 best = (d, n, rows)
         d, n, rows = best
         print('owwave: cartridge f%d best port f%d (%+d): %d px differ on %d line(s)' % (f, f + d, d, n, len(rows)))
-    # THE TABLE ITSELF: each side's first frame with the install's `F0` at $8A4F, then both 224-line buffers ($9A36, $9796)
+    # The wave's table: each side's first frame with the install's `F0` at $8A4F, then both 224-line buffers ($9A36, $9796)
     # and the pointers $8A29 / $8A4F ten frames on.
     mon = '7E8A4F:7,7E8A29:4,7E9A36:448,7E9796:448,7E8A21:8,7E8B56:448,7E8DF6:448,7E9176:448,7E9416:448'
     r = subprocess.run([os.path.abspath('build/ct.exe'), '--monitor', mon, '--from', STATE, '--input', '0:1350', '--diff'],
@@ -98,7 +98,7 @@ def main():
     same = all(c.get(k) == p.get(k) for k in ('8A4F', '8A29', '9A36', '9796'))
     print('owwave: table -- install cartridge f%d port f%d; ten frames on: pointers %s/%s, both buffers %s' %
           (c0, p0, c.get('8A29'), p.get('8A29'), 'equal' if same else 'DIFFER'))
-    # THE BEAMS' TABLES: every frame window 1's beam draws alone (f1024-1055) and both draw (f1303-1345), at the offset.
+    # The beams' tables: every frame window 1's beam draws alone (f1024-1055) and both draw (f1303-1345), at the offset.
     off, n, bad = p0 - c0, 0, []
     for f in list(range(1024, 1056)) + list(range(1303, 1346)):
         c, p = at(cs, f), at(ps, f + off); n += 1

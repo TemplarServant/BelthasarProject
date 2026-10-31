@@ -1,22 +1,20 @@
 #!/usr/bin/env python
-"""Regenerate the two SAVE-screen test fixtures under saves/ (which is gitignored).
+"""Regenerate the two Save-screen test fixtures under saves/ (which is gitignored).
 
-  saves/savepoint_flags.bin   story8.bin with $7F01CE bit15 SET -- the ROM's own SAVE-POINT flag.
+  saves/savepoint_flags.bin   story8.bin with $7F01CE bit15 set -- the ROM's own save-point flag.
                               C2/9875 builds $0D34 at menu-open (`LDA $0100 / CMP #01F0 / BCS` for the
                               overworld, else `LDA $7F01CE / BMI` for a save point), and C2/CEDC's
                               `AND #40 / BEQ` is what lets the Save screen open at all. Without this
-                              flag every field map REFUSES the screen, so the save checks cannot run.
+                              flag every field map refuses the screen, so the save checks cannot run.
 
   saves/ct_real_save.srm      the cart's 8 KB SRAM lifted out of saves/com_jogo_salvo.state -- a game
-                              CHRONO TRIGGER ITSELF saved. It is the reference the checksum is graded
+                              the ROM itself saved. It is the reference the checksum is graded
                               against (`Belthasar --sramcheck`): slot 0 carries signature $E41B and the
-                              checksum word 0x6B8C that the ROM wrote, and our port of FF/FBE7 has to
-                              reproduce that number. Grading the checksum against a file WE wrote
-                              would agree with any algorithm, right or wrong.
+                              checksum word 0x6B8C that the ROM wrote, and the port of FF/FBE7 has to
+                              reproduce that number (a file the port wrote would agree with any algorithm).
 
-Both inputs (story8.bin, saves/com_jogo_salvo.state) are themselves local; a checkout without them
-simply cannot run the two checks that need the fixtures, which is the same deal every saves/*.state
-check in this repo already has.
+Both inputs (story8.bin, saves/com_jogo_salvo.state) are local; a checkout without them cannot run
+the two checks that need the fixtures.
 
 Usage:  python tools/gen_save_fixtures.py
 """
@@ -48,7 +46,7 @@ def gen_real_save(src="saves/com_jogo_salvo.state", dst="saves/ct_real_save.srm"
         return False
     from ctlib import lake
     payload, _fmt = lake.read_payload(src)
-    # cart_handleState is the LAST block a LakeSnes payload carries, so the cart's SRAM is its tail
+    # cart_handleState is the last block a LakeSnes payload carries, so the cart's SRAM is its tail
     # (the same splice tools/s9x_to_lake.py performs in the other direction).
     sram = payload[len(payload) - CART_SRAM_SIZE:]
     sig = sram[0x1FF8] | (sram[0x1FF9] << 8)

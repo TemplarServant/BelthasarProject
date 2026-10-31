@@ -3,7 +3,7 @@ r"""Fire Whirl against the Naga-ettes: the enemies' published poses, port agains
 
     python tools/naga_firewhirl_pose_cmp.py
 
-The Manoria cathedral fight (saves/field_re/m81_nuns_ppu_lake.state: the user's snes9x capture animacao_freiras_naga_ettes
+The Manoria cathedral fight (saves/field_re/m81_nuns_ppu_lake.state: the snes9x capture animacao_freiras_naga_ettes
 spliced with --ppu onto `--teleport 129 7 11 0`, so the oracle draws the room right; the port runs
 saves/field_re/m81_nuns_lake.lakewram, the same WRAM). Both sides get battle_ab's combo pokes for 3C (Crono + Lucca,
 every single learned, MP 99, only Fire Whirl's dual bit) and its drive: Down, A, eight Downs, A, A once both are ready.

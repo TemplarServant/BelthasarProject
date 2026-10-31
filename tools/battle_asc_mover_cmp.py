@@ -22,6 +22,7 @@ the bank-CE interpreter (src/battle.c battleAscTick) or its movers (battleAscMov
   slash  Crono's Slash (tech 02): the whole span (the resolver's modes 12-18 / 32-3F, C1/762E).
 
 Prints per case the two spans, and per WRAM field `identical on all N frames` or where it first differs.
+Regression check: battle-tech-asc-movers-vs-logical-oracle.
 """
 import concurrent.futures
 import os
@@ -78,8 +79,8 @@ def run(case):
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, cwd=ROOT, capture_output=True,
                            text=True, errors='replace')
         p = r.stdout
-        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read
-        # from stdout it was never found and `start` stayed 220 -- see tools/battle_ab.py run()).
+        # The battle's frame 0 on the field's clock: src/field.c prints it on stderr, and only under CT_BATTLE_TRACE
+        # (see tools/battle_ab.py run()).
         m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: break
         start = int(m.group(1))

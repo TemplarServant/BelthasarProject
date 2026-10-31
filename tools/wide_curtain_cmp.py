@@ -12,9 +12,8 @@ the same scaling as field.c wideWipeEdge). Prints one line per frame and a verdi
     wide-curtain: f<N> vanilla edge <e> -> widescreen edge <E> (scaled <S>)
     wide-curtain: <k> of <n> frame(s) off the scaled edge
 
-The user, 2026-10-13 (translated from Portuguese): "in widescreen the race's curtain in the demo does not work as it
-should" -- the left side was lit from the curtain's first frame and the right one snapped dark (or lit) at once, since
-the window test only moved the edge across the 256 columns.
+A window test that only moved the edge across the 256 columns would light the left side from the curtain's first frame
+and snap the right one dark (or lit) at once.
 """
 import os
 import struct
@@ -24,7 +23,7 @@ import sys
 FIELD = os.path.abspath('build/Belthasar.exe')
 # (f8167 is the opening's last frame before its edge comes within 16 columns of the screen's -- from there both window
 #  rules, snes/ppu.c's and seq_pic.c's, read the band left as the road's hidden column and light the side: the mod's known
-#  limit; the curtain is the native stage's since 2026-10-18, on the cartridge's frames)
+#  limit; the curtain is the native stage's, on the cartridge's frames)
 FRAMES = (8148, 8152, 8156, 8160, 8164, 8167, 8484, 8488, 8492, 8496, 8500, 8504)
 
 

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Regenerate saves/ct_namewin.bin -- the name-entry-screen WINDOW BACKGROUND, byte-exact.
+"""Regenerate saves/ct_namewin.bin -- the name-entry screen's window background.
 
 The naming-screen windows (frame + diagonal weave + per-scanline HDMA gradient) are SNES BG2,
 composited by the PPU's colour-math pipeline -- not reproducible from the final framebuffer alone
-(the weave is a diagonal tile texture and the gradient is per-scanline). So we capture BG2 in
-ISOLATION from the oracle: ct.exe renders one frame with only layer 1 (BG2) on the main screen
-(PEEK_ISOBG=1, the g_ppuIsoBg hook in snes/ppu.c), keeping its real gradient/colour-math but
-dropping the content layer (BG1 = portrait/keyboard/name) and sprites. The result is the exact
+(the weave is a diagonal tile texture and the gradient is per-scanline). So BG2 is captured in
+isolation from the oracle: ct.exe renders one frame with only layer 1 (BG2) on the main screen
+(PEEK_ISOBG=1, the g_ppuIsoBg hook in snes/ppu.c), keeping its gradient and colour math but
+dropping the content layer (BG1 = portrait/keyboard/name) and sprites. The result is the
 window background, character-independent; field.c blits it and draws the content on top.
 
-Verified byte-identical: the full Lucca naming screen matches the oracle fb 57344/57344 px (max
-channel diff 0). Run from the repo root; needs the ROM + saves/luccaname.state.
+Run from the repo root; needs the ROM + saves/luccaname.state.
 Output: saves/ct_namewin.bin = [w u16 LE][h u16 LE] + w*h*3 RGB (256x224)."""
 import os, struct, subprocess, sys
 

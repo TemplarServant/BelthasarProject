@@ -3,10 +3,9 @@ r"""GATO through the battle's boot, port against the rule's cartridge: his box, 
 
     python tools/gato_entry_cmp.py
 
-The user, 2026-10-07: "when the battle against GATO starts, he teleports down and then up again".
-From op D8's trigger ($0117 = 21, f218) to the battle's first OAM (c296) the cartridge's picture keeps GATO exactly
-as he stood; the port drew a baked capture of his stance for the battle's first 82 frames -- another pose, 8 px
-lower -- and then handed over to the engine (field.c battleGatoRender), which now draws him from the first frame.
+From op D8's trigger ($0117 = 21, f218) to the battle's first OAM (c296) the cartridge's picture keeps GATO as he
+stood; the port draws him from the engine (field.c battleGatoRender) from the first frame, and this checks that his
+box does not move. Regression check: battle-gato-entry-stands-still-vs-rule-cartridge.
 
 The cartridge: saves/battle_re/gato_wait.state under the rule, A held on f0-7, `--peek` k + 2 (the alignment P + 2).
 The port: the same state's WRAM (--loadwram), A held on f1-8 (its key is the oracle's + 1), CT_SHOTS. Compared:
@@ -36,7 +35,7 @@ def box(rgb, w):
 
 
 def oracle_all(script, ks, region):
-    """Every frame k's crop from ONE oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
+    """Every frame k's crop from one oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
     to k)."""
     got = peekshots.shots(STATE, script, ks, env=RULE, prefix=os.path.join(OUT, 'c'))
     out = {}

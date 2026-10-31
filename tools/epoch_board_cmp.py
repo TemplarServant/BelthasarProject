@@ -9,6 +9,7 @@ CT_SRAM, the Load screen, A at f420). Graded:
   - two pictures: the lift-off (port A+20 against cartridge A+22, the P+2 alignment; the era placard's box masked -- the
     port loads the save at another frame, so its placard counter $1BF7 starts lower) and the fade into loc 1DD (A+60 / A+62).
 Prints `epoch-board: timeline <same|DIFFERENT> ...` and `epoch-board: picture A+<n> <px> px differ`.
+Regression checks: ow-epoch-boarding-and-liftoff-vs-oracle and the other ow-*-vs-oracle checks that call it.
 
 `--flight`: the same save driven on (A every 32 frames through the Black Omen's rising, loc 06B and 1DD) to the free flight
 on 1F6 (the cartridge's f3073), then Right 40 frames, Down 16, A (the landing). The port presses the flight 358 frames after
@@ -172,8 +173,7 @@ def omen():
     drive_o = ['0:60', '100:2'] + ['0:30', '100:2'] * 50
     drive_p = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 50
     shots = (700, 900, 1100, 1300, 1500)
-    # (+65: the power-on title, 404971a; -3: the 1DD -> 1F6 world load walked from the ROM, 37 black frames as the
-    #  cartridge's, was 40 -- ce84bdb)
+    # (+65: the power-on title; -3: the 1DD -> 1F6 world load walked from the ROM, 37 black frames as the cartridge's)
     OMEN_BOOT = 65 - 3
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_SHOTS=os.path.join(OUT, 'om'),
@@ -299,9 +299,7 @@ def gauge():
 
 MAP_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '4:2', '0:240', '1:2', '0:250']
 MAP_SEL, MAP_B = 3082, 3324                       # Select and B on the cartridge's clock
-MAP_SHIFT = 358 + 65    # the world's own scripts run 358 frames behind from the free flight (the VM in $0C30 ends at f3074 / f3433 with the old 359)
-                        # (359 until 2026-10-29: the drive's story panorama, FF 23, opened in 18 frames on the port, the
-                        # cartridge's 17 -- field.c seqOpeningHold)
+MAP_SHIFT = 358 + 65    # the world's own scripts run 358 frames behind from the free flight (+65: the power-on title)
 MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3470]   # the mosaic and fade, the zoom, the map, B, the way back
 MAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
 
@@ -318,10 +316,10 @@ def world_map():
                         '--from', os.path.join(JK, 'states', 'ch24.state'), '--btnscript', ','.join(MAP_O), '--frames',
                         str(frames), '--diff'], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_RUNFRAME_TRACE='1'),
                        capture_output=True, text=True, errors='replace')
-    # THE CARTRIDGE'S LOST PICTURES: snes_runFrame cannot stop inside an opcode, and C2/26A8's 64 KB VRAM clear (one DMA, 1.47
-    # frames) ends inside the vblank after the one it began before -- one call (one picture) for two frames. The console shows
-    # both; the port, on the console's clock, is a frame later than the harness from there. Measured, not assumed: a call that
-    # ran over a frame boundary to a line of the vblank (>= 225) is a lost picture at monitor index call - 1.
+    # The cartridge's lost pictures: snes_runFrame cannot stop inside an opcode, and C2/26A8's 64 KB VRAM clear (one DMA,
+    # 1.47 frames) ends inside the vblank after the one it began before -- one call (one picture) for two frames. The
+    # console shows both; the port, on the console's clock, is a frame later than the harness from there. A call that ran
+    # over a frame boundary to a line of the vblank (>= 225) is a lost picture at monitor index call - 1.
     lost = sorted(int(m.group(1)) - 1 for m in re.finditer(r'runframe: call (\d+) ran frames \d+-\d+ \(to V=(\d+)\)', r.stderr)
                   if int(m.group(2)) >= 225)
     lost_by = lambda f: sum(1 for x in lost if x <= f)

@@ -1,31 +1,15 @@
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
-# Bake the menu's WINDOW-GRADIENT lists out of the ROM into src/data/menu_wingrad.h.
+# Bake the menu's window-gradient lists out of the ROM into src/data/menu_wingrad.h
+# (disasm/notes/menu2_window_gradient.md).
 #
-# WHAT THIS IS. The dark menu windows are not painted with a baked gradient: the ROM runs an HDMA
-# channel over $2131/$2132 (CGADSUB + COLDATA) that ADDs a grey fixed colour on the way down each
-# window and SUBTRACTs it on the way out -- one 16-step ramp +8..-7 in 5-BIT colour space, RESET and
-# HEIGHT-NORMALISED per window. Measured directly with `ct.exe --hdma`:
-#
-#   opt0 (status)   line  16.. 27 : 02 E8   line 28.. 39 : 02 E7 ... 196..207 : 82 E7   <- ONE 192px ramp
-#   opt4 (Form)     line  16.. 18 : 02 E8   line 19.. 21 : 02 E7 ...  61.. 63 : 82 E7
-#                   line  64.. 66 : 02 E8   <- RESTARTS every 48 lines: FOUR windows
-#
-# THE GENERATOR is C2/86DD. It copies the 16 (CGADSUB, COLDATA) pairs at C2/8771 to $7E:9DE9, then
-# walks a WINDOW LIST at $7E:9D99 of 2-byte [kind, height] entries (kind 0x80 = end):
-#
-#   kind 0 (FLAT) : emit ONE HDMA entry of `height` lines carrying the neutral pair $7E:9DF9 = 02 E0
-#   kind 1 (RAMP) : $A019 = height * 16 ; then for each of the 16 pairs:
-#                     $A01B += $A019 ; lines = hi($A01B) ; $A01C = 0 (keep only the fraction)
-#                   i.e. every step gets height/16 lines with the remainder carried -- height 192 -> 12
-#                   lines/step, 48 -> 3, 32 -> 2, 80 -> 5, and a non-multiple splits unevenly.
-#
-# THE LISTS ARE ROM DATA at $FF:BBF2, length-prefixed and back-to-back, copied to $7E:9D99 by the
-# generic bank-FF->7E block copier C2/F362 (`LDX $5B / LDA $0000,X / DEC A / INX / MVN $7E,$FF`, so
-# byte 0 is the length and the list starts at +1). Confirmed by monitoring $7E:9D99 on the oracle
-# while walking the ribbon: each hover writes exactly one of these (writer C2:F376), and ENTERING a
-# sub-screen does not change it -- the entered screen keeps the hovering option's list.
+# The dark menu windows are shaded by an HDMA channel over $2131/$2132 (CGADSUB + COLDATA): a 16-step
+# ramp +8..-7 in 5-bit colour space, restarted and scaled to each window's height. The generator C2/86DD
+# copies the 16 (CGADSUB, COLDATA) pairs at C2/8771 to $7E:9DE9 and walks a window list at $7E:9D99 of
+# [kind, height] entries (kind 0 = flat, 1 = ramp, 0x80 = end). The lists are ROM data at $FF:BBF2,
+# length-prefixed and back to back, copied to $7E:9D99 by the bank-FF->7E block copier C2/F362 (byte 0 is
+# the length). Each ribbon hover writes one (C2:F376); an entered sub-screen keeps the hovered option's list.
 #
 # Regenerate:  python tools/gen/menu_wingrad.py      (from the repo root; needs the .sfc)
 # (tools/setup.py runs it.)
@@ -33,7 +17,7 @@ from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a
 ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 
 BASE = 0x3FBBF2                 # FF/BBF2 -- the first length byte
-NLIST = 10                      # 0-5 = the six X-menu ribbon options; 6-9 follow (8 = the SHOP, screen $0C:
+NLIST = 10                      # 0-5 = the six X-menu ribbon options; 6-9 follow (8 = the shop, screen $0C:
                                 # --hdma on its open reads flat 8 / 32 / 112 / 64 / flat 8, and $7E:9D99 is
                                 # written with FF/BC53's body by C2:F376 at the open). Past 9 the data is not a list.
 
@@ -54,7 +38,7 @@ def ramp(lst):
     for i in range(0, len(lst), 2):
         kind = lst[i]
         if kind & 0x80:
-            break                                # C2/871A BMI -- the list terminator is ONE byte
+            break                                # C2/871A BMI -- the list terminator is one byte
         h = lst[i + 1]
         if kind == 0:
             out += [0] * h                       # C2/875B: one flat entry, the neutral pair 02 E0
@@ -62,7 +46,7 @@ def ramp(lst):
             step = h * 16                        # C2/8720: $A019 = height * 16
             for k in range(16):
                 acc = (acc + step) & 0xFFFF      # C2/8733: $A01B += $A019
-                out += [8 - k] * (acc >> 8)      # C2/873D: line count = the INTEGER part
+                out += [8 - k] * (acc >> 8)      # C2/873D: line count = the integer part
                 acc &= 0x00FF                    # C2/8743: STZ $A01C -- keep the fraction
     return out
 

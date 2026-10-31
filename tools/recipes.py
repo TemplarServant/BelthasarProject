@@ -6,7 +6,7 @@ r"""Oracle states rebuilt from power-on: the recipes that replace captured saves
     python tools/recipes.py show <name>                (the chain of steps, flattened)
 
 A savestate holds the console's whole memory -- the game's graphics, code and text -- so none may be published. What
-can be published is how to get there: a RECIPE is a JSON file in tools/recipes/ that names a parent recipe (or the
+can be published is how to get there: a recipe is a JSON file in tools/recipes/ that names a parent recipe (or the
 power-on) and the steps the oracle (build/ct.exe, the cartridge under the rule) runs from it:
 
     {"name": "leene_square", "from": "bedroom", "doc": "...",
@@ -21,17 +21,17 @@ Steps:
                          Start=08 Select=04 Y=02 B=01, A=100 X=200, L=400 R=800; `0:N` waits N frames;
                          `(100:2,0:40)*5` repeats a group -- expanded here, before the oracle sees it)
   ["poke", "ADDR=HH,..."]  set WRAM bytes on the current state (PEEK_POKE on a 0-frame --peek): for the bytes a
-                         recipe cannot replay (a capture's play clock, a party's sheets the owner's own fights left)
+                         recipe cannot replay (a capture's play clock, the party sheets a capture's own fights left)
                          or that a capture's own provenance poked (a keeper's stores, a minigame's points)
   ["teleport", scene, tx, ty, facing, frames(, method)]  ct.exe --teleport: poke the location request ($0100-$0104)
-                         and let the ROM's own loader run it (method jmp = enter C0:0066, the default; ow; req), then
+                         and let the ROM's own loader run it (method jmp = enter C0/0066, the default; ow; req), then
                          run `frames` frames with no pad -- how several captures were made from an earlier state
   ["sram", "<recipe>"]   the battery RAM of another recipe's state at power-on (CT_ORACLE_SRAM): only valid before
                          power_on / boot_to_bedroom
   ["sram_file", "<path>"]  a third-party battery save at power-on, the same way: a file tools/fetch_saves.py downloads
-                         and verifies (tools/third_party_saves.json: its URL and SHA-256), never one of the owner's
+                         and verifies (tools/third_party_saves.json: its URL and SHA-256), never a private capture
 "expect" asserts the result: "loc" ($0100) and "wram" {"0xADDR": "0xVALUE", ...}; a recipe whose result does not
-match fails loudly rather than handing a wrong state to a generator or a check.
+match fails rather than handing a wrong state to a generator or a check.
 
 Every state is built under the rule (CT_ORACLE_LOGICAL=1, CLAUDE.md) and cached in build/recipes/<name>.state (+ .wram,
 .vram, .oam sidecars of the last step); the cache key is the whole chain's steps, the ROM and the oracle's own sources,

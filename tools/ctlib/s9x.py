@@ -1,8 +1,7 @@
 """snes9x ('#!s9xsnp:0011') savestate access.
 
-Thin wrapper over the canonical parser tools/parse_ppu_state.py -- imported,
-NOT duplicated. That module owns the block splitter and the 2652-byte
-big-endian SnapPPU[] decode (plus the FIL $21xx shadow).
+Thin wrapper over tools/parse_ppu_state.py, which owns the block splitter
+and the 2652-byte big-endian SnapPPU[] decode (plus the FIL $21xx shadow).
 
 API:
   is_s9x(path)        -> bool (gzip'd or raw '#!s9xsnp' container)

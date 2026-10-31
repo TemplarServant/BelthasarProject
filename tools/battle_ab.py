@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""A battle ACTION, port against the rule's cartridge, from the same WRAM -- the synthetic-battle harness.
+r"""A battle action, port against the rule's cartridge, from the same WRAM -- the synthetic-battle harness.
 
     python tools/battle_ab.py tech <char> <k>          # char 0..6's k-th single tech (all eight learned), solo party
     python tools/battle_ab.py attack [char]            # char 0..6's physical attack on GATO, solo party
@@ -18,7 +18,7 @@ r"""A battle ACTION, port against the rule's cartridge, from the same WRAM -- th
     python tools/battle_ab.py strip <party> <keys> <frame> [pokes]   # the HUD strip's pixels at that frame, both sides
     (-v on any of them: both sides' effect lists, and each change at its frame from the action's $A013 rise)
 
-The battle is GATO's (saves/battle_re/gato_wait.state, the field before the A that starts it), made into ANY fight by
+The battle is GATO's (saves/battle_re/gato_wait.state, the field before the A that starts it), made into any fight by
 poking the field WRAM before the trigger, on both sides alike -- the party $2980-$2982, the learned-tech seeds
 $2837+char (+ the learn count $2830+char), MP 99 on the sheet ($2600 + char*0x50 + 7 / + 9), an item into $2400.
 The battle's own staging then reads them exactly as it reads a real save.
@@ -28,7 +28,7 @@ The battle's own staging then reads them exactly as it reads a real save.
              bytes ($A013, $95DB, $9609, $AE93, $9877); `--peek` with PEEK_THUMBS every frame;
   port       build/Belthasar.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 (the A that starts the fight), the
              battle's buttons through CT_BATTLE_SCRIPT with CT_BATTLE_SCRIPT_ABS=1 at the cartridge's frames minus the
-             port's `battlephase: begins at field fN`; CT_FIELD_MEMMON of the same bytes (the field host's $7E IS the
+             port's `battlephase: begins at field fN`; CT_FIELD_MEMMON of the same bytes (the field host's $7E is the
              battle's), CT_SHOTS_THUMBS every frame.
 
 Prints, per side, the PC action's MP spend and span ($A013 up -> down), the change sequence of every monitored byte
@@ -200,8 +200,8 @@ def run(pokes, drive, total, tag, regs=None, raw=False, timed=None):
         if os.path.exists(pth): os.remove(pth)
         # CT_AUDIO_SEEDSTATE: the port's SPC is the state's own (src/field.c fieldSeedStateLoad; read only under the rule,
         # CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1): the WRAM image is that state's, so its driver is the console's and the
-        # boot's song upload is priced on the rule's clock -- a cold driver keeps the old clock, the battle NMI's work
-        # charged, and the field-started fight ran 6 frames behind the rule's cartridge.
+        # boot's song upload is priced on the rule's clock. With a cold driver the field-started fight runs 6 frames
+        # behind the rule's cartridge.
         penv = dict(os.environ, **tenv, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                     CT_AUDIO_SEEDSTATE=STATE,
                     CT_BATTLE_SCRIPT_ABS='1', CT_BATTLE_SCRIPT=port_script(drive, start, total),
@@ -213,18 +213,17 @@ def run(pokes, drive, total, tag, regs=None, raw=False, timed=None):
                             '--loadwram', lw, '--walkscript', 'a:8'], env=penv, capture_output=True, text=True,
                            errors='replace')
         p = r.stdout
-        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE. (Read
-        # from stdout it was never found, `start` stayed 220 while the fight begins at f216 on this fixture, and every port
-        # button landed 4 frames early -- the "port drifts 2-8 frames early under the A mash" tools/battle_sim.py reported.)
+        # The battle's frame 0 on the field's clock: src/field.c prints it on stderr, and only under CT_BATTLE_TRACE.
+        # Note: it is not on stdout; with the default `start` every port button would land early.
         m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: break
         start = int(m.group(1))
     orows = parse_mon(o, r'\s*f(\d+)\s+(.*)')
     prows = parse_mon(p, r'fmemmon f(\d+) loc=\w+\s+(.*)')
     cth, pth_ = thumbs(oth), thumbs(pth)
-    # The every-frame thumbnails are ~65 MB a side and read into memory just above: left behind they filled the disk
-    # (2026-10-08: 1101 of them, 68 GB under build/_battle_ab, 100 GB more in one worktree). The oracle's sidecars and the
-    # seed go too; the two final frames strip_report reads (<tag>_c.raw, <tag>_p_f<total>.raw) stay. BATTLE_AB_KEEP=1 keeps all.
+    # The every-frame thumbnails are ~65 MB a side and already read into memory: delete them, the oracle's sidecars and
+    # the seed so repeated runs do not fill the disk. The two final frames strip_report reads (<tag>_c.raw,
+    # <tag>_p_f<total>.raw) stay. BATTLE_AB_KEEP=1 keeps all.
     if not os.environ.get('BATTLE_AB_KEEP'):
         for f in (oth, pth, lw) + tuple(os.path.join(OUT, tag + '_c.raw' + e) for e in ('.wram', '.vram', '.oam')):
             try:
@@ -312,7 +311,7 @@ def job(label, pokes, drive, total, tag, expect):
     return report(label, regs, otl, ptl, cth, pth, expect, drive[-1][0])
 
 
-# ANY ENEMY in GATO's arena (memory ct-enemy-id-poke-fixture): C0/0557 stages the fight's enemy ids from the formation's
+# Any enemy in GATO's arena: C0/0557 stages the fight's enemy ids from the formation's
 # field objects (`LDA $1101,Y / STA $7E29C4,X`), and GATO is object 8 of gato_wait, so poking `$1111` makes the fight load
 # that enemy's stats, AI scripts and techs from the ROM on both sides. Valid for the AI, the effects and the timing -- the
 # sprite is GATO's field graphics with the new id's frames (garbage on both sides), so no picture is graded here.
@@ -380,7 +379,7 @@ for _ids, _grp in (((0x39,), (1, 0)), ((0x3A, 0x3B), (0, 1)), ((0x3C, 0x3D, 0x3E
 
 
 def combo_pokes(t):
-    """The combo's participants as the party (participant 0 in seat 0), every single learned, MP 99, and ONLY this
+    """The combo's participants as the party (participant 0 in seat 0), every single learned, MP 99, and only this
     combo's learned bit -- a dual: $283E + (t-39)/3, bit 7 - (t-39)%3; a triple: $284D + (t-66) bit 7 (C1/CA1A,
     C1/CCCB) -- so each seat's list is its eight singles, one header and this combo (CC/E755): eight Downs reach it."""
     party = list(COMBO_GROUP[t])
@@ -492,7 +491,7 @@ def main():
         c, k = int(a[1]), int(a[2])
         work.append(('tech char%d #%d' % (c, k), pokes_for([c]), drive_tech(k), 1500, 'tech_%d_%d' % (c, k), tech_id(c, k)))
     elif a[0] == 'attack':
-        # the PC PHYSICAL (`attack <char>`): A on Att, A on the target (GATO); $AE93 reads 00 at its dispatch
+        # the PC physical (`attack <char>`): A on Att, A on the target (GATO); $AE93 reads 00 at its dispatch
         c = int(a[1]) if len(a) > 1 else 0
         work.append(('attack char%d' % c, pokes_for([c]), [(MENU_AT, 'a', 2), (MENU_AT + 12, 'a', 2)], 1200,
                      'attack_%d' % c, 0))

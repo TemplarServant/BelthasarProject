@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
-"""Bake the CT battle-mode HUD STRIP into src/data/battle_hud.h + verify vs the oracle.
+"""Bake the battle-mode HUD strip into src/data/battle_hud.h + verify against the oracle.
 
-The strip (renderY 160..207 = oracle-fb-y 168..215, 8px overscan) is ONE 32x32 tilemap at
+The strip (renderY 160..207 = oracle-fb-y 168..215, 8px overscan) is one 32x32 tilemap at
 VRAM word 0x7800, rendered twice per the HDMA split (BG1 4bpp chrome + BG3 2bpp text, TM 0x05).
-The whole 256x48 CHROME -- window bodies (gradient + fixed dither), box bevel frames, the 2px
+The whole 256x48 chrome -- window bodies (gradient + fixed dither), box bevel frames, the 2px
 inter-box separators and the 2px outer screen-edge frame -- is the opaque BG1 layer (subscreen
-= BG1+BG3, CGWSEL=0: field-independent); the TEXT is BG3 2bpp font (ROM $FF:8C60 ==
+= BG1+BG3, CGWSEL=0: field-independent); the text is BG3 2bpp font (ROM $FF:8C60 ==
 CT_ASSET_MENUFONT) with tile index = 0x100 + CT-textcode, palette 2 (CGRAM[8..11]) except PC
-name rows (per-PC palette), composited ON TOP of the chrome.
+name rows (per-PC palette), composited on top of the chrome.
 
-PROBED (both phases): the BG1-only render (PEEK_ISOBG=0) == the normal render byte-exact at
-EVERY strip pixel outside glyph INK (cmd: 2192 diffs all under ink, 0 outside; enemy: 1256/0).
-So the chrome is baked verbatim as the full-strip BG1 layer (ctBattleHudBg1{Enemy,Cmd}) --
-per-pixel, since the dither is non-periodic (no tileable matrix) AND position-dependent (a
-single box's bevel profile does NOT transfer to another box, which was the old
-ctBattleHudBevel* d>16 residual: 74 enemy / 101 cmd px).
+In both phases the BG1-only render (PEEK_ISOBG=0) equals the normal render at every strip pixel
+outside glyph ink, so the chrome is baked as the full-strip BG1 layer (ctBattleHudBg1{Enemy,Cmd}),
+per pixel: the dither is non-periodic and position-dependent (one box's bevel profile does not fit
+another box). disasm/notes/battle_hud_render.md.
 
 Two settled phases:
   - ENEMY-NAME (2 boxes): enemy name (left) + party window (right). Settled ~f320-370.
   - COMMAND    (3 boxes): 2 command windows "Att./Tech/Item" + party window. Settled ~f400+.
 
-Sources: committed saves/battle_re/p600.raw* (settled COMMAND). The settled ENEMY-NAME frame is
-regenerated from gato_press_action.state (btnscript '100:8,0:360') because the committed p300 /
-gato_t2 dumps are MID-SLIDE (window not fully open). ROM = the font + provenance.
+Sources: both frames are made from gato_press_action.state -- command with btnscript '100:8,0:600'
+(CT_GEN_P600 names an existing dump instead), enemy-name with '100:8,0:360' (earlier frames are
+mid-slide, the window not fully open). The ROM gives the font.
 
 Run from repo root. Emits src/data/battle_hud.h; with --verify, reconstructs the strip from the baked
 data and pixel-diffs against the oracle fb over renderY 160..207, printing diff counts.
@@ -38,7 +36,7 @@ ROM   = os.environ.get('CT_ROM', 'Chrono_Trigger_USA_SNES.sfc')
 EXE   = os.environ.get('CT_EXE', 'build/ct.exe')
 STATE = (sys.argv[sys.argv.index('--state') + 1] if '--state' in sys.argv else os.environ.get('CT_GEN_STATE', 'build/recipes/battle_gato_press_action.state'))
 SP    = os.environ.get('CT_SCRATCH', 'build')          # where to drop the regen enemy-name frame
-FONT_FILEOFF = 0x3F8C60                                  # $FF:8C60, no copier header (verified: 'A'@$FF:9660)
+FONT_FILEOFF = 0x3F8C60                                  # $FF:8C60, no copier header ('A' at $FF:9660)
 
 # ---- strip geometry (measured; see disasm/notes/battle_hud_render.md) --------------------------
 STRIP_Y0 = 160            # render-y of the window top (oracle-fb-y 168)
@@ -47,7 +45,7 @@ STRIP_H  = 48             # 160..207 inclusive
 ROWY = {1: 163, 2: 171, 4: 183, 6: 195}   # map row 1=headers, 2/4/6 = text lines
 BOX_CMD   = [(2, 53), (56, 101), (104, 253)]    # command phase: 3 boxes (x0..x1 inclusive)
 BOX_ENEMY = [(2, 95), (98, 253)]                # enemy-name phase: 2 boxes
-BEVEL = 3                 # box L/R frame thickness (px); only used for the interior ACCOUNTING
+BEVEL = 3                 # box L/R frame thickness (px); only used for the interior accounting
 
 # ---- helpers ----------------------------------------------------------------------------------
 def load_font():
@@ -92,19 +90,18 @@ def gen_enemy_frame():
     return out
 
 def gen_cmd_frame():
-    """The settled COMMAND frame (was the committed saves/battle_re/p600.raw: the same peek, verified identical)."""
+    """The settled COMMAND frame (the same peek as saves/battle_re/p600.raw)."""
     out = os.path.join(SP, 'bh_cmd.raw')
     subprocess.run([os.path.abspath(EXE), ROM, '--peek', STATE, out, '--btnscript', '100:8,0:600'],
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out
 
 def gen_iso0(btnscript, name):
-    """Regenerate a settled battle frame with ONLY BG1 composited (PEEK_ISOBG=0). The whole strip
-    CHROME is 100% BG1 (probed: iso0 == normal byte-exact at every non-glyph-ink strip pixel,
-    both phases -- bevels, separators and the outer frame included; battle_hud_render.md Q2), so
-    this is the pure chrome with NO text/OBJ overlay -- the exact source to bake.
-    Enemy uses 100:8,0:360 (== gen_enemy_frame's settled f360); command uses 100:8,0:600 (regen of
-    the committed p600 -- verified byte-identical: cmd600 NORMAL == saves/battle_re/p600.raw)."""
+    """Regenerate a settled battle frame with only BG1 composited (PEEK_ISOBG=0). The strip chrome
+    is all BG1 (bevels, separators and the outer frame included; battle_hud_render.md Q2), so this
+    is the chrome with no text/OBJ overlay -- the source to bake.
+    Enemy uses 100:8,0:360 (== gen_enemy_frame's settled f360); command uses 100:8,0:600 (the
+    frame of saves/battle_re/p600.raw)."""
     out = os.path.join(SP, name)
     env = dict(os.environ, PEEK_ISOBG='0')
     subprocess.run([os.path.abspath(EXE), ROM, '--peek', STATE, out, '--btnscript', btnscript],
@@ -112,14 +109,12 @@ def gen_iso0(btnscript, name):
     return out
 
 def bake_bg1(isopath):
-    """The full-strip BG1 CHROME layer: EVERY pixel (all 256 cols x 48 rows) of the BG1-only
-    render (PEEK_ISOBG=0). This is the window bodies (per-scanline COLDATA gradient + the fixed
+    """The full-strip BG1 chrome layer: every pixel (256 cols x 48 rows) of the BG1-only render
+    (PEEK_ISOBG=0). This is the window bodies (per-scanline COLDATA gradient + the fixed
     non-periodic dither carried in the BG1 tiles, char word 0x1000), the per-box bevel frames,
-    the inter-box separators and the outer screen-edge frame, all in one baked table -- the strip
-    has NO field-showing gap (TM/TS=0x05, opaque). Replaces the old single-box bevel_box()
-    profile, whose stamp-on-every-box approximation was the d>16 residual (the bevel columns are
-    part of the same position-dependent dithered bitmap as the body, so a profile lifted from one
-    box does not match another box's edges). Returns tex[48][256] of (r,g,b)."""
+    the inter-box separators and the outer screen-edge frame, all in one table -- the strip has
+    no field-showing gap (TM/TS=0x05, opaque). The bevel columns belong to the same
+    position-dependent dithered bitmap as the body. Returns tex[48][256] of (r,g,b)."""
     w, h, rgb = fb.load(isopath)
     def px(x, ry):
         oy = STRIP_Y0 + ry + 8; o = (oy*w + x)*3
@@ -205,10 +200,9 @@ static const int ctBattleHudBoxCmd[3][2]   = { {2,53}, {56,101}, {104,253} };
     carr_map("ctBattleHudMapEnemy", mapE)
     fp.write("// COMMAND: box0=Crono cmd(hand+Att/Tech/Item), box1=Marle cmd, box2=party\n")
     carr_map("ctBattleHudMapCmd", mapC)
-    # --- the full-strip BG1 CHROME layer: per-pixel color, baked from the BG1-only render
-    #     (PEEK_ISOBG=0). One table per phase covers body + bevels + separators + outer frame; the
-    #     old split (flat gradient + single-box bevel profile + separator/outer tables) is gone --
-    #     the dither is non-periodic AND position-dependent, so only the verbatim layer is exact.
+    # --- the full-strip BG1 chrome layer: per-pixel colour, baked from the BG1-only render
+    #     (PEEK_ISOBG=0). One table per phase covers body + bevels + separators + outer frame;
+    #     the dither is non-periodic and position-dependent, so only the verbatim layer matches.
     fp.write("// --- full-strip BG1 CHROME: per-pixel index into ctBattleHudBg1Pal ---\n")
     fp.write("// Baked from the BG1-only oracle render (iso0): bodies (COLDATA gradient + fixed dither in\n")
     fp.write("// the BG1 tiles), per-box bevel frames, separators, outer frame. iso0 == normal byte-exact\n")
@@ -254,7 +248,7 @@ def reconstruct(phase, pal, mp, font, bg1):
     return img
 
 def ink_positions(mp, font):
-    """Set of (ry,x) covered by glyph INK (font value>0) per the baked map."""
+    """Set of (ry,x) covered by glyph ink (font value>0) per the baked map."""
     ink=set()
     for r in range(7):
         sy=ROWY.get(r,-1)
@@ -294,7 +288,7 @@ def verify(name, rgb, w, pal, mp, font, phase, bg1):
             else: far+=1
     print("  [%s vs %s] %d strip px (renderY 160-207): exact=%d (%.1f%%)  d<=16=%d (%.1f%%)  d>16=%d (%.1f%%)"
           % (phase, name, total, exact, 100*exact/total, near, 100*near/total, far, 100*far/total))
-    # glyph-INK-only exactness (font value>0), isolating text fidelity from the chrome
+    # glyph-ink-only match (font value>0), isolating the text from the chrome
     inkE=inkT=0
     for r in range(7):
         sy=ROWY.get(r,-1)
@@ -319,12 +313,10 @@ def verify(name, rgb, w, pal, mp, font, phase, bg1):
              bodyE, len(interior), 100*bodyE/max(1,len(interior))))
     return exact,near,far,total
 
-# ---- ADDITIVE: diff a C-produced CtBattleHudRender dump (CT_BATTLESHOT, field.c) vs the SAME oracle
-# targets `verify()` uses above. Reuses the existing oracle loaders (fb.load / gen_enemy_frame /
-# bake_map / load_font) unchanged -- no new derivation logic, just a second thing to diff against the
-# same ground truth. The C dump is [u32 w][u32 h][RGB], TRUE 256x224 engine coords (NO 2x doubling, NO
-# 8px overscan) -- unlike the oracle fb, so renderY ry maps to dump row STRIP_Y0+ry directly, and to
-# oracle row STRIP_Y0+ry+8 (the same "+8" every other helper here already applies).
+# ---- diff a C-produced CtBattleHudRender dump (CT_BATTLESHOT, field.c) against the oracle targets
+# `verify()` uses above, with the same loaders (fb.load / gen_enemy_frame / bake_map / load_font).
+# The C dump is [u32 w][u32 h][RGB] in 256x224 engine coords (no 2x doubling, no 8px overscan), so
+# renderY ry is dump row STRIP_Y0+ry and oracle row STRIP_Y0+ry+8.
 def verify_c(name, cpath, phase):
     font = load_font()
     wC, hC, rgbC = fb.load(cpath)
@@ -383,7 +375,7 @@ def verify_c(name, cpath, phase):
 def main():
     do_verify = '--verify' in sys.argv
     font = load_font()
-    # COMMAND phase from committed p600
+    # COMMAND phase: the settled f600 frame (or CT_GEN_P600)
     p600 = os.environ.get('CT_GEN_P600') or gen_cmd_frame()
     wC,hC,rgbC = fb.load(p600)
     vramC = open(p600 + '.vram','rb').read()
@@ -395,9 +387,8 @@ def main():
     vramE = open(ef+'.vram','rb').read()
     palE  = cgram_palettes(ef+'.oam')
     mapE  = bake_map(vramE)
-    # CHROME: bake the full-strip BG1 layer (bodies + bevels + separators + outer frame) from the
-    # BG1-only render. Enemy @f360 (== the enemy target), command @f600 (== committed p600 BG1,
-    # byte-verified).
+    # chrome: bake the full-strip BG1 layer (bodies + bevels + separators + outer frame) from the
+    # BG1-only render. Enemy @f360 (== the enemy target), command @f600 (== the p600 frame).
     texE = bake_bg1(gen_iso0('100:8,0:360', 'bh_enemy_iso0.raw'))
     texC = bake_bg1(gen_iso0('100:8,0:600', 'bh_cmd_iso0.raw'))
     bg1Pal  = bg1_palette(texE, texC)
@@ -413,7 +404,7 @@ def main():
         print("=== VERIFY: reconstruct strip from baked data, diff vs oracle fb (renderY 160-207) ===")
         verify('p600(committed,settled)', rgbC, wC, palC, mapC, font, 'cmd',   texC)
         verify('regen-f360(settled)',     rgbE, wE, palE, mapE, font, 'enemy', texE)
-    # ADDITIVE: --diffc-enemy <c_dump.raw> and/or --diffc-cmd <c_dump.raw> diff a C-produced
+    # --diffc-enemy <c_dump.raw> and/or --diffc-cmd <c_dump.raw> diff a C-produced
     # CtBattleHudRender dump (CT_BATTLESHOT, src/field.c) against the same oracle targets above.
     if '--diffc-enemy' in sys.argv:
         verify_c('regen-f360(settled)', sys.argv[sys.argv.index('--diffc-enemy')+1], 'enemy')

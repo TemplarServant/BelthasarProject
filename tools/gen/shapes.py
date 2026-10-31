@@ -7,7 +7,7 @@ r"""Shapes: the generated files with their declarations and sizes but none of th
 
 The oracle (build/ct.exe) that replays the recipes is compiled with the rest of the engine, and the engine includes the
 generated tables (src/data/*.h) and translated stages (src/xlat/*.c) -- which the oracle itself makes. A fresh clone
-has none of them, so tools/setup.py first installs these SHAPES, builds a bootstrap oracle from them (the oracle's own
+has none of them, so tools/setup.py first installs these shapes, builds a bootstrap oracle from them (the oracle's own
 modes -- --peek, --fb, --cputrace, --teleport, ... -- never read the tables), generates the real files with it, and
 rebuilds everything.
 

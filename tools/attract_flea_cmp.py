@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-r"""Compare Flea's ENTRANCE POSE in the attract's demo battle (loc 0AD) with the cartridge, pixel for pixel.
+r"""Compare Flea's entrance pose in the attract's demo battle (loc 0AD) with the cartridge, pixel for pixel.
 
     python tools/attract_flea_cmp.py [<port_frame> <oracle_frame>]      (default 3716 50)
 
-The pose is the one whose OBJ tiles OVERLAP: her face (tiles 0-3) is drawn over her white cape (tiles 4-7). On the
-SNES a lower OAM slot wins, and the ROM copies a frame's tiles into ascending slots in tile order (oam.md: tile# =
+In this pose her OBJ tiles overlap: her face (tiles 0-3) is drawn over her white cape (tiles 4-7). On the SNES a
+lower OAM slot wins, and the ROM copies a frame's tiles into ascending slots in tile order (oam.md: tile# =
 $0D00 + t*2), so tile 0 is in front -- the oracle's OAM at this pose has Flea at slots 40..47 = tiles 080..08E.
 The port composes a frame into one bitmap (src/scene.c CtComposeSprite); if a later unit overwrites an earlier
 one, the face disappears under the cape.
@@ -12,9 +12,11 @@ one, the face disappears under the cape.
 The port runs the attract from its own boot (`--scene 433 --selftest`) and dumps the composed field frame at
 <port_frame> with CT_FIELDSHOT. The oracle runs the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) from
 saves/attract_loc0AD_flea_rule.state (the attract from power-on + 3758, at loc 0AD before Flea's entrance, made by a
-recipe: tools/fixtures/attract_rule.json) for <oracle_frame> frames and dumps its framebuffer with --peek. (Until 2026-10-22 it ran the owner's real-time capture
-saves/attract_loc0AD_flea.state, another history: docs/ROADMAP.md 1.1.) Oracle frame rows sit 8 lines below the port's (the 240-line framebuffer), which the
-throne -- a static BG feature above her -- confirms. Compared: the box around Flea, x 104..139, port y 62..107.
+recipe: tools/fixtures/attract_rule.json) for <oracle_frame> frames and dumps its framebuffer with --peek. Oracle
+frame rows sit 8 lines below the port's (the 240-line framebuffer), which the throne -- a static BG feature above
+her -- confirms. Compared: the box around Flea, x 104..139, port y 62..107.
+
+Regression check: attract-flea-entrance-vs-oracle.
 """
 import os
 import struct

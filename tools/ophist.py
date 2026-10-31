@@ -1,25 +1,17 @@
-"""Field event-VM opcode USAGE HISTOGRAM + byte-exact runner coverage.
+"""Field event-VM opcode usage histogram and the runner's coverage.
 
-This is the tool that picks the next porting target. The project's rule is to choose by
-MEASUREMENT rather than by guess ("port the two script JUMPs -- picked by measuring opcode
-usage, not by guessing"), and for three sessions the measurement was re-derived ad hoc and
-then lost, which is how the denominator drifted from 114848 to a mis-remembered 113011.
+Counts the static reachable sites of each opcode over every scene and which of them the runner in src/move.c
+executes, so the next porting target is chosen by measured usage.
 
     python tools/ophist.py [rom]
 
-TWO THINGS IT DOES NOT GUESS AT:
+1. The walk follows the fn pointers; it does not scan the body linearly. A scene's script body holds data as well
+   as code, and a linear walk desyncs into it and counts sites that are not code (about a third too many). Each
+   object's 16-entry fn-pointer table is the set of entry points, and a body offset already walked is counted once,
+   so functions that several slots share do not inflate their opcodes.
 
-1. THE WALK FOLLOWS FN POINTERS, it does not scan the body linearly. A scene's script body
-   holds data as well as code, and a linear walk desyncs into it and invents sites -- 155966
-   instead of 114848, a 36% overcount, with the surplus landing on whatever byte values the
-   data happens to contain. Each object's 16-entry fn-pointer table is the only honest set of
-   entry points, and a body offset already walked is counted ONCE, so functions that several
-   slots share do not inflate their opcodes.
-
-2. THE PORTED SET IS READ OUT OF src/move.c, not written down here. A hand-kept list of "what
-   the runner can execute" has drifted twice in this project's history (--portrun's claim list,
-   twice), and both times the actors sitting on the missing entries were invisible rather than
-   broken -- which does not look like a bug, it looks like a clean run.
+2. The ported set is read out of src/move.c, not kept here by hand: a hand-kept list drifts, and an actor that sits
+   on a missing entry does not look like a bug, it looks like a clean run.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
@@ -64,7 +56,7 @@ def histogram(rom):
 
 
 def ported_opcodes(path='src/move.c'):
-    """The runner's REAL dispatch set, read from the switch in CtFieldRunnerOne."""
+    """The runner's dispatch set, read from the switch in CtFieldRunnerOne."""
     src = open(path, encoding='utf-8', errors='replace').read()
     body = src[src.index('int CtFieldRunnerOne'):]
     return set(int(x, 16) for x in re.findall(r'case 0x([0-9A-Fa-f]{2}):', body))

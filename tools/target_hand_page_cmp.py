@@ -11,7 +11,7 @@ shipped it (h->handPageShown, src/field.c battleTargetCursorRender).
 
 The fixture is tools/caster_radius_dispatch_cmp.py's: gato_wait staged with four Hetakes (tools/battle_sim.py, op 0x83)
 at cells cmb3 12,8 / cmb4 6,7 / cmb5 8,3 / cmb6 10,10 around seat 0's 8,9, each tech the caster's own drive
-(battle_ab.drive_tech) with the select HELD (its A pressed late) so the page turns many times:
+(battle_ab.drive_tech) with the select held (its A pressed late) so the page turns many times:
   Area Bomb (Robo, group 11 -> C1/224B, radius 0x10 around the caster): $A62D = 04 06, the multi arm on every pass.
   Cyclone (Crono, group 12 -> C1/225F, radius 9 around the cursor's enemy cmb3): $A62D = 03 06, the multi arm.
   Cyclone, none near (the Hetakes at cmb3 13,8 / cmb4 3,7 / cmb5 8,3 / cmb6 12,11: cmb6's square is 10): $A62D = 03, the
@@ -51,8 +51,8 @@ PLACED = [(0x5E, 3, 12, 9), (0x5E, 4, 6, 8), (0x5E, 5, 8, 4), (0x5E, 6, 10, 11)]
 FAR = [(0x5E, 3, 13, 9), (0x5E, 4, 3, 8), (0x5E, 5, 8, 4), (0x5E, 6, 12, 12)]
 # The port's frame f draws the shadow the cartridge's main loop left at f - 1: the cartridge's picture N shows the
 # shadow of N - 2 (the NMI at N - 1's end ships it), and inside a fight the port's picture P is the cartridge's P + 1
-# (docs/TESTING.md, THE ALIGNMENT). Measured (BATTLE_AB_KEEP=1, the thumbnails): the secondary hand's cell turns on and
-# off on the same frames at P + 1; -v prints the sprite match at every lag.
+# (docs/TESTING.md, the alignment; the thumbnails, BATTLE_AB_KEEP=1, show the secondary hand on the same frames at
+# P + 1). -v prints the sprite match at every lag.
 LAG = -1
 # (name, char(s), k = the tech's row or None for the Att, placed, frames the select is held, the key that closes it)
 CASES = [('Area Bomb', 3, 6, PLACED, 60, 'a'), ('Cyclone', 0, 0, PLACED, 120, 'a'), ('Cyclone, none near', 0, 0, FAR, 60, 'a'),

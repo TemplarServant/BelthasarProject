@@ -4,26 +4,27 @@ r"""The anim drain's raster deadline in the attract (C0/CA76, the virtual beam t
     python tools/attract_anim_drain_cmp.py [port_shift]
 
 port_shift (optional, default 0) moves the port's side of the leg pairs and its stop frame: the port's numbering moves
-with the attract's clock (the rule's migration: the 087 leg -60 frames under the infinitely fast CPU), the cartridge's not.
+with the attract's clock, the cartridge's does not.
 
-The user, 2026-09-27: "at the entrance of Magus's castle, some bats are rising with a different animation from the
-cartridge" and "on the bridge, Zombor's legs are moving less than on the cartridge, before the battle starts"
-(disasm/notes/anim_drain_cad9.md sec. 8). Both were the drain running without its deadline: the queue emptied in one
-pass, the objects past the fourth arena slot were popped with CLC and lost their frame every step. The drain now reads
-the zelda3 model's virtual beam (src/ct_vbeam.h) and stops at the ROM's own line $6B.
+The drain stops at the ROM's own line $6B against the virtual beam (src/ct_vbeam.h). Without the deadline the queue
+empties in one pass and the objects past the fourth arena slot are popped with CLC and lose their frame every step:
+the bats at the entrance of Magus's castle (0A5) fly with other poses and Zombor's legs on the bridge (087) move less
+(disasm/notes/anim_drain_cad9.md sec. 8).
 
 One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) is watched with CT_FIELD_MEMMON and shoots the legs'
-frames; the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state: the attract
-from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture
-saves/attract_cena_inicial.state) is watched with `ct.exe --monitor` and peeked at the pairs.
+frames; the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state:
+the attract from power-on + 2159, made by the recipe tools/fixtures/attract_rule.json) is watched with
+`ct.exe --monitor` and peeked at the pairs.
 
 * 0A5, the bats obj15-22 from their take-off ($1680 = 02) to anim 3: per bat, the poses it flies through and its longest
   hold of one pose, both counted from the bat's first flap. The cartridge's real beam gives another schedule than the
   virtual one, so the frames do not pair; the property graded is that every bat flaps through the cartridge's wing
-  poses and none holds a pose longer than the cartridge's longest hold (before: obj19-22 flew ~455 frames in the
-  hanging pose 07 and never flapped).
+  poses and none holds a pose longer than the cartridge's longest hold (the failure: a bat that stays in the hanging
+  pose 07 and never flaps).
 * 087, Zombor's legs obj12 from the torso's first pose 02 to the battle: the sequence of committed leg poses on both
   sides, and the legs' box (64,60)-(152,130) at five pairs (port = cartridge + 2066 under the rule, before the shift).
+
+Regression check: attract-anim-drain-bats-and-legs-vs-cartridge.
 """
 import os
 import re

@@ -2,7 +2,7 @@
 """The overworld's event cells ($0280 = 1), the port against the cartridge (disasm/notes/ow_event_cells.md).
 
 Two scenes end on a world cell that runs a script on arrival: scene 02F (Heckran's cave: the whirlpool) sets $7F:01F0 bit 0
-and exits to 1F0 at (37, 32), where world 0's bootstrap has armed event 0 (C2:8300's record 1B 19 01 -> script $7F:113F, the
+and exits to 1F0 at (37, 32), where world 0's bootstrap has armed event 0 (C2/8300's record 1B 19 01 -> script $7F:113F, the
 party out of the water onto the shore by Lucca's house); scene 097 sets $7F:01F3 bit 4 and exits to 1F1 at (35, 3F), world 1's
 event 0 ($7F:0B91). No battery save stands there, so the tool makes one: Jackie's ch04 / ch10 slot 0 with the saved place
 (slot +5F5 / +5F6, the 8 x 8 cell) moved onto the event's cell and the story bit set (slot +603 = $7F:0000), its sum
@@ -30,7 +30,7 @@ SCEN = {
     'heckran': dict(srm='ch04', cell=(0x37, 0x32), flag=(0x1F0, 0x01), shots=(40, 95, 130, 200, 262)),
     'w1': dict(srm='ch10', cell=(0x35, 0x3F), flag=(0x1F3, 0x10), shots=(30, 60, 90)),
 }
-DRIVE_O = '0:300,8:2,0:120,100:2,0:%d'      # Start f300, the Load list, A f422 (memory: ctjackie-saves)
+DRIVE_O = '0:300,8:2,0:120,100:2,0:%d'      # Start f300, the Load list, A f422
 DRIVE_P = 'n:198,s:1,n:125,a:1,n:%d'   # Start on the power-on's title (boot_loader.md sec. 10)
 
 

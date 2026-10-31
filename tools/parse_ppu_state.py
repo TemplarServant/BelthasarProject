@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-Definitive snes9x SNAPSHOT_VERSION-11 PPU-block parser for Chrono Trigger
-PPU register extraction (Telepod portal-open frame).
+Parser for the PPU block of a snes9x savestate (SNAPSHOT_VERSION 11), used to read Chrono Trigger's
+PPU registers (first written for the Telepod portal-open frame).
 
-Synthesized from four independent investigations:
-  - SnapPPU[] descriptor order (Investigator A)
-  - struct SPPU / SOBJ field widths from ppu.h (Investigator B)
-  - byte-order = BIG-ENDIAN (Investigator D, confirmed from FreezeStruct source)
-  - OAMData@2003 / CGDATA@64 anchors (Investigator C)
+The layout follows snes9x: the SnapPPU[] descriptor order, the struct SPPU / SOBJ field widths from
+ppu.h, and big-endian multi-byte fields (FreezeStruct). The OAMData@2003 / CGDATA@64 anchors check it.
 
-The 2652-byte PPU block (snes9x SnapPPU[]) does NOT contain the screen-enable
+The 2652-byte PPU block (snes9x SnapPPU[]) does not contain the screen-enable
 or colour-math control registers (TM/TS/CGWSEL/CGADSUB/W12SEL/WHx/WBGLOG...).
 Those are the raw last-written $21xx shadow in the FIL block (Memory.FillRAM,
 32768 bytes, indexed FillRAM[address]). parse_ppu() reads the PPU block;
@@ -21,9 +18,9 @@ import struct, gzip, io
 # ---------------------------------------------------------------------------
 # SnapPPU[] descriptor, in serialized (array) order.
 # Each entry: (name, elem_size_bytes, count). Stream width = elem_size*count.
-# Multi-byte ints are BIG-ENDIAN. uint8 arrays are raw.
+# Multi-byte ints are big-endian. uint8 arrays are raw.
 # Version 11 includes CGSavedByte (after CGADD) and VRAMReadBuffer (last).
-# RangeTimeOver is in struct SPPU but NOT in SnapPPU[] -> omitted.
+# RangeTimeOver is in struct SPPU but not in SnapPPU[] -> omitted.
 # ---------------------------------------------------------------------------
 def _build_descriptor():
     d = []

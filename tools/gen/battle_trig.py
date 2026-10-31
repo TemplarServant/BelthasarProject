@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Bake the battle-movement TRIG tables into src/data/battle_trig.h.
+"""Bake the battle-movement trig tables into src/data/battle_trig.h.
 
-Derivation dossier: disasm/notes/battle_enemy_move_target.md §A + the Wave-2 ADDENDUM,
-plus the STEP-2 disasm working notes. The enemy field-movement mover (CF/F98F), the angle
-computation (atan2 C1/0222) and the per-segment sin/cos step (C1/01F9) all index three raw
-ROM tables in bank C0. This generator copies them BYTE-FOR-BYTE from the ROM (the sanctioned
-bake method -- nothing computed/approximated) and emits them as C arrays:
+disasm/notes/battle_enemy_move_target.md sec. A and its Wave 2 addendum. The enemy field-movement mover
+(CF/F98F), the angle computation (atan2 C1/0222) and the per-segment sin/cos step (C1/01F9) index three
+raw ROM tables in bank C0, copied here from the ROM as C arrays:
 
-  * C0/F300 -> ctBattleAtanTab[1024]  -- the ARCTANGENT table (C1/0222 `LDA $C0F300,X`).
-      32x32: index = (|dy|>>3)*32 + (|dx|>>3); the byte is atan(|dy|/|dx|) in the FIRST octant
+  * C0/F300 -> ctBattleAtanTab[1024]  -- the arctangent table (C1/0222 `LDA $C0F300,X`).
+      32x32: index = (|dy|>>3)*32 + (|dx|>>3); the byte is atan(|dy|/|dx|) in the first octant
       where 0x40 == 90deg (a full turn == 0x100). C1/0222 folds the quadrant from the dx/dy signs.
-  * C0/F900 -> ctBattleSinTab[1024]   -- the SINE table (CF/F9FB / C1/01F9 `LDA $C0F900,X`).
-      Indexed (angle<<2)&0x3FF; the byte is |255*sin(angle*360/256deg)|, and the reader NEGATES
+  * C0/F900 -> ctBattleSinTab[1024]   -- the sine table (CF/F9FB / C1/01F9 `LDA $C0F900,X`).
+      Indexed (angle<<2)&0x3FF; the byte is |255*sin(angle*360/256deg)|, and the reader negates
       it when the index >= 0x200 (the lower half-turn) -> a signed sine in [-255,+255]. cos(a) is
       read as sin(a+0x40).
-  * C0/F700 -> ctBattleFaceTab[1024] -- the FACING/octant table (C1/379A:37E9 `LDA $C0F700,X`,
-      indexed by the raw angle) used to pick the sprite's walk facing. Baked for completeness
-      (the walk-pose facing, E.6); the POSITION math needs only F300+F900.
+  * C0/F700 -> ctBattleFaceTab[1024] -- the facing/octant table (C1/379A:37E9 `LDA $C0F700,X`,
+      indexed by the raw angle) that picks the sprite's walk facing (E.6); the position math needs
+      only F300+F900.
 
 Run from repo root (needs Chrono_Trigger_USA_SNES.sfc in cwd). Emits src/data/battle_trig.h.
 --verify re-reads the ROM and spot-checks a handful of table entries + the derived sin/atan2.
@@ -49,7 +47,7 @@ def emit_array(rom, name, off, note):
 def main():
     rom = _romlib.load(ROM)
     if '--verify' in sys.argv:
-        # spot-check the SINE reader (signed) reproduces the physics we validated (angle 0x40 == +255 == +Y).
+        # spot-check the signed sine reader (angle 0x40 == +255 == +Y).
         def sin_signed(a):
             idx = (a << 2) & 0x3FF
             t = rom[0xF900 + idx]

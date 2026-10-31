@@ -6,9 +6,10 @@ r"""Export the public tree of BelthasarProject: the tracked files minus everythi
 Copies every file `git ls-files` lists, except the patterns in EXCLUDE (ROM-derived data that the setup regenerates
 from the user's own ROM: savestates and captures, src/data's tables, src/xlat's translated programs; and private or
 stale material), into <dir> (which must not exist or be empty, and must be outside this repository). Then runs
-tools/release/scan_rom_leaks.py over <dir> with the ROM and, when present, ct_assets.dat and today's src/data
-tables as corpora, so a table that slipped through is caught by its bytes, not only by its name. With --commit,
-`git init` + one commit (the public repository starts with a fresh history: docs/DECISIONS.md, 2026-10-10).
+tools/release/scan_rom_leaks.py and tools/release/scan_dialogue.py over <dir> with the ROM and, when present,
+ct_assets.dat and the src/data tables as corpora, so a table that slipped through is caught by its bytes, not only by
+its name. With --commit, `git init` + one commit (the public repository starts with a fresh history; see
+docs/DECISIONS.md).
 
 Prints what it left out, by pattern, and the scanner's verdict; exits 1 unless the tree is clean.
 """

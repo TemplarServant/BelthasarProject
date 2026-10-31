@@ -1,5 +1,5 @@
 """Loaded by every Python child of tools/regress.py (PYTHONPATH): routes its oracle runs through the content-addressed
-cache of tools/ctlib/oracle_cache.py when CT_ORACLE_CACHE is set. Loaded by FILE, so tools/ is never put on sys.path
+cache of tools/ctlib/oracle_cache.py when CT_ORACLE_CACHE is set. Loaded by file path, so tools/ is never put on sys.path
 (tools/dis.py would shadow the standard library's dis)."""
 import importlib.util
 import os

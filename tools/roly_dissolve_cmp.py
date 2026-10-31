@@ -3,25 +3,18 @@ r"""The Roly Rider's death dissolve, port against the rule's cartridge (scene 11
 
     python tools/roly_dissolve_cmp.py
 
-saves/battle_re/roly_rider_s119.state: the cartridge `--teleport 119 8 10 2` (above obj30's trigger tile; since
-2026-10-22 the recipe twin tools/recipes/fxr_roly_s119.json, from the playthrough's Guardia Forest); Down 40 walks into it
-and the ambush stages three Roly Riders (id 13, type 1, slots 0/4/6). roly_rider_battle.state is the same run 240 frames
-on. Crono attacks (A, A, every 144 frames); on the twin his third blow kills slot 0 (C1:ED12, cartridge f708 of the
-battle state; the port's field f949) -- the capture's first blow did, at f324 / f564. The port walks Down a frame after
-the cartridge (`.:1,d:40`: its keys are the cartridge's + 1, ct-frame-alignment-p2) -- with the keys on the same frame its
-lead was a pixel ahead into the ambush and Crono's battle foot one line lower ($1D23 62 / 61), which turned the Rolies'
-segments elsewhere from their third -- and its fight script starts at its battle frame 120 (the capture's 116).
-The s119 state was rebuilt on 2026-10-12 by the same teleport (the first one was lost; tools/regress_inputs.json):
-the cartridge's side reproduces the original numbers exactly, and the port's kill lands one frame earlier on it (f564). The port replays the same drive from the s119 WRAM
-(roly_rider_s119.lakewram).
+saves/battle_re/roly_rider_s119.state (recipe twin tools/recipes/fxr_roly_s119.json, from the playthrough's Guardia
+Forest): Crono in scene 119 above obj30's trigger tile; Down 40 walks into it and the ambush stages three Roly Riders
+(id 13, type 1, slots 0/4/6). roly_rider_battle.state is the same run 240 frames on. Crono attacks (A, A, every 144
+frames); his third blow kills slot 0 (C1:ED12; cartridge f708 of the battle state, the port's field f949). The port
+replays the drive from the s119 WRAM (roly_rider_s119.lakewram) with its keys one frame after the cartridge's
+(`.:1,d:40`, the frame alignment in docs/TESTING.md); its fight script starts at its battle frame 120.
 
-Per frame from the kill, the dying Roly's box (around its foot at the kill) is compared with the same box once it is gone (the
-cartridge's +60): the count of pixels that still differ = how much of the corpse is drawn. A dissolve shows the
-count holding, then thinning to 0; a corpse that vanishes on the blow reads 0 from the first frame. The port's +k is set
-against the cartridge's +k+1: inside a fight the pictures align at P+1 (docs/TESTING.md; the port's own picture draws what
-the NMI shipped -- the CGRAM page and, since 2026-10-15, CD/3ED2's dither tiles). Graded at the same +k the port read one
-to two frames ahead -- the comparison's offset, not the routine's (CD/0043's 43 frames, battle_death_dissolve_order.md,
-last addendum); at P+1 every sampled frame is the cartridge's count.
+Per frame from the kill, the dying Roly's box (around its foot at the kill) is compared with the same box once it is
+gone (the cartridge's +60): the count of pixels that still differ is how much of the corpse is drawn. A dissolve holds
+the count, then thins it to 0; a corpse that vanishes on the blow reads 0 from the first frame. The port's +k is set
+against the cartridge's +k+1: inside a fight the pictures align at P+1 (docs/TESTING.md). CD/0043's 43 frames:
+disasm/notes/battle_death_dissolve_order.md.
 """
 import os
 import subprocess
@@ -41,9 +34,8 @@ PSEED = 'saves/battle_re/roly_rider_s119.lakewram'
 CKILL, PKILL = 708, 949            # the kill frame on each side (cartridge: the battle state's; port: the field's)
 OFFS = [0, 2, 3, 10, 12, 20, 30, 40, 42, 43]
 PICT = 1                      # the cartridge's picture of the port's frame P is its --peek P+1 (in a fight)
-# the dying Roly's box in the port's picture (the oracle's PNG is 8 lines lower): its foot (slot 0 = combatant 3,
-# $1D0F / $1D26 on the cartridge at the kill) - 17 .. + 17 across and - 26 .. + 10 down -- (84,26)-(118,62) on the
-# capture's foot (101,52); the recipe twin's (2026-10-22) dies at (79,89)
+# the dying Roly's box in the port's picture (the oracle's is 8 lines lower): around its foot (slot 0 = combatant 3,
+# $1D0F / $1D26 on the cartridge at the kill), -17..+17 across and -26..+10 down
 BOX_OFF = (-17, -26, 17, 10)
 DRIVE = ','.join(['100:2,0:10,100:2,0:120'] * 6)
 

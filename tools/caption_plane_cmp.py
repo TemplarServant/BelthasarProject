@@ -15,15 +15,16 @@ saves/field_re/s19_power_tab.state (scene 05B, "PRODUCER"), then 2280 frames wit
 05C. The port is seeded from its WRAM (--loadwram) and its SPC (CT_AUDIO_SEEDSTATE) and runs the exits, the loads (fn0's
 op 0x29 -> the font into its VRAM image), the clears and the lines itself -- a seed has no VRAM, so the plane must be
 built by the port's own machine. Port frame k is set beside the cartridge's `--peek` k + 2 + d (the alignment P + 2,
-memory ct-frame-alignment-p2), the whole 256x224.
+docs/TESTING.md), the whole 256x224.
 
 d is each scene's own: the exits are `E1` (C0/3B4B), whose C0/3B71 `LDA $4210 / BPL` spins on the NMI flag the field
-NMI's own read races -- before the rule decided that race for the poll (2026-10-09, oracle_rdnmi_rule.md) the cartridge
-left 05B 2 frames and 05C 7 frames after the port. The tool still finds d per scene (-5..9, the most identical frames)
-and prints it; under the rule both are 0:
+NMI's own read races. The rule decides that race for the poll (disasm/notes/oracle_rdnmi_rule.md), so under it both
+are 0; the tool still finds d per scene (-5..9, the most identical frames) and prints it:
   caption-plane: <scene> d=+<d> <k>/<n> frames identical, <c> with captions
 05D is graded to its exit (the port leaves it after f1348): its NPCs are loaded hidden and shown by obj1's `7C`; obj6's
-sprite 186 (`82 B3`) was missing from ct_assets.dat until the extractor swept every scene's loads (sec. 9).
+sprite 186 (`82 B3`) comes from the extractor's sweep of every scene's loads (sec. 9).
+
+Regression check: field-caption-plane-staff-roll-vs-rule-cartridge.
 """
 import os
 import struct

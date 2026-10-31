@@ -6,17 +6,17 @@ r"""The location load, port against cartridge, load by load over the playthrough
     python tools/load_cost_cmp.py --cycles --keep [leg ...] ...keeping the beam traces in build/_loadcost/ (~200 MB each:
                                                             what tools/load_cost_consts.py reads)
 
-FRAMES. A load commits ($0100 changes, C0/0C9A) and its ramp's first INC lands $0119 = 01 (C0/284D). The cartridge is the
+Frames: a load commits ($0100 changes, C0/0C9A) and its ramp's first INC lands $0119 = 01 (C0/284D). The cartridge is the
 logical oracle (CT_ORACLE_LOGICAL=1) under the leg's pad, the port Belthasar from the leg's start state; each prints
 `<loc> oracle <commit>-><ramp> d=<n>  port ... d=<n>` and the count that agree.
 
-CYCLES. The cartridge's load is beam-traced (`ct.exe --cputrace`, CPUTRACE_BEAM=1, from C0/0B86) and summed: its CPU work
+Cycles: the cartridge's load is beam-traced (`ct.exe --cputrace`, CPUTRACE_BEAM=1, from C0/0B86) and summed: its CPU work
 from the NMI-off write to C0/2848's first vblank wait (C0/0B5D -> 0B86 is a constant 716; C0/0B86 -> C0/2848 the window;
 C0/2848 -> C0/0B38 the pass) less the sound driver's (C7: the loader clock's, priced by the port's SPC), and by leg: the
 packets (C0/0960 -> C0/56D4, + the walk's 7 JSRs), the pass, the object pass's ops (every C0/5910 / C0/5977 dispatch +
 CT_VM_DISPATCH). The port's are its `loadwalk:` line (CT_LOADCOST=1; src/field_cost.c ct_field_load_cycles, the ops priced
 as the VM runs them). A load the walk refuses names the leg (`NOT WALKED`) and is charged ct_lz_load_cost instead.
-disasm/notes/field_load_cost.md section 9.
+disasm/notes/field_load_cost.md sec. 9. Regression check: field-reload-cost-vs-oracle.
 """
 import os
 import re

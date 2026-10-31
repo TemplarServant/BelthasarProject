@@ -10,8 +10,8 @@ default), with CT_AUDIO_PCM (src/audio.c: the frames as played, 534 samples each
 for byte, the two stdouts equal line for line (but the line naming the engine), and the attract's last picture equal.
 A borrowed check's own output files are moved to build/_sndmach/<mode>/ so the runs never collide.
 
-    snd-machine: attract: 5982834 samples identical / 5982834, stdout identical, picture identical
-    snd-machine: quick: 412 runs (120 with sound), PCM identical in 412 / 412 (21630204 samples), stdout identical in 412 / 412
+    snd-machine: attract: <n> samples identical / <m>, stdout identical, picture identical
+    snd-machine: quick: <n> runs (<k> with sound), PCM identical in <a> / <n> (<s> samples), stdout identical in <b> / <n>
 """
 import concurrent.futures
 import filecmp

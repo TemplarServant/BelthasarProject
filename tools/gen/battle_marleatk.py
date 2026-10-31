@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""ADDITIVE bake: MARLE's ranged (crossbow) ATTACK animation -- the T1 completeness pass.
-Emits src/data/battle_marleatk.h. Does NOT touch other headers; NOT wired.
+"""Bake Marle's ranged (crossbow) attack animation into src/data/battle_marleatk.h.
+Touches no other header. Not wired.
 
-Dossier: battle_actionfx.md ADDENDUM MA (Marle attack). Method mirrors tools/gen/battle_anim.py A2/A3:
-per-pose keyframe = pal6 OAM assembly + its streamed OBJ tiles 0x20-0x37 + pal6, baked at a rep
-frame; pixel-verify composites all combatants by OAM index and diffs Marle's pixels vs the oracle fb
-(fb row = OAM y + 8). Base gato_press_action.state, the canonical 42x A-MASH; Marle attacks at f869
-($9877=0x0F, AEEB=02 PC_RANGED). Her attack is a crossbow: she aims side-on and fires a BOLT drawn
-by her own streamed pal6 sprite (tiles stream, like Crono's sword-arc), + a small pal0 IMPACT SPARK
-at GATO (tiles 0x12E/0x108/0x10C/0x10E), then GATO hurt-flashes (strike). NO lunge (steps ~10px).
+disasm/notes/battle_actionfx.md, ADDENDUM MA. Method as tools/gen/battle_anim.py A2/A3: per-pose keyframe =
+pal6 OAM assembly + its streamed OBJ tiles 0x20-0x37 + pal6, baked at a representative frame; --verify
+composites all combatants by OAM index and diffs Marle's pixels against the oracle fb (fb row = OAM y + 8).
+Base gato_press_action.state with the 42x A-mash; Marle attacks at f869 ($9877=0x0F, AEEB=02 PC_RANGED).
+She aims side-on and fires a bolt drawn by her own streamed pal6 sprite (like Crono's sword arc), plus a small
+pal0 impact spark at GATO (tiles 0x12E/0x108/0x10C/0x10E); then GATO hurt-flashes. No lunge (she steps ~10 px).
 
 Run from repo root: CT_EXE=<scratch>/ct_probe.exe CT_SCRATCH=<scratch> python tools/gen/battle_marleatk.py [--verify] [--emit]
 """
@@ -56,7 +55,7 @@ def _plot(buf,owner,s,tb,cgram,key):
 # ---- Marle pose keyframes (rep frames within each pose dwell)
 MARLE_KF=[('MA1_aim',905),('MA2_raise',918),('MA3_fire',930),('MA4_recover',948)]
 # ---- impact spark (pal0), tile-animated at the impact point; rep frames per tile-variant.
-# NB peek timeline = monitor+2 (battle_hud_render peek/monitor skew): monitor 0x12E@922 0x108@930
+# Note: peek timeline = monitor+2 (battle_hud_render peek/monitor skew): monitor 0x12E@922 0x108@930
 # 0x10C@932 0x10E@934 -> peek 924 932 934 936.
 SPARK_KF=[('E0_spark',924),('E1_ring0',932),('E2_ring1',934),('E3_ring2',936)]
 

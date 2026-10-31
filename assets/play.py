@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live, interactive field viewer — walk Crono around a Chrono Trigger scene.
+"""Live, interactive field viewer: walk Crono around a Chrono Trigger scene.
 
 A Python front-end to the field engine (engine.py) via ctypes -> SDL2.dll
 (third_party/SDL2). The map + NPCs are composited once into a base image; each frame

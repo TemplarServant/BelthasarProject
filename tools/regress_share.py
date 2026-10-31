@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-r"""Prove that checks can share ONE run, and give them the same env so tools/regress.py runs them once.
+r"""Prove that checks can share one run, and give them the same env so tools/regress.py runs them once.
 
     python tools/regress_share.py NAME NAME [...] [--write] [--partition] [--argv JSON]
 
 The checks must have the same argv and env_rule -- except the value of `--frames`, where the group runs to the
-largest -- and their env is merged into one (a variable two of them set to different values is refused). Each check is run as declared and the group is run once with the merged env, and every
-check must grade the merged run exactly as it grades its own:
+largest -- and their env is merged into one (a variable two of them set to different values is refused). Each check
+is run as declared and the group is run once with the merged env, and every check must grade the merged run exactly
+as it grades its own:
 
   1. every expect line is in the merged output, and the check passes on its own;
   2. its pin regexes take the same lines from the merged output as from its own (`--pin` re-derives the same expect);
@@ -16,7 +17,7 @@ check must grade the merged run exactly as it grades its own:
 --argv '["python", "tools/frame_region_cmp.py", ...]' gives the group's command when it is not the checks' own with the
 largest --frames (frame_region_cmp.py's several rectangles in one port run); the proof is the same.
 
-The merged env only ADDS the other checks' probes (CT_*TRACE, CT_*MEMMON, ...): a variable that changes what the
+The merged env only adds the other checks' probes (CT_*TRACE, CT_*MEMMON, ...): a variable that changes what the
 program does (an input, an audio mode, a frame to stop at) differs between scenarios and is refused by the merge, or
 fails 1-3. A check that stops earlier is equivalent only when nothing it grades or pins comes from its own last
 frames or from where the run ends (an end-of-run summary): 1-3 refuse it otherwise. With --write each check's env

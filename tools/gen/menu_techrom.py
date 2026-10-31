@@ -1,17 +1,17 @@
-# Bake the TECH screen's ROM data into src/data/menu_techrom.h, so the menu stays ROM-free.
-# Derived in disasm/notes/menu2_tech_screen.md. The screen is ONE list machine over a 37-entry
-# "tech GROUP" space: groups 0-6 = the seven characters' 8 SINGLE techs (ids $01..$38), 7-21 = the
-# fifteen PAIRS with 3 DOUBLE techs each ($39..$65), 22-36 = the fifteen TRIPLES with 1 each
-# ($66..$74). The tabs "1 2 3" are Single/Double/Triple and index C2/BD65 for the group window.
+# Bake the Tech screen's ROM data into src/data/menu_techrom.h, so the menu reads no ROM.
+# disasm/notes/menu2_tech_screen.md. The screen is one list machine over a 37-entry "tech group"
+# space: groups 0-6 = the seven characters' 8 single techs (ids $01..$38), 7-21 = the fifteen
+# pairs with 3 double techs each ($39..$65), 22-36 = the fifteen triples with 1 each ($66..$74).
+# The tabs "1 2 3" are Single/Double/Triple and index C2/BD65 for the group window.
 #
 #   C2/BD40  38-byte cumulative id boundary over the 37 groups
 #   C2/BD65  (firstGroup, groupCount) per tab = 00 07 | 07 0F | 16 0F
-#   CC/2963  per-group CHARACTER MASK (bit 0x80 = charId 0), the filter C2/BCCD applies
-#   CC/253B  the MP cost table, indexed by techId for a SINGLE and by $7E:1607[char*64+tech] for a
+#   CC/2963  per-group character mask (bit 0x80 = charId 0), the filter C2/BCCD applies
+#   CC/253B  the MP cost table, indexed by techId for a single and by $7E:1607[char*64+tech] for a
 #            double/triple (C2/BC22)
 #   FF/F951  per-character cap on the "next tech to learn" that FF/F876 adds to the menu bitfield
 #
-# The $7E:1607 index table is REBUILT here exactly as FF/F8BD-F94B builds it at menu-open, out of
+# The $7E:1607 index table is rebuilt here as FF/F8BD-F94B builds it at menu open, out of
 # CC/24B4 (pair participants, stride 3), CC/28DB (the two per-tech indices per double, stride 6),
 # CC/2979 (the triple participation masks) and CC/2935 (the triple indices).
 import os as _ctos, sys as _ctsys
@@ -30,11 +30,11 @@ MASK = ROM[0x0C2963:0x0C2963 + 37]         # CC/2963
 F951 = ROM[0x3FF951:0x3FF951 + 8]          # FF/F951
 MPTAB = ROM[0x0C253B:0x0C253B + 0x100]     # CC/253B
 
-# ---- FF/F8BD..F94B: the per-character MP INDEX table, laid out as $7E:1607 + charId*64 + techId ----
-# The address C2/BC46 forms is $7E:1607 + charId*64 + techId, and the per-character 64-byte blocks
-# therefore OVERLAP: the whole thing is one flat region running $7E:1640 (char 0's first double,
-# id $39) to $7E:17FB (char 6's triple, id $74). We bake exactly that region, and the C side indexes
-# it as [charId*64 + techId - 0x39].
+# ---- FF/F8BD..F94B: the per-character MP index table, laid out as $7E:1607 + charId*64 + techId ----
+# The address C2/BC46 forms is $7E:1607 + charId*64 + techId, so the per-character 64-byte blocks
+# overlap: the whole thing is one flat region from $7E:1640 (char 0's first double, id $39) to
+# $7E:17FB (char 6's triple, id $74). That region is baked, and the C side indexes it as
+# [charId*64 + techId - 0x39].
 IDX_LO, IDX_HI = 0x1640, 0x17FC
 idx = bytearray(IDX_HI - IDX_LO)
 def put(charId, techId, v):
@@ -58,10 +58,10 @@ for tri in range(15):
             put(c, tech, ROM[0x0C2935 + run]); run += 1
     tech += 1
 
-# CC/3A09 -- the per-tech DESCRIPTION pointer table (16-bit, bank $CC). The strings are
-# DICTIONARY-COMPRESSED, so they go through assets/text.py's decoder (the same one the item and
-# location names use) and are baked as fixed-width ASCII, the way ctItemCat already is.
-# Entries 0x76..0x78 are the three TAB names the screen puts in the bar next to the description.
+# CC/3A09 -- the per-tech description pointer table (16-bit, bank $CC). The strings are
+# dictionary-compressed, so they go through assets/text.py's decoder (as the item and location
+# names do) and are baked as fixed-width ASCII, like ctItemCat.
+# Entries 0x76..0x78 are the three tab names the screen puts in the bar next to the description.
 SUBS = CTTEXT.load_dict(ROM)
 DESC_N = 0x7A
 desc = []
@@ -72,14 +72,14 @@ for tid in range(DESC_N):
     t = "".join(ch for ch in t.split(chr(10))[0] if 32 <= ord(ch) < 127)[:31]
     desc.append(t)
 
-# ---- the CAST tables (disasm/notes/menu2_tech_effect.md) --------------------------------------
+# ---- the cast tables (disasm/notes/menu2_tech_effect.md) --------------------------------------
 # C2/B3E6 builds three bytes at the A press and C2/8ECC/C2/8E2D consume them:
-#   $0DC0 = $CC:2140[id*12 + 0] & 0x1F      -- the amount NIBBLE (and bits 6/7 = FULL / negate)
+#   $0DC0 = $CC:2140[id*12 + 0] & 0x1F      -- the amount (and bits 6/7 = full / negate)
 #   $0DBD = ($CC:2140[id*12 + 1] & 0xC0)    -- b7 touch HP, b6 touch MP
-#           | ((($CC:1ACB[id*2] & 1) + 1) << 2)   -- b3 = ALL PARTY
-#   $0DBF = the caster's DERIVED MAGIC (sheet +0x39), so the tech arm is magic-scaled
-# and the per-target spread reads $C0:FE00 with a cursor $7E:0D00 and NO wrap on the index, so the
-# table has to be baked with the over-read tail (cursor 0xFF + 5).
+#           | ((($CC:1ACB[id*2] & 1) + 1) << 2)   -- b3 = all party
+#   $0DBF = the caster's derived magic (sheet +0x39), so the tech arm is magic-scaled
+# and the per-target spread reads $C0:FE00 with a cursor $7E:0D00 and no wrap on the index, so the
+# table is baked with the over-read tail (cursor 0xFF + 5).
 TECH_N = 0x75
 fxb = bytearray(TECH_N); nib = bytearray(TECH_N)
 for t in range(TECH_N):
@@ -88,7 +88,7 @@ for t in range(TECH_N):
     allp = ((ROM[0x0C1ACB + t * 2] & 1) + 1) << 2
     fxb[t] = (ROM[rec + 1] & 0xC0) | allp
 RNG = ROM[0x00FE00:0x00FE00 + 0x110]          # C0/FE00 + the 5-byte over-read the ROM performs
-POSE = ROM[0x2B519:0x2B519 + 7]               # C2/B519, indexed by charId -- SEVEN entries, not five
+POSE = ROM[0x2B519:0x2B519 + 7]               # C2/B519, indexed by charId -- seven entries
 
 def emit(f, name, data, note):
     f.write("// %s\n" % note)

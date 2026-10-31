@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""src/data/dlg_cursor.h -- the DIALOGUE DECISION CURSOR (the pointing hand), lifted out of an oracle frame.
+"""src/data/dlg_cursor.h -- the dialogue decision cursor (the pointing hand), lifted out of an oracle frame.
 
-CT's decision box (event ops 0xC0/0xC3/0xC4) marks the selected option with a small pointing HAND drawn into the
-dialogue window itself -- not an OBJ (the oracle's OAM at the option page holds only the party sprites), and not the
-menu's hand either (src/data/menu_itemdetail.h, OBJ tile 0x20: compared pixel by pixel, 63/138 -- another graphic).
+The decision box (event ops 0xC0/0xC3/0xC4) marks the selected option with a small hand drawn into the dialogue
+window itself -- not an OBJ (the OAM at the option page holds only the party sprites), and a different graphic from
+the menu's hand (src/data/menu_itemdetail.h, OBJ tile 0x20).
 
-METHOD -- the one the window bitmap itself came from: take a frame with the option page up and SUBTRACT the window
-texture (saves/ct_window.bin, T_WINDOW -- tools/gen/ct_window.py, the asset stage, runs first). Every pixel of the
-window's 80 rows maps 1:1 onto the frame (fb row = window row + 16 on a 240-row peek dump), so whatever differs inside
-the cursor's cell IS the cursor. Pixels equal to the texture are transparent -- an edge pixel that happens to match the
-window exactly would be dropped, which is why the cell is a fixed 16x12 box rather than the diff's bbox.
+Method (the one the window bitmap came from): take a frame with the option page up and subtract the window texture
+(saves/ct_window.bin, T_WINDOW -- tools/gen/ct_window.py, the asset stage, runs first). The window's 80 rows map 1:1
+onto the frame (fb row = window row + 16 on a 240-row peek dump), so whatever differs inside the cursor's cell is the
+cursor. Pixels equal to the texture are transparent; an edge pixel that happens to match the window would be dropped,
+so the cell is a fixed 16x12 box rather than the diff's bbox.
 
-CAPTURE (Norstein Bekkler's lab, loc 1B2 -- its `C0 40 03` box has four options), from recipe truce_market (it stands
+Capture (Norstein Bekkler's lab, loc 1B2 -- its `C0 40 03` box has four options), from recipe truce_market (it stands
 in for saves/truce_market.state):
   ct.exe --teleport 434 8 8 0 --from <truce_market> --out o434.state --frames 240
   ct.exe --peek o434.state o434e.raw --btnscript "10:8,0:6,100:6,0:180,100:6,0:60,100:6,0:60,100:6,0:120,100:6,0:120"
 The cursor's cell in WINDOW space is (16,10)-(31,21): x 16 is one glyph cell left of the option text (the options are
-indented six spaces = x 32), and row 10 is the first option line's glyph row. Port of tools/gen_dlgcursor.py (which
-took the picture as a PNG; the PNG was the same 2x-downsampled framebuffer this reads directly).
+indented six spaces = x 32), and row 10 is the first option line's glyph row.
 
     python tools/gen/dlg_cursor.py [--state S] [--window saves/ct_window.bin] [--out src/data/dlg_cursor.h]
 """

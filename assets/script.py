@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Parse Chrono Trigger (SNES/USA) scene scripts (the field event bytecode) and
-extract each scene's objects/actors — their sprite, initial position and facing.
-Reverse-engineered from CTViewer's scene_script_decoder.rs, verified against the ROM.
+extract each scene's objects/actors: their sprite, initial position and facing.
+Follows CTViewer's scene_script_decoder.rs, checked against the ROM.
 
 Scene scripts: 513-entry pointer table @ 0x3CF9F0 (3-byte: u16 offset + bank), the
 data is LZ-compressed. A decompressed script is: [actor_count u8][actor_count x 16
 u16 function pointers (rebased - header_size)][shared bytecode body]. Each object's
 16 slots: 0=init, 1=activate, 2=touch, 3..15=other. Execution starts at slot 0.
 
-There is no static "sprite/x/y" record — those come from interpreting the init
-function (slot 0). We linearly walk it (advancing by each opcode's length) and record
+There is no static "sprite/x/y" record; those come from interpreting the init
+function (slot 0). This walks it linearly (advancing by each opcode's length) and records
 the sprite-load / coordinate / facing ops, which covers most static placements.
 
 Usage:
@@ -116,21 +116,18 @@ def iter_ops(body, start, limit=4000):
 #   op 57 -> C0/41E4  LDA $6D / STA $8D / LDA #00   id 0 Crono
 #   op 5C -> C0/41EC            STA $8E / LDA #01   id 1 Marle
 #   op 62 -> C0/41F4            STA $8F / LDA #02   id 2 Lucca
-#   op 6A -> C0/4204            STA $90 / LDA #03   id 3 Robo   <-- the LATER handler, LOWER id
-#   op 68 -> C0/41FC            STA $91 / LDA #04   id 4 Frog   <-- the EARLIER one, HIGHER id
+#   op 6A -> C0/4204            STA $90 / LDA #03   id 3 Robo   <-- the later handler, lower id
+#   op 68 -> C0/41FC            STA $91 / LDA #04   id 4 Frog   <-- the earlier one, higher id
 #   op 6C -> C0/420C            STA $92 / LDA #05   id 5 Ayla
 #   op 6D -> C0/4214            STA $93 / LDA #06   id 6 Magus
-# ⚠ THE MAPPING IS NOT MONOTONIC IN THE HANDLER ADDRESS, and 0x68/0x6A WERE SWAPPED HERE. That is
-# not a harmless table typo: this dict bakes the packed ACTOR table in ct_assets.dat, which is the
-# reference `ct.exe --vm` compares the C engine against -- and src/ct_vm.c's pcSprite() carried the
-# SAME swap, so the 512-scene check was comparing two copies of one mistake and reporting 512 OK.
-# Correcting only one side is what made scenes 87, 345 and 429 finally disagree.
+# Note: the mapping is not monotonic in the opcode. This dict bakes the packed actor table in ct_assets.dat,
+# the reference `ct.exe --vm` compares src/ct_vm.c's pcSprite() against (disasm/notes/pc_loader_id_map_swap.md).
 _PC = {0x57: 0, 0x5C: 1, 0x62: 2, 0x6A: 3, 0x68: 4, 0x6C: 5, 0x6D: 6}
 
 class Mem:
     """Scene-script WRAM: global $7F0000 (storyline at 0), local $7F0200 (cleared per
-    scene), system $7E0000. 16-bit values are LITTLE-endian, as the 65816 stores them (CTViewer's big-endian
-    convention put op 0x50's word in the wrong byte order; src/ct_vm.c r16/w16 and move.c CtVmVarFamily agree)."""
+    scene), system $7E0000. 16-bit values are little-endian, as the 65816 stores them (not CTViewer's
+    big-endian convention), matching src/ct_vm.c r16/w16 and move.c CtVmVarFamily."""
     def __init__(self):
         self.g = bytearray(0x200)
         self.l = bytearray(0x200)
@@ -216,7 +213,7 @@ def _local_arith(mem, op, body, addr):
     o1 = body[addr + 1]
     if op == 0x60: src, di = o1 | (body[addr + 2] << 8), body[addr + 3]
     elif op in (0x5E, 0x61): src, di = mem.r16(LOC + o1 * 2), body[addr + 2]
-    elif op in (0x63, 0x64):                         # $FF20 / $FF28 indexed by the WHOLE byte (no AND #0F)
+    elif op in (0x63, 0x64):                         # $FF20 / $FF28 indexed by the whole byte (no AND #0F)
         k = (8 if op == 0x64 else 0) + o1
         src, di = (_MASKS[k] if k < 16 else 0), body[addr + 2]
     else: src, di = o1, body[addr + 2]
@@ -256,7 +253,7 @@ def run_func(body, objs, obj, start, mem, actors, cap=None, follow=False, depth=
         nxt = addr + ln
         if op == 0x00 or op in (0xAF, 0xB0, 0xB1, 0xB2):     # Return / yield-forever / hand to player
             stop_op = op; break
-        # --- control flow (jump when condition FALSE) ---
+        # --- control flow (jump when condition false) ---
         elif op == 0x10: nxt = addr + body[addr + 1] + 1
         elif op == 0x11: nxt = addr - body[addr + 1] + 1
         elif op == 0x12:
@@ -284,17 +281,17 @@ def run_func(body, objs, obj, start, mem, actors, cap=None, follow=False, depth=
                 nxt = addr + body[addr + 2] + 2
         elif op == 0xD2:                                     # party-membership conditional (ROM C0/38E8 ->
             pc = body[addr + 1]                              # C2/8C36 mode 0): scan the 3 active-party char-ids
-            if not any(mem.r8(0x7E2980 + k) == pc for k in range(3)):  # at $7E2980/81/82; ABSENT -> take the
-                nxt = addr + 2 + body[addr + 2]              # jump, PRESENT falls through (addr+3). Marle's fair
-                                                             # meeting (obj3 @439) needs this or her init drops
-                                                             # into the in-party follower branch + skips placement.
-        # fn0's has-character / has-item tests, which the engine's init pass runs through move.c's graded bodies since
-        # 2026-10-08 (disasm/notes/live_vm_op_gaps.md). Both jump from their displacement byte (spill + disp).
+            if not any(mem.r8(0x7E2980 + k) == pc for k in range(3)):  # at $7E2980/81/82; absent -> take the
+                nxt = addr + 2 + body[addr + 2]              # jump, present falls through (addr+3). E.g. Marle's
+                                                             # fair meeting (obj3 @439): without it her init takes
+                                                             # the in-party follower branch and skips placement.
+        # fn0's has-character / has-item tests, as the engine's init pass runs them through move.c
+        # (disasm/notes/live_vm_op_gaps.md). Both jump from their displacement byte (spill + disp).
         elif op == 0xCF:                                     # C0/388D -> C2/8C36 leaf 3 (C2/8CCF): the char id among
-            if not any(mem.r8(0x7E2980 + k) == body[addr + 1] for k in range(9)):   # $7E2980..2988; ABSENT jumps
+            if not any(mem.r8(0x7E2980 + k) == body[addr + 1] for k in range(9)):   # $7E2980..2988; absent jumps
                 nxt = addr + 2 + body[addr + 2]
         elif op == 0xC9:                                     # C0/3780 -> C1/CFE9 HasItem over $7E2400..24FF (an id
-            it = body[addr + 1]                              #   of 0 returns 0 before the scan); ABSENT jumps
+            it = body[addr + 1]                              #   of 0 returns 0 before the scan); absent jumps
             if it == 0 or not any(mem.s[0x2400 + k] == it for k in range(0x100)):
                 nxt = addr + 2 + body[addr + 2]
         # --- data / math / bit (operate on local memory) ---
@@ -342,14 +339,11 @@ def run_func(body, objs, obj, start, mem, actors, cap=None, follow=False, depth=
             if cid == _PARTY[0]:                             # in-party slot 0 (C0/426A); 1/2 are 0x80 here
                 a['draw'] = 'draw'; a['dead'] = False        # only an in-party arm writes $1A81 (42A6) and a live
                 _pc_lead_arm(mem, obj)                       # $1100; C0/428C stores the kill's own 80 (ct_vm.c)
-        # 0x81/0x82/0x83 are the NPC/monster loaders and they DO NOT touch the visibility byte $1A81:
-        # C0/4476, C0/4559+C0/4590 and C0/46DF contain no `STA $1A81,X` (the only indexed writers in
-        # the whole ROM are C0/42A6/431A/43CD -- the PC loader's three in-party arms -- C0/4CD9, the
-        # 0x90/0x91/0x7E/0x7C/0x7D tail, and C0/6264, op 0x0A). Setting 'draw' here re-showed any
-        # object whose fn0 reads `91 HIDE / 8B SETCOORD / 82 LOADSPRITE` -- scene 113's obj11 (the
-        # Truce Canyon gate), 227/11, 272/8+9, 288, 419/8, 420/8. Mirrors src/ct_vm.c's loader arms.
-        # ...but they DO rewrite $1100, the only byte op 0x0A's kill (C0/6254) set besides $1A81: a load after a kill
-        # puts the object back in the scheduler's queue, still hidden.
+        # 0x81/0x82/0x83, the NPC/monster loaders (C0/4476, C0/4559+4590, C0/46DF), do not write the
+        # visibility byte $1A81, so a `91 HIDE / 8B SETCOORD / 82 LOADSPRITE` init stays hidden (e.g. scene
+        # 113's obj11, the Truce Canyon gate). They do rewrite $1100, which op 0x0A's kill (C0/6254) also
+        # sets, so a load after a kill puts the object back in the scheduler's queue, still hidden.
+        # Mirrors src/ct_vm.c's loader arms; disasm/notes/gate_scene113_hidden_portal.md sec. 2.
         elif op == 0x81: a['sprite'] = body[addr + 1]; a['defined'] = True; a['dead'] = False
         elif op == 0x82: a['sprite'] = body[addr + 1] + 7; a['defined'] = True; a['dead'] = False
         elif op == 0x83: a['sprite'] = body[addr + 1] + 256; a['defined'] = True; a['dead'] = False
@@ -357,7 +351,7 @@ def run_func(body, objs, obj, start, mem, actors, cap=None, follow=False, depth=
         elif op == 0x8B:                                     # C0/4B74: X = tile centre, Y = tile foot
             a['pos'] = (body[addr + 1] * 16 + 8, body[addr + 2] * 16 + 16)
             _pos_words(mem, obj, body[addr + 1] * 256 + 0x80, body[addr + 2] * 256 + 0xFF)
-        elif op == 0x8C:                                     # C0/4BC3: the TILES are the LOW bytes of two scene
+        elif op == 0x8C:                                     # C0/4BC3: the tiles are the low bytes of two scene
             X = obj * 2                                      #   vars; $1801/$1881 := them, $1880 := FF and $1800
             tx, ty = mem.r8(LOC + body[addr + 1] * 2), mem.r8(LOC + body[addr + 2] * 2)   # kept, no zero guard
             mem.s[0x1801 + X] = tx; mem.s[0x1881 + X] = ty; mem.s[0x1880 + X] = 0xFF
@@ -366,7 +360,7 @@ def run_func(body, objs, obj, start, mem, actors, cap=None, follow=False, depth=
             wx, wy = body[addr + 1] | (body[addr + 2] << 8), body[addr + 3] | (body[addr + 4] << 8)
             a['pos'] = (wx >> 4, wy >> 4)
             _pos_words(mem, obj, wx, wy)
-        elif op in (0x21, 0x22):                             # C0/65AA / C0/65EB: an object's TILE pair -> two vars
+        elif op in (0x21, 0x22):                             # C0/65AA / C0/65EB: an object's tile pair -> two vars
             X = body[addr + 1] if op == 0x21 else mem.s[0x0197 + body[addr + 1]]   # 0x22: by party slot, $0197+op1
             tx, ty = mem.s[(0x1801 + X) & 0xFFFF], mem.s[(0x1881 + X) & 0xFFFF]
             mem.w8(LOC + body[addr + 2] * 2, tx); mem.w8(LOC + body[addr + 3] * 2, ty)
@@ -421,7 +415,7 @@ def extract_actors(rom, scene):
     for n in range(len(objs)):
         run_func(body, objs, n, objs[n][0], mem, actors)
     for a in actors:
-        # placed = a sprite was loaded, draw mode is on, not dead, AND it got a position.
+        # placed = a sprite was loaded, draw mode is on, not dead, and it got a position.
         # Objects that load a sprite but never get coords (the party-member slots, and NPCs
         # positioned later by a runtime event) are not on the field.
         a['visible'] = a['defined'] and a['draw'] == 'draw' and not a['dead'] and a['pos'] is not None

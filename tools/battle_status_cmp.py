@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-r"""The battle's STATUS machinery, port against the rule's cartridge, from the same WRAM and the same ROM.
+r"""The battle's status machinery, port against the rule's cartridge, from the same WRAM and the same ROM.
 
     python tools/battle_status_cmp.py lifeline      # Crono's lifeline revive inside the dead-flag sweep C1/B223
     python tools/battle_status_cmp.py sleeptail     # the ATB handler's tail after GATO's action (a sleeper's $B03A)
-    python tools/battle_status_cmp.py chaosenemy    # a CONFUSED GATO: no counter, the swapped script, his turns
-    python tools/battle_status_cmp.py lockdrop      # a LOCKED Crono's queued tech dropped at its dispatch (C1/D74F)
-    python tools/battle_status_cmp.py blindgate     # a BLIND GATO does not counter (C1/86FF, +1E & 8F)
+    python tools/battle_status_cmp.py chaosenemy    # a confused GATO: no counter, the swapped script, his turns
+    python tools/battle_status_cmp.py lockdrop      # a locked Crono's queued tech dropped at its dispatch (C1/D74F)
+    python tools/battle_status_cmp.py blindgate     # a blind GATO does not counter (C1/86FF, +1E & 8F)
     python tools/battle_status_cmp.py all
 
 GATO's fight (saves/battle_re/gato_wait.state, the field before the A that starts it) on both sides: the cartridge is
 build/ct.exe under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) with PEEK_POKE and the scenario's ROM
-patches applied in memory (CT_ROM_MEMPATCH, src/rom_verify.h) to the verified dump; the port is build/Belthasar.exe --scene 6 --loadwram <the same WRAM> --walkscript a:8 with CT_ROM
-and CT_BATTLE_MEMMON (battle frames; the cartridge's frame = the port's + 227 on this fixture, disasm/notes/
-battle_status_pipeline.md S9.3). The ROM patches (disasm/notes/battle_status_pipeline.md S9.5), applied in memory on both sides:
-  sleep02  GATO's attack headers CC/89C6[0..1]: +1 = 63 (accuracy), +2 = 02 (SLEEP), +7 |= 04 (the rider)
-  lock08   the same with +2 = 08 (LOCK)
-  chaosE   Crono's physical header CC/23F7: +1 = 63, +2 = 04 (CHAOS), +7 |= 04; GATO's +23 immunity CC/5422 = 00
-  blindE   the same with +2 = 01 (BLIND)
+patches applied in memory (CT_ROM_MEMPATCH, src/rom_verify.h) to the verified dump; the port is build/Belthasar.exe
+--scene 6 --loadwram <the same WRAM> --walkscript a:8 with CT_ROM and CT_BATTLE_MEMMON (battle frames; the
+cartridge's frame = the port's + OFF below, disasm/notes/battle_status_pipeline.md sec. 9.3). The ROM patches
+(disasm/notes/battle_status_pipeline.md sec. 9.5), applied in memory on both sides:
+  sleep02  GATO's attack headers CC/89C6[0..1]: +1 = 63 (accuracy), +2 = 02 (Sleep), +7 |= 04 (the rider)
+  lock08   the same with +2 = 08 (Lock)
+  chaosE   Crono's physical header CC/23F7: +1 = 63, +2 = 04 (Chaos), +7 |= 04; GATO's +23 immunity CC/5422 = 00
+  blindE   the same with +2 = 01 (Blind)
 Prints one line per scenario: the frames compared and how many differ per field, and the scenario's own events.
+Regression checks: battle-status-machinery-vs-logical-oracle, battle-status-machinery-under-the-rule-vs-oracle.
 """
 import os
 import re
@@ -26,23 +28,19 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# One directory PER RUN: battle-status-machinery-vs-logical-oracle and -under-the-rule- run this same tool in parallel
-# in the suite, and a shared directory let one run rewrite the .lakewram the other was reading (the
-# post-flip full suite: blindgate read 0 frames on one side). docs/TESTING.md: a file shared by two parallel checks
-# lives in each check's own directory. Removed at the end of the run.
+# One directory per run: two suite checks run this tool in parallel, and a file shared by two parallel checks lives in
+# each check's own directory (docs/TESTING.md). Removed at the end of the run.
 OUT = os.path.join(ROOT, 'build', '_status_cmp', 'run%d' % os.getpid())
 STATE = 'saves/battle_re/gato_wait.state'
 OFF = 227                                           # cartridge frame - port battle frame on gato_wait
 # ...under the rule (CT_ORACLE_NMION_HOLD=1, both sides): 228 -- the cartridge's boot holds C1/0000's setup, the port's is
 # `2 + apu + 3 + 1` (battle.c battleBootBandArm), so the fight's frames meet one later (disasm/notes/battle_menu_pass.md 12).
 if os.environ.get('CT_ORACLE_NMION_HOLD', '1') != '0': OFF = 228
-# ...and under the infinitely fast CPU (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1, the rule's model, CLAUDE.md): the
-# cartridge's fight comes 17 frames sooner than the valve's (C1/0000 at f222 in every model; the band seed `$CA1E = FF`
-# f279 against f296, the first iteration head f355 against f372 -- the boot's setup and its upload's CPU side held) and
-# the port's 11 frames sooner (its arm CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm; a --selftest --loadwram
-# run brings no SPC up, so the scene-6 boot takes the fixture's arm), so the offset is 221 -- the arm 58 against the seed
-# f279, as tools/gato_logical_cmp.py measures on the fixture, identical on all 1564 frames -- and every frame below moves
-# with its side: the cartridge's presses and windows by CS, the port's presses by PS. The same fight at the same moments.
+# ...and under the infinitely fast CPU (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1, the rule's model): the cartridge's
+# fight comes 17 frames sooner (C1/0000 at f222 in every model; the band seed `$CA1E = FF` f279 against f296: the boot's
+# setup and its upload's CPU side are held) and the port's 11 sooner (its arm CT_BHUD_ARM_FRAME - 11, src/battle.c
+# battleBootBandArm), so the offset is 221, as tools/gato_logical_cmp.py measures on the fixture. Every frame below
+# moves with its side: the cartridge's presses and windows by CS, the port's presses by PS.
 CS, PS = 0, 0
 if os.environ.get('CT_ORACLE_NMION_HOLD', '1') != '0' and os.environ.get('CT_ORACLE_IFAST', '1') != '0':
     CS, PS = -17, -11
@@ -209,10 +207,9 @@ def lifeline():
     f = fields_of('d0=5E4A:1,ll=5E4F:1,hp=5E30:2,frz=A013:1,act=AE93:1,who=0200:1,msg=020C:4,box=CCEC:1,flag=B03A:3,'
                   'atb=AFAB:3,ros=AEFF:11,all=0024:1,cur=B2D3:1,slot=B328:4,rec=AD9C:4,it=0027:1,q=A6D9:3,qcur=A6DD:2,chooser=95D5:1,'
                   'pend=95D6:5,rec0=93EE:1')
-    # The window ENDS at c1140 in every model: the revived Crono's enqueue ($93EE = 81, $95D6 = 00) and his box at the next
-    # pass ($A6D9) are what it grades last, and under the infinitely fast CPU they come 7 frames sooner, not 17 (c1124 /
-    # c1128 against plain A's c1131 / c1135) -- an end at 1140 + CS (c1123) cut both off, and the mutations of C1/8562 and of
-    # the close's single CC/F06B wipe survived (the post-flip mutation sweep, 2026-10-01).
+    # The window ends at c1140 in every model: the revived Crono's enqueue ($93EE = 81, $95D6 = 00) and his box at the next
+    # pass ($A6D9) are what it grades last, and under the infinitely fast CPU they come only 7 frames sooner, so an end at
+    # 1140 + CS would cut both off.
     LO, HI = 605 + CS, 1140
     n, per, first = compare(o, p, f, LO, HI)
     ev = ' | cartridge: $5E4F %s, $A013 %s, $020C %s, $CCEC %s, $5E4A %s' % (

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Scan a tree for the game's TEXT: passages of the script quoted in notes, comments or docs.
+r"""Scan a tree for the game's text: passages of the script quoted in notes, comments or docs.
 
     python tools/release/scan_dialogue.py <dir> [--rom ROM] [--chars 40]
 

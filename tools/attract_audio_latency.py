@@ -1,40 +1,30 @@
 #!/usr/bin/env python3
-r"""The attract's sound against its picture: the output FIFO's backlog through the whole demo (the user, 2026-09-27: "in
-the game's demo, the sound is falling behind after a certain point, probably the mode 7 race scene").
+r"""The attract's sound against its picture: the output FIFO's backlog through the whole demo.
 
     python tools/attract_audio_latency.py [points stages end]
 
-The optional arguments (all three: `360,8040,8640,9120,10740 8100-9025 10732`) replace the output frames below: the port's
-numbering moves with the attract's clock (the rule's migration: the stages 60 frames earlier, the demo's end 85, under the
-infinitely fast CPU), so the same moments of the demo are sampled.
+The optional arguments (all three, e.g. `360,8040,8640,9120,10740 8100-9025 10732`) replace the output frames below; the
+port's numbering moves with the attract's clock, so they keep the same moments of the demo sampled.
 
 The port's output plays one frame of SPC per displayed frame, 534 samples; every sample the SPC produces beyond that
-waits in src/audio.c's FIFO, and a backlog that only grows is sound drifting behind the picture. CT_AUDIO_FIFOTRACE=60
+waits in src/audio.c's FIFO, and a backlog that only grows is sound drifting behind the picture. CT_AUDIO_FIFOTRACE=1
 prints the FIFO before each output frame's take (534 = one frame queued: the frame about to play, no latency) and the
-SPC's cycle carry. A song load legitimately runs the SPC AHEAD (carry < 0: the frames it will then stand still for,
+SPC's cycle carry. A song load legitimately runs the SPC ahead (carry < 0: the frames it will then stand still for,
 carry/32 samples); those samples play on the frames they belong to, so the backlog graded here is the FIFO less that
 debt. Run: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1: one SPC frame per engine frame, the paced host's
 relation) to f10800.
 
-The user's second report the same day, "after the race scene, the curtains' sound is damaged", was the same
-defect: the window wipe's whoosh (18 BA) is the cartridge's on all 15 curtains, alone (tools/sfx_voice_cmp.py: level
-and noise rate), but before the fix it played 1.85 s after its picture, and the full FIFO (65536) threw away the
-oldest samples when the 087 battle's JSLs pre-ran on top of it -- 841 samples lost by the demo's end, 396 in the race
-(the stage ran more SPC than the DSP's 0x400 ring between two reads). Now: none.
+Host paths that give the SPC time no displayed frame stands for (an unclocked handshake at a location load, a clocked
+session's last opcode) are not debited from the SPC, whose state stays the cartridge's; the output drains them instead
+(audio.c: a frame takes 536 samples while more than a frame waits beyond the debt). A stage's exit frame runs its
+remaining SPC time (audio.c CtAudioStageExitFrame).
 
 Printed: the backlog at a few points (the title, before the race, after the race, after entry 3, the end), the largest
-one over the two translated stages (the race f8150-8580, entry 3 f8760-9070) and the largest over the whole demo (all
-three on the trace's 60-frame grid), and every output frame over the demo that came out more than 32 samples short of
-its 534 -- the rest of it the last sample held, an audible gap (the user, 2026-10-13: "the curtain after the race cuts
-the music"; it was a translated stage's exit frame whose remaining SPC time nobody ran -- audio.c CtAudioStageExitFrame).
+one over the two stages (the race and entry 3) and the largest over the whole demo (all three on a 60-frame grid), the
+samples lost (the DSP ring overrun or the FIFO full), and every output frame over the demo that came out more than 32
+samples short of its 534 (the rest of it the last sample held, an audible gap).
 
-What was wrong (1.8 s behind the picture by the end): the race's logical-frame holds ran the APU (snes.c
-g_ctLogicalHoldApu -- the zelda3 model runs one SPC frame per displayed frame, Belthasar turns it off), the field's
-mailbox kept posting through a translated stage (field.c), a stage's partial last frame stayed queued (audio.c's short
-read), and the host paths that give the SPC time no displayed frame stands for (an unclocked handshake at a location
-load, a clocked session's last opcode: ~100-250 samples a load) piled up. Those last ones are NOT debited from the SPC
-(its state is the cartridge's: the song loads' handshakes and the stages are graded on it) -- the output DRAINS them
-(audio.c: a frame takes 536 samples while more than a frame waits beyond the debt).
+Regression check: attract-sound-stays-with-the-picture.
 """
 import os
 import re
@@ -67,7 +57,7 @@ def main():
                 short.append((o, n))
             lost = int(m.group(3))
             if o % 60:
-                continue                        # the backlog statistics: on the 60-frame grid, as they always were
+                continue                        # the backlog statistics use the 60-frame grid
             debt = int(-float(m.group(4)) / 32.0) if float(m.group(4)) < 0 else 0
             q[o] = max(0, n - debt)
     if not q:

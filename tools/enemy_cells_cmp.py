@@ -18,7 +18,7 @@ Prints, per slot and in total:
     enemy-cells-cmp: slot0 id=B3 type=2 pose=00 cells=12 px 3072/3072 identical
     enemy-cells-cmp: f330 total 5632/5632 identical
 
-(disasm/notes/battle_enemy_cells.md; the law is src/battle.c CtBattleEnemyCells.)
+(disasm/notes/battle_enemy_cells.md; the port's code is src/battle.c CtBattleEnemyCells.)
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))

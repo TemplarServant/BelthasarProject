@@ -7,11 +7,11 @@ Reads `git ls-files` (the index: a file staged for the next commit counts) and f
 
   * a path the public export leaves out (tools/release/export_public.py EXCLUDE: the ROM, ct_assets.dat, savestates,
     WRAM captures, battery saves, src/data's tables, src/xlat's translated programs, ...);
-  * a binary file (tools/release/scan_rom_leaks.py's decode_text) outside the scanner's allowlist -- the README's
-    pictures in docs/media/ -- the upstream files named in UPSTREAM below and the files export_public.py's KEEP
-    publishes by name.
+  * a binary file (tools/release/scan_rom_leaks.py's decode_text) outside the allowlist: the README's pictures in
+    docs/media/, the upstream files in scan_rom_leaks.py's UPSTREAM, and the files export_public.py's KEEP publishes
+    by name.
 
-It needs no ROM, so it runs everywhere (the GitHub CI, a fresh clone). It does NOT search the files' bytes: a table
+It needs no ROM, so it runs everywhere (the GitHub CI, a fresh clone). It does not search the files' bytes: a table
 pasted into a source file is found only by tools/release/scan_rom_leaks.py, which needs the ROM (CONTRIBUTING.md).
 
 Prints one line per finding and exits 1, or

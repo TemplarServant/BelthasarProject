@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Regenerate src/data/menu_shop.h -- the SHOP screen's ($0C) BG2 chrome, its narrow-digit tiles and text palettes.
+"""Regenerate src/data/menu_shop.h -- the Shop screen's ($0C) BG2 chrome, its narrow-digit tiles and text palettes.
 
-Capture is byte-exact from the oracle, the way tools/gen/menu_chrome.py captures the Equip detail: open the shop from
+Captured from the oracle, the way tools/gen/menu_chrome.py captures the Equip detail: open the shop from
 the recipe menu_shop (loc 5, Crono under the fair merchant obj16, whose activate is `C8 90` = shop $10), dump VRAM and
 read the BG2 tilemap at word 0x6000 (the menu's BG2 map, char base 0; --ppuregs on the open: BG2 map=6000 chr=0000).
-The map is captured on the Buy/Sell screen, the Buy list and the quantity picker, and must be IDENTICAL on all three
-(it is: the shop draws its windows once, C2/DACA's display list, and every later state writes BG1/BG3/OAM only) -- the
+The map is captured on the Buy/Sell screen, the Buy list and the quantity picker, and must be identical on all three
+(the shop draws its windows once, C2/DACA's display list, and every later state writes BG1/BG3/OAM only) -- the
 script asserts it. Only window tiles 0x3DC-0x3EF on palette 0 plus tile 0 appear, so the existing chrome tiles and
 ctMenuChromePal[0] draw it; the per-window gradient is ctMenuWinList[CT_MENU_WINLIST_SHOP].
 

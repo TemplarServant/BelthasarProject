@@ -195,7 +195,7 @@ def a66b(loc):
         k += br(0xA6B1, 0) + L(0xA6B3, 0xA6BC)
         n = ROM[0x250000 + x + 2]
         if n & 0x80:
-            # a COLUMN run: the same write a row ($100) further down each time (A6F7-A6FF)
+            # a column run: the same write a row ($100) further down each time (A6F7-A6FF)
             k += br(0xA6BC, 1) + L(0xA6DC, 0xA6E7)
             y = n & 0x7F
             while True:

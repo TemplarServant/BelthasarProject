@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The FREE sync mode against FRAME-PERFECT, on the attract's first 3600 frames.
+r"""The free sync mode against frame-perfect, on the attract's first 3600 frames.
 
     python tools/sync_free_check.py
 
@@ -7,9 +7,9 @@ Runs Belthasar --scene 433 twice with a settings file (CT_SETTINGS) choosing the
 presentation forced by CT_OVERLAY_SHOT (the overlay drawn at the end, under the dummy video driver), since a headless
 run never reads the file -- and prints every location load (CT_LOADCOST) of each:
 
-    sync: frame_perfect  scene 433 6 black at f2058 | world 5 38 black at f2136 | ...
-    sync: free           scene 433 0 black at f2058 | world 5 0 black at f2100 | ...
-    sync: same locations in the same order (7 loads); free reaches the last one 158 frames sooner
+    sync: frame_perfect  scene 433 <n> black at f<F> | world 5 <n> black at f<F> | ...
+    sync: free           scene 433 <n> black at f<F> | world 5 <n> black at f<F> | ...
+    sync: same locations in the same order (<k> loads); free reaches the last one <d> frames sooner
 
 The free mode keeps what the game does (the same loads, in the same order) and drops the black frames the SNES spent
 decompressing and uploading.

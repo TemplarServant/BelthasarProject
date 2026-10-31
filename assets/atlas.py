@@ -2,10 +2,10 @@
 """Population atlas: per scene, find the global-flag state that most fully populates it.
 
 Scenes gate NPC placement on global story flags (`ifg`/0x16). At game start most flags
-are 0, so many rooms are empty; the real game sets them as you play. Lacking a savestate
-for every story point, this greedily searches the flags a scene actually checks and keeps
-each one that increases the placed-actor count — yielding the fullest sensibly-reachable
-population per scene. (For an exact state, capture flags from the oracle: ct --dumpflags.)
+are 0, so many rooms are empty; the game sets them as you play. This greedily searches
+the flags a scene checks and keeps each one that increases the placed-actor count, giving
+the fullest reachable population per scene. (For a real story state, capture the flags
+from the oracle: ct --dumpflags.)
 
 Usage:
   python assets/atlas.py <rom> build [out.json]      # build the atlas
@@ -32,7 +32,7 @@ def _placed(objs, body, gmem):
 
 
 def _relevant_flags(objs, body):
-    """Global byte offsets the scene tests via ifg (0x16) — the search space."""
+    """Global byte offsets the scene tests via ifg (0x16): the search space."""
     offs = set()
     for o in range(len(objs)):
         for addr, op, ln in script.iter_ops(body, objs[o][0]):

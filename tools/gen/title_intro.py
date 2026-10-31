@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
-r"""Regenerate src/data/title_intro.h -- the data the TITLE SEQUENCE's engine runs on.
+r"""Regenerate src/data/title_intro.h -- the data the title sequence's engine runs on.
 
-disasm/notes/title_intro.md is the derivation.  The port does not bake pictures: it runs the
-overlay's own machine (the $C3 script interpreter, the NMI's hook lists, the tasks, the sprite
-drawers, the ROM's palette-job runner) and renders what that machine produces.  So what is
-generated here is only what cannot be computed:
+disasm/notes/title_intro.md.  The port does not bake pictures: it runs the overlay's own machine
+(the $C3 script interpreter, the NMI's hook lists, the tasks, the sprite drawers, the ROM's
+palette-job runner) and renders what that machine produces.  So only what cannot be computed is
+generated here:
 
-  * the GRAPHICS.  The overlay builds them at boot -- it transposes 160 4bpp tiles into the
+  * the graphics.  The overlay builds them at boot -- it transposes 160 4bpp tiles into the
     SNES's interleaved mode-7 pair ($7E:5E3C) and decompresses the mode-2 tilemaps/characters
-    out of blobs -- so they are captured from the ORACLE'S OWN VRAM, with refusals if anything
-    about the capture is not what the derivation says it is.
-  * the overlay's own DATA: the sequence script ($7E:5B05), the sprite packages ($7E:603F) and
+    out of blobs -- so they are captured from the oracle's VRAM; the script refuses a capture
+    that does not match the derivation.
+  * the overlay's own data: the sequence script ($7E:5B05), the sprite packages ($7E:603F) and
     the letter-slide tables ($7E:5D5D/$5D67).  Byte-code and byte tables, read out of the
     decompressed overlay image the same way.
-  * the SEED: the machine's WRAM state at the frame the port calls swing frame 0 (oracle boot
-    frame 140 -- measured: its mode-7 matrix is the one the PPU renders boot frame 141 with).
+  * the seed: the machine's WRAM state at the frame the port calls swing frame 0 (oracle boot
+    frame 140, whose mode-7 matrix is the one the PPU renders boot frame 141 with).
   * the ROM's own sine table, $C0:F900, read from the ROM.
 
-⭐ What is NOT here any more: the per-frame mode-7 matrix.  It used to be captured because one
-carry per multiply looked underivable; `$7E:31BF` zeroes $F6 (and so $F7) and then ROLs the WORD
-at $F7, which rotates BIT 7 OF THE STALE $F8 into the middle ADC.  $F8 is not noise -- it is the
-quotient the same driver's divide ($7E:339F) left there, shifted one place left by each
-following multiply.  Modelled, the whole swing computes exactly (title_intro.md section 3.1).
+Not here: the per-frame mode-7 matrix, which the port computes.  Note: `$7E:31BF` zeroes $F6 (and
+so $F7) and then ROLs the word at $F7, which rotates bit 7 of the stale $F8 into the middle ADC;
+$F8 holds the quotient the driver's divide ($7E:339F) left there, shifted one place left by each
+following multiply (title_intro.md section 3.1).
 
 Run from the repo root; needs the ROM + build/ct.exe.
 """
@@ -37,7 +36,7 @@ ROM = sys.argv[1] if len(sys.argv) > 1 else 'Chrono_Trigger_USA_SNES.sfc'
 EXE = os.path.abspath('build/ct.exe')
 OUT = 'src/data/title_intro.h'
 TMP = 'build/_titleintro'
-SEED_FRAME = 140                      # ⭐ the port's swing frame 0 (see the module header)
+SEED_FRAME = 140                      # the port's swing frame 0 (see the module header)
 NL = chr(10)
 os.makedirs('build', exist_ok=True)
 
@@ -47,9 +46,9 @@ def run(args, **kw):
 
 
 # ---- the captures ------------------------------------------------------------------------------
-# The SEED is the overlay's live WRAM at boot frame 140; the graphics come from a frame deep in the
+# The seed is the overlay's live WRAM at boot frame 140; the graphics come from a frame deep in the
 # logo phase (the mode-2 tilemaps are only meaningful once they are loaded), and a second frame
-# proves they are static.
+# checks that they are static.
 run([EXE, ROM, '--fb', TMP + '_seed.raw', '--frames', str(SEED_FRAME)],
     env=dict(os.environ, PEEK_SAVE=TMP + '_seed.state'))
 run([EXE, ROM, '--fb', TMP + '_gfx.raw', '--frames', '900'],
@@ -61,7 +60,7 @@ seed = open(TMP + '_seed.raw.wram', 'rb').read()
 vram = open(TMP + '_a.raw.vram', 'rb').read()
 vramB = open(TMP + '_b.raw.vram', 'rb').read()
 
-# ⭐ The only VRAM the sequence ever writes after the boot load is the 64-word OFFSET-PER-TILE
+# The only VRAM the sequence writes after the boot load is the 64-word offset-per-tile
 # table at word $7000 (the vblank hook $7E:6212 DMAs it every frame); everything else is static,
 # and the port depends on that.
 for i in range(0, 0x10000, 2):
@@ -75,8 +74,8 @@ W = lambda a: vram[a * 2] | (vram[a * 2 + 1] << 8)
 
 # ---- the mode-7 texture (the swing) -------------------------------------------------------------
 words = [W(i) for i in range(0x4000)]
-tmap = [w & 0xFF for w in words]              # the mode-7 tilemap: the LOW byte
-chr8 = [w >> 8 for w in words]                # the mode-7 characters: the HIGH byte
+tmap = [w & 0xFF for w in words]              # the mode-7 tilemap: the low byte
+chr8 = [w >> 8 for w in words]                # the mode-7 characters: the high byte
 
 used = [t for t in set(tmap) if t]
 if not used:
@@ -213,8 +212,8 @@ with open(OUT, 'w', encoding='utf-8') as f:
              0x62, 0x64, 0x66, 0x68, 0x6C, 0x6E, 0x70, 0x72, 0xFE)
     # The NMI's own brightness trio: $2100 = $038D (or $80 = forced blank when it is 0), stepped down
     # once every $038E frames by the fade-out task $7E:34C2, which counts $038F.
-    # $0388/$0389/$038A -- the NMI's song-change watcher (C3/09A4): busy latch, song PLAYING, song
-    # WANTED. The title's setup latches both to its own song, so the watcher finds nothing to do.
+    # $0388/$0389/$038A -- the NMI's song-change watcher (C3/09A4): busy latch, song playing, song
+    # wanted. The title's setup latches both to its own song, so the watcher finds nothing to do.
     f.write('#define CT_TITLE_SEED_SNDBUSY 0x%02X%s' % (seed[0x0388], NL))
     f.write('#define CT_TITLE_SEED_SNDCUR  0x%02X%s' % (seed[0x0389], NL))
     f.write('#define CT_TITLE_SEED_SNDREQ  0x%02X%s' % (seed[0x038A], NL))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-r"""A PC PHYSICAL runs its own bank-CE script on the anim interpreter -- graded against the LOGICAL-FRAME oracle
-(CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md, disasm/notes/battle_pc_physical_script.md).
+r"""A PC physical attack runs its own bank-CE script on the anim interpreter, graded against the logical-frame oracle
+(CLAUDE.md's frame rule; disasm/notes/oracle_logical_frames.md, disasm/notes/battle_pc_physical_script.md).
 
     python tools/pc_physical_logical_cmp.py press|crit|nocrit
 
@@ -17,7 +17,7 @@ C1/432C loads the physical exactly as C1/4617 loads a tech: $9877 = CD/4000 (far
           poke at load would not survive -- with both rates poked to 0 ($5E72, $5EF2): Marle's far shot (sel 02). The
           port: as press, CT_BATTLE_CRITRATE=0.
 
-The two fights are not the same fight (another fixture, another input), so the actions are paired by ORDER and each is
+The two fights are not the same fight (another fixture, another input), so the actions are paired by order and each is
 graded against its own $A013 rise (the port's pc-act): the span (rise -> fall; pc-act -> act-end) and, on tracks 0, 3
 and 8, every change of the track's cursor $5DBD + 4t (the port's CT_BATTLE_ASCIP) inside it.
 """
@@ -143,7 +143,7 @@ def oracle_foot(rows, cmb, f):
 def cmp_feet(name, k, who, cmb, o, p, rows, pfeet):
     """From the port's first foot line of the action (the script's arm) to the fall, frame by frame. Where the two
     fights left the combatant somewhere else before the action (GATO wanders between turns, and these are two
-    different fights), what is graded is its MOVE: the displacement from its own foot at that first frame."""
+    different fights), what is graded is its move: the displacement from its own foot at that first frame."""
     ser = [(f, xy) for f, xy in pfeet.get(cmb, []) if p['rise'] < f <= p['fall']]
     if not ser:
         print('pcphys %s #%d: %s cmb%d -- the port printed no foot' % (name, k, who, cmb)); return

@@ -19,6 +19,8 @@ CD/0415-0438 -> C0/1BE6 -> the ack:
 Every change from f900 (the wipe is at f807-f911) to f970, on each side:
 
     defeat-exit: <q> cartridge f<N>=<v> .. port f<M>=<v> .. -> SAME | DIFFER
+
+Regression check: battle-defeat-exit-vs-oracle.
 """
 import os
 import sys

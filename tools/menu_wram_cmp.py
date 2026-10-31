@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The menu's WRAM around the X menu, frame by frame, port against the LOGICAL oracle.
+r"""The menu's WRAM around the X menu, frame by frame, port against the logical oracle.
 
     python tools/menu_wram_cmp.py
 

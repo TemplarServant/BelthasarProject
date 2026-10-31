@@ -1,23 +1,21 @@
 #!/usr/bin/env python
-# GENERATOR (gitignored) for the Stage-3 PC pose-engine baked data (Crono + Marle).
-# Emits three TRACKED headers from the ROM ONLY (no WRAM dump needed -- the PC sheets live in ROM):
-#   src/data/animeng_e3_pc.h     -- Crono/Marle E3 assembly records (positions + cell-words), sparse (used indices)
-#   src/data/animeng_sheet_pc.h  -- Crono/Marle sprite sheets (sparse: only the srcTiles the used records gather)
-#   src/data/animeng_e4_pc.h     -- the resolved pose selections (idle cycle, attack ladder, foot origins)
+# Generator for the stage-3 PC pose-engine data (Crono, Marle, Lucca, Frog). Emits three tracked headers from
+# the ROM alone (the PC sheets live in ROM, so no WRAM dump is needed):
+#   src/data/animeng_e3_pc.h     -- E3 assembly records (positions + cell-words), sparse (used indices)
+#   src/data/animeng_sheet_pc.h  -- sprite sheets (sparse: only the srcTiles the used records gather)
+#   src/data/animeng_e4_pc.h     -- the pose selections (idle cycle, attack ladder, foot origins)
 #
-# Provenance / how it was derived (all this session, oracle build/ct.exe + ROM):
-#   * Crono E3 base = LIVE $1C78[0] = $DC27B0 (builder_dossier's "DC/27D0" folded the +0x20 position offset,
-#     the same phantom-base artifact ADDENDUM 1 fixed for GATO). Marle E3 base = LIVE $1C78[3] = $DC9AD8
-#     (the builder dossier left Marle OPEN -- derived here from her live pointer).
-#   * PC sheets = LIVE $1C57[0]=$D272C0 (Crono) / $1C57[3]=$D40000 (Marle): PC sprites are UNCOMPRESSED IN ROM
-#     (unlike GATO's WRAM-decompressed sheet), so they bake straight from the ROM -- no interim fixture.
-#   * record layout = [16 x 16-bit CELL-WORDS +0x00][4 signed (dx,dy) +0x20], stride 0x28 (4-cell PC form of
-#     ADDENDUM 1: cell-words FIRST, positions after). raster: word i -> VRAM tile vt0 + (i%8) + 0x10*(i//8).
-#   * idle cycle / attack ladder = the LIVE $9907[pc]/$967B sequences (gato_press_action Crono-active idle;
-#     crono_normal_ready driven attack). Foot origins = LIVE $1D0C/$1D23 (Crono idle (134,144)/strike (134,128);
-#     Marle (176,111)) -- cross-validated: gather(idx) == the live VRAM byte-exact (Crono idle 10/10 + strike
-#     9/9; Marle idle 11/11) AND the E3 (dx,dy) == the retired bake cells (ctBattleStanceObj / ctCronoIdleAdd /
-#     ctBattleAnimKf A1-A6 / ctMarleAtkKf), so each bake is reproduced 1:1.
+# Sources (the oracle's live RAM + the ROM):
+#   * Crono E3 base = live $1C78[0] = $DC27B0 (not DC/27D0, which folds in the +0x20 position offset, as
+#     battle_anim_engine.md ADDENDUM 1 describes for GATO). Marle E3 base = live $1C78[3] = $DC9AD8.
+#   * PC sheets = live $1C57[0]=$D272C0 (Crono) / $1C57[3]=$D40000 (Marle): PC sprites are uncompressed in ROM
+#     (unlike GATO's WRAM-decompressed sheet), so they bake straight from the ROM.
+#   * record layout = [16 x 16-bit cell-words +0x00][4 signed (dx,dy) +0x20], stride 0x28 (the 4-cell PC form of
+#     ADDENDUM 1: cell-words first, positions after). raster: word i -> VRAM tile vt0 + (i%8) + 0x10*(i//8).
+#   * idle cycle / attack ladder = the live $9907[pc]/$967B sequences (gato_press_action Crono-active idle;
+#     crono_normal_ready driven attack). Foot origins = live $1D0C/$1D23 (Crono idle (134,144)/strike (134,128);
+#     Marle (176,111)). gather(idx) matches the live VRAM, and the E3 (dx,dy) the cells of the earlier bakes
+#     (ctBattleStanceObj / ctCronoIdleAdd / ctBattleAnimKf A1-A6 / ctMarleAtkKf).
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
@@ -30,32 +28,31 @@ STRIDE = 0x28
 
 # Per-PC config. `used` = every E3 index the engine will select (idle + attack), sorted.
 PC = {
- # 0xD5 / 0x53 / 0x54 = the CRIT double-slash ladder assemblies (battle_anim_polish2.md ITEM 4 §4.1:
- # 0xD5 leap/windup, 0x53 second-slash raise, 0x54 second-slash STRIKE); 0x50/0x51/0x52/0x8B/0x47/0xC6/0xC7
- # already served the normal swing + idle, so the crit reuses them and ADDS these three.
+ # 0xD5 / 0x53 / 0x54 = the crit double-slash ladder assemblies (battle_anim_polish2.md ITEM 4 sec. 4.1:
+ # 0xD5 leap/windup, 0x53 second-slash raise, 0x54 second-slash strike); the crit also reuses the normal
+ # swing + idle ones (0x50/0x51/0x52/0x8B/0x47/0xC6/0xC7).
  "Crono": dict(base=foff(0xDC, 0x27B0), sheet=foff(0xD2, 0x72C0), vt0=0x08,
                used=[0x20, 0x41, 0x47, 0x4F, 0x50, 0x51, 0x52, 0x53, 0x54, 0x8B, 0xC6, 0xC7, 0xD5]),
- # 0x5B = the SONG-TARGET FLINCH assembly (battle_gato_polish.md ITEM 3 §3.2/§3.3: $9907[1] flips 0xDA->0x5B
- # through the song effect window; the corpus §4.1 hurt-reaction pose, VRAM tiles 22/20/26/24). ADDED to
- # ctAnimengE3Marle so the song render can draw the targeted PC's flinch (§3.3 fix b). Crono's react id is
- # un-derived (OPEN) -> not baked (mandate: not fabricated).
+ # 0x5B = the song-target flinch assembly (battle_gato_polish.md ITEM 3 sec. 3.2/3.3: $9907[1] flips 0xDA->0x5B
+ # through the song effect window; the hurt-reaction pose, VRAM tiles 22/20/26/24), so the song render can draw
+ # the targeted PC's flinch. Not baked: Crono's react id (not derived).
  "Marle": dict(base=foff(0xDC, 0x9AD8), sheet=foff(0xD4, 0x0000), vt0=0x20,
                used=[0x37, 0x5B, 0x8C, 0x8D, 0xD9, 0xDA]),
- # LUCCA (charId 2): E3 base = LIVE $1C78[1] = $DC4E70 (stable across bat8/bat9), sheet = LIVE $1C57[1] =
- # $D36B40 (bank D3, UNCOMPRESSED IN ROM like Crono -- battle_3pc_lucca_frog.md §1.1). `used` = the idle
- # holds {0x31 bat8/facing0, 0x39 bat9/formation-variant} + her CAPTURED attack ladder (§1.5, bat8 drive:
- # 31->EC->3D->05->23->2A->A8->A9->AA->08). vt0=0x08 (internal win-buffer base; each blit re-gathers so the
- # window is self-contained -- distinct from the real per-combatant VRAM slot, which the port does not model).
+ # Lucca (charId 2): E3 base = live $1C78[1] = $DC4E70 (the same in bat8/bat9), sheet = live $1C57[1] =
+ # $D36B40 (bank D3, uncompressed in ROM like Crono -- battle_3pc_lucca_frog.md sec. 1.1). `used` = the idle
+ # holds {0x31 bat8/facing0, 0x39 bat9/formation-variant} + her captured attack ladder (sec. 1.5, bat8 drive:
+ # 31->EC->3D->05->23->2A->A8->A9->AA->08). vt0=0x08 (internal window-buffer base; each blit re-gathers, so the
+ # window is self-contained -- not the per-combatant VRAM slot, which the port does not model).
  "Lucca": dict(base=foff(0xDC, 0x4E70), sheet=foff(0xD3, 0x6B40), vt0=0x08,
                used=[0x05, 0x08, 0x23, 0x2A, 0x31, 0x39, 0x3D, 0xA8, 0xA9, 0xAA, 0xEC]),
- # FROG (charId 4): E3 base = LIVE $1C78[2] = $DC7490, sheet = LIVE $1C57[2] = $D30000 (bank D3, UNCOMPRESSED
- # -- §1.1). `used` = his single held idle 0x3B (bat9; §1.4). His attack pose ladder is O1 (un-captured: bat9's
- # Diablos pre-empted the target-select window) -> NOT baked (mandate: not fabricated). His normal $9877=0x08
- # is table-derived (CD/4007[4], consumed by battle.c, not an E3 index).
+ # Frog (charId 4): E3 base = live $1C78[2] = $DC7490, sheet = live $1C57[2] = $D30000 (bank D3, uncompressed
+ # -- sec. 1.1). `used` = his single held idle 0x3B (bat9; sec. 1.4). Not baked: his attack pose ladder (O1, not
+ # captured: bat9's Diablos pre-empted the target-select window). His normal $9877=0x08 comes from a table
+ # (CD/4007[4], read by battle.c, not an E3 index).
  "Frog":  dict(base=foff(0xDC, 0x7490), sheet=foff(0xD3, 0x0000), vt0=0x20,
                used=[0x3B]),
 }
-PCS = ("Crono", "Marle", "Lucca", "Frog")   # bake order (Crono/Marle unchanged -> byte-identical headers)
+PCS = ("Crono", "Marle", "Lucca", "Frog")   # bake order (later PCs are appended; the earlier arrays keep their bytes)
 def rec(base, n): o = base + n*STRIDE; return ROM[o:o+STRIDE]
 def positions(r): return [(sext(r[0x20+2*i]), sext(r[0x20+2*i+1])) for i in range(4)]
 def cellwords(r): return [r[2*i] | (r[2*i+1] << 8) for i in range(16)]

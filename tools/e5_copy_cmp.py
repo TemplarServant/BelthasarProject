@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Op 0xE5's QUEUED tile copy and the $0117 bit-5 service C0/1770, port against the LOGICAL oracle.
+r"""Op 0xE5's queued tile copy and the $0117 bit-5 service C0/1770, port against the logical oracle.
 
     python tools/e5_copy_cmp.py [curtain|intro ...]
 
@@ -7,19 +7,19 @@ disasm/notes/field_tile_copy_e5.md. Op 0xE5 (C0/3DC5) only stages $013E-$0145 an
 the next frame the main loop's dispatch reaches C0/1770, which runs one event frame inside its align loop, copies the
 rect in the WRAM map (`1790 JSR C0/AF4E`) and then holds the main loop in the style branch on $0145 (2 frames for
 BG1/BG2/BG3 alone, 4 for BG1+BG2) while the tilemaps are rebuilt -- no event VM, no player, no box machine.
+Regression check: field-e5-copy-service-vs-logical-oracle.
 
   curtain  saves/field_re/loc002_curtain_ctl.state: walk up to loc 002's curtain and press A (obj10's fn1: E5 `..3C`,
            style 4, then E5 `..3B`, style 3). Every frame, both sides: $0117 $0138 $013E-$0146 $0153, obj10's cadence
            $1015 and ip $1194, the layer words $1D7C-$1D83 $1D87-$1D92 $1D99-$1D9E, and the curtain rect (rows $02-$0C,
            cols $13-$1B) on the six planes C0/AF4E writes. And the picture: a thumbnail per frame, the port's P against
-           the cartridge's P+2 (memory ct-frame-alignment-p2), from f5 (f1-f4 differ in the lead's sprite rows at the
-           seed, before and after this mechanism).
+           the cartridge's P+2 (docs/TESTING.md, the alignment), from f5 (f1-f4 differ in the lead's sprite rows at the
+           seed, outside this mechanism).
   intro    saves/field_re/loc002_intro_curtain.state: the new game's own opening, Mom opening the curtain (E5 `..3B`
            then `..3C`), the same bytes, and the picture from f0: both copies, obj10's walk and the first frame of the
-           message box's open ramp (the band FD/C2C1 builds from this iteration's $0127). The seed's picture used to be
-           black: the create-time prescan ran loc 002's storyline-0 `F0 00` and CtSceneSeedFromWram did not rebuild
-           sc->bright from the seeded $0119 = 0F. Graded to last - 3 = f57, as the curtain is; P58 on differ in the
-           ramp's bottom edge row and then the window's left-edge weave -- textbox.md's two open items, not this one.
+           message box's open ramp (the band FD/C2C1 builds from this iteration's $0127). Graded to last - 3 = f57, as
+           the curtain is; from P58 the ramp's bottom edge row and then the window's left-edge weave differ (textbox.md's
+           two open items, not this mechanism).
 
 Per drive:
   e5-copy: <drive> wram f0-fN: <k> frame(s) differ [runs]

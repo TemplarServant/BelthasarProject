@@ -1,32 +1,29 @@
 #!/usr/bin/env python
-"""Instruction-ALIGNED reference scanner for the CT ROM.
+"""Instruction-aligned reference scanner for the CT ROM.
 
     python tools/refscan.py <hexaddr> [bank]          -- who references this 16-bit address?
     python tools/refscan.py 299E                      -- all banks
     python tools/refscan.py 3009 C2                   -- restrict data refs to one bank
 
-WHY THIS EXISTS. A naive `for i in range(len(rom)): if rom[i+1]|rom[i+2]<<8 == target` scan is wrong
-in two ways that both bit this project in a single session (2026-09-11), and both produced confident,
-committed, WRONG derivations:
+A plain byte scan (`rom[i+1] | rom[i+2] << 8 == target` at every offset) is wrong in two ways:
 
-  1. IT DOES NOT RESPECT INSTRUCTION BOUNDARIES. Scanning for `$299E` reported `C1/33BC STZ $299E`.
-     There is no such instruction: the real code is `A6 9C 9E 29 98` = `LDX $9C / STZ $9829,X`, and
-     the scan matched the `9C` of the LDX operand as an opcode. One of exactly three "sites" was a
-     ghost, and the other two were the whole mechanism.
+  1. It ignores instruction boundaries. Scanning for `$299E` reports `C1/33BC STZ $299E`, but the code
+     there is `A6 9C 9E 29 98` = `LDX $9C / STZ $9829,X`: the `9C` of the LDX operand is matched as an
+     opcode.
 
-  2. JSR AND JMP ABSOLUTE ARE BANK-LOCAL. Scanning every bank for `20 09 30` "found" five callers of
-     `C2/3009` in banks C4/E7/EF/F1/F3. A `JSR $3009` in bank C4 calls C4/3009. The real answer was
-     ZERO direct callers -- the routine is reached indirectly -- which is a completely different fact.
+  2. JSR and JMP absolute are bank-local. `20 09 30` in bank C4 calls C4/3009, so a scan of every bank
+     for it reports callers of C2/3009 that do not exist (C2/3009 has no direct callers; it is reached
+     indirectly).
 
-So this tool (a) decodes forward from an anchor so it only reports real instruction starts, and
+So this tool (a) decodes forward from anchors so it reports only instruction starts, and
 (b) knows which operand forms are bank-local, which carry their own bank, and which depend on DB.
 
-ALIGNMENT, HONESTLY. There is no way to know where instructions start in a raw ROM. This walks each
-bank from many staggered anchors and keeps an offset only if it is an instruction start on a MAJORITY
-of the walks that reach it -- linear 65816 decoding self-synchronises quickly, so a real instruction
-start is reached from almost every anchor and a byte inside an operand from almost none. Hits are
-printed with that agreement count so a thin one can be eyeballed rather than trusted. It is a filter,
-not a proof: confirm anything load-bearing with `tools/dis.py` at the reported address.
+Alignment: where instructions start in a raw ROM cannot be known for certain. Each bank is walked from
+many staggered anchors, and an offset is kept only if it is an instruction start on a majority of the
+walks that reach it; linear 65816 decoding resynchronises quickly, so a real instruction start is
+reached from almost every anchor and a byte inside an operand from almost none. Hits are printed with
+that agreement count so a thin one can be checked. It is a filter, not a proof: confirm anything
+load-bearing with `tools/dis.py` at the reported address.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
@@ -38,7 +35,7 @@ import disasm65816 as D
 ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 NBANK = len(ROM) >> 16
 
-# operand forms that name a 16-bit address, and where that address LIVES.
+# operand forms that name a 16-bit address, and where that address lives.
 #   'local' : JSR/JMP absolute and (abs,X) -- the target bank is the bank being executed
 #   'long'  : the instruction carries its own bank byte (4-byte forms)
 #   'db'    : a data reference through the data bank -- the bank is whatever DB held
@@ -59,7 +56,7 @@ LONG = {0xAF: "LDA l", 0xBF: "LDA l,X", 0x8F: "STA l", 0x9F: "STA l,X", 0xCF: "C
 
 
 def starts_in_bank(bank, anchors=64):
-    """offset -> (walks that saw it as an instruction START, walks that covered it at all)."""
+    """offset -> (walks that saw it as an instruction start, walks that covered it at all)."""
     base = bank << 16
     votes = [0] * 0x10000
     seen = [0] * 0x10000

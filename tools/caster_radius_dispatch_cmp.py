@@ -9,7 +9,7 @@ select (C1/224B / C1/22A4 / C1/22D3 -> C1/2701, `$960C = 80`); their area byte i
 (CC/2B38 `01 / 00 00 19`). C1/C1DD's PC arm ($3A = 3, C1/C518-C536) runs the area pass C1/C586: C1/C95C[0] = C1/C78D
 stages `$9604 = 0`, `$9605 = $00` (participant 0's seat, C1/C74C), `$9606 = $B2AE`, `$9607 = 10 / 19`, `$9608 = 0`, and
 C1/1FDD routine 1 = C1/2701 rebuilds $99C0 around the caster before C1/C600 copies it into $AD8E (battle.c
-battleAreaC586). The port used to keep these shapes out and dispatch the group's own set: one victim.
+battleAreaC586), so every enemy in the radius is a victim, not only the group's own target.
 
 The fixture: gato_wait staged with four Hetakes (tools/battle_sim.py, op 0x83 on fresh objects) at cells chosen around
 the lone caster's seat 0 (cell 8,9): cmb3 at 12,8 (4^2 + 1^2 = 17), cmb4 at 6,7 (8), cmb5 at 8,3 (36), cmb6 at 10,10
@@ -20,10 +20,10 @@ The select (C1/1F79 -> C1/224B / C1/22A4 / C1/22D3 -> C1/2701 -> C1/27E8, battle
 rebuilds the set around the caster into $99C0 and $A62D (`$960C = 80`: no cursor, Up / Down do nothing) and the hand
 lights $A62D (C1/1979 -> C1/1A7B: sprite 0 on $A62D[0], 1-3 on the $960B page; a hidden one has its $0900 X-high bit set);
 the confirm's record takes `$93F1 := $A62D[0]` (C1/1703), which C1/BB85 puts in $B2AE and C1/C78D stages as $9606 -- cmb4
-for Area Bomb / Tail Spin (radius² 10), cmb3 for Black Hole (19). Graded: $9609 / $960C / $A62D on every frame either side
+for Area Bomb / Tail Spin (radius^2 $10), cmb3 for Black Hole ($19). Graded: $9609 / $960C / $A62D on every frame either side
 holds the select, the hand's positions (the cartridge's OAM $0700 entries shown by $0900 against the port's
 CT_BATTLE_HANDTRACE sprites), and $9606 at the dispatch. 'Area Bomb + Down' presses Down in the select (the target stays
-$A62D[0]); 'Area Bomb, none near' stages the four Hetakes out of radius² 10: C1/1FD9 `$9613 = FF` vetoes the open (C1/137C),
+$A62D[0]); 'Area Bomb, none near' stages the four Hetakes out of radius^2 $10: C1/1FD9 `$9613 = FF` vetoes the open (C1/137C),
 no select, no dispatch.
 
 'Area Bomb, walked out': the confirm with cmb4 / cmb6 inside, then (f850, while a Hetake's attack holds the dispatch back)
@@ -42,6 +42,9 @@ C1/C72B `$AF23 = 1` and C1/BB8B -> C1/BC5A: C1/BDB3's reloads, no MP spent (batt
     caster-radius <tech>: span ($A013) cartridge f<a>-f<b> port f<a>-f<b>
     caster-radius <tech>: after the close $AF23 / MP / $AFAB cartridge <hex> port <hex>
     caster-radius: <n>/<m> identical
+
+Regression checks: battle-caster-radius-tech-victims-at-dispatch-vs-rule-cartridge,
+battle-caster-radius-empty-pass-plays-7b-then-drops-vs-rule-cartridge, battle-target-hand-page-vs-rule-cartridge.
 """
 import os
 import re

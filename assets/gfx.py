@@ -2,7 +2,7 @@
 """Decode Chrono Trigger graphics and render them to PNG (dependency-free).
 
 Tile source is either an LZ-compressed ROM block or a raw VRAM dump. Colors come
-from a CGRAM dump sub-palette (matching what the oracle loaded — so they reflect
+from a CGRAM dump sub-palette (matching what the oracle loaded, so they reflect
 any runtime palette animation); without one, a grayscale ramp is used.
 
 CLI:

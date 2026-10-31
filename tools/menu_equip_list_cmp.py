@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-r"""The Equip screen's candidate list, frame by frame, against the cartridge (menu2_equip_change.md; user report
-2026-09-24: "when opening to equip weapons, the box does not 'rise' with the canonical animation").
+r"""The Equip screen's candidate list, frame by frame, against the cartridge (menu2_equip_change.md): the list's climb,
+its way back down and the Attack preview.
 
     python tools/menu_equip_list_cmp.py
 
-saves/battle_re/party3_field.state with an Iron Blade poked into bag slot 1 (the oracle, LOGICAL frames) and the same
+saves/battle_re/party3_field.state with an Iron Blade poked into bag slot 1 (the oracle, logical frames) and the same
 WRAM with the same poke (the port, saves/battle_re/party3_field.lakewram), one drive on both, each press on the frame
 the cartridge reads it: X; A (Equip); A (Crono); A on the Weapon row (C2/A41A -> C2/A4AF, the 8-frame climb); B (C2/A64D
 -> C2/A697, the way back down); A on the Weapon row again; A (commit the Iron Blade); A on the Weapon row (now the Wood
-Sword -- a LOWER Attack); B. Graded every frame f138-f330, three ways:
+Sword -- a lower Attack); B. Graded every frame f138-f330, three ways:
 
   edges   the rows of the window rules crossing x 24-100 (the column's top and bottom, the bar's top): the geometry
   bar     the pixels of the description bar's box right of the column (x 112-239, y 176-207)
   attack  the pixels of the picked member's Attack digits (x 40-65, y 46-57): the live preview C2/A5C3 / C2/A5E7 --
-          the NEW value, palette 2 when the candidate raises it, palette 7 when it lowers it
+          the new value, palette 2 when the candidate raises it, palette 7 when it lowers it
 
-(The screen's static art is graded nowhere yet and differs: the marble's colour conversion, the portrait and plaque,
-the icons, the hand -- those regions are outside the three above.)
+(Not graded: the screen's static art, which differs -- the marble's colour conversion, the portrait and plaque, the
+icons, the hand; those regions are outside the three above.)
 
     equip-list: <what> f138-f330: <N> frame(s) differ [...]
+
+Regression check: menu-equip-list-climb-and-preview-vs-oracle.
 """
 import os
 import subprocess
@@ -54,7 +56,7 @@ def obtn(total):
 
 
 def oracle(frames):
-    """Every frame's dump from ONE logical-oracle run (PEEK_SHOTS: the same bytes as a --peek cut to f + 2)."""
+    """Every frame's dump from one logical-oracle run (PEEK_SHOTS: the same bytes as a --peek cut to f + 2)."""
     env = dict(os.environ, CT_ORACLE_LOGICAL='1', PEEK_POKE=','.join('%04X=%02X' % kv for kv in POKE.items()))
     got = peekshots.shots('saves/battle_re/party3_field.state', obtn(max(frames) + 2), [f + 2 for f in frames], env=env,
                           prefix=os.path.join(ROOT, 'build', '_eqlist_o'))

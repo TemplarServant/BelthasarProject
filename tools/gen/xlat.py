@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-r"""Translate a stage's 65816 PROGRAM into C -- src/xlat/<name>.c, driven by src/seq_xlat.h.
+r"""Translate a stage's 65816 program into C -- src/xlat/<name>.c, driven by src/seq_xlat.h.
 
-User decision 2026-09-14 (memory: ct-seq-race-translation-decision): a $C3 sequence stage whose output depends on
-the CPU CLOCK (the motorcycle race: its bike frames land in VRAM when the main loop's decompression finishes, and
-its transition reads the PPU's H/V counters) is ported as its program translated instruction by instruction, over
-the VENDORED snes.c/dma.c/ppu.c clock. The program -- which instruction sits at which address, and where control
-goes -- is C; each instruction's semantics and bus timing are cpu.c's (cpu_xlatExec), so the clock the program
-drives is the cartridge's.
+A $C3 sequence stage whose output depends on the CPU clock (the motorcycle race: its bike frames land in VRAM when
+the main loop's decompression finishes, and its transition reads the PPU's H/V counters) can be ported as its
+program translated instruction by instruction, over the vendored snes.c/dma.c/ppu.c clock (docs/DECISIONS.md;
+src/xlat/ is kept as a reference). The program -- which instruction sits at which address, and where control goes
+-- is C; each instruction's semantics and bus timing are cpu.c's (cpu_xlatExec), so the clock the program drives
+is the cartridge's.
 
 Where the instructions come from:
-  * every instruction a `ct.exe --cputrace` run EXECUTED (CPUTRACE_UNIQUE=1 files): the bytes and the M/X widths the
-    CPU really had, so no boundary is guessed;
-  * plus a STATIC extension INSIDE routines: the untaken side of each executed branch is decoded from the ROM / the
+  * every instruction a `ct.exe --cputrace` run executed (CPUTRACE_UNIQUE=1 files): the bytes and the M/X widths the
+    CPU had, so no boundary is guessed;
+  * plus a static extension inside routines: the untaken side of each executed branch is decoded from the ROM / the
     WRAM image with the widths of the branch, until it rejoins executed code, returns or jumps (48 instructions at
     most). Calls into routines that never ran are not decoded. A wrong static boundary cannot pass silently: the
     runtime checks every boundary and every opcode byte, and an address with no translation stops the run.
@@ -55,7 +55,7 @@ def main():
         opt[a[i]] = a[i + 1]; i += 2
     name = opt['--name']
     rom = romlib.load(opt['--rom'])                          # verified: only the supported dump
-    # Each trace decodes its static extension from ITS OWN WRAM image (`--trace T --wram W` pairs): two stages share
+    # Each trace decodes its static extension from its own WRAM image (`--trace T --wram W` pairs): two stages share
     # the overlay's code but not the data around it. A lone `--wram` before any `--trace` serves every trace.
     images = {}
     for t in traces:
@@ -160,7 +160,7 @@ def main():
         falls = op not in ENDS
         return tg, falls, nxt, m, x
 
-    # Only INSIDE a routine: the untaken side of a branch, followed until it rejoins executed code, returns or jumps
+    # Only inside a routine: the untaken side of a branch, followed until it rejoins executed code, returns or jumps
     # -- at most STATIC_RUN instructions a chain. A call or jump into a routine that never ran is not decoded (its
     # widths on entry are not known here); reaching one at run time stops with CT_XLAT_MISS and its address.
     STATIC_RUN = 48

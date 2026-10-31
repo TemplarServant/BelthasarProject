@@ -4,8 +4,8 @@ r"""The field's native frames between over what is composed on the map: the iris
     python tools/native_fx_check.py [roll] [line] [gate]
 
 The native drawer (src/fieldnative.c, a mod: the frames between at 60+ fps) redraws a field frame from the map's layers,
-the sprites' own pixels and -- since 2026-10-10 -- the window and the captions composed over them (CtFieldNativeFx). At
-t = 256 and 1x it must be the composed frame (CT_NATIVECHECK). Three runs reach the three:
+the sprites' own pixels, and the window and the captions composed over them (CtFieldNativeFx). At t = 256 and 1x it must
+be the composed frame (CT_NATIVECHECK). Three runs reach the three:
 
   roll  the staff roll's caption plane: 05B's roll from tools/caption_plane_cmp.py's seed, 1400 frames
   line  the tutorial's colour window: scene 254's line from tools/tutorial_cmp.py's seed, 380 frames

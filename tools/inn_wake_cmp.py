@@ -3,21 +3,20 @@ r"""The 600 A.D. inn's bedroom with Crono and Lucca, port against the rule's car
 
     python tools/inn_wake_cmp.py [frames]
 
-The bedroom (loc 0x75) puts each PC in the bed `$7E1102/04/06` names and obj0 wakes them with the PARTY-SLOT
-calls `05 00 13` / `07 02 13` (C0/61E9 / 6214): the target is the object HOSTING slot n, `$0197 + n` -- with
-Crono and Lucca, slot 1 is obj3 ($0199 = 06), not obj2 (Marle's empty object). The live runner used to take
-1 + n / 2, so Lucca never ran her fn3 (sit up, walk out) and the release op 0xDA walked her from the bed.
-The user's report: "when sleeping at the inn with lucca in the party, there was a bug" (saves/field_re/inn_lucca_007.state).
+The bedroom (loc 0x75) puts each PC in the bed `$7E1102/04/06` names and obj0 wakes them with the party-slot
+calls `05 00 13` / `07 02 13` (C0/61E9 / 6214): the target is the object hosting slot n, `$0197 + n` -- with
+Crono and Lucca, slot 1 is obj3 ($0199 = 06), not obj2 (Marle's empty object), so Lucca runs her fn3 (sit up,
+walk out). Regression check: field-inn-wake-party-slot-calls-vs-rule-cartridge.
 
   cartridge  build/ct.exe --peek saves/field_re/inn600_yesno.state (the rule): the inn's night (loc 0x10F)
              after Yes, A pressed once, PEEK_THUMBS every frame. The state (tools/recipes/fxr_inn600_yesno.json)
              is the Cathedral's south door (story 0x12, Crono + Lucca) teleported to loc 0x74 (--teleport 0x74 11 28
              0 --method jmp --frames 240 -> inn600_tele.state), then `10:16,0:30,100:2,0:120,100:2,0:120,0:10`.
   port       build/Belthasar.exe --loadstate saves/field_re/inn_lucca_007.state (its own CtScene state at the
-             "Register? Yes" prompt, made from fxr_inn600_prompt's WRAM; until 2026-10-22 the user's F5 state),
+             "Register? Yes" prompt, made from fxr_inn600_prompt's WRAM),
              A at f5, CT_SHOTS_THUMBS every frame, the SPC seeded from
              inn600_tele.state under the rule (CT_AUDIO_SEEDSTATE): the song load `EA 02` costs the SPC's
-             44 frames on both sides (a cold driver priced it at 4).
+             44 frames on both sides (a cold driver would price it at 4).
 
 Aligned on each side's first lit frame of loc 0x75:
 

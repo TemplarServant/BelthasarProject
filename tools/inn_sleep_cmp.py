@@ -3,12 +3,12 @@ r"""Sleeping at an inn, port against the cartridge under the rule: the way back 
 
     python tools/inn_sleep_cmp.py [frames]
 
-THE ROM. The keeper (loc 00C's obj8, `C0 4A 06` -> "Check in?") charges, heals, raises $7F0152 bit 0 (`65 80 52`), leaves
+The keeper (loc 00C's obj8, `C0 4A 06` -> "Check in?") charges, heals, raises $7F0152 bit 0 (`65 80 52`), leaves
 the way back in the story page (`56 0C 66 01 / 56 38 68 01 / 56 08 6A 01 / 56 01 6C 01` = $7F0166/68/6A/6C: loc 00C,
 tile 38,08, facing 1) and sends the party to loc 10F with `E0 0F 03 08 08`. Loc 10F's obj0 counts its local 9 to 10
 (`AD 05 / 71 09 / 11 0A`), copies the four bytes into locals 0A-0D (`53 68 01 0A` ..) and leaves with `E2 0C 0A 0B 0D`
-(C0/3B9E: op 0xE0's fade-change with every operand a LOCAL -- until 2026-09-30 the port stepped over it and the screen
-stayed black for good). Back in loc 00C the PCs' fn0s pick their beds from their own party slot (`5C / 48 04 11 7E 0A /
+(C0/3B9E: op 0xE0's fade-change with every operand a local). Back in loc 00C the PCs' fn0s pick their beds from their
+own party slot (`5C / 48 04 11 7E 0A /
 19 0A / 1A 00 .. 1A 01 .. 1A 02 ..`: $1100,X read back through a local into the result word) and obj0 walks them out.
 
   fixture:   saves/field_re/inn_sleep_10f.state (the cartridge, under the rule) and .lakewram (its WRAM, for the port):
@@ -24,6 +24,7 @@ Printed:
     inn-sleep: wake walk from the first step (cartridge f<a>, port f<b>): <k>/<n> frames equal [first differ c<f>: ..]
 The walk is $1800/$1880 (x/y words) and $1600 (facing) of obj1 and obj2, aligned on each side's first step (the reload
 of loc 00C prices its own frames -- the load clock, an open item of its own -- so the two walks start apart).
+Regression check: field-inn-sleep-vs-rule-cartridge.
 """
 import os
 import re

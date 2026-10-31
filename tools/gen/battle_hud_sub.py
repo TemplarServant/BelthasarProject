@@ -1,30 +1,26 @@
 #!/usr/bin/env python
-"""Bake the battle Tech/Item SUBMENU chrome into src/data/battle_hud_sub.h from oracle captures.
+"""Bake the battle Tech/Item submenu chrome into src/data/battle_hud_sub.h from oracle captures.
 
-WHAT THIS REPLACES. The first version of that header was ASSEMBLED out of the COMMAND phase's own
-pixels (outer frames verbatim, interior cloned on its 32px period) with the window STRUCTURE read off
-submenu captures that were believed to be hires/2x -- its own header said "the left window's right
-frame at real x~124 = dump 248-249 dark dip". Measured against a proper capture, the Tech submenu's
-window junction is at columns 172/175, not 124/127/128/131, and it is TWO dark columns, not four: the
-assembled version put a whole extra frame pair 48 px to the left. The Item submenu is one unified
-window on both.
+The Tech submenu's window junction is two dark columns at 172/175; the Item submenu is one window
+(disasm/notes/battle_hud_render.md).
 
-CAPTURE RECIPE (both phases, BG1 only -- the strip chrome is 100% BG1, battle_hud_render.md Q2, so
-this is the chrome with no text and no OBJ):
+Captures (both phases, BG1 only -- the strip chrome is all BG1, battle_hud_render.md Q2, so this is
+the chrome with no text and no OBJ):
 
   PEEK_ISOBG=0 build/ct.exe --peek saves/gato_inbattle.state iso_tech.raw \
       --btnscript "0:600,20:2,0:20,100:2,0:60"                     # settle, Down to Tech, A
   PEEK_ISOBG=0 build/ct.exe --peek saves/gato_inbattle.state iso_item.raw \
       --btnscript "0:600,20:2,0:12,20:2,0:20,100:2,0:60"           # settle, Down x2 to Item, A
 
-Both strips use ONLY colours already in ctBattleHudBg1Pal (checked here), so nothing about the
-palette changes -- only the 48x256 index maps.
+Both strips use only colours already in ctBattleHudBg1Pal (checked here), so the palette does not
+change -- only the 48x256 index maps.
 
-A THIRD capture is the TARGET-SELECT layout: the picker keeps the command boxes but box0 is
-4 px narrower (dividers at 48/51 instead of 52/55, everything else identical), so it is its own
+A third capture is the target-select layout: the picker keeps the command boxes but box0 is
+4 px narrower (dividers at 48/51 instead of 52/55, everything else the same), so it is its own
 chrome and not the command bake.
 
-  PEEK_ISOBG=0 build/ct.exe --peek saves/gato_inbattle.state iso_tgt.raw \n      --btnscript "0:600,100:2,0:20,100:2,0:200"        # settle, A on Att., A -> picker up
+  PEEK_ISOBG=0 build/ct.exe --peek saves/gato_inbattle.state iso_tgt.raw \
+      --btnscript "0:600,100:2,0:20,100:2,0:200"        # settle, A on Att., A -> picker up
 
 Usage: python tools/gen/battle_hud_sub.py [<iso_tech.raw> <iso_item.raw> <iso_tgt.raw> [out.h]]
 With no captures named it makes the three itself from the recipe gato_inbattle (build/recipes/gato_inbattle.state,

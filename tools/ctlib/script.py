@@ -1,13 +1,11 @@
 """Field event-VM scene-script access + annotated disassembly.
 
 Scene header: 14 bytes @ 0x360000 + scene*14; scriptId = h[8] | h[9]<<8.
-Script decompression / fn-pointer tables / opcode lengths come from the
-canonical assets/script.py (load_script / iter_ops / op_len) -- imported via
-a sys.path bootstrap, NOT duplicated.
+Script decompression / fn-pointer tables / opcode lengths come from
+assets/script.py (load_script / iter_ops / op_len), imported.
 
-The ~90-entry opcode annotation table `ann()` is lifted VERBATIM from
-tools/_demo_trace.py (parameterized on `body`; that script hardcoded scene 8).
-Annotations are best-effort RE labels -- several ops are still '?'.
+`ann()` annotates about 90 opcodes with best-effort RE labels; several are
+still '?'.
 
 API:
   scene_header(rom, scene) -> {'raw': 14 bytes, 'scriptId': int}
@@ -26,7 +24,7 @@ SCENE_HDR_LEN = 14
 
 
 def _assets_script():
-    """Import the canonical assets/script.py (module name 'script')."""
+    """Import assets/script.py (module name 'script')."""
     if ASSETS_DIR not in sys.path:
         sys.path.insert(0, ASSETS_DIR)
     import script as assets_script
@@ -49,8 +47,7 @@ def load(rom, scene):
     return objs, body, si
 
 
-# --- opcode annotator, VERBATIM from tools/_demo_trace.py ann() -------------
-# (only change: `body` is a parameter instead of a module global)
+# ---- opcode annotator ----
 def ann(body, o, op, ln):
     b = body
     args = [b[o+i] for i in range(1, ln) if o+i < len(body)]
@@ -146,7 +143,6 @@ def ann(body, o, op, ln):
     elif op == 0xEB: s='? %s'%hx(args)
     elif op == 0x88: s='COLOR/PAL %s'%hx(args)
     return s
-# --- end verbatim ann() ------------------------------------------------------
 
 
 def disassemble(rom, scene, obj=None, out=print):

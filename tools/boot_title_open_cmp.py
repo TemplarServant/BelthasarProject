@@ -7,14 +7,16 @@ At power-on loc 1B1's `FF 02` runs op 0xFF's own fade inside the field's program
 C3:0000, whose title setup ($7E:5978) holds the screen black for its song load and spin before the pendulum's opening.
 Both sides run from power-on: the cartridge under the rule (build/ct.exe --peek boot, CT_ORACLE_LOGICAL=1
 CT_ORACLE_VIRTUAL_BEAM=1, PEEK_THUMBS every frame) and the port (build/Belthasar.exe --boot, CT_SHOTS_THUMBS every frame).
-Each side is aligned on its OWN first lit frame (the boot's own length is another question), and the next <frames>
+Each side is aligned on its own first lit frame (the boot's own length is another question), and the next <frames>
 (default 360) are compared as 128x112 thumbnails (a pixel differs when a channel differs by more than 24):
 
     boot-title: first lit port f<P> cartridge c<C>; <n> frames from there: <k> differ [first +<i>]
 
-A port that shows anything of the title before the real opening -- the machine ticking under the op's fade, as it did
-until 2026-09-28 -- lights early, and its first lit frame then lines up with the cartridge's opening while the next ones
-are black: those frames differ.
+A port that shows anything of the title before the real opening (e.g. the machine ticking under the op's fade) lights
+early, and its first lit frame then lines up with the cartridge's opening while the next ones are black: those frames
+differ.
+
+Regression check: boot-title-opening-no-false-start-vs-rule-cartridge.
 """
 import os
 import struct

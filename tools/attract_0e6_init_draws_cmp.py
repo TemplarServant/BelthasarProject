@@ -4,21 +4,23 @@ r"""The attract's loc 0E6: the init pass draws the robots' variants (op 0x7F, C0
     python tools/attract_0e6_init_draws_cmp.py
 
 Objs 18-22's fn0 at loc 0E6 is `7F 06 / 12 06 80 03 06 / 83 6A 03 / 10 04 / 83 69 03`: local[6] := $FE00[++$01F8], and
-the enemy loaded is 69 when it is >= 80, else 6A. The init runner C0/58ED dispatches it like any op; the port's init
-pass (ct_vm.c runFunc) stepped over 0x7F by its length until 2026-10-08 (disasm/notes/live_vm_op_gaps.md), so local[6]
-stayed 00 and all five robots loaded 6A while the cursor never moved.
+the enemy loaded is 69 when it is >= 80, else 6A. The init runner C0/58ED dispatches it like any op, and so does the
+port's init pass (ct_vm.c runFunc; disasm/notes/live_vm_op_gaps.md).
 
 Both sides run from power-on (the cartridge under the rule, `--monitor --from boot`; the port `--boot` on an erased
 cart, CT_SRAM_FRESH=1, with CT_FIELD_MEMMON -- the route tools/f8_cursor_cmp.py grades the cursor's seeds on; a cold
-`--scene 433` starts 22 play-clock ticks behind, field_f8_cursor_play_clock.md). The cursor $01F8 the draws start from is NOT the same on the two sides -- it drifts from the boot
-(cartridge f50 = 11, port 00), an open matter of its own -- so each side is graded against the ROM's table from ITS
-OWN cursor at the 0E6 load: the five draws $FE00[c+1..c+5] give local[6] (the last) and the five ids. Prints
+`--scene 433` starts 22 play-clock ticks behind, field_f8_cursor_play_clock.md). The cursor $01F8 the draws start from
+differs between the sides (open: it drifts from the boot, cartridge f50 = 11, port 00), so each side is graded
+against the ROM's table from its own cursor at the 0E6 load: the five draws $FE00[c+1..c+5] give local[6] (the last)
+and the five ids. Prints
 
     init-draws: cartridge cursor CC -> DD, local[6] LL, ids I I I I I, $FE00 from CC+1: V V V V V -> consistent|WRONG
     init-draws: port      cursor .. -> DD, local[6] LL, ids I I I I I, $FE00 from DD-4: V V V V V -> consistent|WRONG
     init-draws: <n>/2 sides draw the robots from the ROM table at the load
 
 (The port's whole load lands in one presented frame, so its cursor before the draws is read as the one after, less 5.)
+
+Regression check: attract-0e6-init-draws-the-robots-from-the-rom-table-vs-rule-cartridge.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))

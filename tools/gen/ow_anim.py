@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Bake the overworld ANIM SUB-VM bytecode (ROM bank $C3) into src/data/ow_anim.h.
+"""Bake the overworld anim sub-VM bytecode (ROM bank $C3) into src/data/ow_anim.h.
 
-The sub-VM interpreter C2/0E1D executes bytecode whose pointer table is C3:E000 (op 0x30 of the
-object VM stamps `+0B = C3:E000[id*2]`, `+0D = $C3`). world.c is ROM-free by design, so the region
-the interpreter can reach is baked here, exactly like the menu's $CC name-table slice.
+The sub-VM interpreter C2/0E1D runs bytecode whose pointer table is C3:E000 (op 0x30 of the object VM
+stamps `+0B = C3:E000[id*2]`, `+0D = $C3`). world.c reads no ROM, so the reachable region is baked here,
+like the menu's $CC name-table slice.
 
-Region: C3:E000..C3:FFFF (8 KB). Derived, not guessed: walking EVERY one of the 256 pointer-table
-entries with the interpreter's own advance rules (op 4 = 4 bytes, ops 0/1/2/5 = 2, op 3 = a signed
-jump) touches C3:E14C..C3:FF04, and the table itself occupies C3:E000..E1FF. (A first cut baked only
-E000..EFFF because the span walk had been filtered to pointers ALREADY inside that window -- a
-self-confirming range. The live gull/boat objects run scripts at C3:F0F2 and C3:FA6D.)
+Region: C3:E000..C3:FFFF (8 KB). Walking all 256 pointer-table entries with the interpreter's advance rules
+(op 4 = 4 bytes, ops 0/1/2/5 = 2, op 3 = a signed jump) touches C3:E14C..C3:FF04; the table itself is
+C3:E000..E1FF. (The gull/boat objects run scripts at C3:F0F2 and C3:FA6D, past E000..EFFF.)
 
 Run from the repo root: python tools/gen/ow_anim.py [rom] > src/data/ow_anim.h
 """

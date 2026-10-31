@@ -4,9 +4,9 @@
 
     python tools/gen/lz_pack.py
 
-The streams are named by the ROM's OWN pointer tables -- never by a trace of what some run touched: a run reaches only
-part of the game, and a stream missing here would be read from the ROM again. Each table is one entry of SOURCES; the
-work packages of the ROM-free runtime (memory rom-free-runtime-goal) add theirs as they move their system. ct.exe
+The streams are named by the ROM's own pointer tables, not by a trace of what some run touched: a run reaches only
+part of the game, and a stream missing here would be read from the ROM again. Each table is one entry of SOURCES; a
+system that moves off the ROM adds its own. ct.exe
 --lzpack decompresses every listed offset with src/lz.c and prices it both ways (C3/0557's $7E and $7F arms), so the
 container's copy is the same code's output; `ct.exe --lzassets ct_assets.dat` checks it stream by stream.
 """

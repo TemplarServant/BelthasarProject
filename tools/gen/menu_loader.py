@@ -1,37 +1,34 @@
 #!/usr/bin/env python3
-r"""src/data/menu_loader.h -- everything the LOAD screen (menu mode 0, screen 0x0E, ROM handler C2/E60B) is drawn from.
+r"""src/data/menu_loader.h -- everything the Load screen (menu mode 0, screen 0x0E, ROM handler C2/E60B) is drawn from.
 
 The screen only exists when the cart holds a save: the boot SRAM scan C2/8D6A writes $7F0061 = 2, and scene 0's boot
 script then reaches its second `C8 41` (0x00CE) instead of the mode-0 shell's new-game short circuit. So:
 
-  1. a battery image with a game the ROM ITSELF saved -- by default the cart RAM of recipe name_saved (the party of
+  1. a battery image with a game the ROM itself saved -- by default the cart RAM of recipe name_saved (the party of
      com_jogo_salvo saves in slot 1 on the 600 A.D. overworld), the last 8192 bytes of its CTLS payload;
   2. power-on with that battery (CT_ORACLE_SRAM) for 1 frame (before C0/0057's `LDA #09 / JSL $C2:8004` runs the scan);
   3. run to the title, press START, let the load screen build, dump VRAM + WRAM + CGRAM.
 
 Emitted:
-  * ctMenuChromeLoaderTM   the BG2 tilemap, ALL 32x64 of it (word 0x6000 + the second screen at
-                           +0x400 words), because this screen is scrolled per scanline -- see below
+  * ctMenuChromeLoaderTM   the whole 32x64 BG2 tilemap (word 0x6000 + the second screen at +0x400
+                           words), because this screen is scrolled per scanline -- see below
   * ctMenuLoaderBand       the BG2VOFS ($2110) HDMA bands, read out of $7E:9080
-  * ctMenuChromeLoaderPal  this screen's own CGRAM rows 0-7 -- it does NOT share the X-menu's
+  * ctMenuChromeLoaderPal  this screen's own CGRAM rows 0-7 (not the X menu's)
   * ctLoaderChapThr/Chapter, ctLoaderEraOf/Era   the two ROM string tables the rows show
 
-WHAT OF THE SAVE REACHES THE FILE (measured: this capture against one with saves/field_re/colsave3.srm, slot 1 saved
-by Crono alone in window colour 3): (a) the selected slot's WINDOW COLOUR -- the slot-1 bar's tiles in the tilemap
-(0x700.. for colour 0, 0x73C.. for colour 3; src/menu.c, $0D79) and CGRAM row 1 (entries 8-15 of ctMenuChromeLoaderPal
-row 1); (b) its PARTY -- the summary window shows the slot's three members, each face with its own sixteen colours
-($FF:CC84 + charId * 0x20) in CGRAM rows 4/5/6 (ctMenuChromeLoaderPal rows 4-6). So the file wants slot 1 saved in
-colour 0 by Crono, Lucca and Frog (ids 0, 2, 4) -- the party of the owner's save the header was first made from
-(saves/ct_real_save.srm, lifted out of the owner's saves/com_jogo_salvo.state), which recipe name_saved reproduces.
-Nothing else of the save (names, levels, gold, time, place, the chapter title) is in the file: the rows' text is drawn
-by the engine from the ROM tables emitted below.
+What of the save reaches the file (compare a capture with saves/field_re/colsave3.srm, slot 1 saved by Crono alone in
+window colour 3): (a) the selected slot's window colour -- the slot-1 bar's tiles in the tilemap (0x700.. for colour 0,
+0x73C.. for colour 3; src/menu.c, $0D79) and CGRAM row 1 (entries 8-15 of ctMenuChromeLoaderPal row 1); (b) its party
+-- the summary window shows the slot's three members, each face with its own sixteen colours ($FF:CC84 + charId *
+0x20) in CGRAM rows 4/5/6 (ctMenuChromeLoaderPal rows 4-6). So the file wants slot 1 saved in colour 0 by Crono, Lucca
+and Frog (ids 0, 2, 4) -- the party of saves/ct_real_save.srm, which recipe name_saved reproduces. Nothing else of the
+save (names, levels, gold, time, place, the chapter title) is in the file: the rows' text is drawn by the engine from
+the ROM tables emitted below.
 
-The screen reuses the SAME chrome TILES as every other menu screen (0x300-0x313 slot buttons + 0x3DC-0x3EF window
-9-slice) -- the generator REFUSES to emit if a tile outside that set appears.
+The screen reuses the chrome tiles of every other menu screen (0x300-0x313 slot buttons + 0x3DC-0x3EF window
+9-slice); the generator refuses to emit if a tile outside that set appears.
 
     python tools/gen/menu_loader.py [--srm battery.srm | --state S] [--out src/data/menu_loader.h]
-
-Port of tools/gen_menuloader.py (which spliced saves/ct_real_save.srm into a 1-frame boot state; the same capture).
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
@@ -81,12 +78,11 @@ def word(i):
     return vram[o] | (vram[o + 1] << 8)
 
 
-# ⭐ THE MAP IS 32x64 AND THE SCREEN IS SCROLLED PER SCANLINE.  --ppuregs reports BG2 higher=1 (two
-# 32x32 screens, the second at map base + 0x400 WORDS) and vS=503 -- but 503 is only what the
-# register happens to hold at the frame boundary.  --hdma shows the vertical scroll is HDMA'd in
-# three bands, and ⚠ $2110 is BG2VOFS ($2112 is BG3VOFS; getting that pairing wrong is what made the
-# first bake miss the screen's top row entirely).  So the line a scanline shows is
-# (y + VOFS) & 0x1FF, and the SAME three button blocks are shown FOUR times.
+# The map is 32x64 and the screen is scrolled per scanline.  --ppuregs reports BG2 higher=1 (two
+# 32x32 screens, the second at map base + 0x400 words) and vS=503 -- but 503 is only what the
+# register holds at the frame boundary.  --hdma shows the vertical scroll is HDMA'd in three bands
+# (Note: $2110 is BG2VOFS; $2112 is BG3VOFS).  So the line a scanline shows is (y + VOFS) & 0x1FF,
+# and the same three button blocks are shown four times.
 cells = [word(i) for i in range(32 * 64)]
 bad = sorted({c & 0x3FF for c in cells} - ({0} | set(range(0x300, 0x3F0))))
 if bad:
@@ -149,16 +145,16 @@ with open(OUT, 'w', encoding='utf-8') as f:
     f.write("};\n\n")
 
     rom = _romlib.load(ROM)
-    # ---- the two 16x16 SPRITE-ISH bits this screen draws that are not font ---------------------
-    # (1) THE PARTY FACE ICONS, BG1 tiles 0x1E0-0x1E3 / 0x1E8-0x1EB / 0x1F0-0x1F3 at cols 15-16 of the
-    # party window's three rows.  They are NOT generated: the four 4bpp tiles of each are stored RAW
-    # in the ROM and the party's three were located by searching this capture's VRAM for them --
+    # ---- the two 16x16 sprite-like pieces this screen draws that are not font ---------------------
+    # (1) The party face icons, BG1 tiles 0x1E0-0x1E3 / 0x1E8-0x1EB / 0x1F0-0x1F3 at cols 15-16 of the
+    # party window's three rows.  They are not generated: the four 4bpp tiles of each are stored raw
+    # in the ROM, located by searching this capture's VRAM for them --
     # Crono (id 0) at $FF:E55C, Lucca (id 2) at $FF:E65C, Frog (id 4) at $FF:E75C, i.e.
     #     $FF:E55C + charId * 0x80,  four tiles in reading order (tl, tr, bl, br).
     # Decoding all eight slots of that table renders seven clean mugshots (Crono, Marle, Lucca, Robo,
-    # Frog, Ayla, Magus) and garbage at index 7, so the table is exactly seven entries long.
-    # (2) THE BIG SLOT NUMERALS, BG3 tiles 001/002+011/012, 003/004+013/014, 005/006+015/016 -- these
-    # are NOT in the ROM raw (the ROM builds them), so they are baked from this screen's own BG3 CHR.
+    # Frog, Ayla, Magus) and garbage at index 7, so the table is seven entries long.
+    # (2) The big slot numerals, BG3 tiles 001/002+011/012, 003/004+013/014, 005/006+015/016 -- these
+    # are not in the ROM raw (the ROM builds them), so they are baked from this screen's own BG3 CHR.
     # Both carry tilemap palette 4; resolved to RGB here through this screen's CGRAM so the engine
     # blits them directly (they still take the row's colour math, which the caller applies).
     def rgb4(prow, idx):                       # 4bpp: 16 colours per palette row
@@ -171,12 +167,12 @@ with open(OUT, 'w', encoding='utf-8') as f:
         c = cg[o] | (cg[o + 1] << 8)
         return (conv(c & 31), conv((c >> 5) & 31), conv((c >> 10) & 31))
 
-    # ⭐ EACH SLOT'S ICON CARRIES ITS OWN CGRAM ROW -- the three party rows' tilemap cells read
-    # pal 4 / 5 / 6, i.e. the palette belongs to the CHARACTER, not to the screen. Located the same
+    # Each slot's icon carries its own CGRAM row -- the three party rows' tilemap cells read
+    # pal 4 / 5 / 6, i.e. the palette belongs to the character, not to the screen. Located the same
     # way as the tiles, by searching the ROM for this capture's CGRAM rows 4/5/6:
     #     Crono id 0 -> $FF:CC84,  Lucca id 2 -> $FF:CCC4,  Frog id 4 -> $FF:CD04
-    # = $FF:CC84 + charId * 0x20, sixteen BGR555 entries. Resolving all seven through row 4 (the
-    # first thing that looks right, because Crono IS row 4) renders the right FACES in wrong colours.
+    # = $FF:CC84 + charId * 0x20, sixteen BGR555 entries. Note: resolving all seven through row 4
+    # (Crono's) gives the right faces in the wrong colours.
     ICON_BASE, ICON_PAL = 0x3FE55C, 0x3FCC84
     f.write("// The seven party FACE ICONS the summary window draws (BG1 tiles 0x1E0.. at cols 15-16).\n"
             "// Four 4bpp tiles each, stored RAW in the ROM at $FF:E55C + charId * 0x80 in reading order\n"
@@ -248,7 +244,7 @@ with open(OUT, 'w', encoding='utf-8') as f:
         f.write("  },\n")
     f.write("};\n\n")
 
-    # ---- the two ROM string tables the screen shows, baked (the menu module is ROM-free) ----------
+    # ---- the two ROM string tables the screen shows, baked (the menu module reads no ROM) ----------
 
     def cstr(ptr, bank=0x3F0000):
         o, s = bank | ptr, []
@@ -269,12 +265,12 @@ with open(OUT, 'w', encoding='utf-8') as f:
             elif 0xBA <= c <= 0xD3: out.append(chr(ord('a') + c - 0xBA))
             elif 0xD4 <= c <= 0xDD: out.append(chr(ord('0') + c - 0xD4))
             else:                   out.append(PUNCT.get(c, ' '))
-        # ⭐ VERBATIM, leading spaces included. The ROM does NOT centre these strings -- the pen
-        # starts at the block's left edge and the string's OWN leading spaces position it:
-        #   '  The Queen is Gone'  2 spaces * 4px -> ink at x8   (measured 8)
-        #   '          No data'   10 spaces * 4px -> ink at x40  (measured 40)
-        #   'Middle Ages'          none            -> ink at x0   (measured 0)
-        # Stripping them and centring on a tile fits those three points by accident and is wrong.
+        # Verbatim, leading spaces included. The ROM does not centre these strings -- the pen
+        # starts at the block's left edge and the string's own leading spaces position it:
+        #   '  The Queen is Gone'  2 spaces * 4px -> ink at x8
+        #   '          No data'   10 spaces * 4px -> ink at x40
+        #   'Middle Ages'          none            -> ink at x0
+        # Note: stripping them and centring on a tile happens to fit these three and is wrong.
         return ''.join(out).rstrip()
 
     thr = rom[0x3FD024:0x3FD024 + 26]                       # C2/D27F  CMP $FFD024,X
@@ -292,7 +288,7 @@ with open(OUT, 'w', encoding='utf-8') as f:
         f.write('  "%s",\n' % mapped(cstr(p)).replace('"', '\\"'))
     f.write("};\n\n")
 
-    # the ERA name: C2/D3AD `LDA $98C2 / LSR A / TAX / LDA $FFD296,X / BCC +4 / LSR x4 / AND #0F`
+    # the era name: C2/D3AD `LDA $98C2 / LSR A / TAX / LDA $FFD296,X / BCC +4 / LSR x4 / AND #0F`
     era_nib = bytearray(512)
     for loc in range(512):
         b = rom[0x3FD296 + (loc >> 1)]

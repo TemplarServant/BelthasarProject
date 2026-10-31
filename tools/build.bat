@@ -1,8 +1,7 @@
 @echo off
-rem Thin wrapper: all build logic (VS location via vswhere, cmake+ninja flow,
-rem running-exe pre-flight, per-target freshness verification, honest banner)
-rem lives in tools\build.py.  Usage: tools\build.bat [ct|Belthasar|ct_world|ct_viewer]
-rem (no argument = build everything, exactly as before).
+rem Thin wrapper: the build logic (VS location via vswhere, cmake+ninja,
+rem running-exe pre-flight, per-target artifact check) lives in tools\build.py.
+rem Usage: tools\build.bat [ct|Belthasar|ct_world|ct_viewer]  (no argument = build everything)
 setlocal
 set "PY=python"
 where python >nul 2>nul

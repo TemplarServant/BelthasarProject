@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-r"""The attract 07D's Frog Squash: playAnim on track 4 arms the WHOLE $A018 list -- against the LOGICAL-FRAME oracle
-(the battle main loop's two-frame iteration, CLAUDE.md's one exception; disasm/notes/battle_playanim_list.md).
+r"""The attract 07D's Frog Squash: playAnim on track 4 arms the whole $A018 list -- against the logical-frame oracle
+(the battle main loop's two-frame iteration, CLAUDE.md's zelda3 model; disasm/notes/battle_playanim_list.md).
 
     python tools/attract_playanim_list_cmp.py
 
 The cartridge: saves/attract_07d_battle_f4540.state on CT_ORACLE_LOGICAL=1, `--monitor` of the pose engine's mode
-$A124, the published pose $9907 and the cursor $A13A (eleven combatants each). The port: the attract (scene 433, --selftest) with
-CT_BATTLE_ASCTRACE -- its `ascposearm` (C1/4D08's arm) and `ascpose` (C1/424C's publish) lines of the tech's action
-(the `asc arm ... sel=28` window). The two frame counters are tied at the action's FIRST arm (Frog's anim 10, the
-first $A124 0 -> non-zero edge on the cartridge); from there, per frame to the action's end:
+$A124, the published pose $9907 and the cursor $A13A (eleven combatants each). The port: the attract (scene 433,
+--selftest) with CT_BATTLE_ASCTRACE -- its `ascposearm` (C1/4D08's arm) and `ascpose` (C1/424C's publish) lines of
+the tech's action (the `asc arm ... sel=28` window). The two frame counters are tied at the action's first arm (Frog's
+anim 10, the first $A124 0 -> non-zero edge on the cartridge); from there, per frame to the action's end:
 
-  * every ARM: the frame, the combatants and the mode (on the cartridge: $A124 := 1/2, $A13A := FF);
-  * every PUBLISHED pose: $9907 of combatants 0-7 as each frame leaves it.
+  * every arm: the frame, the combatants and the mode (on the cartridge: $A124 := 1/2, $A13A := FF);
+  * every published pose: $9907 of combatants 0-7 as each frame leaves it.
 
 Tech $28's script plays `06 05` and `06 03` on track 3 (the primary) and track 4 (the $A018 list, C1/4D79): on the
-cartridge all five enemies arm together, 3 and 4 HOLD one pose ($A150 = 1 on $A018[0] and the primary) and 5/6/7 walk
-the anim through. Arming only role 4 left three enemies in their idle pose -- the user's report.
+cartridge all five enemies arm together, 3 and 4 hold one pose ($A150 = 1 on $A018[0] and the primary) and 5/6/7 walk
+the anim through. Arming only role 4 leaves three enemies in their idle pose.
+
+Regression check: attract-07d-playanim-list-vs-logical-oracle.
 """
 import os
 import re

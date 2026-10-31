@@ -1,13 +1,11 @@
-# Extract the 8 CT character records for the new-game $7E:2600 init into a baked C header, so the runtime
-# engine needs only ct_assets.dat (no .sfc). Two canonical sources, merged:
-#   * bytes 0x00-0x35, 0x41-0x4F : ROM $CC:0000..0280 (file 0xC0000, 0x50/rec) -- the ROM char-base table
-#       that C2/956E MVN-copies to $2600 (HP/MP/7 stats/LV/XP/equip/NEXT).
-#   * bytes 0x36-0x40 : the DERIVED-stat block (effective stats + 0x3D ATK / 0x3E DEF), which the ROM base
-#       leaves 0xFF and CT recomputes from the equipped gear. We take the oracle's post-recompute values
-#       from the oracle in GATO's fight (the recipe gato_wait, tools/recipes/: its $2600 == the ROM base for every
-#       char EXCEPT this block, so 0x36-0x40 there IS the canonical recalc of each char's join gear; the same 640
-#       bytes as the capture gato_t0 this was first made from). Our equip is read-only, so these static derived
-#       stats are exact; port the C2 recalc if equip-change is ever added.
+# The 8 character records of the new-game $7E:2600 init, baked into a C header. Two sources, merged:
+#   * bytes 0x00-0x35, 0x41-0x4F: ROM $CC:0000..0280 (file 0xC0000, 0x50 per record), the char-base table
+#       C2/956E copies (MVN) to $2600 (HP/MP/7 stats/LV/XP/equip/NEXT).
+#   * bytes 0x36-0x40: the derived-stat block (effective stats + 0x3D ATK / 0x3E DEF), which the ROM base leaves
+#       0xFF and the game recomputes from the equipped gear. Taken from the oracle in GATO's fight (recipe
+#       gato_wait, tools/recipes/), whose $2600 equals the ROM base except this block, so 0x36-0x40 there is the
+#       recalc of each character's join gear. These static values hold only while equip is read-only; an
+#       equip change needs the C2 recalc ported.
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped

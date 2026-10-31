@@ -13,6 +13,8 @@ after the last toggle that is not a toggle). Prints
 
     cyclone-blink-cmp: oracle <n> toggles <intervals>; port <m> toggles <intervals>
     cyclone-blink-cmp: intervals identical <k> / <n-1>, toggle count <same|differs>, exit +<a> vs +<b>
+
+Regression check: battle-anim-op6c-cyclone-blink-vs-oracle.
 """
 import os
 import re

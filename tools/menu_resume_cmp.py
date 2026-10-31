@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-r"""The field's fade-in after a menu (C0/2824) against the cartridge, pixel by pixel -- user defect 2026-09-26 #21:
-a menu opened mid-walk made the screen "jump" on closing.
+r"""The field's fade-in after a menu (C0/2824) against the cartridge, pixel by pixel.
 
     python tools/menu_resume_cmp.py
 
-C0/2824 fades in the RELOADED field (C0/01A5 rebuilt the map, C0/7506/7553 the camera from the arrival tile, C0/286C
-redrew the objects), with the scheduler and the controller frozen. The port used to fade in the frame the menu froze
-at its OPEN, then cut to the reloaded field: on a walk the camera jumped at the fade's end. Two drives on party3_field
+C0/2824 fades in the reloaded field (C0/01A5 rebuilt the map, C0/7506/7553 the camera from the arrival tile, C0/286C
+redrew the objects), with the scheduler and the controller frozen. It does not fade in the frame the menu froze at its
+open, so after a menu opened mid-walk the camera must not jump at the fade's end. Two drives on party3_field
 (the logical oracle, `--peek` F+2 = the port's frame F, menu_shell_cmp.py's alignment): X standing still, and X right
 after a walk to the right. For every frame from the reload's last black one to the fade's end the tool counts the
 pixels that differ in the 256x224 picture and prints the largest; what is left is sprite-sized (C0/B127 resets the drawn
@@ -31,8 +30,7 @@ DRIVES = [
 def main():
     for tag, obtn, pwalk, a, b in DRIVES:
         frames = list(range(a, b + 1))
-        # the cartridge's display of frame F = the dump after F + 2 frames, every frame from one run (PEEK_SHOTS; this read
-        # menu_shell_cmp's per-frame `_mshell_o_*_<F>.raw` files, which that tool no longer leaves behind)
+        # the cartridge's display of frame F = the dump after F + 2 frames, every frame from one run (PEEK_SHOTS)
         got = peekshots.shots('saves/battle_re/party3_field.state', obtn, [f + 2 for f in frames],
                               env=dict(os.environ, CT_ORACLE_LOGICAL='1'), prefix=os.path.join(ROOT, 'build', '_mresume_o_' + tag))
         M.port_frames('saves/battle_re/party3_field.lakewram', 130, pwalk, frames, 'rs' + tag)

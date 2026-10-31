@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-r"""Regenerate src/data/seq_credits.h -- the data SEQUENCE-TABLE ENTRY 1 (the staff credits,
-$7E:6B04) runs on.  disasm/notes/sequence_table.md section 6 is the derivation.
+r"""Regenerate src/data/seq_credits.h -- the data sequence-table entry 1 (the staff credits,
+$7E:6B04) runs on.  disasm/notes/sequence_table.md section 6.
 
-Entry 1 is NOT a picture either.  The port runs its setup and its three tasks, and builds the BG1
-tilemap and the OAM the same way $7E:6C4D and $7E:6C71 do -- by streaming the page's own text out
-of the overlay through the WMDATA port.  So what is generated here is only what cannot be computed:
+Entry 1 is not a picture.  The port runs its setup and its three tasks, and builds the BG1
+tilemap and the OAM the way $7E:6C4D and $7E:6C71 do -- by streaming the page's own text out
+of the overlay through the WMDATA port.  So only what cannot be computed is generated here:
 
-  * the FONTS.  The boot decompresses a 512-byte packet (ROM index $AE, via $7E:3691 -> C3/0557)
+  * the fonts.  The boot decompresses a 512-byte packet (ROM index $AE, via $7E:3691 -> C3/0557)
     into VRAM words $0000..$00FF -- 32 tiles read as 2bpp in BG mode 0 -- and $7E:66B0 expands a
     2bpp source at $7F:0300 into VRAM words $0100..$045F, padding each tile's upper two planes
-    with zeroes so the SPRITES can use the same glyphs at 4bpp.  Captured from the ORACLE'S OWN
-    VRAM, with refusals if anything about the capture is not what the derivation says it is.
-  * the overlay's own DATA: the five pages' text streams ($7E:6CC0..$6E41) and the two pointer
+    with zeroes so the sprites can use the same glyphs at 4bpp.  Captured from the oracle's
+    VRAM; the script refuses a capture that does not match the derivation.
+  * the overlay's own data: the five pages' text streams ($7E:6CC0..$6E41) and the two pointer
     tables ($7E:6CAC BG, $7E:6CB6 OAM), read out of the decompressed overlay image.
 
-⭐ What is NOT here: the tilemap, the OAM, the palette and the timing.  The four greys are
+Not here: the tilemap, the OAM, the palette and the timing.  The four greys are
 immediates in $7E:6BF9; the tilemap and OAM are what the two stream decoders write; the page
 counter, the 15-frame fade in, the 90-frame hold and the 15-frame fade out are the machine's.
 
@@ -31,9 +31,9 @@ TMP = 'build/_seqcred'
 NL = chr(10)
 
 # The two capture frames.  A plain boot plays the title to its end and falls into the attract; boot
-# frame 2840 is 82 frames into the credits' FIRST page, and 1700 frames further on is 68 frames
-# into its SECOND.  Two different pages is the point: it is what proves the fonts are a boot asset
-# and not something the page builds.
+# frame 2840 is 82 frames into the credits' first page, and 1700 frames further on is 68 frames
+# into its second.  Two different pages show that the fonts are a boot asset and not something
+# the page builds.
 BOOT_FRAMES = 2840
 PAGE2_AFTER = 1700
 
@@ -71,7 +71,7 @@ def w16(buf, a):
 
 
 # ---- the refusals ------------------------------------------------------------------------------
-# Both captures must actually BE inside the credits, on two different pages, with the page timer
+# Both captures must be inside the credits, on two different pages, with the page timer
 # still installed -- otherwise the VRAM below is some other stage's.
 for tag, buf, want in (('capture A', wram, 1), ('capture B', wram2, 2)):
     if buf[0x384] != 0x61:
@@ -87,7 +87,7 @@ if font != vram2[:FONT_WORDS * 2]:
     die('the font words $0000..$%03X differ between page 1 and page 2 -- they are not a boot asset'
         % (FONT_WORDS - 1))
 
-# $7E:66B0 writes eight words of 2bpp data and then eight ZERO words per tile, so every tile from
+# $7E:66B0 writes eight words of 2bpp data and then eight zero words per tile, so every tile from
 # $10 up must have empty upper planes.  If one does not, the expansion is not what $66B0 does.
 for tile in range(0x10, 0x40):
     if any(font[tile * 32 + 16 + k] for k in range(16)):

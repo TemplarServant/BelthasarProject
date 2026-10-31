@@ -29,7 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
 
 # Operand formats. d = direct page byte, a = absolute word, i = immediate, r = relative branch (signed byte),
-# mb = 13-bit address + 3-bit bit, ds/dd = two direct page bytes (the SOURCE comes first in the instruction).
+# mb = 13-bit address + 3-bit bit, ds/dd = two direct page bytes (the source comes first in the instruction).
 # Each entry: (mnemonic with {..} slots, operand kinds in byte order). A slot name is the kind it formats.
 OPS = {}
 

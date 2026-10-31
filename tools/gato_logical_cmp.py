@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-r"""GATO's whole fight against the LOGICAL-FRAME oracle -- the battle main loop's two-frame iteration (the zelda3 model,
-CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md §4).
+r"""GATO's whole fight against the logical-frame oracle -- the battle main loop's two-frame iteration (the zelda3 model,
+CLAUDE.md; disasm/notes/oracle_logical_frames.md sec. 4).
 
     python tools/gato_logical_cmp.py [last oracle frame]
 
@@ -11,18 +11,18 @@ fixture saves/battle_re/gato_t0.raw.wram with no input (CT_BATTLE_SCRIPT n:2000)
 Port frame p is oracle frame p + 227: the fixture's pinned band arm (CT_BHUD_ARM_FRAME 69) against the oracle's band
 seed ($CA1E = FF, f296). Graded from the oracle's first iteration head (f372, `$0027 = 01`) to the given frame
 (default 1935): GATO's attack A, his op-00 turn, his song, the teardown, attack A again, and every ATB tick between.
-Per byte: `identical` or the first frame and both values. And GATO's WALK: every mover step the port prints
+Per byte: `identical` or the first frame and both values. And GATO's walk: every mover step the port prints
 (CT_BATTLE_MVTRACE `battlemove ... cmb6 ... live=(x,y)`) against the oracle's live foot $1D12 / $1D29 on that frame --
 the mode pass C1/3714 on both frames of the iteration and the NMI's segment service CF/F978.
 
-UNDER THE RULE (the migration switches CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1, CLAUDE.md "The infinitely fast CPU"):
-the cartridge is the rule's oracle, CT_ORACLE_LOGICAL=1 + CT_ORACLE_VIRTUAL_BEAM=1 -- with every CPU cycle free the real
-beam stands while the field works, so the event runner's deadline C0/5A46 (`$213D` against `$69`) would read a frozen
-line and cut every pass: gato_wait never reaches its battle without the virtual beam. C1/0000 runs at f222 in every model
-(--hookpc C10000); the rule's boot is C1/0000 + 57 to the band seed (CD:0512, `$CA1E = FF` f279 -- the valve's f296) and
-the first iteration head is f355. The fixture's arm under the rule is CT_BHUD_ARM_FRAME - 11 = 58 (src/battle.c
-battleBootBandArm), so port frame p is oracle frame p + 221 (its arm 58 against the seed f279, as 227 was 69 against
-f296), and the default window is the same span from the rule's first head: f355 .. f1918.
+Under the rule (CT_ORACLE_NMION_HOLD=1 + CT_ORACLE_IFAST=1, CLAUDE.md "The infinitely fast CPU") the cartridge runs with
+CT_ORACLE_LOGICAL=1 + CT_ORACLE_VIRTUAL_BEAM=1: with every CPU cycle free the real beam stands while the field works, so
+the event runner's deadline C0/5A46 (`$213D` against `$69`) would read a frozen line and cut every pass, and gato_wait
+would never reach its battle. C1/0000 runs at f222 in every model (--hookpc C10000); the rule's boot is C1/0000 + 57 to
+the band seed (CD:0512, `$CA1E = FF` f279; f296 without the rule) and the first iteration head is f355. The fixture's
+arm under the rule is CT_BHUD_ARM_FRAME - 11 = 58 (src/battle.c battleBootBandArm), so port frame p is oracle frame
+p + 221 (227 without the rule), and the default window is the same span from the rule's first head: f355 .. f1918.
+Regression check: battle-gato-fight-vs-logical-oracle.
 """
 import os
 import re

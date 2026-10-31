@@ -3,7 +3,7 @@
 
 OBJ tiles (char base VRAM byte 0x8000; a 16x16 icon = t, t+1, t+16, t+17): 04..0E are the grey unselected icons,
 24..2E the selected ones. CT loads a different OBJ palette 0 per selection (each icon's own colours), so each
-highlight is decoded with OBJ palette 0 of the frame where THAT icon is selected; the greys with the first one's (the
+highlight is decoded with OBJ palette 0 of the frame where that icon is selected; the greys with the first one's (the
 greys' colours are the same in all six). Colours as the PPU expands them, (v<<3)|(v>>2). disasm/notes/menu_phase2.md.
 The captures: the X menu open in front of GATO (recipe menu_open_gato2, standing in for saves/menu_open_gato2.state;
 icon 0 selected), then Right x i for icon i.

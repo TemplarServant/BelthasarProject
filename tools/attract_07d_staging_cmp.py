@@ -5,13 +5,16 @@ r"""The attract 07D's battle staging against the cartridge: the five enemy recor
 
 The field writes them at the battle's entry (C0/0557-0616): tile = $1801,Y - $F0 / $1881,Y - $F1 and fine =
 $0A00,Y & 0F / $0A80,Y & 0F of each enemy's field object, then the pose, id, mode byte and tail. So they are the
-enemies' FIELD positions at that moment -- which the 07D's script sets with op 0x8C (C0/4BC3) out of scene vars
-filled by op 0x21 (disasm/notes/field_op8c_place_from_vars.md), and the battle's $1D0C/$1D23 are 16*tile + fine
-of these bytes (CC/EA82-EA9B). The cartridge, under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM):
-saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json),
-`--monitor 7E29BF:60` over the write (C0:0589, f4425; f4496 on the owner's real-time capture saves/attract_cena_inicial.state,
-which this tool read until 2026-10-22). The port: the attract (scene 433, --selftest) with CT_BATTLE_MEMMON, the first line of the
-battle whose formation $AF02 is the 07D's (05 05 51 51 57).
+enemies' field positions at that moment, which the 07D's script sets with op 0x8C (C0/4BC3) from scene vars filled
+by op 0x21 (disasm/notes/field_op8c_place_from_vars.md); the battle's $1D0C/$1D23 are 16*tile + fine of these bytes
+(CC/EA82-EA9B).
+
+Cartridge, under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM): saves/attract_cena_inicial_rule.state (the attract
+from power-on + 2159, recipe tools/fixtures/attract_rule.json), `--monitor 7E29BF:60` over the write (C0:0589,
+f4425). Port: the attract (scene 433, --selftest) with CT_BATTLE_MEMMON, the first line of the battle whose
+formation $AF02 is the 07D's (05 05 51 51 57).
+
+Regression check: attract-07d-enemy-staging-vs-oracle.
 """
 import os
 import re

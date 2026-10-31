@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-r"""A cutscene leaves the lead on the plane it found him on -- port against the LOGICAL oracle.
+r"""A cutscene leaves the lead on the plane it found him on -- port against the logical oracle.
 
     python tools/field_plane_cutscene_cmp.py
 
-The lead's plane is ONE byte, $0155, with three writers in the ROM: the location load (C0/0C4C `LDA #01 / STA $55`),
+The lead's plane is one byte, $0155, with three writers in the ROM: the location load (C0/0C4C `LDA #01 / STA $55`),
 the arrival-tile evaluation (C0/9DC3 -> 9DFE) and the step commit (C0/9D54-9D5A, unless the tile is IGNORE_Z). A
 scripted move (op 0x96 -> C0/A810, op 0xD9's walk programs) writes none of them (disasm/notes/field_plane_0155.md).
+Regression check: field-plane-survives-a-cutscene-vs-logical-oracle.
 
   meal  saves/field_re/s07b_table_seat.state (loc $07B, the castle dining hall with the soldiers' tables; the oracle's own --teleport
-        from saves/solo_forest.state with the story page of the user's capture build/ct_debug_023.state, then walked
+        from saves/solo_forest.state with the story page of the capture build/ct_debug_023.state, then walked
         to the soldiers' table, Crono at 0780,0C7F on plane 1, facing down). A at the table (obj15 fn1), A through
         the choice and the boxes; op 0xD9 seats Crono at 0704,0C7F -- the upper, plane-1 half of a shape-0x19 strip
         -- and gives control back at f1099. Then Left 30, Right 60. Every frame, both sides: the lead's words
@@ -32,7 +33,7 @@ OUT = os.path.join(ROOT, 'build', '_planecut')
 
 PRESSES = 13                                                # the boxes after the choice, one A a second
 
-# The oracle's word for frame f reaches the ROM's logic on frame f+1 (memory ct-frame-alignment-p2): the port's drive
+# The oracle's word for frame f reaches the ROM's logic on frame f+1 (docs/TESTING.md, the alignment): the port's drive
 # is the oracle's shifted one frame later, as in tools/e4_visit_cmp.py.
 DRIVES = {
     'meal': dict(state='saves/field_re/s07b_table_seat.state', seed='saves/field_re/s07b_table_seat.lakewram',

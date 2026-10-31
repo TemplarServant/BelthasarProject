@@ -1,5 +1,5 @@
 """Beam traces (`ct.exe --cputrace` with CPUTRACE_BEAM=1): each instruction's PC, its beam line on a linear axis and
-its master-cycle stamp, and the non-refresh cycles between two stamps -- LakeSnes charges the 40-cycle DRAM refresh
+its master-cycle stamp, and the non-refresh cycles between two stamps. LakeSnes charges the 40-cycle DRAM refresh
 when an instruction carries the beam across h = 536 (snes.c snes_runCycles), so the refreshes between two instruction
 starts are the h-536 crossings between them: lines + (h2 >= 536) - (h1 >= 536)."""
 import re
@@ -10,9 +10,9 @@ F = 357366 - 262 * 40            # one frame's non-refresh master cycles
 
 def load(path):
     """[(pc, opcode, flags, line, h, cycles)] with `line` linear (v unwrapped across frames). One instruction can carry
-    the beam past a whole frame (a DMA longer than 262 lines: the world loader's C2/26D3, 540076 cycles), so v going down
-    is not the only wrap: the stamp says how many lines the step can have crossed (1364 a line), and every further frame
-    that fits is one more wrap -- without it the step's refreshes read a frame short (264 x 40 cycles too many)."""
+    the beam past a whole frame (a DMA longer than 262 lines, e.g. the world loader's C2/26D3), so v going down is not
+    the only wrap: the cycle stamp bounds how many lines the step crossed (1364 a line), and each further whole frame
+    that fits counts as one more wrap."""
     out, wraps, last = [], 0, None
     for line in open(path):
         m = RX.match(line)

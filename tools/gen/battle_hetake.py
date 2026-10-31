@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
-"""Bake the FOREST battle (scene 19, 3x Hetake id 0x5E) enemy sprites into
-src/data/battle_hetake.h + verify vs oracle.
+"""Bake the forest battle (scene 19, 3x Hetake id 0x5E) enemy sprites into
+src/data/battle_hetake.h + verify against the oracle.
 
-Derivation dossier: disasm/notes/battle_scenario2.md. The forest fight is the first
-MULTI-ENEMY battle (Crono+Marle vs 3 Hetake mushrooms, 14 HP each). Like GATO, the
-battle module (bank C1/CC) clears field OBJ at boot and renders combatants through its
-own OBJ engine into the $7E0700 OAM shadow; the enemy poses are a fresh boot upload to
-OBJ VRAM (char base word 0). The 3 Hetakes occupy DISTINCT VRAM tile blocks
-(slot0=0x40, slot1=0x48, slot2=0x60) and stream their idle anim INDEPENDENTLY (slot0
-and slot1 happen to be byte-identical this frame; slot2 is at a different phase).
+disasm/notes/battle_scenario2.md. The forest fight is the first multi-enemy battle
+(Crono+Marle vs 3 Hetake, 14 HP each). As with GATO, the battle module (bank C1/CC)
+clears field OBJ at boot and renders combatants through its own OBJ engine into the
+$7E0700 OAM shadow; the enemy poses are a fresh boot upload to OBJ VRAM (char base
+word 0). The 3 Hetakes occupy distinct VRAM tile blocks (slot0=0x40, slot1=0x48,
+slot2=0x60) and stream their idle anim independently (slot0 and slot1 happen to be
+identical on the captured frame; slot2 is at a different phase).
 
 Baked (T1):
-  - the 3 Hetake idle clusters: OAM assembly (rel anchor) + anchors, byte-exact snapshot.
+  - the 3 Hetake idle clusters: OAM assembly (rel anchor) + anchors, one snapshot.
   - OBJ tiles 0x00..0x7F (4bpp) from the in-battle VRAM: cursor(0x00), parked-cursor
     foot(0x06), the 3 Hetake idle blocks (0x40..0x77).
   - pal1 (enemy) CGRAM.
-  - the Hetake ATTACK keyframe (the spore-burst lunge pose) tiles 0x40..0x47 + assembly,
+  - the Hetake attack keyframe (the spore-burst lunge pose) tiles 0x40..0x47 + assembly,
     baked from the leap-arc peak frame; + the measured leap-arc trajectory table.
   - the target-select cursor (tile 0x000 pal1 prio3) + per-slot on-screen positions.
 
-Idle is OAM-STATIC (no positional bob; the tile CONTENT streams -- the C1/CC anim engine
-boundary, same as stance/GATO idle). Enemies appear SETTLED at their formation anchors
-(no entrance morph; only the PCs weapon-draw + the HUD slides). All derived ROM/oracle-
-only, zero invention; the per-frame tile stream + the formation-anchor ROM math are cited
-BOUNDARIES.
+Idle is OAM-static (no positional bob; the tile content streams -- the C1/CC anim engine
+boundary, as for the stance/GATO idle). Enemies appear settled at their formation anchors
+(no entrance morph; only the PCs' weapon draw + the HUD slides). Outside this bake (cited
+in the dossier): the per-frame tile stream and the formation-anchor ROM math.
 
 Run from repo root. Emits src/data/battle_hetake.h. With --verify, reconstructs the 3 idle
 Hetakes (and the attack keyframe) from the baked data and pixel-diffs vs the oracle fb.
@@ -198,7 +197,7 @@ def main():
         cursors.append((cur[0]['x'], cur[0]['y']) if cur else (0, 0))
 
     if '--verify' in sys.argv:
-        # confirm slot0/slot1 tile content byte-identical (same enemy, distinct VRAM blocks)
+        # confirm slot0/slot1 tile content is identical (same enemy, distinct VRAM blocks)
         def blk(v, T): return b''.join(v[(T+dx+0x10*dy)*32:(T+dx+0x10*dy)*32+32] for dy in range(2) for dx in range(2))
         ab = all(blk(iv, 0x40+2*i) == blk(iv, 0x48+2*i) for i in range(4))
         print("[battle-hetake verify] idle (forest_battle_3hetake + 0:8):")

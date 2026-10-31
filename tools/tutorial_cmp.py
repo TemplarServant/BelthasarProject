@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-r"""The combat tutorial (loc 0FE, scene 254), port against the rule's cartridge from the SAME WRAM.
+r"""The combat tutorial (loc 0FE, scene 254), port against the rule's cartridge from the same WRAM.
 
     python tools/tutorial_cmp.py [circle|line|jump ...]        (no argument: all three)
 
 disasm/notes/field_quad_window.md. Scene 254 has no battle: obj0's script draws the lesson with field objects and two screen
-effects, and its three moments are the user's report of 2026-10-07 ("the circle ... is black, it should be magenta", "the yellow
-indication of the line attack is missing", "at the end, the imps did not move to the damage area"):
-  circle  `FF 90 98 2C 25` -- the iris (C0/21E1 entries 1/2, C3/0077). Inside it BG1/BG2 are off and the BACKDROP shows:
+effects. Its three moments (the magenta circle, the line attack's yellow window, the imps' jump into the damage area):
+  circle  `FF 90 98 2C 25` -- the iris (C0/21E1 entries 1/2, C3/0077). Inside it BG1/BG2 are off and the backdrop shows:
           CGRAM 0, which obj0's `4B 00 22 7E D8 5C` makes magenta (5CD8). The state is the iris ($0139-$013D).
   line    `FE 30 ..` + `F1 7F 00` -- C0/21E1 entry 6 (C0/2409): eight channels, a quad from C3/0EFA in window 1's table,
           that window as the colour window with the fixed colour (31,31,0) added. `FF 9C` (entry 0E) takes it down. The
@@ -18,7 +17,7 @@ Each moment starts from a cartridge state a few frames before it (saves/field_re
 tool from scene254_tutorial.state under the rule, the A every 32 frames, when missing); the port is seeded from that state's
 WRAM (--loadwram) and both run the same presses. For each frame k the port's frame k is set beside the cartridge's: its WRAM
 with `--peek` k + 1 (the port's CT_DUMPWRAM_AT is taken before the tick), its picture with `--peek` k + 2 (the alignment
-P + 2, memory ct-frame-alignment-p2), rows 0-130 (above the text box):
+P + 2, docs/TESTING.md), rows 0-130 (above the text box):
   tutorial: <seg> f<k> state <same|DIFF> [table <n>/448] picture <n>/33536 identical
   tutorial: <seg> <k>/<n> frames identical
 """

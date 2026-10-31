@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Bake the CT battle ACTION-FEEDBACK digit popup (the rising DAMAGE NUMBERS) into
-src/data/battle_fx.h + verify vs oracle.
+"""Bake the battle action-feedback digit popup (the rising damage numbers) into
+src/data/battle_fx.h + verify against the oracle.
 
-Derivation dossier: disasm/notes/battle_actionfx.md (P1). When a hit lands, the battle
-module draws the damage value as decimal digits in OBJ tiles 0x190+d ('0'..'9'), palette 0,
-8x8 (sz=0), prio 3, over the target -- rising in a parabolic hop then holding, then vanishing
-just before the HP write. Proven byte-exact for two independent hits:
+disasm/notes/battle_actionfx.md (P1). When a hit lands, the battle module draws the damage
+value as decimal digits in OBJ tiles 0x190+d ('0'..'9'), palette 0, 8x8 (sz=0), prio 3, over
+the target -- rising in a parabolic hop then holding, then vanishing just before the HP write.
+The two hits the verify checks:
   * Crono -> GATO  "17"  (GATO curHP 76->59 = -17)  -> tiles 0x191,0x197
   * GATO  -> Crono "14"  (Crono curHP 70->56 = -14) -> tiles 0x191,0x194
-The digit-to-tile map is tile = 0x190 + digit (rendered strip 0x190..0x199 = '0'..'9', S-verify).
+The digit-to-tile map is tile = 0x190 + digit (rendered strip 0x190..0x199 = '0'..'9').
 
-Baked (all read from the oracle, deterministic):
+Baked (all read from the oracle):
   - ctBattleFxDigitTile[10][32]  -- OBJ 8x8 tiles 0x190..0x199 ('0'..'9'), 4bpp planar, from the
     in-battle OBJ VRAM (0x190 lands at byte 0x3200, inside the battle-boot OBJ upload region
     0x3000-0x3C00 -- same provenance as the stance pose tiles, battle_stance.md S1).
   - ctBattleFxDigitPal[16]  -- OBJ palette 0 (BGR555 LE); the digits use indices 1(white fill=
-    0x7FFF)/2/3(dark outline); index 0 transparent. pal0 is stable across the fight (verified).
-  - ctBattleFxFlashPal[16]  -- OBJ palette 4 = the HURT/HIT FLASH palette: entries 1..15 all
-    0x7FFF (white), so the target's OWN pose tiles rendered in pal4 = a solid-white silhouette
-    (P3; the flash is a palette SWAP 1/5/6 -> 4 on the target's sprites, not an overlay).
+    0x7FFF)/2/3(dark outline); index 0 transparent. pal0 is stable across the fight.
+  - ctBattleFxFlashPal[16]  -- OBJ palette 4 = the hurt/hit flash palette: entries 1..15 all
+    0x7FFF (white), so the target's own pose tiles rendered in pal4 = a solid-white silhouette
+    (P3; the flash is a palette swap 1/5/6 -> 4 on the target's sprites, not an overlay).
   - ctBattleFxRiseDY[CT_FX_RISE_N]  -- the popup's vertical offset from its rest row, per render
-    frame, index 0 = birth. MEASURED byte-exact from a step-1 dense --peek sweep and confirmed
-    target-independent (identical for the "17"/GATO and "14"/Crono popups). After the table the
-    number HOLDS at rest (dy=0) for ~31 frames, then vanishes (lifetime ~56 frames).
+    frame, index 0 = birth. Measured with a frame-by-frame --peek sweep; target-independent (the
+    same for the "17"/GATO and "14"/Crono popups). After the table the number holds at rest (dy=0)
+    for HOLD_FRAMES (32) frames, then vanishes (lifetime 57 frames).
 
 Render rule (composite as OBJ, prio 3, over the combatants):
   leftX = numberOriginX(target)         # left digit x; origin measured per target (see spec)
@@ -33,7 +33,7 @@ Render rule (composite as OBJ, prio 3, over the combatants):
 Run from repo root (needs Chrono_Trigger_USA_SNES.sfc + ct_assets.dat + gato_press_action.state in
 cwd). Emits src/data/battle_fx.h. With --verify, regenerates the settled "17"(GATO f540) and "14"(Crono
 f755) frames, reconstructs the digits from the baked tiles+pal0 at the oracle's own digit OAM
-positions, and pixel-diffs vs the oracle fb (verified 73/73 + 79/79 opaque px, 0 mismatch d>24).
+positions, and pixel-diffs against the oracle fb (a pixel mismatches at colour distance d > 24).
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
@@ -54,10 +54,10 @@ DIGIT_W    = 8                           # px between digit columns (8x8 sprites
 DIGIT_PAL  = 0
 FLASH_PAL  = 4
 MISS_BASE  = 0x19A                        # the "MISS" glyph = OBJ tiles 0x19A (left) + 0x19B (right), pal0
-MISS_NTILE = 2                            #   (battle_miss_evade.md §2: spawned by C1/E8E2 on a physical miss)
+MISS_NTILE = 2                            #   (battle_miss_evade.md sec. 2: spawned by C1/E8E2 on a physical miss)
 
-# The A-mash that boots the GATO fight and drives Crono->GATO / GATO->Crono physicals (loop dossier
-# mash). build(F) is deterministic; --peek to exactly F frames reproduces the frame byte-identical.
+# The A-mash that boots the GATO fight and drives Crono->GATO / GATO->Crono physicals. build(F) is
+# deterministic: --peek to F frames reproduces the frame.
 AON = AOFF = 16
 def build(F):
     seq = []; n = 0
@@ -69,19 +69,18 @@ def build(F):
         if off: seq.append("0:%d" % off); n += off
     return ','.join(seq)
 
-# Verify frames: settled popups (dy=0, held) -- the clean byte-exact instants.
+# Verify frames: settled popups (dy=0, held).
 VERIFY = [(540, "17 over GATO",  0x6130, 76, 59),   # (frame, label, curHP addr, before, after)
           (755, "14 over Crono", 0x5E30, 70, 56)]
-# The flash palette (pal4) is only all-white DURING a flash; f480 = GATO's hit-flash (f476-484).
+# The flash palette (pal4) is only all-white during a flash; f480 = GATO's hit-flash (f476-484).
 FLASH_FRAME = 480
 
-# ---- P1 the vertical rise, MEASURED byte-exact (dossier P1, step-1 dense sweep; index 0 = birth).
+# ---- P1 the vertical rise, measured (dossier P1, frame-by-frame sweep; index 0 = birth).
 #      Offset from the number's rest row. Identical for both observed targets (target-independent).
 RISE_DY = [7, -1, -7, -10, -12, -13, -14, -15, -16,
            -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0]
-HOLD_FRAMES = 32                          # frames held at rest (dy=0); battle_hp_timing.md §c.4: bumped
-                                          # 31->32 so LIFETIME 56->57 = the MEASURED 57 present-frames
-                                          # (popup f572..f628 inclusive = 57), matching the late-spawn timing.
+HOLD_FRAMES = 32                          # frames held at rest (dy=0); battle_hp_timing.md sec. c.4: the
+                                          # popup is present 57 frames (f572..f628 inclusive).
 LIFETIME    = len(RISE_DY) + HOLD_FRAMES  # 57 render frames total (25 rise + 32 hold)
 
 def peek(frame, out):
@@ -179,7 +178,7 @@ def emit(fp, vram, cgram, fpal):
     W(','.join('0x%04X' % w for w in heal + dpal[4:]))
     W("};\n\n")
 
-    # --- flash palette (OBJ pal4, all white) -- read from a FLASH frame (fpal), not the bake frame ---
+    # --- flash palette (OBJ pal4, all white) -- read from a flash frame (fpal), not the bake frame ---
     W("// OBJ palette %d = the HURT/HIT FLASH: entries 1..15 all white (0x7FFF). Render the TARGET's\n" % FLASH_PAL)
     W("// own pose tiles (from battle_stance.h) in this palette for a solid-white silhouette flash.\n")
     W("// (Read from the GATO hit-flash frame f%d; pal4 is a normal OBJ palette outside a flash.)\n" % FLASH_FRAME)
@@ -235,24 +234,24 @@ def verify():
         total.append((tot-diff, tot, diff))
     return total
 
-# Verify the "MISS" glyph: patch GATO's evade ($6168 = block+0x3B) HIGH so Crono's physical MISSES, mash-peek
-# a settled miss-popup frame, and pixel-diff the baked 0x19A/0x19B tiles (pal0) vs the oracle fb. Proves the
-# glyph + palette + anchor byte-exact, the same way verify() proves the damage digits.
+# Verify the "MISS" glyph: patch GATO's evade ($6168 = block+0x3B) high so Crono's physical misses, mash-peek
+# a settled miss-popup frame, and pixel-diff the baked 0x19A/0x19B tiles (pal0) against the oracle fb -- the
+# glyph, palette and anchor, as verify() checks the damage digits.
 def verify_miss():
     from ctlib import lake
-    # 1. Capture a MID-BATTLE Crono-command-ready state (battle blocks populated). Patching evade in the
-    #    PRE-battle state does NOT work -- battle-init (C1/CF3B stat copy from ROM CC/4700) overwrites it. A
-    #    HOLD drive (one A boots the fight, then hold) parks Crono at the command menu; PEEK_SAVE snapshots it.
+    # 1. Capture a mid-battle Crono-command-ready state (battle blocks populated). Note: evade patched in the
+    #    pre-battle state is overwritten by battle init (C1/CF3B stat copy from ROM CC/4700). A hold drive
+    #    (one A boots the fight, then hold) parks Crono at the command menu; PEEK_SAVE snapshots it.
     ready = os.path.join(SP, 'fx_miss_ready.state')
     env = dict(os.environ, PEEK_SAVE=ready)
     subprocess.run([os.path.abspath(EXE), ROM, '--peek', STATE, os.path.join(SP, 'fx_miss_pre.raw'),
                     '--btnscript', '100:8,0:400'], check=True, env=env,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # 2. Patch GATO evade ($6168 = block+0x3B) HIGH in the mid-battle state so Crono MISSES.
+    # 2. Patch GATO evade ($6168 = block+0x3B) high in the mid-battle state so Crono misses.
     payload, fmt = lake.unwrap(open(ready, 'rb').read())
     pl = bytearray(payload); pl[lake.WRAM_OFF + 0x6168] = 0xFF
     mstate = os.path.join(SP, 'fx_miss.state'); open(mstate, 'wb').write(lake.wrap(bytes(pl)))
-    # 3. Mash-peek and SCAN for the settled "MISS" popup (RNG-robust: a specific frame may roll a rare hit).
+    # 3. Mash-peek and scan for the settled "MISS" popup (a given frame may still roll a rare hit).
     for frame in (135, 130, 140, 150, 125, 145, 120, 155):
         prefix = os.path.join(SP, 'fx_miss.raw')
         subprocess.run([os.path.abspath(EXE), ROM, '--peek', mstate, prefix, '--btnscript', build(frame)],

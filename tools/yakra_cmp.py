@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""YAKRA's fight against the LOGICAL-FRAME oracle (defect #19, "Yakra did not attack properly").
+r"""Yakra's fight against the logical-frame oracle.
 
     python tools/yakra_cmp.py
 

@@ -8,16 +8,16 @@ Writes, under DIR (default: the repository root):
                                                   -> x.wram. The map data of world 0 and the intro seed (the flock +
                                                   fair spawner master pc=06CD at $0B30) come from here.
   saves/ow_w0.live.wram.bak, saves/ow_w0.live.vram  the interactive 1000 A.D. overworld: `--peek <w0> x 0:1` ->
-                                                  x.wram (the BASE object seed: no master, the lead PC) and x.vram
+                                                  x.wram (the base object seed: no master, the lead PC) and x.vram
                                                   (the char and BG3 of world 0).
   saves/ow_w<n>.live.wram/.vram, n = 1-7         `ct.exe --owforce <w0> <n> x` (re-runs the C2 loader with
                                                   $0100 = 0x1F0+n and 240 frames) -> x.wram, x.vram.
 The two oracle states:
   default    the recipes ow_intro_pan (stands in for start_scene.state) and ow_nav_w0 (stands in for saves/ow_w0.state)
   --capture  the owner's captures start_scene.state and saves/ow_w0.state
-The captures were dumped by the plain oracle (no CT_ORACLE_LOGICAL; they predate the rule), and these dumps keep
-doing so: a dump is a read of a state, and --owforce's world load is an NMI-off load the rule prices differently
-(the forced world's ambient objects would run a frame apart).
+The dumps use the plain oracle (no CT_ORACLE_LOGICAL), as the captures were made: a dump is a read of a state, and
+--owforce's world load is an NMI-off load the rule prices differently (the forced world's ambient objects would run
+a frame apart).
 """
 import argparse
 import os

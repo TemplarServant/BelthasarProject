@@ -1,30 +1,29 @@
 #!/usr/bin/env python3
 r"""The demo battles' colours against the cartridge: the entry frame and the frames around a tech's effect.
 
-    python tools/attract_battle_colour_cmp.py
+    python tools/attract_battle_colour_cmp.py [port_frames [cart_frames]]
 
-The user, 2026-09-27: "when the battle with flea starts in the demo, the characters vanish for 1 or more frames" and "after
-the frog's skill ends in Magus's castle, and the ice skill on zombor, the screen is darkening for a moment"
-(disasm/notes/battle_arena_cgram.md). One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's
-frames; ct.exe --peek shoots the cartridge's under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from
-saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made by a recipe -- tools/fixtures/attract_rule.json),
-and each pair's box is compared. (The cartridge frames below are the owner's real-time capture's, saves/attract_cena_inicial.state,
-which this tool read until 2026-10-22; the rule's are in PAIRS: the fights' picture diagonal p - 2066, P+1, and p - 2067 in
-087's, whose visit is a frame longer in the port.)
+The optional comma lists replace the port's (and the cartridge's) frames, in PAIRS order; the port's numbering moves
+with the attract's clock. One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's frames;
+ct.exe --peek shoots the cartridge's under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from
+saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made by the recipe
+tools/fixtures/attract_rule.json), and each pair's box is compared (disasm/notes/battle_arena_cgram.md). The pairs
+sit on the fights' picture diagonal: port = cartridge + 2066 (P+1), + 2067 in 087's, whose visit is a frame longer in
+the port.
 
-  0AD entry     port f3810 = the battle's first frame, cart c1744: the PCs' box (Crono, (112,128)-(128,194)). The
-                first compose read h->fxCgram before any battle NMI filled it -- zeros: black PCs for one frame.
-  07D mid-tech  port f6708 / cart c4700, the whole screen, and port f6659 / cart c4648: CD/0E79's fade of CGRAM $10-$1F
-                down at the effect load (armed port f6631 / cart c4633; c4648 differs from the lit c4630 by 1062 px).
-  087 darken    port f9503 / cart c7505: the Ice Sword's own records $0580/$058C (mode 50 over CGRAM $10-$7F, cartridge
-                c7493-c7523) darkening the ARENA's BG1/BG2 -- what the arena baked from the battle's page draws.
-  07D after     port f7171 / c5145 and f7179 / c5153: CD/0453's CD/0E61 fades $10-$1F back up -- only those colours.
-  07D glow      port f6664 / c4630 (before the tech: the candles' BG3 glow added, CGWSEL 02 CGADSUB 03) and f6731 / c4700,
-                f6831 / c4800 (the tech: CGWSEL 00, no sub screen added -- the glow gone, not green; the user's item #6).
-  087 after     port f9900 / c7889 and f9908 / c7897: no record at all ($2C66 = 13, C0/6DCF's $01BB).
+  0AD entry     the battle's first frame, the PCs' box (Crono, (112,128)-(128,194)): the first compose must not read
+                h->fxCgram before a battle NMI has filled it (black PCs for one frame).
+  07D mid-tech  the whole screen, through CD/0E79's fade of CGRAM $10-$1F down at the effect load.
+  087 darken    the Ice Sword's own records $0580/$058C (mode 50 over CGRAM $10-$7F) darkening the arena's BG1/BG2 --
+                what the arena baked from the battle's page draws.
+  07D after     CD/0453's CD/0E61 fades $10-$1F back up -- only those colours.
+  07D glow      before the tech the candles' BG3 glow is added (CGWSEL 02 CGADSUB 03); during the tech CGWSEL 00, no
+                sub screen added (the glow gone, not green).
+  087 after     no record at all ($2C66 = 13, C0/6DCF's $01BB).
 
-The counts are pinned exactly, so a change in either direction is seen. (Against the real-time capture they were residuals --
-the 07D's candle glow and sprites, the 087's ~1300 px of Zombor's area; against the rule's cartridge every pair is whole.)
+The regression check pins the counts exactly, so a change in either direction is seen.
+
+Regression check: attract-battle-colours-entry-and-tech-vs-oracle.
 """
 import os
 import struct
@@ -51,8 +50,8 @@ PAIRS = [   # (label, port frame, cart frame, box)
 
 def main():
     global PAIRS
-    # an optional comma list replaces the port frames, in PAIRS order: the port's numbering moves with the attract's clock
-    # (the rule's migration: the fights' boots and returns under the infinitely fast CPU); a second one the cartridge's
+    # an optional comma list replaces the port frames, in PAIRS order (the port's numbering moves with the attract's
+    # clock); a second one the cartridge's
     if len(sys.argv) > 1:
         pfs = [int(v) for v in sys.argv[1].split(',')]
         PAIRS = [(l, pf, c, b) for (l, _, c, b), pf in zip(PAIRS, pfs)]

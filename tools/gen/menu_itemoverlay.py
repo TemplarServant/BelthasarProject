@@ -8,9 +8,8 @@ window colour), so its cells are a constant; C2/AFB5's offset-per-tile rows show
 
 The capture: tools/menu_audit_cmp.py's `itemuse` drive (X, R to Item, A, Down to the Tonic, A pick, A use -> the target
 window), its oracle frame 172 (+2, the drive's shift): the overlay is up. From the recipe grupo_3_mapa (loc 082, the
-party Crono/Lucca/Frog, a Tonic in bag slot 1 -- the drive's own layout, without its pokes). Port of
-tools/_gen_item_overlay.py, which read the drive's `_o_172.raw.vram` from saves/battle_re/party3_field.state with the
-pokes $2401 = BD, $2501 = 03 (three Tonics); both give the same file.
+party Crono/Lucca/Frog, a Tonic in bag slot 1 -- the drive's own layout, without its pokes).
+saves/battle_re/party3_field.state with the pokes $2401 = BD, $2501 = 03 (three Tonics) gives the same file.
 
     python tools/gen/menu_itemoverlay.py [--state S [--poke 2401=BD,2501=03]] [--vram V] [--out src/data/menu_itemoverlay.h]
 """

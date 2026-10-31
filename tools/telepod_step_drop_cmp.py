@@ -7,9 +7,9 @@ rule's cartridge.
 The touch's fn2 of obj11 (`EB 30 00 / CA D6 / 04 06 36 / ...`) installs Crono's fn6 in the same event pass in which the
 lead's op B0 armed this frame's step (C0/3040 `LDA #01 / STA $1A01,X`, C0/9E29 -> 9E56 the velocity into $1900). The
 install ends `STZ $1A01,X` (C0/6199), so C0/A810's integrate (AB06 `BEQ`) does not move him: a lateral press on the touch
-frame leaves Crono where the frame began, and the stale velocity sits in $1906 until fn7. The port's host moved the lead
-before the tick and kept the step: Crono stood 1 px off, his fn7 MOVETO (`96 04 05`) took one more step, and obj11 left
-its `04 06 47` 4 frames late (ct_vm.c vmTicketStop / CtSceneLeadStepFrom; field.c the dropped step).
+frame leaves Crono where the frame began, and the stale velocity sits in $1906 until fn7. Keeping the step would leave
+Crono 1 px off, his fn7 MOVETO (`96 04 05`) would take one more step, and obj11 would leave its `04 06 47` 4 frames late
+(the port: ct_vm.c vmTicketStop / CtSceneLeadStepFrom; field.c the dropped step).
 
 The cartridge: saves/field_re/scene8_pod_latch.state under the rule (`--monitor`), Up 20 frames, Left or Right 5, Up 20.
 The port: the same WRAM (--loadwram) and SPC (CT_AUDIO_SEEDSTATE), the pad one frame later, CT_FIELD_MEMMON. Per pad:

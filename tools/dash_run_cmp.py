@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-r"""The field lead's RUN, port against the LOGICAL oracle: the Dash row of the button map, read from the pad latch.
+r"""The field lead's run, port against the logical oracle: the Dash row of the button map, read from the pad latch.
 
     python tools/dash_run_cmp.py [hold|ctrun|remap ...]
 
 disasm/notes/field_dash_run.md. The run is C0/8925 `LDA $00F8 / BIT #02` (C0/88EE's d-pad dispatch: accumulator delta
-0x20 instead of 0x10). $00F8 is the HELD byte the NMI's pad latch decodes (C2/84D2 -> C2/8545, the X = 2 pass of
+0x20 instead of 0x10). $00F8 is the held byte the NMI's pad latch decodes (C2/84D2 -> C2/8545, the X = 2 pass of
 C2/8555) and its bit 1 is `AND $2996 / CMP $2996` -- the Config screen's Dash row (C2/C2E8), factory map B (C2/FCA9).
 Each drive runs the same buttons on both sides (the cartridge on `--monitor`, the port on CT_FIELD_MEMMON from the same
 WRAM) and compares, every frame, the lead's words $1802/$1882, its velocity $1D32/$1D33, its anim mode $1682 and the
@@ -17,6 +17,8 @@ latched $00F8:
 Per drive:
   dash-run: <drive> f0-fN: <k> frame(s) differ [runs]
   dash-run: <drive> run frames (mode 06, |$1D32| = 0x20) cartridge <ranges> port <ranges>
+
+Regression check: field-dash-run-vs-logical-oracle.
 """
 import os
 import re

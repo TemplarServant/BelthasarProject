@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Decode + render a Chrono Trigger OVERWORLD (world map). Format reverse-engineered from the ROM
-(workflow overworld-re; engine is bank C2, separate from the field-scene engine in C0):
+"""Decode + render a Chrono Trigger overworld (world map) from the ROM. The overworld engine is bank C2,
+separate from the field-scene engine in C0:
 
   Location index WRAM $0100 >= 0x1F0 enters the overworld; world = ($0100 & 0x1FF) - 0x1F0 (0..7).
   Master descriptor ptr table C6:FD00 (8 u16 LOCAL offsets into bank C6) -> a 23-byte descriptor per
@@ -9,8 +9,8 @@
     desc[0x10] -> C6:FF00 -> L1 metatile/block defs   (4096 B = 512 blocks x 4 chips)
     desc[0x11] -> C6:FF20 -> L2 world block-grid       (12288 B = 96 x 128 cells, 1 byte = L1 block idx)
     desc[0x0A] -> C6:FEA0 -> palette                   (512 B = 256 BGR15 colors)
-    desc[0x00..0x06] -> C6:FE20 -> tile gfx list A (4bpp, DMA'd to VRAM tile 0)
-    desc[0x0C..0x0F] -> C6:FDF0 -> tile gfx list B (4bpp, DMA'd to VRAM tile 512)
+    desc[0x0C..0x0F] -> C6:FDF0 -> tile gfx list A (4bpp, DMA'd to VRAM tile 0)
+    desc[0x00..0x06] -> C6:FE20 -> tile gfx list B (4bpp, DMA'd to VRAM tile 512)
   An L1 chip = u16: tile = bits0-9, palette = bits10-12, priority = bit13, xflip = bit14, yflip = bit15
   (the same SNES metatile encoding the field maps use). World pixel size = 96*16 x 128*16 = 1536 x 2048.
 
@@ -25,8 +25,8 @@ from gfx import decode_tiles
 from palettes import snes15_to_rgb, write_png_rgb
 
 MASTER   = 0x06FD00      # C6:FD00 master descriptor ptr table (8 x u16 local offset)
-SUB_FE20 = 0xC6FE20      # tile gfx list A
-SUB_FDF0 = 0xC6FDF0      # tile gfx list B
+SUB_FE20 = 0xC6FE20      # tile gfx list B (VRAM tile 512)
+SUB_FDF0 = 0xC6FDF0      # tile gfx list A (VRAM tile 0)
 SUB_FEA0 = 0xC6FEA0      # palette (+ aux)
 SUB_FF00 = 0xC6FF00      # L1 metatile/block defs
 SUB_FF20 = 0xC6FF20      # L2 world block-grid
@@ -76,8 +76,8 @@ GRASS = (74, 140, 66)     # base fill for land cells (BG2 grass)
 
 def render_overworld(rom, world):
     """Return (rgb bytes, W, H) for the full world map (1536 x 2048). The overworld composites BG1 (the
-    L1/L2 metatiles -- coastlines/structures, mostly transparent) over a BG2 grass / BG3 ocean BASE that
-    the engine builds at RUNTIME (not in ROM). We APPROXIMATE the base per-cell: a cell whose block is
+    L1/L2 metatiles -- coastlines/structures, mostly transparent) over a BG2 grass / BG3 ocean base that
+    the engine builds at runtime (not in ROM). This approximates the base per cell: a cell whose block is
     mostly transparent is water (OCEAN fill), else land (GRASS fill); BG1 draws on top."""
     d, L1, L2, pal, tiles = decode_overworld(rom, world)
     W, H = GW * 16, GH * 16

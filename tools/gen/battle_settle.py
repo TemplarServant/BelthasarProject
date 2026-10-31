@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-"""Bake the CT victory SETTLE-IN ladder (the ~72f animated celebration that plays INTO the
-held victory pose) into src/data/battle_settle.h + verify vs oracle.
+"""Bake the victory settle-in ladder (the ~72f animated celebration that plays into the
+held victory pose) into src/data/battle_settle.h + verify against the oracle.
 
-Dossier: disasm/notes/battle_gato_idle_victory.md section C (mission 2, the "travada" fix).
-GATO fight, party Crono seat0 + Marle seat1.
+disasm/notes/battle_gato_idle_victory.md section C. GATO fight, party Crono seat0 + Marle seat1.
 
-The held victory pose (battle_end.h kf0/kf1) is correct; what our engine was MISSING is the
-discrete ~72f keyframe ladder that plays into it (dossier C.2). Each ladder keyframe = OAM
-assembly + its OWN OBJ tiles (poses STREAM tile content, dossier E) -- same bake shape as
-battle_end.h / battle_entrance.h.  Endpoints: C0/M0 = the idle-stance held at the kill; the
-final pose C5/M5 == battle_end.h kf0/kf1 (reused by the render, NOT re-baked here).
+The held victory pose is battle_end.h kf0/kf1; this bakes the discrete ~72f keyframe ladder that
+plays into it (dossier C.2). Each ladder keyframe = OAM assembly + its own OBJ tiles (poses stream
+tile content, dossier E) -- the same bake shape as battle_end.h / battle_entrance.h. Endpoints:
+C0/M0 = the idle stance held at the kill; the final pose C5/M5 == battle_end.h kf0/kf1 (reused by
+the render, not baked here).
 
-Source: gato_kill.state (gato_mid with GATO curHP $6130=6) + mash-A to f110 then IDLE to N
-(the fine_celebration peek recipe, scratchpad/gato_idle/fine_celebration.py; kill ~N170).
-The ladder keyframes' representative peek frames (dossier C.2 dwell windows):
+Source: gato_kill.state (gato_mid with GATO curHP $6130=6) + mash-A to f110 then idle to N
+(the fine_celebration peek recipe; kill ~N170). The ladder keyframes' representative peek frames
+(dossier C.2 dwell windows):
   Crono  C0@N178 C1@N194 C2@N204 C3@N214 C4@N226   (pal5)
   Marle  M0@N178 M1@N186 M2@N196 M3@N210 M4@N228   (pal6)
-The C1/M1 assemblies were cross-checked byte-exact vs dossier C.2 (anchor + cells).
 
 Run from repo root:  CT_EXE=<scratch>/ct_probe.exe CT_SCRATCH=<scratch> python
 tools/gen/battle_settle.py [--verify] [--emit].  Needs gato_kill.state in CT_SCRATCH/gato_idle
@@ -45,7 +43,7 @@ def make_gato_mid():
     return mid
 OUT_H = os.environ.get('CT_GEN_OUT', 'src/data/battle_settle.h')
 NTILE = 0x40                                      # 8x8 tiles 0x00..0x3F: Crono(0x08..)+Marle(0x20..)
-BRACKET = 0x006                                   # the active-PC selection bracket -- EXCLUDED (its own asset)
+BRACKET = 0x006                                   # the active-PC selection bracket -- excluded (its own asset)
 
 # (name, repN, pal) -- the ladder keyframes (dossier C.2). C0/M0 = idle at kill; C1-C4/M1-M4 = the settle.
 KEYS = [
@@ -61,7 +59,7 @@ def mash(f):
 
 def peek(N):
     """Peek gato_kill.state to peek-frame N (mash-A to f110 then idle), reproducing fine_celebration's
-    fc_N.raw.  If the sidecar already exists (from that lane), reuse it (no oracle needed)."""
+    fc_N.raw.  If the sidecar already exists, reuse it (no oracle needed)."""
     out=os.path.join(GID,'fc_%d.raw'%N)
     bs=mash(110)+(",0:%d"%(N-110) if N>110 else "")
     subprocess.run([os.path.abspath(EXE),ROM,'--peek',MID,out,'--btnscript',bs],check=True,

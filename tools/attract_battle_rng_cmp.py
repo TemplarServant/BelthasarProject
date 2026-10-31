@@ -5,20 +5,21 @@ hands back in $29AD.
 
     python tools/attract_battle_rng_cmp.py
 
-ONE stream runs through the three fights. C1/800A seeds $26 from $29AD, the two sampling-with-retry shuffles
+One stream runs through the three fights. C1/800A seeds $26 from $29AD, the two sampling-with-retry shuffles
 (C1/8072, C1/80AD) and the enemies' AI init (C1/80E8 -> C1/8C09) draw from it, and C1/8443 hands the final $26 back to
 $29AD, which nothing in bank C0 touches between fights. So a draw one fight misses shifts every table entry the next
-fight's shuffle reads, and the turn order comes out rotated: that is how the 0AD's lost AI-init draw (the eval ran
-after C1/80EB put the demo bit back, so AF22 answered its base without advancing $26) wrote $B185 = 06 in the 07D
-where the cartridge writes 05, and how the 07D's unported op 04 (C1/98C5, the random branch: its roll + the chosen
-entry's resolver 05) left the 087 two draws behind.
+fight's shuffle reads, and the next turn order comes out rotated (e.g. an AI-init eval that answers its base without
+advancing $26, or a random branch op 04 (C1/98C5: its roll + the chosen entry's resolver) left unrun).
 
 Port: the live attract (`--scene 433 --selftest`) with CT_BATTLE_TRACE (the `battle-rng-cursor handback` line,
 field.c) and CT_BATTLE_MEMMON over $B163/$B185 (a line per frame whose bytes changed; the fight's first line is its
-frame 1). Cartridge: saves/attract_cena_inicial_rule.state under the rule, `--monitor 7EB163:11,7EB185:1,7E29AD:1 --diff --writer` --
-each fight's first cursor pass is the first `$B185` write by C1:82EE after FD:A989 clears it (or C1:FBD4 fills $B163, the
-writer a frame's sample names when both land in one frame), the handback is the
-`$29AD` write by C1:8448. Values only, no frame is graded: the port's fights sit at other frames than the cartridge's.
+frame 1). Cartridge: saves/attract_cena_inicial_rule.state under the rule,
+`--monitor 7EB163:11,7EB185:1,7E29AD:1 --diff --writer` -- each fight's first cursor pass is the first `$B185` write
+by C1:82EE after FD:A989 clears it (or C1:FBD4 fills $B163, the writer a frame's sample names when both land in one
+frame), the handback is the `$29AD` write by C1:8448. Values only, no frame is graded: the port's fights sit at other
+frames than the cartridge's.
+
+Regression check: attract-battle-rng-stream-vs-oracle.
 """
 import os
 import re
@@ -26,8 +27,8 @@ import subprocess
 
 FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
-RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json)
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 NAMES = ['0AD', '07D', '087']
 
 

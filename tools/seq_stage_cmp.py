@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Diff one frame of a $C3 SEQUENCE-TABLE entry against the ORACLE's own framebuffer, pixel for
+r"""Diff one frame of a $C3 sequence-table entry against the oracle's own framebuffer, pixel for
 pixel.
 
     python tools/seq_stage_cmp.py <entry> <page> <frame> [<frame> ...]
@@ -8,15 +8,13 @@ pixel.
 the setup has run, which for entry 1 is the credits page ($0382 is not cleared by the common init,
 so the attract's five visits show pages 1..5). `<frame>` counts NMIs since the setup returned.
 
-⚠ The oracle is not driven to the stage -- the stage is reached only from deep inside the attract
-demo, five thousand frames in. So the reference is a PLAIN BOOT run to a frame that happens to be
-inside the page, and the alignment is not counted by hand: the probe run reads the overlay's own
-16-bit frame counter $7E:0008 out of the .wram sidecar, and `setup = probe - $0008`. That makes the
-comparison self-locating -- if the boot's timing ever moves, the probe moves with it -- and it is
-checked, not assumed: the probe must land on this entry ($0384) and this page ($0382).
+The stage is reached only from deep inside the attract demo, five thousand frames in, so the reference
+is a plain boot run to a frame inside the page. The probe run reads the overlay's own 16-bit frame
+counter $7E:0008 out of the .wram sidecar, and `setup = probe - $0008`, so the comparison locates
+itself if the boot's timing moves; the probe must land on this entry ($0384) and this page ($0382).
 
-⚠ The oracle's 512x480 dump is not a plain 2x image: ppu_putPixels writes scanline y to buffer row
-y*2 + 16, so the 224 visible lines are IMAGE rows 8..231 of the 256x240 ctlib/fb.py decodes.
+Note: the oracle's 512x480 dump is not a plain 2x image: ppu_putPixels writes scanline y to buffer row
+y*2 + 16, so the 224 visible lines are image rows 8..231 of the 256x240 ctlib/fb.py decodes.
 """
 import os
 import subprocess
@@ -29,8 +27,8 @@ ROM = 'Chrono_Trigger_USA_SNES.sfc'
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
 
-# A boot frame that lands somewhere inside each page of entry 1. Only a SEED for the probe -- the
-# real alignment comes out of $7E:0008 below, so these only have to be inside the right page.
+# A boot frame that lands somewhere inside each page of entry 1: only a seed for the probe (the
+# alignment comes out of $7E:0008 below), so these only have to be inside the right page.
 PROBE = {(1, 1): 2840, (1, 2): 4540, (1, 3): 5565, (1, 4): 7549, (1, 5): 8813}
 
 

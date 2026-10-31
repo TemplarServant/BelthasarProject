@@ -3,19 +3,18 @@ r"""The attract's demo battles: how often the idle tick's walk dispatch (C1/10A9
 
     python tools/attract_demo_walk_cmp.py
 
-The user, 2026-09-27 (an F5 in the 07D Frog Squash battle): "one bat has a different animation from the other, that does not
-happen on the cartridge". A demo battle is ONE pass of the main loop: its first iteration's idle tick visits the walk once,
-then the ATB pass takes the demo's turn (C1/8461 -> C1/B725 -> C1/B967) and only returns once the action has run -- into
-the loop tail C1/83AE, whose `LDA $2989 / BIT #20` ends the fight instead of `JMP C1/8120`. So no walk runs after the
-demo's action. The port ran one more frame A between the action's end and its demo end, and at the 07D that dispatch
-committed the right Vamp's idle window and published pose 00 over the tech's closing 01 for the ~36 frames of the
-teardown (src/battle.c battleIterFrameA, h->demoPass).
+A demo battle is one pass of the main loop: its first iteration's idle tick visits the walk once, then the ATB pass
+takes the demo's turn (C1/8461 -> C1/B725 -> C1/B967) and only returns once the action has run -- into the loop tail
+C1/83AE, whose `LDA $2989 / BIT #20` ends the fight instead of `JMP C1/8120`. So no walk runs after the demo's action;
+an extra one would commit an idle window and publish pose 00 over the tech's closing 01 for the teardown (the 07D's
+right Vamp; src/battle.c battleIterFrameA, h->demoPass).
 
 Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1) with CT_BATTLE_WALKTRACE, one `idlewalk` line per
 dispatch; cartridge: `ct.exe --hookpc C12DA4` (after `LDA $A4`: A = the group) under the rule (CT_ORACLE_LOGICAL /
-VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by a recipe --
-tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state).
-The dispatches are counted per demo battle, in order.
+VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by the recipe
+tools/fixtures/attract_rule.json). The dispatches are counted per demo battle, in order.
+
+Regression check: attract-demo-battles-walk-once-vs-cartridge.
 """
 import os
 import re

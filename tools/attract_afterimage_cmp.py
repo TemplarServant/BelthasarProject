@@ -3,17 +3,17 @@ r"""Crono's afterimage in the attract's Ice Sword (loc 087) against the cartridg
 
     python tools/attract_afterimage_cmp.py [p:c,p:c,...]
 
-The optional argument replaces the (port frame, cartridge frame) pairs -- the port's numbering moves with the attract's
-clock (the rule's migration: the 087 fight -73 frames under the infinitely fast CPU), the cartridge's does not.
+The optional argument replaces the (port frame, cartridge frame) pairs; the port's numbering moves with the attract's
+clock, the cartridge's does not.
 
-The user, 2026-09-27: "in the skill on zombor, crono is not leaving a 'trail'" (disasm/notes/battle_afterimage.md). The
-tech's script arms the trail on Crono's track with `A4 05 03` (C1/691B); CF/ED18 records his point every 5 frames and
-CF/E92C draws his current cells at the four recorded points on one frame in 3 (cartridge c7643, 7646, ... 7679). One
-interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's frames, ct.exe --peek the cartridge's under
-the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made
-by a recipe -- tools/fixtures/attract_rule.json), port = cartridge + 2066 here (the fight's picture diagonal); each pair's box
-(40,0)-(110,130) -- Crono's dash and the copies behind him -- is compared. (The cartridge frames above are the owner's
-real-time capture's, saves/attract_cena_inicial.state, which this tool read until 2026-10-22.)
+The tech's script arms the trail on Crono's track with `A4 05 03` (C1/691B); CF/ED18 records his point every 5 frames
+and CF/E92C draws his current cells at the four recorded points on one frame in 3 (disasm/notes/battle_afterimage.md).
+One interactive attract run (--scene 433, CT_AUDIO_LOCKSTEP=1) shoots the port's frames, ct.exe --peek the cartridge's
+under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from saves/attract_cena_inicial_rule.state: the attract from
+power-on + 2159, made by the recipe tools/fixtures/attract_rule.json), port = cartridge + 2066 (the fight's picture
+diagonal); each pair's box (40,0)-(110,130) -- Crono's dash and the copies behind him -- is compared.
+
+Regression check: attract-087-ice-sword-afterimage-vs-oracle.
 """
 import os
 import struct

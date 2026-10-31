@@ -6,15 +6,15 @@ r"""Real battery saves across the story (Jackie's, saves/downloaded/ctjackie) lo
 Each save is booted the player's way (`--boot`, CT_SRAM, the Load screen: `n:198,s:1,n:125,a:1`), then left 300 frames and
 given A every 40 frames for 1200 (on a world map that enters what the party stands on). Graded:
 
-- `census chNN <loc> clean` -- the run printed no "PARKED" / "UNDERIVED" / "not run" line. The saves are the ones whose world
-  scripts needed what the 2026-10-14 census found missing: op 24 (C2/14AD, ch24), ops 44/45 (C2/1A52 / 1AAC, ch13), op 4F
-  (C2/1B2F, ch16 / ch19 / ch21), the native C2/7BC4 (ch02 / ch10).
+- `census chNN <loc> clean` -- the run printed no "PARKED" / "UNDERIVED" / "not run" line. The saves are ones whose world
+  scripts use op 24 (C2/14AD, ch24), ops 44/45 (C2/1A52 / 1AAC, ch13), op 4F (C2/1B2F, ch16 / ch19 / ch21) and the
+  native C2/7BC4 (ch02 / ch10).
 - `map ch16 diffs N` -- the world's two map buffers ($7E:4000-$6FFF, what op 4F copies) 160 frames into the world, against the
   cartridge's 120 frames past the same save's load (saves/downloaded/ctjackie/states/ch16.state): 0.
 - `lead ch23 ...` -- loc 173 after the Ocean Palace (party Marle / Lucca / Frog), walked Down: the frame's hash, with the
   lead drawn. The lead is $0197's object (C0/426A), not the first fn0 with op 0x57 (Crono's own load, a no-op here).
 
-Needs the downloaded saves (local, gitignored): SKIPs without them.
+Needs the downloaded saves (local, gitignored): SKIPs without them. Regression check: jackie-saves-census-vs-oracle.
 """
 import os
 import subprocess
@@ -73,7 +73,7 @@ def main():
 
     # the lead after the Ocean Palace
     out = port('23', LOAD + ',n:300,d:40,n:30,d:200', None,
-               ('--selftest', os.path.join(OUT, 's23_%d.raw' % os.getpid()), '--frames', '965'))   # (900 + 65: the power-on boot, 404971a)
+               ('--selftest', os.path.join(OUT, 's23_%d.raw' % os.getpid()), '--frames', '965'))   # (900 + 65: the power-on boot)
     line = [l for l in out.splitlines() if l.startswith('selftest: scene 371')]
     print('lead ch23 %s' % (line[0].split('player')[1].strip() if line else 'none'))
     try:

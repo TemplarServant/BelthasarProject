@@ -3,7 +3,7 @@
 
     python tools/steam_bgcover.py ["<Steam's Chrono Trigger folder>"] [--csv out.csv]
 
-The widescreen (a mod) carries a room's BACKGROUND layers past the room's edge -- the layers the map header marks
+The widescreen (a mod) carries a room's background layers past the room's edge -- the layers the map header marks
 (md[1..3], C0/A385-A4FB: md1 bit 4 / 5 = BG2 / BG3 detached ($1D36), md2 / md3 != 0 = BG2 / BG3 scrolling on its own
 ($1D35)). Where the Steam release's own widescreen draws scenery over them beside the edge, a background going on there
 is no plausible continuation, and without the Steam margins drawn the side ends black instead (docs/WIDESCREEN.md).
@@ -16,7 +16,7 @@ location and side, the room's rows whose first column past the edge holds a marg
   Steam draws over it / part    its margins draw over the background on every row / some rows: black past the edge
 
 and prints the locations of the last two classes as kSteamCovers' lines (1 the left side, 2 the right, 3 both). Only
-those numbers are in the tree; the Steam data stay on the player's machine. Checked 2026-10-24: 42 locations.
+those numbers are in the tree; the Steam data stay on the player's machine.
 """
 import argparse
 import csv

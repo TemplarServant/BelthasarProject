@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Talk to the snes9x-rr Lua MCP bridge via its file IPC (command.json/response.json).
-The bridge polls command.json each frame and writes response.json. Lets us read live emulator state
-(CGRAM/VRAM/WRAM) while the user stands on the overworld -- the clean source the save state couldn't give.
+The bridge polls command.json each frame and writes response.json. Reads live emulator state
+(CGRAM/VRAM/WRAM, the framebuffer), e.g. while the player stands on the overworld.
 """
 import json, os, time
 

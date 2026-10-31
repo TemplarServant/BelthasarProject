@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Render a Chrono Trigger field scene WITH its objects/actors — the static map
+"""Render a Chrono Trigger field scene with its objects/actors: the static map
 (maps.py) plus every NPC/object placed at the sprite + position its scene-script
-init function assigns (script.py). A first step of the M2 field engine.
+init function assigns (script.py).
 
 Usage: python assets/field.py <rom.sfc> <scene> <out.png> [--frame N]
 """

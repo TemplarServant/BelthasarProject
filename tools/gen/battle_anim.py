@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
-"""Bake the CT battle ACTION/IDLE animations (Crono attack swing, GATO idle, GATO attack) into
-src/data/battle_anim.h + verify vs oracle.
+"""Bake the battle action/idle animations (Crono attack swing, GATO idle, GATO attack) into
+src/data/battle_anim.h + verify against the oracle.
 
-Derivation dossiers: disasm/notes/battle_actionfx.md (Crono attack ADDENDUM A2 / GATO attack ADDENDUM A3)
-and disasm/notes/battle_stance.md (idle ADDENDUM 4). All frames are the deterministic peek/monitor
-timelines from gato_press_action.state (party Crono seat0 + Marle seat1 vs GATO enemy-slot3):
-  - MASH driver ("100:16,0:16" repeated) -> Crono dispatches one physical on GATO (attack swing window
+Dossiers: disasm/notes/battle_actionfx.md (Crono attack ADDENDUM A2 / GATO attack ADDENDUM A3) and
+disasm/notes/battle_stance.md (idle ADDENDUM 4). All frames are peek/monitor timelines from
+gato_press_action.state (party Crono seat0 + Marle seat1 vs GATO enemy-slot3):
+  - mash driver ("100:16,0:16" repeated) -> Crono dispatches one physical on GATO (attack swing window
     f447-526) then GATO counters (f596-680).
-  - HOLD driver ("100:8,0:N-8": one boot-A, then hold) -> Crono sits ACTIVE in the command menu (never
-    attacks) so we get a CLEAN idle window (f384-504) AND an ISOLATED GATO attack (rear-up f505-553).
-Both are byte-reproducible per frame (the --peek/--monitor determinism; monitor fN == peek fN, and the
-OAM shadow $7E0700[0:512]+$7E0900[0:32] == the live .oam, both proven).
+  - hold driver ("100:8,0:N-8": one boot-A, then hold) -> Crono sits active in the command menu (never
+    attacks), giving a clean idle window (f384-504) and an isolated GATO attack (rear-up f505-553).
+Both are reproducible per frame (monitor fN == peek fN, and the OAM shadow $7E0700[0:512]+$7E0900[0:32]
+equals the live .oam).
 
-Like the stance/entrance bakes, each combatant animation POSE streams its own OBJ tile CONTENT per frame
-(the C1/CC OBJ anim engine + FD:E170 tile streamer, battle_stance.md S4) -- so a byte-exact pose replay
-bakes EACH keyframe's own OBJ tiles + OAM assembly. The fine per-frame tile stream WITHIN a pose (the
-sword-arc / claw-swipe drawn frame-by-frame) is the documented anim-engine BOUNDARY; the per-frame ANCHOR
-trajectory + the pose assemblies are pinned byte-exact here.
+As in the stance/entrance bakes, each combatant animation pose streams its own OBJ tile content per frame
+(the C1/CC OBJ anim engine + FD:E170 tile streamer, battle_stance.md S4), so each keyframe bakes its own
+OBJ tiles + OAM assembly, plus the per-frame anchor trajectory. Not baked: the per-frame tile stream
+within a pose (the sword arc / claw swipe drawn frame by frame; the anim engine's part).
 
 Run from repo root. Emits src/data/battle_anim.h. With --verify, reconstructs each baked keyframe over the
-acting combatant's bbox and pixel-diffs vs the oracle fb (fb row = OAM y + 8, as the stance bake).
+acting combatant's bbox and pixel-diffs against the oracle fb (fb row = OAM y + 8, as the stance bake).
 """
 import os, sys, subprocess, re
 sys.path.insert(0, 'tools')
@@ -31,28 +30,28 @@ STATE = (sys.argv[sys.argv.index('--state') + 1] if '--state' in sys.argv else o
 SP    = os.environ.get('CT_SCRATCH', 'build')
 OUT_H = os.environ.get('CT_GEN_OUT', 'src/data/battle_anim.h')
 NTILE = 0xA0                                    # 8x8 tiles 0x00..0x9F cover Crono(0x08..)/Marle(0x20..)/GATO(0x68..0x9F)
-# tile 0x006 (OAM #0-3, pal1-attr, prio3, 4x mirror) = the pulsing white ACTIVE-PC selection BRACKET,
-# NOT a combatant sprite ("GATO's foot quad" was a misID -- it sits around CRONO, follows $95D5). It is
-# its own asset now (src/data/battle_bracket.h). Excluded from every keyframe here (battle_stance.md T1).
+# tile 0x006 (OAM #0-3, pal1 attr, prio3, 4x mirror) = the pulsing white active-PC selection bracket,
+# not a combatant sprite (it sits around the active PC and follows $95D5). It is its own asset
+# (src/data/battle_bracket.h), so it is excluded from every keyframe here (battle_stance.md T1).
 BRACKET_TILE = 0x006
 
 # ---- reference (stance) anchors: animation deltas are relative to each combatant's idle-rest anchor.
 CRONO_REF = (109, 108)     # battle_stance.h Crono anchor (= Crono idle-rest in the mash timeline)
-GATO_REF  = (104, 62)      # GATO idle-rest anchor in the HOLD timeline (stance bake caught 104,63 at a bob phase)
+GATO_REF  = (104, 62)      # GATO idle-rest anchor in the hold timeline (the stance bake's 104,63 is a bob phase)
 
 # ---- keyframes: (driver, pal, name, pose, repFrame, startF, endF). repFrame = mid-dwell (avoids boundary).
 KEYS = [
-    # Crono attack swing (MASH), battle_actionfx.md A2 -- P0 idle = battle_stance.h (not re-baked here)
+    # Crono attack swing (mash), battle_actionfx.md A2 -- P0 idle = battle_stance.h (not baked here)
     ('mash', 5, 'Crono', 'A1_approach', 450, 447, 452),
     ('mash', 5, 'Crono', 'A2_gather',   455, 453, 457),
     ('mash', 5, 'Crono', 'A3_raise',    465, 458, 472),
     ('mash', 5, 'Crono', 'A4_strike',   485, 473, 499),
     ('mash', 5, 'Crono', 'A5_recoil',   503, 500, 508),
     ('mash', 5, 'Crono', 'A6_settle',   515, 509, 525),
-    # GATO idle (HOLD), battle_stance.md ADDENDUM 4 -- two arm states; foot-quad Y-bob is a per-frame table
+    # GATO idle (hold), battle_stance.md ADDENDUM 4 -- two arm states; the Y bob is a per-frame table
     ('hold', 1, 'GATO',  'I0_armsRest', 395, 384, 433),
     ('hold', 1, 'GATO',  'I1_armsSwap', 460, 434, 472),
-    # GATO attack rear-up (HOLD), battle_actionfx.md A3 -- one lunge pose (claw-swipe streams in tiles)
+    # GATO attack rear-up (hold), battle_actionfx.md A3 -- one lunge pose (claw-swipe streams in tiles)
     ('hold', 1, 'GATO',  'G1_rearup',   520, 505, 553),
 ]
 
@@ -165,7 +164,7 @@ def gato_idle_table(mon):
         if nm == 'GATO' and pose == 'I0_armsRest' and rf in mon: _, _, rest_sig = cluster_sig(mon[rf], 1)
         if nm == 'GATO' and pose == 'I1_armsSwap' and rf in mon: _, _, swap_sig = cluster_sig(mon[rf], 1)
     def armstate(sprites):
-        # tile 0x68 dy: rest -> ~10 (top), swap -> ~48 (bottom). Robust discriminator.
+        # tile 0x68 dy: rest -> ~10 (top), swap -> ~48 (bottom).
         c = [s for s in sprites if s['tile'] == 0x68 and s['pal'] == 1]
         if not c: return 0
         on = [s for s in sprites if s['y'] < 210 and -60 < s['x'] < 256 and s['pal'] == 1]
@@ -178,8 +177,8 @@ def gato_idle_table(mon):
               and s['tile'] != BRACKET_TILE]            # GATO body only (bracket is not GATO's)
         if not on: continue
         ax = min(s['x'] for s in on); ay = min(s['y'] for s in on)
-        footdy = 0   # GATO has NO foot quad: the old tile-0x06 "foot-bob" was the active-PC BRACKET
-                     # measured against a moving GATO anchor (spurious). Neutralized (battle_stance.md T1).
+        footdy = 0   # GATO has no foot quad: tile 0x06 is the active-PC bracket (battle_stance.md T1);
+                     # the column is kept at 0.
         rows.append((F, ax - GATO_REF[0], ay - GATO_REF[1], armstate(mon[F]), footdy))
     return rows
 
@@ -343,8 +342,8 @@ def _plot(buf, owner, s, tb_provider, cgram):
                         owner[Y][X] = s['pal']
 
 def verify(kfs, tiles_per_kf):
-    # Composite ALL combatants (acting one from BAKED tiles, others from raw VRAM for correct occlusion),
-    # then score only pixels the acting combatant OWNS on top -- the cross-combatant-overlap-safe method.
+    # Composite all combatants (the acting one from baked tiles, the others from raw VRAM for occlusion),
+    # then score only pixels the acting combatant owns on top, so overlaps between combatants do not count.
     total_ok = total = 0
     print("[battle-anim verify] per keyframe: acting combatant reconstructed from BAKED tiles, overlap-safe")
     print("  (all combatants composited by OAM idx; scored where the actor is top). d>24 = mismatch.")
@@ -359,7 +358,7 @@ def verify(kfs, tiles_per_kf):
             _plot(buf, owner, s, baked_tb if s['pal'] == pal else raw_tb, cgram)
         act = kf['on']; x0 = min(s['x'] for s in act); x1 = max(s['x'] for s in act)+15
         y0 = min(s['y'] for s in act); y1 = max(s['y'] for s in act)+15
-        brk = kf['brk']                                    # bracket-owned pixels -> its own asset, EXCLUDE
+        brk = kf['brk']                                    # bracket-owned pixels -> its own asset, excluded
         d = tot = excl = 0
         for y in range(max(0, y0), min(224, y1+1)):
             for x in range(max(0, x0), min(256, x1+1)):

@@ -4,7 +4,7 @@ r"""The battle HUD strip's upload pipeline, port against the rule's cartridge, f
     python tools/battle_strip_upload_cmp.py main | item | cancel
 
 disasm/notes/battle_hud_upload_pipeline.md: the strip reaches the screen as WRAM tilemap images the menu pass writes and
-POSTS ($0CC0 the command level, $A6E1 the Tech list built from $99E3, $0E80 the item list -- BG3 rows 1..6 through the
+posts ($0CC0 the command level, $A6E1 the Tech list built from $99E3, $0E80 the item list -- BG3 rows 1..6 through the
 one-slot record and `$A0`; $0B40 the window frames -- BG1 rows 16..21 through `$99E2`), and the next NMI DMAs (CF/E300).
 Both sides run GATO's fight from the same WRAM (saves/battle_re/gato_wait.state, Crono alone with every tech and 99 MP:
 the dossier's PEEK_POKE), the dossier's drives:
@@ -125,8 +125,8 @@ def run_port(drive, total, tag):
         r = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '6', '--loadwram',
                             lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True, errors='replace')
         p = r.stdout
-        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read
-        # from stdout it was never found and `start` stayed 220 -- see tools/battle_ab.py run()).
+        # The battle's frame 0 on the field's clock: src/field.c prints it on stderr, and only under CT_BATTLE_TRACE
+        # (see tools/battle_ab.py run()).
         m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: break
         start = int(m.group(1))

@@ -2,7 +2,7 @@
 """f8_cursor_cmp.py -- the field's $C0:FE00 cursor $7E01F8 from power-on, the port against the rule's cartridge.
 
 $01F8 is the index op 0x7F (C0/6D09), the mover's bounce (C0/AE29) and the blink (C0/A22F) step through the 256-byte
-table at $C0:FE00. Its writers on the attract's first legs, MEASURED (PEEK_WRITEWATCH=01F8:1 from power-on): C0/0C70
+table at $C0:FE00. Its writers on the attract's first legs (PEEK_WRITEWATCH=01F8:1 from power-on): C0/0C70
 `LDA $0400 / STA $F8` -- the field init C0/0B86 on every location load, seeding the cursor with the play clock's
 frames byte -- and op 0x7F's `STA $F8` (C0/6D0E); nothing else before loc 0E6. So the cursor a location's scripts
 draw from is the clock $0400 at its load, and the clock ticks once per NMI that reaches the pad latch C2/84D2
@@ -22,6 +22,8 @@ Prints one line per seed that differs, the cartridge's op-0x7F steps for referen
   f8-cursor: <n>/<m> field-init seeds of $01F8 equal (power-on -> loc <L>)
 
 usage: python tools/f8_cursor_cmp.py [--until 0E6] [--show]
+
+Regression check: field-f8-cursor-seeds-from-power-on-vs-rule-cartridge.
 """
 import argparse, os, re, subprocess, sys, concurrent.futures as cf
 

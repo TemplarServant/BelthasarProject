@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-r"""The party EXCHANGE's picture (menu mode 5, screen $07), port against the rule's cartridge, pixel for pixel.
+r"""The party exchange's picture (menu mode 5, screen $07), port against the cartridge under the frame rule, per pixel.
 
     python tools/menu_exchange_pic_cmp.py [frame ...]        # cartridge --peek frames (default 100 120 140 160 180)
     python tools/menu_exchange_pic_cmp.py --drive [frame ...] # with menu_exchange_cmp's drive: Right, A, Left, A, B
 
 The recipe of tools/menu_exchange_cmp.py (gato_wait, storyline 0x49, Robo in reserve, Y at f20), both sides from one image
-and one SPC. Each cartridge `--peek` frame N is graded against the port's frame N - 2 (EXCH_PIC_SHIFT): the menus' P + 2 --
-the port's frame N - 2 has the WRAM the cartridge's peek N has (tools/menu_exchange_cmp.py grades it frame for frame). Prints
-`exchange-picture: cartridge fN port fM: <d> px differ, <o> outside the figure` -- the figure = the hooded member of the
-prompt box (x 20-43, y 150-209, C2/F422's block 7). disasm/notes/menu2_form_screen.md 2.14.
+and one SPC. Each cartridge `--peek` frame N is graded against the port's frame N - 2 (EXCH_PIC_SHIFT, the menus' P + 2:
+the port's frame N - 2 has the WRAM of the cartridge's peek N; tools/menu_exchange_cmp.py grades that frame for frame).
+Prints `exchange-picture: cartridge fN port fM: <d> px differ, <o> outside the figure`; the figure is the hooded member
+of the prompt box (x 20-43, y 150-209, C2/F422's block 7). disasm/notes/menu2_form_screen.md sec. 2.14.
 """
 import os
 import struct

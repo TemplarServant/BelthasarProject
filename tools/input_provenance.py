@@ -8,7 +8,7 @@ r"""Where every state file the suite reads comes from: nothing may exist on one 
 A check's `saves/...` input must be one of:
   recipe       made from the ROM by a recipe: an entry of tools/fixtures/<domain>.json (python tools/fixtures.py make all)
   third-party  a public battery save: tools/third_party_saves.json (python tools/fetch_saves.py)
-  private      a capture from the owner's playthrough still waiting for its recipe (docs/ROADMAP.md 1.1), listed in
+  private      a local capture still waiting for its recipe (docs/ROADMAP.md 1.1), listed in
                tools/private_captures.json -- the list only shrinks: a check that reads a file in none of the three
                fails here, and so does a list entry no check reads any more (take it off)
 Inputs are found in a check's `inputs`, its argv and its env (the paths a tool takes as arguments). A path a tool opens

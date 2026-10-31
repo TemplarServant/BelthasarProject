@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-r"""C0/595C -- obj0's SLOT 1 run to its terminator -- at the battle return and the menu exit, against the cartridge.
+r"""C0/595C -- obj0's slot 1 run to its terminator -- at the battle return and the menu exit, against the cartridge.
 
     python tools/slot1_runner_cmp.py
 
 The ROM calls C0/595C from three places, each right after the $7F:2000 script image is (re)built: the location load
-(C0/56C8), the menu-exit reload chain (C0/0206) and the battle-return tail (C0/0330). The port ran only the load's.
+(C0/56C8), the menu-exit reload chain (C0/0206) and the battle-return tail (C0/0330).
 disasm/notes/obj0_slot1_runner.md is the dossier.
 
 For each scenario, both sides run live:
@@ -31,10 +31,10 @@ CT = os.path.abspath('build/ct.exe')
 MASH = ','.join(['100:20,0:40'] * 45)
 SCENARIOS = [
     dict(label='0AD battle', site='C0/0330',
-         oracle=['--from', 'saves/attract_loc0AD_flea_rule.state', '--frames', '650'],   # recipe-made, under the rule (2026-10-22)
+         oracle=['--from', 'saves/attract_loc0AD_flea_rule.state', '--frames', '650'],   # recipe-made, under the rule
          oenv=dict(CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1'),
          port=['--assets', 'ct_assets.dat', '--scene', '433'],
-         penv=dict(CT_AUDIO_FORCE='1', CT_AUDIO_PROBE='4420'), mailbox=True),   # 4382 until 2026-09-16: the return now holds the VM (battle-return)
+         penv=dict(CT_AUDIO_FORCE='1', CT_AUDIO_PROBE='4420'), mailbox=True),   # the return holds the VM (battle-return)
     dict(label='082 battle', site='C0/0330',
          oracle=['--from', 'saves/battle_re/party3_field.state', '--btnscript', '40:150,' + MASH + ',0:250'],
          port=['--assets', 'ct_assets.dat', '--scene', '130', '--loadwram', 'saves/battle_re/party3_field.lakewram',

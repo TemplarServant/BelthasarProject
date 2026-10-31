@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Build saves/ow_balloons.spr from the settled Leene's Square oracle state
-(anim_leenes_square.state, brightness 15 = full CGRAM; the scene darkness is color-math, not
-INIDISP): the booth EXPLOSION puffs (char $00/$02/$04/$06/$08, 16x16, pal 1, OBJ page 1 / byte 0)
-AND the rising BUNCHES (char $0A, pal 1/2/3 = red/blue/yellow). Why not --owballoons: the new-game
-pan loads the coastal BOAT into the SAME chars $00-$08, so a capture there only ever grabs the boat's
-red tiles -- the real cream/white puffs only exist in VRAM in this settled fair state. Run AFTER
---owballoons (which creates the file; this OVERWRITES it), BEFORE extract_assets:
+(anim_leenes_square.state, brightness 15 = full CGRAM; the scene darkness is color math, not
+INIDISP): the booth's explosion puffs (char $00/$02/$04/$06/$08, 16x16, pal 1, OBJ page 1 / byte 0)
+and the rising bunches (char $0A, pal 1/2/3 = red/blue/yellow). --owballoons alone is not enough: the
+new-game pan loads the coastal boat into the same chars $00-$08, so a capture there grabs the boat's
+red tiles; the cream/white puffs exist in VRAM only in this settled fair state. Run after
+--owballoons (which creates the file; this overwrites it) and before extract_assets:
   ct.exe --owballoons start_scene.state saves/ow_balloons
   python tools/owbpal0.py
   python assets/extract_assets.py Chrono_Trigger_USA_SNES.sfc
@@ -41,12 +41,11 @@ def render(tile, pal):                                  # 16x16 OBJ at OBJ char 
     return bytes(px)
 
 
-# Build the WHOLE .spr from the settled oracle state -- the new-game pan loads the coastal BOAT into the
-# explosion chars $00-$08, so --owballoons can only ever grab the boat there; the real cream/white PUFFS
-# only exist in VRAM in the settled fair state (page 1, byte 0). All frames are 16x16, pal 1 (bunches 1/2/3).
+# The whole .spr comes from the settled fair state (page 1, byte 0; see the docstring). All frames are 16x16,
+# pal 1 (bunches 1/2/3).
 EXPL = (0x00, 0x02, 0x04, 0x06, 0x08)                   # field.c maps anim 0xE671.. -> char fr*2 = these
-frames = [(ch, 1, render(ch, 1)) for ch in EXPL]        # EXPLOSION: $00 round puff -> $02 cloud -> $04 break -> $06 debris -> $08 fade
-frames += [(0x0A, pal, render(0x0A, pal)) for pal in (1, 2, 3)]   # BUNCHES: red/blue/yellow
+frames = [(ch, 1, render(ch, 1)) for ch in EXPL]        # explosion: $00 round puff -> $02 cloud -> $04 break -> $06 debris -> $08 fade
+frames += [(0x0A, pal, render(0x0A, pal)) for pal in (1, 2, 3)]   # bunches: red/blue/yellow
 out = bytearray([len(frames)])
 for i, (tile, pal, body) in enumerate(frames):
     out += bytes([i, tile, pal, 16, 16, 0xF8, 0xF8]) + body       # all 16x16, ox/oy = -8

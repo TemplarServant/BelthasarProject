@@ -14,8 +14,8 @@ In a developer tree (src/data holds the generated headers):
      every #define with the real header's value (a run-time one as the loader filled its variable);
   4b. the same pack inside ct_assets.dat (pack_tables.py into, what the player's setup writes) loads the same way, and
      ct_assets.dat without it is refused;
-  5. the controls: packs with one table byte flipped or a run-time #define changed must DIFFER, and packs with a wrong
-     pointer size, a wrong layout hash or a compiled-in #define changed must be REFUSED -- so the comparison and the
+  5. the controls: packs with one table byte flipped or a run-time #define changed must differ, and packs with a wrong
+     pointer size, a wrong layout hash or a compiled-in #define changed must be refused -- so the comparison and the
      loader's checks are not vacuous.
 Prints `tables-proof: ... IDENTICAL` and `tables-proof: controls OK`, exit 0; anything else exits 1.
 

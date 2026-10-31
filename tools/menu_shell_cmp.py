@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-r"""The MENU SHELL's open and close, frame by frame, against the cartridge (disasm/notes/menu_shell_timing.md).
+r"""The menu shell's open and close, frame by frame, against the cartridge (disasm/notes/menu_shell_timing.md).
 
     python tools/menu_shell_cmp.py
 
-What is graded is the screen's BRIGHTNESS LEVEL on every frame from the press to the RTL: the caller's 15-frame fade
+What is graded is the screen's brightness level on every frame from the press to the RTL: the caller's 15-frame fade
 (C0/193E / C0/0CCE), the switch and the 16 black frames of the init chain (C2/800E..808C), the screen's substate 0
 (the ribbon builder's yields / the shop's C2/DACA), the fade-in C2/83B2 -> C2/83D0 (+2 a frame, 15 at P+9), the
 close C2/82B2 -> C2/83CA (-2 a frame over the frozen image, RTL the frame after 0), and after the RTL the field's
-reload (black: C0/0B5D -> C0/0B38 priced by src/field_cost.c, W = floor(C / F) + 1 frames) and C0/2824's fade-in. The level is the frame's mean luma
-over the full frame of the same phase (the field before the press, the menu once lit), scaled to 0..15.
+reload (black: C0/0B5D -> C0/0B38 priced by src/field_cost.c, W = floor(C / F) + 1 frames) and C0/2824's fade-in.
+The level is the frame's mean luma over the full frame of the same phase (the field before the press, the menu once
+lit), scaled to 0..15.
 
-The cartridge side is the LOGICAL oracle (CT_ORACLE_LOGICAL=1, CLAUDE.md's lag-frame rule: the shop's C2/DACA and
+The cartridge side is the logical oracle (CT_ORACLE_LOGICAL=1, CLAUDE.md's lag-frame rule: the shop's C2/DACA and
 the ribbon's first tab build overrun the NMI on real time). A frame's logic reaches the screen through that frame's
-NMI, so the cartridge DISPLAYS frame F's state during frame F+1, and a --peek after L frames is the picture displayed
-during frame L-1: port frame F is `--peek` at F+2 (re-aligned 2026-09-24 with tools/menu_audit_cmp.py -- every content
-change of the menu and the field walk agree on it; the old F+1 needed an extra brightness lag in the port that no
-tile or sprite change has). The drives press on the frame the cartridge reads the press (its pad latch, C2/84D2,
-is read one frame after the button goes down), so port frame F is oracle frame F. The x-menu and shop-close drives run
-through the reload and the field's fade-in (disasm/notes/menu_shell_timing.md section 10).
+NMI, so the cartridge displays frame F's state during frame F+1, and a --peek after L frames is the picture displayed
+during frame L-1: port frame F is `--peek` at F+2 (the alignment of tools/menu_audit_cmp.py; every content change of
+the menu and the field walk agrees on it). The drives press on the frame the cartridge reads the press (its pad latch,
+C2/84D2, is read one frame after the button goes down), so port frame F is oracle frame F. The x-menu and shop-close
+drives run through the reload and the field's fade-in (disasm/notes/menu_shell_timing.md sec. 10).
 
     menu-shell: <drive> f<A>-f<B>: <N> frame(s) differ [f..: oracle x port y, ...]
 """
@@ -32,10 +32,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 
-# name, oracle state, port seed, scene, oracle btnscript (LakeSnes masks), port walkscript (every key the cartridge's + 1,
-# ct-frame-alignment: the shops' A was the cartridge's own frame until 2026-10-19, when the port's C8 fade started a frame
-# late and hid it), frames, the full-field
-# reference frame, the lit-menu reference frame, the first frame the menu owns the picture (the switch) and the RTL
+# name, oracle state, port seed, scene, oracle btnscript (LakeSnes masks), port walkscript (every key one frame after the
+# cartridge's), frames, the full-field reference frame, the lit-menu reference frame, the first frame the menu owns the
+# picture (the switch) and the RTL
 DRIVES = [
     ('x-menu', 'saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
      '0:4,200:2,0:54,1:2,0:100', 'n:5,m:1,n:55,b:1,n:100', (3, 127), 3, 55, 20, 69),
@@ -43,7 +42,7 @@ DRIVES = [
      '0:10,100:2,0:418,1:2,0:40', 'n:11,a:1,n:419,b:1,n:40', (9, 62), 9, 60, 27, None),
     ('shop-close', 'saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5,
      '0:10,100:2,0:418,1:2,0:100', 'n:11,a:1,n:419,b:1,n:100', (428, 499), 9, 428, 27, 439),
-    # the X menu on the OVERWORLD (menu_audit_cmp.py's owsave presses): the world's fade object, C2/2E23's stash, the
+    # the X menu on the overworld (menu_audit_cmp.py's owsave presses): the world's fade object, C2/2E23's stash, the
     # shell, the Save tab, then B, B -- the menu's fade, C2/2E72 + C2/2C93's black window, the world's fade-in object.
     # The world's own picture differs (the port's seed enters it through a load), so the level is each side's own.
     ('ow-menu', 'saves/ow_w0.state', 'saves/field_re/ow_w0.lakewram', 1,
@@ -65,7 +64,7 @@ def luma(path, oracle):
 
 
 def oracle_frames(state, script, frames, tag):
-    """Peek after F+2 frames = the cartridge's display of frame F's state, on the logical oracle -- every frame from ONE
+    """Peek after F+2 frames = the cartridge's display of frame F's state, on the logical oracle; every frame from one
     run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut to F+2)."""
     env = dict(os.environ, CT_ORACLE_LOGICAL='1')
     got = peekshots.shots(state, script, [f + 2 for f in frames], env=env,

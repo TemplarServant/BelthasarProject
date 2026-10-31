@@ -3,10 +3,9 @@ r"""GATO's song (the tech $9877 = 10) against the rule's cartridge: the whole pi
 
     python tools/gato_song_cmp.py
 
-The user, 2026-10-07: "the skill where gato sings and the screen darkens has a difference in the spotlight's transparency".
-On the cartridge the cone is the arena's own colour math: the song program's BG3 beam on the SUB screen (TS = 04)
+On the cartridge the cone is the arena's own colour math: the song program's BG3 beam on the sub screen (TS = 04)
 added to BG1/BG2 (CGADSUB = 03, no half) over lines 0-160, the room's palettes faded down under it -- the floor shows
-through the beam. The port drew a hand-made overlay over that composite (a measured darken and an OPAQUE baked cone).
+through the beam. Regression check: battle-gato-song-spotlight-is-the-arena-colour-math-vs-rule-cartridge.
 
 Both sides from saves/battle_re/gato_wait.state with A held on f0-7 (the port's key one frame later) and nothing else:
 the fight runs on its own and GATO sings at f1006-1305. Port frame k against the cartridge's `--peek` k + 2 (the
@@ -32,7 +31,7 @@ FRAMES = range(1060, 1241, 10)
 
 
 def oracle_all(script, ks, region):
-    """Every frame k's crop from ONE oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
+    """Every frame k's crop from one oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
     to k)."""
     got = peekshots.shots(STATE, script, ks, env=RULE, prefix=os.path.join(OUT, 'c'))
     out = {}

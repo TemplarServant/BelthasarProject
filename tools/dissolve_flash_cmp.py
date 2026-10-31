@@ -4,11 +4,11 @@ an Avian Chaos, A held through the fight on both sides).
 
     python tools/dissolve_flash_cmp.py
 
-The user, 2026-10-07: "when the enemy is about to do the dissolve, it flashes and sometimes even teleports to another
-spot". CF/FE20 moves the corpse to OBJ palette 4 (`$993C = 08`, CF/FE57) and copies its own colours 1-12 there
-(CF/FE61-FE72) in one main-loop pass; the NMI of that frame uploads the page and the OAM attribute follows a frame later
-(the compose, then the next NMI), so the corpse keeps its colours until CD/00A5's record turns them red. The port drew the
-corpse with the LIVE `$993C` against the UPLOADED page: one frame of palette 4 as the hurt flash had left it (white).
+CF/FE20 moves the corpse to OBJ palette 4 (`$993C = 08`, CF/FE57) and copies its own colours 1-12 there (CF/FE61-FE72)
+in one main-loop pass; that frame's NMI uploads the page and the OAM attribute follows a frame later (the compose, then
+the next NMI), so the corpse keeps its colours until CD/00A5's record turns them red. Drawing the corpse with the live
+`$993C` against the uploaded page would show one frame of palette 4 as the hurt flash left it (white).
+Regression check: battle-dissolve-no-flash-vs-rule-cartridge.
 
 Cartridge: saves/battle_re/forest_wait_ambush_active.state under the rule, `--peek` with PEEK_ISOBG=4 (the OBJ layer
 alone: this state's BG is not the room's) at every frame from the delist ($AF02 := FF, --monitor) -3 to +8. Port: the

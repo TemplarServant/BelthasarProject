@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""An action's STAGING, write for write against the rule's cartridge -- C1/4833-48EB, frame by frame (src/battle.c
+r"""An action's staging, write for write against the rule's cartridge -- C1/4833-48EB, frame by frame (src/battle.c
 battleFxActionLoadFrame): the caster's sheets (CD/0015 / CD/002A), the effect load CD/0018 -> CD/0D28 on its frames,
 the arm (CD/0D33), and the frame table after it (C1/48EC, C1/486A, C1/4943 x8, C1/48B3).
 
@@ -12,9 +12,10 @@ graded frame by frame from the first rel either side writes it to last_rel -- be
 earlier actions (the fill area, an earlier frame table), which is not the staging's -- and from rel 1 at the earliest:
 the port's PC dispatch opens the action after the staging's pass in its frame, so rel 0's CD/1323 lands on rel 1.
 Prints per tech `fx-load-stage: char C k K (fx FX): N regions (M written by the staging), F region-frames on rels 1-R,
-all the cartridge's`, or each divergent region's first differing rel and values. The effect-load frames the CPU work spills over on the cartridge (CD/107D's
-blocks, CD/1052's fill; battle_fx_program_census.md sec. 8) are NOT ported -- a layout that spills would move every
-write after it -- so the defaults are single-block effects (0 spill frames on gato_wait's battle).
+all the cartridge's`, or each divergent region's first differing rel and values. The effect-load frames the CPU work
+spills over on the cartridge (CD/107D's blocks, CD/1052's fill; battle_fx_program_census.md sec. 8) are not ported -- a
+layout that spills would move every write after it -- so the defaults are single-block effects (0 spill frames on
+gato_wait's battle). Regression check: battle-fx-load-stage-vs-logical-oracle.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
@@ -61,8 +62,8 @@ def port(c, k, pokes, drive, total):
                             '--loadwram', lw, '--walkscript', 'a:8'], env=env, capture_output=True, text=True,
                            errors='replace', cwd=ROOT)
         out = r.stdout
-        # The battle's frame 0 on the field's clock: src/field.c prints it on STDERR, and only under CT_BATTLE_TRACE (read
-        # from stdout it was never found and `start` stayed 220 -- see tools/battle_ab.py run()).
+        # The battle's frame 0 on the field's clock: src/field.c prints it on stderr, and only under CT_BATTLE_TRACE
+        # (see tools/battle_ab.py run()).
         m = re.search(r'battlephase: begins at field f(\d+)', r.stderr)
         if not m or int(m.group(1)) == start: return out
         start = int(m.group(1))

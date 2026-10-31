@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-r"""A mid-battle RENDERWRAM sweep of the port against the LOGICAL-FRAME oracle's continuation of the same seed (the zelda3
-model, CLAUDE.md's one exception; disasm/notes/oracle_logical_frames.md §4).
+r"""A mid-battle RENDERWRAM sweep of the port against the logical-frame oracle's continuation of the same seed (the zelda3
+model, CLAUDE.md; disasm/notes/oracle_logical_frames.md sec. 4).
 
     python tools/sweep_logical_cmp.py <base.state> <frames> <seed.raw.wram | -> <mv|idle> <n> [slot ...]
 
-The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` under the rule (CT_ORACLE_LOGICAL=1; in real
-time until 2026-10-22, when the seeds became recipe-made fixtures, tools/fixtures/rest.json, which the rule makes) -- the
+The seed: the cartridge run `--peek <base.state> --btnscript 0:<frames>` under the rule (CT_ORACLE_LOGICAL=1; the seeds
+are recipe-made fixtures, tools/fixtures/rest.json) -- the
 same drive that produced <seed.raw.wram>, whose bytes are checked identical to the run's WRAM -- saved as a LakeSnes
 state (PEEK_SAVE, cached under build/_sweeps_rule/ by the base state's content). The reference: that state run <n>
 more frames on CT_ORACLE_LOGICAL=1, `--monitor` of the per-slot bytes. The port: build/Belthasar.exe on CT_BATTLE_RENDERWRAM=<seed> with CT_BATTLE_MVSWEEP=<n> (mv) or
@@ -37,8 +37,8 @@ def main():
     slots = [int(s) for s in sys.argv[6:]]
     ct = os.path.abspath('build/ct.exe')
     os.makedirs('build/_sweeps_rule', exist_ok=True)
-    # the cached seed is named by the base state's CONTENT: a fixture re-made from its recipe (fixtures.py make --force)
-    # keeps its path, and a seed cut from the old bytes is another fight's WRAM (2026-10-25: four checks red on it)
+    # the cached seed is named by the base state's content: a fixture re-made from its recipe (fixtures.py make --force)
+    # keeps its path, and a seed cut from the old bytes is another fight's WRAM
     name = '%s_%d' % (os.path.splitext(os.path.basename(base))[0], frames)
     digest = hashlib.sha1(open(base, 'rb').read()).hexdigest()[:12]
     tag = 'build/_sweeps_rule/%s_%s' % (name, digest)

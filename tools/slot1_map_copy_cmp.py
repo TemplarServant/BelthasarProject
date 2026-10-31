@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-r"""obj0's slot-1 TILE COPIES on the map in WRAM, after a location load and after the menu's reload, port against the
-LOGICAL oracle.
+r"""obj0's slot-1 tile copies on the map in WRAM, after a location load and after the menu's reload, port against the
+logical oracle.
 
     python tools/slot1_map_copy_cmp.py [reload|load ...]
 
-disasm/notes/obj0_slot1_runner.md section 6. The ROM builds the map in WRAM ($7E:3000.., C0/A33B) BEFORE it runs obj0's slot
+disasm/notes/obj0_slot1_runner.md section 6. The ROM builds the map in WRAM ($7E:3000.., C0/A33B) before it runs obj0's slot
 1 (C0/595C) -- in the location load (C0/00F4 at 0088, then C0/56A6 -> C0/56C8) and in the menu's reload (C0/01CF, then
 C0/0206) -- and slot 1's `E4` copies (C0/3D97 -> C0/AF4E) land on that fresh map. Loc 002's slot 1 is
 `16 E4 E4 16 E4 E4`: `E4 13 02 1B 0C 13 12 3B` parks the curtain rect (rows $02-$0C, cols $13-$1B) at rows $12-$1C, and
@@ -12,7 +12,7 @@ with $7F:0142 bit 6 set `E4 33 32 3B 3C 13 02 3B` pastes the open curtain (rows 
 $7E:3000 / 3040 / 30C0 / 7000 / 7040.
 
   reload  saves/field_re/loc002_curtain_ctl.state (the curtain open, control on), X at f4, B at f60: the cartridge on
-          --monitor, the port on CT_FIELD_MEMMON, the rect's eleven rows on all five planes, EVERY frame.
+          --monitor, the port on CT_FIELD_MEMMON, the rect's eleven rows on all five planes, every frame.
   load    the same location loaded through each side's own loader -- the cartridge's --teleport (C0:0066) from that
           state, the port's --reentertest 2 from its seed -- and the curtain rect and the parked rect (22 rows x 5
           planes) read after the load.
@@ -55,7 +55,7 @@ def cells(rows):
 
 
 def slot1_trail(stderr, site):
-    last = '-'                                              # the LAST run at the site (a reentry's, not the seed's load)
+    last = '-'                                              # the last run at the site (a reentry's, not the seed's load)
     for l in stderr.splitlines():
         m = re.match(r'slot1: %s ops (.*?) obj0' % re.escape(site), l)
         if m:

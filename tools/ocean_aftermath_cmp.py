@@ -3,17 +3,17 @@ r"""The Ocean Palace's aftermath, port against the rule's cartridge: Lavos risin
 
     python tools/ocean_aftermath_cmp.py
 
-From saves/field_re/pre_scene_19f.state (the user's own snes9x capture before the Mammon Machine scene, spliced into a lake
+From saves/field_re/pre_scene_19f.state (a snes9x capture before the Mammon Machine scene, spliced into a lake
 state at loc 19F, storyline CB), no input to f6000, then A every 40 frames to f9600 (the 10F box and the 1A9 scene), on both
 sides. The cartridge runs 19F -> 1F4 (Lavos rises) -> 1F5 -> 1EE -> 1F5 -> 165 -> 1F4 -> 182 (the Last Village) -> 1ED ->
 10F -> 1A9, storyline CB -> CC -> CD, and the party becomes Lucca, Frog, Marle ($2980 = 02 04 01 | 80 85 81 03 05 80) for the
 exchange screen `C8 00` opens.
 
-What each leg needed (2026-10-14): the world VM's op 03 (C2/10BF, class $1CF5: a VRAM upload through the NMI queue), the C6
-far calls E028/E04D/E64A/E66F (C3/0002 into $7F:9000 / $7F:8C00) and E63D/E644 ($7F01ED), the native C2/7BD1, ops 0C, 46,
-47, 4A, 51; a world's exit into another world (state 2 -> C0:0000 -> the overworld loader); E3 in the fn0 pass writing
-$011F; the lead's words read back before C0/8A6D; the dialogue's code 03 (one argument byte: the timed pause C0/21A8 and
-`03 00`'s self-closing end, 2096); op D3 through C2/8C79 whole (the joiner's reserve entry `| 80`).
+The route exercises: the world VM's op 03 (C2/10BF, class $1CF5: a VRAM upload through the NMI queue), the C6 far calls
+E028/E04D/E64A/E66F (C3/0002 into $7F:9000 / $7F:8C00) and E63D/E644 ($7F01ED), the native C2/7BD1, ops 0C, 46, 47, 4A,
+51; a world's exit into another world (state 2 -> C0/0000 -> the overworld loader); E3 in the fn0 pass writing $011F;
+the lead's words read back before C0/8A6D; the dialogue's code 03 (one argument byte: the timed pause C0/21A8 and
+`03 00`'s self-closing end, 2096); op D3 through the whole of C2/8C79 (the joiner's reserve entry `| 80`).
 
 Compared: the location chain (every distinct $0100 in order), the storyline and the party at f9600, and the 182 box's own
 timing -- the frames from its state 7 to 06 (the pause, $0216 * 15 + 1), to 07 and to 0D (no press).

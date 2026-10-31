@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""C0/21E1's entries 4 and 5 -- the circle as the COLOUR window (`FF 97` / `FF 98`) -- port against the rule's cartridge.
+r"""C0/21E1's entries 4 and 5 -- the circle as the colour window (`FF 97` / `FF 98`) -- port against the rule's cartridge.
 
     python tools/field_colcircle_cmp.py
 
@@ -25,7 +25,8 @@ the frames compared and the first that differs; then three pictures a run, each 
 port's shots N + d for d in -4..+4 (the field's picture is P + 2: d = -2): the best d and its differing pixels. Loc 005,
 like scene 051, keeps BG3 on the sub screen (TM 13 / TS 04): the circle limits that sum, and adds the fixed blue where the
 sub screen is transparent (field.c fieldColWindowApply).
-docs/ROADMAP.md F19, disasm/notes/field_iris_window.md.
+docs/ROADMAP.md F19, disasm/notes/field_iris_window.md. Regression check:
+field-colour-circle-c0-232a-238a-vs-rule-cartridge.
 """
 import os
 import re

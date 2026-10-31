@@ -6,16 +6,18 @@ r"""The battle module's end tails against the rule's cartridge (disasm/notes/bat
 tools/battle_ab.py's synthetic fight, Magus solo (`tech 6 6`: his Black Hole kills GATO), both sides from the same WRAM,
 watching what the module's end chain writes:
 
-  xp       the block's XP +$13 ($5E40:3)  -- C1/F93E, C1/83F2: BEFORE FD/AD17's results messages
+  xp       the block's XP +$13 ($5E40:3)  -- C1/F93E, C1/83F2: before FD/AD17's results messages
   29AD     the RNG cursor handed back     -- C1/8443
   sheet    Magus's sheet curHP ($27E3:2)  -- C1/B442's writeback, C1/83FC
   records  the staging record $29B0:5     -- CF/FC08-FC71 (C1/845E -> CF/FBE5)
   ack      $0117 -> 00                    -- the field's C0/18BD
 
 Per quantity: the frame it changes and the value it takes, on each side. The cartridge runs the chain with no wait in
-between (one frame under the rule); the port ran it all at the ack until battleModuleTail.
+between (one frame under the rule); the port runs it in battleModuleTail.
 
     module-tail: <q> cartridge f<N>=<value> port f<M>=<value> (<M-N>)
+
+Regression check: battle-module-tail-vs-oracle.
 """
 import os
 import sys

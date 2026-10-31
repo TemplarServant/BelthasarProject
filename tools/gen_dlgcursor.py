@@ -1,28 +1,27 @@
 #!/usr/bin/env python
-"""Lift the DIALOGUE DECISION CURSOR (the pointing hand) out of an oracle frame.
+"""Lift the dialogue decision cursor (the pointing hand) out of an oracle frame.
 
 CT's decision box (event ops 0xC0/0xC3/0xC4) marks the selected option with a small
-pointing HAND, drawn into the dialogue window itself -- it is not an OBJ (the oracle's
+pointing hand, drawn into the dialogue window itself -- it is not an OBJ (the oracle's
 OAM at the option page holds only the party sprites), and it is not the menu's hand
-either (src/data/menu_itemdetail.h, OBJ tile 0x20: compared pixel-by-pixel, 63/138 --
-a different graphic).
+either (src/data/menu_itemdetail.h, OBJ tile 0x20: a different graphic).
 
-METHOD -- the same one the dialogue window itself uses (T_WINDOW / saves/ct_window.bin
-is "the dialogue window bitmap lifted from the live oracle fb"): take a frame with the
-option page up, and SUBTRACT the window texture. Every pixel of the window's 80 rows
-maps 1:1 onto the frame (verified: fb row = window row + 16 on a 240-row peek dump), so
-whatever differs inside the cursor's cell IS the cursor. Pixels equal to the texture are
-transparent -- an edge pixel that happens to match the window exactly would be dropped,
+Method -- the same one the dialogue window itself uses (T_WINDOW / saves/ct_window.bin
+is the dialogue window bitmap lifted from the oracle's framebuffer): take a frame with the
+option page up and subtract the window texture. Every pixel of the window's 80 rows
+maps 1:1 onto the frame (fb row = window row + 16 on a 240-row peek dump), so
+whatever differs inside the cursor's cell is the cursor. Pixels equal to the texture are
+transparent -- an edge pixel that happens to match the window would be dropped,
 which is why the cell is taken as a fixed 16x12 box rather than from the diff's bbox.
 
-CAPTURE (Norstein Bekkler's lab, loc 1B2 -- its `C0 40 03` box has four options):
+Capture (Norstein Bekkler's lab, loc 1B2 -- its `C0 40 03` box has four options):
   ct.exe --teleport 434 8 8 0 --from saves/truce_market.state --out o434.state --frames 240
   ct.exe --peek o434.state o434e.raw \
       --btnscript "10:8,0:6,100:6,0:180,100:6,0:60,100:6,0:60,100:6,0:120,100:6,0:120"
   python tools/ct.py fb2png o434e.raw o434e.png
 Then:  python tools/gen_dlgcursor.py o434e.png saves/ct_window.bin src/data/dlg_cursor.h
 
-The cursor's cell in WINDOW space is (16,10)-(31,21): x 16 is one glyph-cell left of the
+The cursor's cell in window space is (16,10)-(31,21): x 16 is one glyph-cell left of the
 option text (the options are indented six spaces = x 32), and row 10 is the first option
 line's glyph row.
 """

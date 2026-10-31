@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Diff the PORT's HDMA walker against the ORACLE's own per-scanline trace, line for line.
+r"""Diff the port's HDMA walker against the oracle's own per-scanline trace, line for line.
 
     python tools/seq_hdma_cmp.py [boot frame]
 
@@ -7,16 +7,15 @@ Both sides are derived live, so nothing here is a pinned constant:
 
   * the oracle is booted to a frame inside sequence-table entry 0 (the motorcycle race, six HDMA
     channels -- disasm/notes/sequence_table.md section 7.1), and `ct.exe --hdma` prints the colour
-    math state of every scanline of that frame. That is the cartridge's own answer.
+    math state of every scanline of that frame.
   * the same run's `.wram` sidecar gives the 64 KB $7E page the channels' tables live in, and
     `Belthasar --seqhdma` replays the walker over it and prints the same bands.
 
-⚠ The oracle numbers its trace 0..224 and its first band is the state BEFORE the frame's first
+Note: the oracle numbers its trace 0..224 and its first band is the state before the frame's first
 transfer; the port's starts at line 1, the first line the SNES draws. Both are expanded to a
-per-line map over 1..224 before comparing, so the numbering cannot paper over a real difference.
+per-line map over 1..224 before comparing.
 
-⚠ No capture is committed: `saves/` is gitignored on purpose (the repo regenerates ROM-derived
-captures rather than storing them), so the page image is rebuilt into build/ on every run.
+No capture is committed (`saves/` is gitignored), so the page image is rebuilt into build/ on every run.
 """
 import os
 import re

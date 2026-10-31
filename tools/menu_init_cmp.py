@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-r"""The menu shell's init chain (C2/8000 -> C2/8096, NMI off) against the cartridge, cycle for cycle, per battery.
+r"""The menu shell's init chain (C2/8000 -> C2/8096, NMI off) against the cartridge, in cycles, per battery.
 
     python tools/menu_init_cmp.py [battery.srm ...]      (no argument: the built-in fixture set)
 
 For each battery the cartridge boots from power-on with it (CT_ORACLE_SRAM, the logical oracle), Start at +13 and +115
 from f120 -- the title's two -- so loc 0's `C8 41` opens the load shell (mode 0) at f198 (or, on a blank cart, takes
-C2/8000's short circuit: no init chain, nothing to measure). C2/8000's frame is FOUND (`--hookpc C28000`: the boot's
-timeline moves with the oracle's frame rule, CT_ORACLE_NMION_HOLD), and the init is traced from three frames before it
-(`--cputrace`, CPUTRACE_BEAM=1; C0/0B5D = the last one before C2/8000) and
-measured with tools/ctlib/beam.py: C2/D156 (the save-slot scan, 8127 -> 812A) and the whole NMI-off stretch
-(C0/0B5D, the caller's `STA $4200` that turns the NMI off, -> C2/8087's that turns it on). Printed against the port's model, src/menu_cost.c (`Belthasar --menucost`; its Python twin is tools/vwf_cost_proto.py):
+C2/8000's short circuit: no init chain, nothing to measure). C2/8000's frame is searched for (`--hookpc C28000`; the
+boot's timeline moves with the oracle's frame rule, CT_ORACLE_NMION_HOLD), and the init is traced from three frames
+before it (`--cputrace`, CPUTRACE_BEAM=1; C0/0B5D = the last one before C2/8000) and measured with tools/ctlib/beam.py:
+C2/D156 (the save-slot scan, 8127 -> 812A) and the whole NMI-off stretch (C0/0B5D, the caller's `STA $4200` that turns
+the NMI off, -> C2/8087's that turns it on). Printed against the port's model, src/menu_cost.c (`Belthasar --menucost`;
+its Python twin is tools/vwf_cost_proto.py):
 
     menu-init: <battery> slots 0000 8080 8080: D156 1737858 / model 1737858, stretch 5915532 = 17.053 F -> S0 = C+17
 
@@ -62,7 +63,7 @@ def fixtures():
 
 SCRIPT = '0:13,8:2,0:100,8:2,0:80'   # from f120: the title's two Starts, then loc 0 runs to its `C8 41`
 LEAD = 3                             # the trace starts this many frames before C2/8000's (C0/0B5D is the frame before)
-SPAN = 24                            # ... and runs past C2/8087 (19.45 frames on three saves)
+SPAN = 24                            # ... and runs past C2/8087 (about 19.5 frames in)
 
 
 def cut(script, n):
@@ -81,8 +82,8 @@ def cut(script, n):
 
 def shell_frame(st120, env):
     """The monitor frame of C2/8000's first visit from st120 under SCRIPT (--hookpc; a visit on line >= 225 is the next
-    monitor frame, docs/DEBUG_SURFACE.md). Found, not assumed: the boot's own timeline depends on the frame rule the
-    oracle runs (CT_ORACLE_NMION_HOLD=1 holds the title's NMI-on stretches, so loc 0 -- and its `C8 41` -- comes sooner)."""
+    monitor frame, docs/DEBUG_SURFACE.md). Searched for because the boot's timeline depends on the oracle's frame rule
+    (CT_ORACLE_NMION_HOLD=1 holds the title's NMI-on stretches, so loc 0 and its `C8 41` come sooner)."""
     out = subprocess.run([M.CT, '--hookpc', 'C28000',
                           '--from', st120, '--btnscript', SCRIPT, '--frames', '220'],
                          cwd=ROOT, env=env, capture_output=True, text=True).stdout

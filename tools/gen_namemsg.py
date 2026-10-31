@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate saves/ct_namemsg.bin -- the "Enter a name, then push the Start Button." prompt box.
 
-The FIRST naming screen (new game, Crono) shows this help message ($FF:CF49, the index-0 string of
+The first naming screen (new game, Crono) shows this help message ($FF:CF49, the index-0 string of
 the help table $FF:CF3B) in a textbox over the keyboard. It is BG2 (a third window) + BG3 (the
-dialogue text), composited by the PPU. We capture the byte-exact box from the oracle: a saved
+dialogue text), composited by the PPU. The box is captured from the oracle: a saved
 new-game naming state (saves/crononame.state -- made with the --script driver, DRIVE_CAP=450 +
 PEEK_SAVE) advanced ~20 frames to full brightness, then crop the box rect (16,104)-(239,151).
 

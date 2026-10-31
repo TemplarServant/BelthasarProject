@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""Generator for the enemy-death DISSOLVE table (src/data/battle_dissolve.h), measured on the oracle.
+"""Generator for the enemy-death dissolve table (src/data/battle_dissolve.h), measured on the oracle.
 
     python tools/gen/battle_dissolve.py            (run from the repository root; needs the recipe forest_battle_3hetake)
 
-Derived in disasm/notes/battle_dissolve.md (T2). The CT enemy-death "dissolve" is a TWO-part OBJ effect on the dying
-enemy's sprite:
-  1. PALETTE: the corpse draws with the live OBJ palette its $993C names (CF/FE20's copy into palette 4 and CD/00A5's
+disasm/notes/battle_dissolve.md (T2). The enemy-death dissolve is a two-part OBJ effect on the dying enemy's sprite:
+  1. Palette: the corpse draws with the live OBJ palette its $993C names (CF/FE20's copy into palette 4 and CD/00A5's
      red fade record, battle_death_dissolve_gate.md PART 5) -- not part of this table.
-  2. ORDERED-DITHER TILE CLEAR: an 8x8 dither matrix (GLOBAL, indexed by the pixel's sprite-local (x%8, y%8)) gives
-     each enemy OBJ pixel a clear-frame. Pixel present iff dither[y%8][x%8] >= (curFrame - dissolveStart). ~20
+  2. Ordered-dither tile clear: an 8x8 dither matrix (global, indexed by the pixel's sprite-local (x%8, y%8)) gives
+     each enemy OBJ pixel a clear frame. Pixel present iff dither[y%8][x%8] >= (curFrame - dissolveStart). ~20
      px/frame, 32 frames, then the OAM sprites are removed. Streamed by the C1/CC battle-anim engine.
 
-HOW THE TABLE IS MEASURED. From the forest fight (the recipe forest_battle_3hetake: three Hetake, Crono's command
+Measurement: from the forest fight (the recipe forest_battle_3hetake: three Hetake, Crono's command
 menu up) Crono attacks the lower-right Hetake (slot 2, VRAM tiles 0x60-0x77); every frame of its death is dumped
 (one ct.exe run, PEEK_SHOTS) and each of its 16 OBJ tiles decoded. The dissolve's start S is the last frame on which
 every pixel of the sprite is still there; a pixel's clear step is the last frame it is present, minus S. The step is
-a function of (x%8, y%8) only -- checked over every inked pixel of the 32x32 sprite (16 samples per cell), so the
-table is a measurement, not an assumption: one disagreeing pixel stops the generator. --verify re-predicts every
-frame from (the tiles at S + the table) and compares all 16 x 64 px of every frame.
+a function of (x%8, y%8) only -- checked over every inked pixel of the 32x32 sprite (16 samples per cell); one
+disagreeing pixel stops the generator. --verify re-predicts every frame from (the tiles at S + the table) and
+compares all 16 x 64 px of every frame.
 """
 import os
 import sys

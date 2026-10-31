@@ -16,16 +16,17 @@ already-built binaries in build/ and the oracle inputs in the repo root.
     python tools/regress.py --mutate NAME...  # prove NAME grades its declared mutations, in labs at once
     python tools/regress.py --mutate-all --mutate-jobs 4
 
-CRITICAL harness fact: most ct.exe self-checks return exit code 0 even on mismatch.
-This suite therefore NEVER trusts exit codes -- a check PASSes iff every literal
-substring in its "expect" list appears in the combined stdout+stderr.
+Note: most ct.exe self-checks return exit code 0 even on a mismatch, so this suite does not
+use exit codes: a check passes iff every literal substring in its "expect" list appears in
+the combined stdout+stderr.
 
-All checks are read-only (verified: no included check writes files), so they run as
-parallel subprocesses. A check declaring "exclusive": true (it writes a file) runs in
-the exclusive lane: one at a time, in declared order, in one worker beside the batch.
-Checks that run the same command (argv, env and env_rule: run_key) share ONE process and each is graded on its
-output (run_group); tools/regress_share.py proves when several checks can be given the same command.
-Checks whose declared inputs are missing are SKIPped with the missing file named (they stay in the suite so the needed capture stays discoverable).
+Checks are read-only, so they run as parallel subprocesses. A check declaring
+"exclusive": true (it writes a file) runs in the exclusive lane: one at a time, in declared
+order, in one worker beside the batch. Checks that run the same command (argv, env and
+env_rule: run_key) share one process and each is graded on its output (run_group);
+tools/regress_share.py proves when several checks can be given the same command. Checks
+whose declared inputs are missing are skipped with the missing file named (they stay in the
+suite so the needed capture stays discoverable).
 
 Exit status: 1 iff any check FAILed (SKIPs do not fail the suite).
 --check-inputs exits 1 if any input is missing or its sha256 disagrees with the
@@ -103,27 +104,27 @@ def run_check(check, root=ROOT):
             env["CT_ORACLE_CACHE_ALIAS"] = root + "|" + ROOT
     for k, v in (check.get("env") or {}).items():
         env[k] = str(v)
-    # The player's battery save (the working folder's ct_sram.srm, src/field.c fieldSramPath) is no check's input: one
-    # played in this tree opened the menu a frame later in 17 menu checks (2026-10-27; a fresh clone has none), and a check
-    # that saved would write over it. A check that wants a save names it (CT_SRAM); every other one reads a blank cart from
-    # a file of its own under build/, made anew each run.
+    # The player's battery save (the working folder's ct_sram.srm, src/field.c fieldSramPath) is no check's input: a
+    # save there changes the menu checks' timing (a fresh clone has none), and a check that saved would write over it.
+    # A check that wants a save names it (CT_SRAM); every other one reads a blank cart from a file of its own under
+    # build/, made anew each run.
     if "CT_SRAM" not in (check.get("env") or {}):
         sram = os.path.join(root, "build", "_regress_sram", check["name"] + ".srm")
         os.makedirs(os.path.dirname(sram), exist_ok=True)
         if os.path.exists(sram):
             os.remove(sram)
         env["CT_SRAM"] = sram
-    # "env_rule": what a check needs only under the infinitely fast CPU's migration switches (CT_ORACLE_NMION_HOLD=1 AND
-    # CT_ORACLE_IFAST=1, CLAUDE.md) because its premise changes there -- e.g. a lockstep whose port runs the rule's clock
-    # needs the oracle under the rule too. Without both switches it is not read: the check runs exactly as declared.
+    # "env_rule": what a check needs only under the infinitely fast CPU's switches (CT_ORACLE_NMION_HOLD=1 and
+    # CT_ORACLE_IFAST=1, CLAUDE.md) because its premise changes there, e.g. a lockstep whose port runs the rule's clock
+    # needs the oracle under the rule too. Without both switches it is not read: the check runs as declared.
     if os.environ.get("CT_ORACLE_NMION_HOLD", "1") != "0" and os.environ.get("CT_ORACLE_IFAST", "1") != "0":
         for k, v in (check.get("env_rule") or {}).items():
             env[k] = str(v)
     timeout = check.get("timeout_s", 120)
     try:
-        # Popen + communicate instead of run(): on a timeout the WHOLE TREE is killed. A check whose argv is a
-        # python tool spawns build\ct*.exe as a grandchild; run() kills only the python child, the exe survives as
-        # an orphan, holds build\'s file lock, and every later build of a --mutate run fails "inconclusive".
+        # Popen + communicate instead of run(): on a timeout the whole process tree is killed. A check whose argv is a
+        # python tool spawns build\ct*.exe as a grandchild; run() would kill only the python child, leaving the exe as
+        # an orphan that holds build\'s file lock, and every later build of a --mutate run would fail "inconclusive".
         argv = resolve_argv(check["argv"], root)
         if ORACLE_CACHE and os.path.basename(argv[0]).lower() == "ct.exe" and oracle_cache.mode_of(argv)[0]:
             r = oracle_cache.run(argv, dict(cwd=root, env=env, capture_output=True, text=True, errors="replace"),
@@ -162,7 +163,7 @@ def run_key(check):
 
 
 def run_group(group):
-    """ONE PROCESS FOR CHECKS THAT RUN THE SAME COMMAND (run_key): a run is a pure function of its argv and env, so the
+    """One process for checks that run the same command (run_key): a run is a pure function of its argv and env, so the
     first check that can run (all its inputs present) runs it and every other one is graded on the same output. A check
     with a missing input SKIPs on its own. tools/regress_share.py proves when checks can be given the same env.
     Returns [(check, result)]."""
@@ -227,10 +228,9 @@ def pin_from_output(check, out):
 
 
 def write_checks(data):
-    # indent=2 + ensure_ascii=False = the format the file is ALREADY in. With json.dump's defaults a
-    # one-line re-pin rewrote all 4902 lines (indent 2 -> 1) and escaped every non-ASCII character
-    # (40 x U+26A0 -> ⚠), so the actual change was invisible in the diff and every pin carried a
-    # whole-file rewrite with it.
+    # indent=2 + ensure_ascii=False = the format the file is already in. With json.dump's defaults a
+    # one-line re-pin would rewrite the whole file (other indent, every non-ASCII character escaped)
+    # and hide the actual change in the diff.
     with open(CHECKS_JSON, "w", encoding="utf-8", newline="\n") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
@@ -289,7 +289,7 @@ def apply_pins(data, checks, outs):
 
 
 def do_repin_failed(data):
-    """Re-pin every check that FAILED on the last suite run FROM THE OUTPUT THAT RUN SAVED -- nothing is run again.
+    """Re-pin every check that failed on the last suite run from the output that run saved; nothing is run again.
     A failure with no pin regexes, or a timeout, is listed and left alone."""
     try:
         with open(LAST_JSON, encoding="utf-8") as f:
@@ -333,7 +333,7 @@ def _build(root=ROOT):
 
 
 def do_build():
-    """Drive tools/build.py (honest artifact check). Prefer its exit code.
+    """Drive tools/build.py (it verifies each target's artifact). Prefer its exit code.
 
     build.py only prints 'Build OK' after per-target verification and fails if a
     ct*.exe from this build/ is still running (locked). Fall back message if the
@@ -363,25 +363,21 @@ def _write_exact(path, s):
 def _resolve_mutation(root, m):
     """The edits of mutation m in the tree at root: (stale, originals, resolved). stale is why the mutation cannot be
     applied (None when it can); originals [(path, text)] restore every file it touches; resolved [(path, find, replace)]
-    carry the file's REAL line endings."""
-    # A mutation is a SET of edits: one behaviour may live at more than one site, and an
-    # edit that only covers one of them tests a path the check may never take. The first
-    # full --mutate-all run caught exactly that: the "same-world skip" mutation patched only
-    # the door-exit overworld entry and SURVIVED, because that scenario enters through the
-    # other site. Single find/replace stays as sugar for the common one-site case.
+    carry the file's actual line endings."""
+    # A mutation is a set of edits: one behaviour may live at more than one site, and an
+    # edit that only covers one of them tests a path the check may never take. Single
+    # find/replace stays as sugar for the common one-site case.
     originals, resolved = [], []
     for e in m.get("edits") or [m]:
         path = os.path.join(root, e["file"])
         s = _read_exact(path)
         originals.append((path, s))
-        # LINE ENDINGS: this repo's working copy is CRLF (see the line-endings trap in the
-        # memory index) but a JSON "find" carries \n. A single-line find never notices; a
-        # multi-line one matches ZERO times and the mutation reads STALE for a reason that
-        # has nothing to do with the source drifting. Fit the pattern to the file instead:
-        # try it verbatim, then with \n -> \r\n (translating "replace" the same way, so a
-        # mutation never converts a CRLF file to LF and blows up the next git diff).
-        # And the other way: a find recorded from a CRLF working copy carries \r\n, and an LF checkout (Linux,
-        # macOS, the CI, a cloud session) has none -- 13 menu mutations read STALE there and nowhere else.
+        # Line endings: a working copy may be CRLF while a JSON "find" carries \n, so a multi-line
+        # find would match zero times and read STALE although the source did not drift. Fit the
+        # pattern to the file: try it verbatim, then with \n -> \r\n (translating "replace" the
+        # same way, so a mutation never converts a CRLF file to LF). And the other way: a find
+        # recorded from a CRLF working copy carries \r\n, which an LF checkout (Linux, macOS, the
+        # CI, a cloud session) does not have.
         find, repl = e["find"], e["replace"]
         if find not in s and "\n" in find:
             crlf = find.replace("\r\n", "\n").replace("\n", "\r\n")
@@ -401,7 +397,7 @@ def _resolve_mutation(root, m):
 
 def _apply_mutation(resolved):
     for path, find, repl in resolved:    # apply every edit, re-reading as we go so two
-        _write_exact(path, _read_exact(path).replace(find, repl))  # edits to the SAME file compose
+        _write_exact(path, _read_exact(path).replace(find, repl))  # edits to the same file compose
 
 
 def _verdict_lines(mi, m, v):
@@ -424,7 +420,7 @@ def _killed(v):
 
 
 def do_mutate(data, names, jobs=0):
-    """MUTATION TESTING: prove each named check actually GRADES something.
+    """Mutation testing: prove each named check grades something.
 
     A check may declare the edits that are supposed to break it:
 
@@ -434,13 +430,12 @@ def do_mutate(data, names, jobs=0):
         ]
 
     For each one we apply the edit, rebuild, re-run the check, and require it to
-    FAIL. A mutation the check still PASSes through is SURVIVED -- the check does
-    not grade that line, whatever its notes claim. The project's own rule, in the
-    harness instead of in a person's head: a surviving mutation is an obligation of
-    proof, not a verdict.
+    fail. A mutation the check still passes through has SURVIVED: the check does
+    not grade that line, whatever its notes claim. A surviving mutation is an
+    obligation of proof, not a verdict.
 
     jobs > 0: that many mutants at once, each in a mutation lab (_mutate_in_labs); the working tree is never edited.
-    jobs == 0: one at a time in the working tree itself. The source file is ALWAYS restored (finally), and rebuilt,
+    jobs == 0: one at a time in the working tree itself. The source file is always restored (finally), and rebuilt,
     before returning.
     """
     by_name = {c["name"]: c for c in data["checks"]}
@@ -496,7 +491,7 @@ def do_mutate(data, names, jobs=0):
 
 
 def _mutate_in_labs(todo, jobs):
-    """--mutate in `jobs` MUTATION LABS at once (tools/ctlib/mutlabs.py: copies of the working tree at
+    """--mutate in `jobs` mutation labs at once (tools/ctlib/mutlabs.py: copies of the working tree at
     build/_mutlabs/<k>, each with its own build/). Every lab is synced with the working tree first; then a check's
     baseline and, once it PASSes, each of its mutants is one job: take a free lab, apply the edits there, build it, run
     the check in it (cwd = the lab), restore the lab. The working tree is never edited, so other sessions and the player
@@ -605,9 +600,9 @@ _TEXT_INPUTS = (".py", ".c", ".h", ".json", ".md", ".txt")
 
 
 def _sha256_file(path):
-    # A TEXT input is pinned by its content, not its line endings: the working copy is CRLF or LF depending on
-    # core.autocrlf and on which tool last wrote the file, and git stores LF either way -- so a raw hash read one file
-    # MISMATCH after a fresh checkout that changed nothing (23 of the text inputs were LF, 2026-09-28).
+    # A text input is pinned by its content, not its line endings: the working copy is CRLF or LF depending on
+    # core.autocrlf and on which tool last wrote the file, and git stores LF either way, so a raw hash would read
+    # MISMATCH after a fresh checkout that changed nothing.
     if path.lower().endswith(_TEXT_INPUTS):
         with open(path, "rb") as f:
             return hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
@@ -726,7 +721,7 @@ def do_refresh_input_hashes():
         print("  pin   %s  %s" % (path, e["sha256"][:16]))
     man["inputs"] = [by_path[p] for p in sorted(by_path)]
     with open(INPUTS_JSON, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(man, f, indent=2, ensure_ascii=False)   # the file's own format (its notes carry ⚠ and em dashes)
+        json.dump(man, f, indent=2, ensure_ascii=False)   # the file's own format (its notes carry non-ASCII characters)
         f.write("\n")
     print("regress: refreshed %d hashes (%d still missing) -> %s"
           % (n_upd, n_miss, INPUTS_JSON))
@@ -767,12 +762,9 @@ def main():
     ap.add_argument("--list", action="store_true", help="list checks, don't run")
     ap.add_argument("--quick", action="store_true", help="tier 'quick' checks only")
     ap.add_argument("--only", nargs="+", metavar="NAME", help="run only these checks")
-    # DEFAULT PARALLELISM: the checks are independent subprocesses, so the suite is bound by the
-    # machine, and 4 was leaving a 20-core box idle. MEASURED on the quick tier (343 checks, 486 s of
-    # summed check time): 4 jobs 145 s, 12 jobs 88 s, 18 jobs 84 s -- the floor is the single slowest
-    # check (verifyframe-oam-ourlist, 57 s), so past ~12 there is nothing left to overlap. Only 4% of
-    # the tier is the serial "exclusive" tail, which is why the scaling is nearly linear until then.
-    # cpu_count-2 keeps the box usable while a run is going; the flag still overrides.
+    # Default parallelism: the checks are independent subprocesses, so the suite is bound by the
+    # machine. Past about 12 jobs the wall time is floored by the single slowest check, so there is
+    # little left to overlap; cpu_count-2 keeps the box usable while a run is going. --jobs overrides.
     _cpus = os.cpu_count() or 4
     ap.add_argument("--jobs", type=int, default=max(4, min(12, _cpus - 2)),
                     help="parallel subprocesses (default: min(12, CPUs-2))")
@@ -796,10 +788,9 @@ def main():
                          "rebuild, and require the check to FAIL (a survivor is reported)")
     ap.add_argument("--mutate-all", action="store_true",
                     help="--mutate every check that declares mutations")
-    # MUTATION LABS (tools/ctlib/mutlabs.py): each mutant builds and runs in its own copy of the working tree, so N run at
-    # once and the tree itself is never edited. MEASURED (4 checks, 23 mutations, 16 of them built and run, 20 CPUs,
-    # 2026-10-16): in place 686 s; 4 labs 239 s; 8 labs 194 s -- a mutant is a build on every core plus a check, so the
-    # labs share the compiler past that. CPUs/2 capped at 8; a lab is ~0.7 GB on disk.
+    # Mutation labs (tools/ctlib/mutlabs.py): each mutant builds and runs in its own copy of the working tree, so N run at
+    # once and the tree itself is never edited. A mutant is a build on every core plus a check, so past a few labs they
+    # share the compiler: CPUs/2 capped at 8. A lab is ~0.7 GB on disk.
     ap.add_argument("--mutate-jobs", type=int, default=max(2, min(8, _cpus // 2)), metavar="N",
                     help="mutants at once, each in a lab at build/_mutlabs/<k> (default min(8, CPUs/2)); 0 = one at a "
                          "time in the working tree itself (the old path)")
@@ -868,8 +859,9 @@ def main():
 
     t0 = time.time()
     results = {}
-    # LONGEST FIRST (the last run's durations, build/_regress_times.json; a check never timed counts as long): the wall
-    # time of a parallel batch is bound below by its slowest check, and a slow check submitted last ran alone at the end.
+    # Longest first (the last run's durations, build/_regress_times.json; a check never timed counts as long): the wall
+    # time of a parallel batch is bound below by its slowest check, and a slow check submitted last would run alone at
+    # the end.
     try:
         with open(TIMES_JSON, encoding="utf-8") as f:
             times = json.load(f)
@@ -891,11 +883,10 @@ def main():
             results[c["name"]] = r
             print("%-4s %s (%.1fs)" % (r["status"], c["name"], r["secs"]), flush=True)
 
-    # THE EXCLUSIVE LANE: the exclusive checks run one at a time, in their declared order, in ONE worker of the pool,
-    # alongside the parallel batch -- not after it. "exclusive" means a check that writes a file, and the files they
-    # write (build/_nmsfx.raw, build/_svsfx.srm, the battleshot dumps ...) are shared only among THEMSELVES: audited
-    # 2026-10-16, no read-only check names any of them, and none is graded on wall-clock time (all CT_NOPACE). Serial
-    # after the batch they were 112 s of the quick tier's 272 s.
+    # The exclusive lane: the exclusive checks run one at a time, in their declared order, in one worker of the pool,
+    # alongside the parallel batch, not after it. "exclusive" means a check that writes a file, and the files they
+    # write (build/_nmsfx.raw, build/_svsfx.srm, the battleshot dumps ...) are shared only among themselves: no
+    # read-only check names any of them, and none is graded on wall-clock time (all CT_NOPACE).
     def lane():
         for g in ser:
             report(run_group(g))
@@ -910,8 +901,8 @@ def main():
     total = time.time() - t0
     save_run(checks, results)
     if ORACLE_CACHE:
-        # 24 GB: the cap was 8 and sat full (2026-10-16), so every run evicted the entries of the binaries before it -- a
-        # branch switch or a reverted change came back to a cold cache. One generation of the quick tier is ~0.13 GB.
+        # 24 GB: room for the entries of many builds, so a branch switch or a reverted change finds a warm cache.
+        # One generation of the quick tier is ~0.13 GB.
         kept, size = oracle_cache.prune(ORACLE_CACHE, int(float(os.environ.get("CT_ORACLE_CACHE_GB", "24")) * (1 << 30)))
         print("regress: oracle cache %d entries, %.2f GB (CT_ORACLE_CACHE_GB caps it, default 24)" % (kept, size / (1 << 30)))
 

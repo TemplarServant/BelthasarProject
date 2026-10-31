@@ -1,18 +1,17 @@
-"""tools/walkto.py -- ORACLE-DRIVEN PATHFINDER for building fixtures.
+"""tools/walkto.py -- oracle-driven pathfinder for building fixtures.
 
 Given a LakeSnes state, find a d-pad drive that walks the lead PC to a target pixel -- or through an
-exit -- by probing the ORACLE itself: 16-frame steps, each one a real `ct.exe --peek` with PEEK_SAVE,
-depth-first with a visited set and a toward-target ordering.  The route therefore comes from the ROM's
-own collision, never from a guessed waypoint, and the end state is a genuine oracle state that went
-through the real loaders (a --teleport'd state does not: `jmp` leaves the lead PC object inactive and
-`req` keeps the old coordinates).  This is how saves/field_re/s5_bell_marle.state was made: scene
-439's real exit into scene 5 (--exit, 228 probes), then 44 probes to the bell's talk tile with Marle
-following.
+exit -- by probing the oracle itself: 16-frame steps, each one a real `ct.exe --peek` with PEEK_SAVE,
+depth-first with a visited set and a toward-target ordering. The route therefore comes from the ROM's
+own collision, and the end state is an oracle state that went through the real loaders (a
+--teleport'd state does not: `jmp` leaves the lead PC object inactive and `req` keeps the old
+coordinates). Example: saves/field_re/s5_bell_marle.state (scene 439's exit into scene 5 with --exit,
+then the bell's talk tile with Marle following).
 
 usage: python tools/walkto.py <start.state> <tx> <ty> <out.state> [maxprobes] [--exit] [--lead=HEX] [--run] [--ow] [--astar] [--fight] [--pilot] [--apress] [--dest=HEX]
   --step=N: frames a probe holds the d-pad (16): 8 reaches a world-map passage the 16-px grid steps over
-  --exit : the target is an exit box; a step that changes $0100 is SUCCESS (the transition is the goal)
-  --dest=HEX: with --exit, only a transition INTO that location ($0100 & 1FF) is the goal; one into another
+  --exit : the target is an exit box; a step that changes $0100 is success (the transition is the goal)
+  --dest=HEX: with --exit, only a transition into that location ($0100 & 1FF) is the goal; one into another
            location is a wall (a door the route must not take)
   --apress: an A press after every step (what an object does on A becomes a step of the search)
   --pilot: as --fight, but a fight is played by tools/battle_pilot.py's Pilot (PILOT_* from the environment) and its pad
@@ -30,12 +29,12 @@ ENV = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_ORAC
 LEAD = 0x02          # the lead PC's actor slot ($1800/$1880 + LEAD): --lead=HEX (the slot `recipes.py try` lists)
 HOLD = 0             # extra buttons held with the d-pad: --run holds B (the dash, $00F8 bit1)
 OW = False           # --ow: the overworld walker's position ($0283/$0285, whole pixels) instead of an actor slot
-BTN = {'R': 0x80, 'L': 0x40, 'U': 0x10, 'D': 0x20}     # LakeSnes serial order (NOT the $00F2 layout)
+BTN = {'R': 0x80, 'L': 0x40, 'U': 0x10, 'D': 0x20}     # LakeSnes serial order (not the $00F2 layout)
 OPP = {'R': 'L', 'L': 'R', 'U': 'D', 'D': 'U'}
 STEP = 16
 DEST = None          # --dest=HEX: the one location an --exit transition may go to
 FIGHT = False        # --fight: mash A through what takes control away (the fights) and keep going
-PILOT = False        # --pilot: as --fight, but a FIGHT is played by tools/battle_pilot.py's Pilot (its PILOT_* settings)
+PILOT = False        # --pilot: as --fight, but a fight is played by tools/battle_pilot.py's Pilot (its PILOT_* settings)
 PADS = {}            # --pilot: probe state -> the pad its fight took (the playthrough grammar)
 APRESS = False       # --apress: each step is followed by an A press (0:2,100:4,0:20) -- what an object does on A (a jump
                      #   between the rocks of a waterfall) is found by the search; the step's frames grow by 26

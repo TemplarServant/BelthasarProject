@@ -4,7 +4,7 @@ r"""The race's stage, native (src/seq_race.c: CtRaceStageOpen + one CtRaceStageF
     python tools/race_stage_cmp.py [--drives idle,boost,steer,camera] [-v]
 
 From saves/race_re/race_user.state (A at f30: Johnny's `FF 00` at f66): the cartridge runs the drive under the rule
-(`--monitor` of the race's LOGIC bytes, on change); the port runs the native stage from the cartridge's own WRAM at the
+(`--monitor` of the race's logic bytes, on change); the port runs the native stage from the cartridge's own WRAM at the
 hand-off (f65) with the same pad, frame for frame (`ct.exe --racestage`). Both timelines are aligned on the race clock's
 first tick ($BC = 1), and every frame from there to the END is compared. Prints, per drive,
 `racestage: <drive> <n> frames compared, <d> differing, END cartridge f<c> port f<p> (<same|DIFFERENT>)`.

@@ -3,23 +3,23 @@ r"""The field's colours after the attract's 07D demo battle (the Frog Squash), p
 
     python tools/attract_07d_palette_cmp.py [port_frame [cartridge_frame]]
 
-port_frame (optional, default 7238) is the port's dump frame; the port's numbering moves with the attract's clock (the
-rule's migration: the 07D's return 59 frames earlier under the infinitely fast CPU). cartridge_frame (default 5112) counts
-from saves/attract_cena_inicial_rule.state.
+port_frame (default 7238) is the port's dump frame; it moves with the attract's clock. cartridge_frame (default 5112)
+counts from saves/attract_cena_inicial_rule.state.
 
-The user's F5 at loc 07D (2026-09-27): after Frog's tech the candles' glow turned GREEN. The glow is BG3 on the sub-screen
-added to BG1/BG2 (CGADSUB 03, TS 04), drawn in colours 24-31 -- the rows the battle's effect loads its own palette into
-(CD/101D, CD/1045) and CD/0453's CD/0E23 puts back from `$CCEE`. The demo's last action ends the battle, so that CD/0453
-is the END PATH's (CD/03B4 -> CD/03C6), which the port counted and never ran.
+The candles' glow is BG3 on the sub-screen added to BG1/BG2 (CGADSUB 03, TS 04), drawn in colours 24-31 -- the rows
+the battle's effect loads its own palette into (CD/101D, CD/1045) and CD/0453's CD/0E23 restores from `$CCEE`. The
+demo's last action ends the battle, so that CD/0453 is the end path's (CD/03B4 -> CD/03C6).
 
-Both sides at the same moment of the demo, back on the field: the cartridge under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM)
-from saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by a recipe: tools/fixtures/attract_rule.json;
-until 2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state at f5228) --peek to f5112, and the port's interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1)
-dumped at f7238 (CT_DUMPWRAM_AT, the F5's frame). Compared: the live page `$7E:2200`,
+Both sides at the same moment of the demo, back on the field: the cartridge under the rule (CT_ORACLE_LOGICAL /
+VIRTUAL_BEAM) from saves/attract_cena_inicial_rule.state (the attract from power-on + 2159, made by the recipe
+tools/fixtures/attract_rule.json) --peek to f5112, and the port's interactive attract (--scene 433,
+CT_AUDIO_LOCKSTEP=1) dumped at f7238 (CT_DUMPWRAM_AT). Compared on the live page `$7E:2200`:
   * the BG rows 0-7, colours 1-15 (index 0 of a 4bpp row is transparent and not drawn);
   * colours 24-31 on their own (the glow, BG3 palettes 6-7);
-  * the sprite colours the battle's staging leaves: OBJ rows 0 and 4 colours 0-3 (ShowDamage's C1/5B03-5B1D copy of the
-    boot's `$999F`), rows 2 and 3 colours 13-15 (CC/EF16-EF32).
+  * the sprite colours the battle's staging leaves: OBJ rows 0 and 4 colours 0-3 (ShowDamage's C1/5B03-5B1D copy of
+    the boot's `$999F`), rows 2 and 3 colours 13-15 (CC/EF16-EF32).
+
+Regression check: attract-07d-field-palette-after-demo-battle.
 """
 import os
 import subprocess

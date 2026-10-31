@@ -8,8 +8,8 @@ C0/9AD3's slope evaluation (C0/9AF8-9B40, disasm/notes/collision.md; src/collisi
   C0/9BF5  bit 7 = negate X after the shift (EOR #$FF); bits 0-6 = the LSR count (1..3)
   C0/9C0B  the 8-bit constant ADDed after the shift
   C0/9C21  the EOR sign (00 keep / FF invert)
-(HiROM file offsets 0x9BF5 / 0x9C0B / 0x9C21.) They were written into collision.c by hand; as the ROM's bytes they
-belong with the other generated tables, which a data-free build loads from the player's pack (docs/ROM.md).
+(HiROM file offsets 0x9BF5 / 0x9C0B / 0x9C21.) As ROM bytes they live with the other generated tables, which a
+data-free build loads from the player's pack (docs/ROM.md).
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))

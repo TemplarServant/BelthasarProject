@@ -7,9 +7,8 @@ r"""Regenerate src/xlat/*.c -- the five ROM programs that run translated -- from
 Each file is tools/gen/xlat.py over unique CPU traces (`ct.exe --cputrace`, CPUTRACE_UNIQUE=1) of the oracle -- the
 cartridge under the rule, CT_ORACLE_LOGICAL=1, as tools/recipes.py builds every state -- plus a WRAM image the static
 extension decodes the untaken side of a branch from (only code in WRAM reads it: the $C3 overlay at $7E:3000). The runs
-below are the ones each file was made with (the commits and notes that made them: disasm/notes/sequence_table.md 11.2
-and 11.2b, field_window_wipe.md 5 and 6, gate_warp_fd_family.md 9, battle_ai_interp.md "The exit's HDMA"), moved from
-captures onto recipe states where the demo reaches the same code from power-on:
+are described in disasm/notes/sequence_table.md 11.2 and 11.2b, field_window_wipe.md 5 and 6, gate_warp_fd_family.md 9
+and battle_ai_interp.md "The exit's HDMA"; they use recipe states where the demo reaches the same code from power-on:
 
   seq_c3    the race (C3 entry 0) and entry 3 from tools/recipes attract_race_handoff / attract_entry3_handoff (the
             attract under the rule, 5 and 17 frames before C3:0000), each plain and with an A press at three points
@@ -24,13 +23,12 @@ captures onto recipe states where the demo reaches the same code from power-on:
   hdma_fd   the HDMA table builder FD/C2C1-D52C, every line of the family any of three runs executed: the whole attract
             from power-on (recipe attract_boot: the builder with no message box, $0126 = 0), the GATO fight at the
             Millennial Fair (recipe gato_wait, waiting for GATO's first turn: the builder's $0126 = 2 pair FD/CFCF +
-            FD/D27E, 492 instructions no other run reaches; it stands in for saves/battle_re/gato_wait.state: the
-            same 613 instructions of the family, 16 of them met with other N/Z flags, and the same file) and scene 8's
-            Telepod cutscene (recipe field_telepod_gate, as gwarp_fd, with A every 30 frames: the $0126 = 1 pair
-            FD/C995 + FD/CD0C). The recipe stands in for saves/field_re/scene8_gate_cutscene.state, a real-time capture
-            whose main-loop park ($0152 = 0) lasted 38 frames where the rule's cartridge parks 39: the message window
-            opens on the other parity of the double-buffered builder ($53 bit 0), so FD/C99A runs and FD/CD11 does not
-            (the capture's run had the reverse). The code is the same; only those two lines' [static] marks moved.
+            FD/D27E, which no other run reaches; it stands in for saves/battle_re/gato_wait.state and gives the same
+            file) and scene 8's Telepod cutscene (recipe field_telepod_gate, as gwarp_fd, with A every 30 frames: the
+            $0126 = 1 pair FD/C995 + FD/CD0C). Note: against saves/field_re/scene8_gate_cutscene.state, a real-time
+            capture whose main-loop park ($0152 = 0) lasts one frame less, the message window opens on the other
+            parity of the double-buffered builder ($53 bit 0), so the recipe runs FD/C99A and not FD/CD11 (the capture
+            the reverse). The code is the same; only those two lines' [static] marks differ.
 
 A run that needs a capture which is not in the tree stops with the capture's name (tools/gen/manifest.json lists them
 as "needs"). The traces are kept in build/xlat/<name>/ and re-made every run (they are cheap next to the recipes, which
@@ -119,10 +117,9 @@ PROGRAMS = {
                          '--stop', 'C0:0000']},
     },
     'hdma_fd': {
-        # The file was first made from four runs: these three and enemy 6E's exit tail (gato_wait.state with
-        # GATO_6E_POKES, 898 frames of '100:8,0:890', then 17 traced). 6E's 313 lines of the family all sit inside the
-        # other three runs (measured 2026-10-10), so it is not run; the attract runs from power-on instead of
-        # saves/attract_cena_inicial.state (11200 frames from the opening scene): the same 1316 instructions.
+        # Enemy 6E's exit tail (gato_wait.state with GATO_6E_POKES, 898 frames of '100:8,0:890', then 17 traced)
+        # reaches no line of the family these three runs miss, so it is not run. The attract runs from power-on;
+        # saves/attract_cena_inicial.state (11200 frames from the opening scene) gives the same instructions.
         'states': {'boot': ('recipe', 'attract_boot'),
                    'gato': ('recipe', 'gato_wait'),
                    's8': ('recipe', 'field_telepod_gate')},

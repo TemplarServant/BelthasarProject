@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""gwarp_cmp.py -- the GATE WARP (op 0xFF 80, scene 8's Telepod), EVERY frame from its hand-off to its exit, the port's
+"""gwarp_cmp.py -- the gate warp (op 0xFF 80, scene 8's Telepod), every frame from its hand-off to its exit, the port's
 native program (src/seq_gwarp.c: its logic and its picture through src/seq_pic.c) against the cartridge.
 
     python tools/gwarp_cmp.py [--realtime]
 
   * the cartridge: saves/field_re/scene8_gate_warp_f2300.state (FD:FFF1 at its f17, `ct.exe --xlatentries`), `--peek
-    --frames 18+N` with PEEK_THUMBS_EVERY=1 -- UNDER THE RULE (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1, as the port's
+    --frames 18+N` with PEEK_THUMBS_EVERY=1 -- under the rule (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1, as the port's
     stage runs) unless --realtime.
   * the port: field-scene8-gate-warp-flow's drive (scene 8, the Telepod flags, the A mash through the cutscene), with
     CT_SHOTS_THUMBS over the warp; `gatewarp: the native program takes over at f<F>` locates it, `ran <N> frames`
@@ -13,14 +13,16 @@ native program (src/seq_gwarp.c: its logic and its picture through src/seq_pic.c
 Port frame F + k is compared with cartridge frame 18 + k, k = 0 .. N-1 (the jump is in f17's vblank, see H below):
 
   gwarp-cmp: port f<F>..f<F+N-1> vs cartridge +18..+<17+N> <mode> -> <n> / <N> frames identical
+
+Regression check: field-scene8-gate-warp-every-frame-vs-oracle.
 """
 import json, os, re, struct, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = 'saves/field_re/scene8_gate_warp_f2300.state'
 # FD:FFF1 runs on the state's f17 (`ct.exe --xlatentries`), in the vblank (v=239): that frame's picture is still the
-# host's, so the program's FIRST picture is the cartridge's f18 -- the same relation entry 3 has against its real-time
-# reference (saves/attract_entry3_handoff_f6750.state: C3:0000 f17, the port's first stage frame = +18, 88/88 frames).
+# host's, so the program's first picture is the cartridge's f18 -- the same relation entry 3 has against its real-time
+# reference (saves/attract_entry3_handoff_f6750.state: C3:0000 f17, the port's first stage frame = +18).
 H = 18
 REC = 6 + 128 * 112 * 3
 

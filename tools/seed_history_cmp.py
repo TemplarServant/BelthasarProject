@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """seed_history_cmp.py -- the attract's C3/02DD seed history, the port against the cartridge, call for call.
 
-CLAUDE.md's one exception (the zelda3 model) makes the seed routine C3/02DD deterministic on BOTH sides: its beam
+The zelda3 model (CLAUDE.md) makes the seed routine C3/02DD deterministic on both sides: its beam
 reads are the virtual beam (snes.c g_ctVirtualBeam) and the oracle runs in logical frames. Under that rule the two
 sides must hand the routine the same inputs at every call -- the seed folds A, the carry, X, $0008, $00F0/$F2/$F4 and
 the virtual $213C (= $0351) into $0386 -- so its whole history is comparable byte for byte:
 
   cartridge  CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1 ct.exe --hookpc C302DD --from boot --frames N
-             --hookwatch 7E0008  (and again with 7E0386): one line per frame, the byte AT EACH VISIT
+             --hookwatch 7E0008  (and again with 7E0386): one line per frame, the byte at each visit
   port       CT_XLAT_SEEDTRACE=1 Belthasar.exe --scene 433 --selftest --frames N: one `seedtrace` line per call
              (the field's wipe and the world's window object, native -- wipe.c, no frame number --, and the translated stage)
 

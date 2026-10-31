@@ -1,4 +1,4 @@
-# Download the SDL2 SOURCE (zlib licence, github.com/libsdl-org/SDL) into third_party/SDL2-src for the Android build
+# Download the SDL2 source (zlib licence, github.com/libsdl-org/SDL) into third_party/SDL2-src for the Android build
 # (docs/ANDROID.md): the APK builds libSDL2.so from it with the NDK, and takes SDL's Java glue (org.libsdl.app) from it.
 # The same version as the Windows dev libraries in third_party/SDL2 (tools/get_sdl2.ps1). Git-ignored. Run once:
 #   powershell -ExecutionPolicy Bypass -File tools\get_sdl2_src.ps1

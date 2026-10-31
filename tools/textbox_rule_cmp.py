@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The dialogue box against the cartridge UNDER THE RULE, every frame (ct-frame-alignment-p2: the logical oracle, the port's
+r"""The dialogue box against the cartridge under the rule, every frame (docs/TESTING.md: the logical oracle, the port's
 frame P against the cartridge's thumbnail P + 2, the port's key one frame after the cartridge's).
 
     python tools/textbox_rule_cmp.py
@@ -11,13 +11,13 @@ Two drives whose picture the oracle draws right (a seed made by the ROM's own lo
     BG3 (its sunbeams) on the map's own lines and the box's text colours are the battle's (CGRAM 9-11 = 1483 4A51 7FFF).
 Graded: the box's rows of every frame (thumbnails, a pixel differs when a channel differs by more than 24). What it pins:
 the text typed by the typewriter is on screen in the frame the NMI that ends it uploads it (C0/EB79), in BG3 palette 2,
-only on the lines HDMA channel 4 gives BG3 inside the box's lines. Two lines per drive -- the box's rows, then the whole picture (the cathedral's: Lucca, Crono and the Naga-ette under BG3's
-sunbeams, which the room's sub-screen OBJ adds to them -- CtFieldSceneMainScreen):
+only on the lines HDMA channel 4 gives BG3 inside the box's lines. Two lines per drive -- the box's rows, then the
+whole picture (the cathedral's: Lucca, Crono and the Naga-ette under BG3's sunbeams, which the room's sub-screen OBJ
+adds to them -- CtFieldSceneMainScreen):
     textbox-rule: <drive> <F> frames, <N> differ (<frames>)
     textbox-rule: <drive> whole picture <N> differ (<frames>)
 The window is drawn as the PPU draws it (field.c drawCtWindowPpu): BG1's pixels in CGRAM's colours and HDMA channel 6's
-per-line colour math (FD/D52D's records); the band's last line is the map's record, the window's raw colour. Every frame
-of both drives is equal (until 2026-10-11 a baked bitmap left f25/26, f55/56, f302/303, .. differing at a ramp's ends).
+per-line colour math (FD/D52D's records); the band's last line is the map's record, the window's raw colour.
 """
 import os
 import struct

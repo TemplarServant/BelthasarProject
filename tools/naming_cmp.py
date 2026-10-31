@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-r"""The NAMING screen (op C8 -> C2:8000 mode 3, screen $0D) against the cartridge, every frame of a drive.
+r"""The naming screen (op C8 -> C2/8000 mode 3, screen $0D) against the cartridge, every frame of a drive.
 
     python tools/naming_cmp.py <drive> [--peek F ...]
 
 Two kinds of drive.
 
-`type` -- the keyboard. The cartridge starts from saves/crononame.state -- the new game's Crono naming screen, settled,
-the naming screen's prompt box up (nothing on the screen moves once it is: the thumbnails are
-identical from its third frame on). The port starts the new game (`--newgame`), confirms the ATB selector with A at its
-f70 and joins the drive at frame BASE, where the prompt is up and static too: port frame BASE + P is the cartridge's thumbnail P + 2 (the menu's display alignment,
-memory ct-frame-alignment-p2), and a key the cartridge gets at frame t the port gets at BASE + t + 1 (the menu reads a
-press a frame after the pad latch).
+`type` -- the keyboard. The cartridge starts from saves/crononame.state: the new game's Crono naming screen, settled,
+its prompt box up (nothing on the screen moves once it is; the thumbnails are identical from its third frame on).
+The port starts the new game (`--newgame`), confirms the ATB selector with A at its f70 and joins the drive at frame
+BASE, where the prompt is up and static too: port frame BASE + P is the cartridge's thumbnail P + 2 (the menu's display
+alignment), and a key the cartridge gets at frame t the port gets at BASE + t + 1 (the menu reads a press a frame after
+the pad latch).
 
 `boot*` / `loadlist` -- from a cartridge's power-on (`ct.exe --fb` to f120 with CT_ORACLE_SRAM = a zeroed battery, or
 the drive's battery; Start at +13 and +115 -- the title takes the second) against the port's `--boot` (a fresh battery or
-a copy of the drive's; Start at 198, the power-on's title: boot_loader.md sec. 10). The two are aligned on the park of an op: `C8 C0` (the naming; boot, bootfast) or
-`C8 41` (the load shell; bootldr, loadlist) -- the cartridge's from `--monitor` ($0125 / $0117), the port's from
-CT_NAMETRACE -- with D = cartridge park - port park (until 2026-10-19 `- (port park + 1)`: the port started the C8 fade
-one frame after its park, a frame later than C0/0CCE does, and the extra frame hid that these drives press the port's
-keys unshifted -- the shop's park is the port's f10 and the cartridge's f11). Port frame p is the
+a copy of the drive's; Start at 198, the power-on's title: boot_loader.md sec. 10). The two are aligned on the park of
+an op, `C8 C0` (the naming; boot, bootfast) or `C8 41` (the load shell; bootldr, loadlist): the cartridge's from
+`--monitor` ($0125 / $0117), the port's from CT_NAMETRACE, with D = cartridge park - port park. Port frame p is the
 cartridge's frame p + D, its thumbnail p + D + 2, and a key the cartridge gets at t the port gets at t - D + 1. Presses
 are listed in the cartridge's frames (from the f120 state). The load list sits 7 lines off the thumbnail grid (its BG V
 scroll: tools/boot_loader_cmp.py grades its settled picture), so `loadlist` grades its timing, not its pixels.
@@ -55,21 +53,20 @@ DRIVES = {
               (0x20, 490), (0x100, 510), (0x1, 530), (0x8, 560)], 212, 640),
     # A on the selector's first frames: under the fade-in (P+2 .. P+9) and in mid-description (the kill of slot 2).
     'bootfast': ([(0x100, 256)], 212, 330),
-    # 'boot' aligned on the LOADER's park instead (C8 41 in loc 0's first visit): the blank cart's short circuit at C,
+    # 'boot' aligned on the loader's park instead (C8 41 in loc 0's first visit): the blank cart's short circuit at C,
     # the reboot, loc 0 again, the naming -- the black stretch between the two parks is what this one times.
     'bootldr': ([(0x20, 280), (0x10, 300), (0x20, 320), (0x100, 350), (0x100, 430)], 170, 460),
-    # A cart holding a save (saves/field_re/colsave3.srm): the LOAD list (screen $0E through the shell), Down, Up, A on
+    # A cart holding a save (saves/field_re/colsave3.srm): the load list (screen $0E through the shell), Down, Up, A on
     # slot 0 -> C2/8320's fade-out, C2/832F's reboot into the save, its location's fade-in.
     'loadlist': ([(0x20, 250), (0x10, 270), (0x100, 300)], 170, 420),
-    # MARLE'S NAMING at the fair (`C8 C1`: $299F | $71 non-zero, so C2/E1ED goes straight to C2/E201 -- no selector, no
+    # Marle's naming at the fair (`C8 C1`: $299F | $71 non-zero, so C2/E1ED goes straight to C2/E201 -- no selector, no
     # prompt, $68 0 -> 1, P = S0 + 4). Both sides mash the field A through the dialog until the op parks; the drive is
     # aligned on the parks (see run_park) and runs Right, Down, Start ("Marle" accepted) -> the close, the reload, the
-    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (the recipe twin since
-    # 2026-10-22: park f603 -- the capture's f572 plus the cartridge's 45-frame hold on the join's song load (`10 06`),
-    # a song the capture's sound processor already held, less the dialog's own pace from that state; the window opens
-    # at the fade's end, f619 = park + 16: under the fade the two dims of different field pictures differ). The
-    # window starts after C0/0CC7's fade (which dims two different field pictures: the dialogs do not keep step) and ends
-    # before the field's return (one frame early in the port: the reload after the menu, an open item).
+    # field's fade-in. Frames are the cartridge's from saves/field_re/s439_marle_choice_lake.state (the recipe twin; its
+    # park is f603, which includes the cartridge's 45-frame hold on the join's song load `10 06`). The window opens at
+    # the end of C0/0CC7's fade, f619 = park + 16 (under the fade the two sides dim different field pictures: the
+    # dialogs do not keep step), and ends before the field's return (one frame early in the port: the reload after the
+    # menu, an open item).
     'marle': ([(0x80, 661), (0x20, 681), (0x8, 711)], 619, 753),
 }
 # name: (cartridge state, port WRAM seed, port scene, the last frame the cartridge's dialog is mashed on)
@@ -111,9 +108,9 @@ def run(name, peeks):
                     '--frames', str(BASE + end), '--walkscript', ','.join(walk)], cwd=ROOT, env=penv,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     O, P = M.load_thumbs(ot), M.load_thumbs(pt)
-    # THE NAMING SCREEN SITS AT THE CARTRIDGE'S OWN LINES: the port's line y is the oracle frame's line y (MEASURED: 0 px
-    # at offset 0, 22549 at 1, 32557 at the other menus' 8), so the oracle's thumbnail -- made past the 8-line head --
-    # is the port's four thumbnail rows lower: rows 0-107 of the one against rows 4-111 of the other
+    # The naming screen sits at the cartridge's own lines: the port's line y is the oracle frame's line y (offset 0
+    # matches; 1 and the other menus' 8 do not), so the oracle's thumbnail, made past the 8-line head, is the port's
+    # four thumbnail rows lower: rows 0-107 of the one against rows 4-111 of the other
     report(name, f0, f1, lambda f: O.get(f + M.SHIFT), lambda f: P.get(BASE + f))
     for f in peeks:
         of = os.path.join(out, '_o_%d.raw' % f)
@@ -156,8 +153,8 @@ def peek_cmp(out, f, of, pf):
 
 def boot_state(d, battery=None):
     """The cartridge at f120 from power-on with `battery` (None = a zeroed one), made in the drive's directory `d` on
-    every run (~0.5 s): a state kept from an older oracle replays the rule that made it (the 2026-09-30 note in
-    field_window_wipe.md, "The virtual beam"), and a shared one would be rebuilt under a drive the suite runs in parallel."""
+    every run (~0.5 s): a state kept from an older oracle replays the rule that made it (field_window_wipe.md, "The
+    virtual beam"), and a shared one would be rebuilt under a drive the suite runs in parallel."""
     srm = os.path.join(d, 'blank.srm')
     open(srm, 'wb').write(bytes(8192))
     tag = os.path.splitext(os.path.basename(battery))[0] if battery else 'boot'
@@ -253,10 +250,9 @@ def mash(until, step=10, first=10):
 def run_park(name, peeks):
     """A naming opened from a live scene: the dialog before it is mashed (field A every 10 frames) on both sides until
     op C8 parks, and the two are aligned on their parks -- the cartridge's is the first frame `--monitor` shows $0125 >= C0
-    with $0117 bit 6, the port's the CT_NAMETRACE park line. The port's field VM runs a frame ahead of its menu pictures
-    (the shop's park is its f10 against the cartridge's f11, and its fade grades 0 px that way), so port frame p is the
-    cartridge's p + D with D = cartridge park - (port park + 1); a menu key the cartridge gets at t the port gets at
-    t - D + 1. The frames before the park are not compared (the dialogs need not keep step)."""
+    with $0117 bit 6, the port's the CT_NAMETRACE park line. Port frame p is the cartridge's p + D with
+    D = cartridge park - port park; a menu key the cartridge gets at t the port gets at t - D + 1. The frames before
+    the park are not compared (the dialogs need not keep step)."""
     presses, f0, f1 = DRIVES[name]
     ost, seed, scene, mash_end = PARK[name]
     end = f1 + 10

@@ -18,9 +18,8 @@ panels and the ribbon box. Everything here is read off the oracle's VRAM/CGRAM, 
   ctMenuChromeExchTM     screen $07, the party exchange (menu mode 5): the field's Y with the storyline at 0x49 and a
                          reserve member -- `7F0000=49, 2982=02, 2983=03, 0126=00` poked on GATO's field  [gato_wait]
 
-Each tilemap is the visible 32x28 region at word 0x6000, verbatim. The captures were first taken from the owner's
-states (saves/menu_open_gato2, grupo_3_mapa, ow_w0, eq_spare; one-off scripts, then pasted); this script makes the whole
-file in one run and the recipes give the same bytes.
+Each tilemap is the visible 32x28 region at word 0x6000, verbatim. The recipes and the owner's states
+(saves/menu_open_gato2, grupo_3_mapa, ow_w0, eq_spare) give the same bytes.
 
     python tools/gen/menu_chrome.py                    the recipes, under the rule
     python tools/gen/menu_chrome.py --private [--norule]   the owner's four captures (taken without the rule)

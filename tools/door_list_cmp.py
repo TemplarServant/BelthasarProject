@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The OPENED-DOOR LIST at $7F:1CC8 and the door cells it re-opens, frame by frame, port against the LOGICAL oracle.
+r"""The opened-door list at $7F:1CC8 and the door cells it re-opens, frame by frame, port against the logical oracle.
 
     python tools/door_list_cmp.py [reload|walk|load ...]
 
@@ -11,7 +11,7 @@ $7F) and compares, every frame, the list and the door's six cells:
 
   reload  party3_field as captured: its right-hand door ($2935, the $FA arm) is open and listed. X at f4, B at f60: the
           reload (C0/01A5) re-decompresses the map with the door closed and C0/28E1 opens it again.
-  walk    the same field with that door CLOSED and the list EMPTY (the cells the reload's own decompress writes, measured
+  walk    the same field with that door closed and the list empty (the cells the reload's own decompress writes, measured
           F2F4/F6F8/FAFC, and C0/28AA's $8080): run right and up into the door -- the request appends $2935 and the handler
           bumps the block -- then X at f130, B at f190.
   load    the scene-468 stairs with $2935 poked into the list: the location loads (the stairs reload 468, then 07A) reset it.
@@ -24,8 +24,8 @@ Per drive:
   door-list: <drive> port <C0/28C0 appends> append(s), C0/28E1 at <frame site reopened ...>
   door-list: <drive> cartridge C0/28C0 <n> visit(s), C0/28E1 <n> visit(s)
 The runs that differ are the port's frame model, named in the check's notes (the menu's own use of $7E:3000, the reload's
-and the load's NMI-off frames, the door request's two-frame lead); a frame the port gets WRONG after the reload or the
-load, or a list the port keeps, shows up as a new run.
+and the load's NMI-off frames, the door request's two-frame lead); a frame the port gets wrong after the reload or the
+load, or a list the port keeps, shows up as a new run. Regression check: field-door-list-vs-logical-oracle.
 """
 import os
 import re

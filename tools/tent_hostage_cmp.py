@@ -3,19 +3,17 @@ r"""The tent of horrors' 80-point game (loc 1B2, the hostage over the flames), p
 
     python tools/tent_hostage_cmp.py [lose|switch ...]          (no argument: both)
 
-The user, 2026-10-08: "the tent of horrors minigame for 80 silver points is bugged when you lose: marle as the hostage
-goes down past the fire, and the sparkle that makes her rise when pressed is not appearing". Bekkler's choice 2 (obj11 fn1, 05BB)
-calls the hostage's fn7 (`05 02 37`, the PCs' 00C3), whose loop is
+Bekkler's choice 2 (obj11 fn1, 05BB) calls the hostage's fn7 (`05 02 37`, the PCs' 00C3), whose loop is
 
     00D3  13 12 20 01 01 49   IF local[12] (16-bit) != 0120 ... else -> 0121 (the flames, then CHANGELOC to the fair)
     00D9  9C 40 01            one vector step down
-    00DC  72 12               local[12] += 1, SIXTEEN-bit (C0/6C85: the REP #20 is still on when 6C92-6C97 run)
+    00DC  72 12               local[12] += 1, 16-bit (C0/6C85: the REP #20 is still on when 6C92-6C97 run)
     00DE  13 12 B2 00 00 05   IF local[12] == 00B2: `E8 0B` + SHOW obj8 -- the blue switch
     00E8  12 19 07 00 31      IF local[19] == 7 (the monsters back in the cage): the win
 
-and the switch (obj8 fn1, 01C3) calls the hostage's fn8 (`9C C0 70` up, `60 70 00 12` local[12] -= 0070). The live VM had
-no arm for op 0x72 (nor 0x76): the counter never moved, so the switch never appeared and the flames never came -- the
-hostage sank forever. (move.c CtVmLocalIncFamily, the body --sweepops grades, now runs in ct_vm.c too.)
+and the switch (obj8 fn1, 01C3) calls the hostage's fn8 (`9C C0 70` up, `60 70 00 12` local[12] -= 0070). Without op
+0x72 (and 0x76) the counter never moves: the switch never appears, the flames never come and the hostage sinks for
+good. (move.c CtVmLocalIncFamily, the body --sweepops grades, also runs in ct_vm.c.)
 
 The cartridge: saves/field_re/s1b2_hostage_lake.state (Crono + Marle in the tent, 96 silver points poked into $7F021A,
 Bekkler's 80-point game chosen; his text 82 is on screen). Two drives, A on f0/f302/f424/f546 (2 frames each) to close
@@ -27,8 +25,8 @@ the rules:
   escape -- from f780 Crono pushes the three monsters back (A on obj13, obj12, obj14 -- their fn1 `02 1E 35` runs the
             monster's fn5), walks to the left wall and touches the switch (obj8 fn1 at f1097): the catch moves to f1260
             and fn8 RETURNs at f1215 with $011F = 1. The ROM's RETURN (C0/5F74) resumes fn7 and the hanging pose `AA 09`
-            holds; the port's RETURN-time reclaim put her on anim 0 (user F5 2026-10-09, "she changes a little after
-            rising"). The obj8 IP is not graded here: the touch lands its call on the frame the cartridge mirrors the
+            holds (a reclaim at RETURN time would put her on anim 0). The obj8 IP is not graded here: the touch lands
+            its call on the frame the cartridge mirrors the
             function's first byte (01C3), the $1180 mirror below.
 The port runs the same WRAM (--loadwram) and SPC (CT_AUDIO_SEEDSTATE), each key one frame after the cartridge's,
 CT_FIELD_MEMMON. Every region's change sequence is compared up to the cartridge's location change (or its last frame):

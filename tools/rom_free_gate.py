@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-r"""The ROM-free runtime's gate (package H): Belthasar with NO dump plays the attract exactly as with one.
+r"""The ROM-free runtime's gate (package H): Belthasar with no dump plays the attract as it does with one.
 
     python tools/rom_free_gate.py [frames] [every]      (default 11200 frames, a thumbnail every 2nd)
 
 Runs Belthasar on the attract (`--scene 433`, CT_AUDIO_LOCKSTEP=1) twice from ct_assets.dat: once as it is (the dump
 beside it, every system reading the container anyway) and once with CT_NO_ROM=1 -- no dump at all: the engine takes the
-EMPTY image (src/battle.c CtBattleUseEmptyRom), zeros it must never read, guarded by CT_ROM_CENSUS. Both runs record a
+empty image (src/battle.c CtBattleUseEmptyRom), zeros it must never read, guarded by CT_ROM_CENSUS. Both runs record a
 128x112 thumbnail of every `every`-th presented frame and the audio output; they must be equal byte for byte, and the
 empty image must have had no page read:
 

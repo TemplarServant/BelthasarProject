@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""ANY BATTLE, port against the rule's cartridge: every enemy formation the ROM stages, any party, any bag.
+r"""Any battle, port against the rule's cartridge: every enemy formation the ROM stages, any party, any bag.
 
     python tools/battle_sim.py catalog [enemy]               # every formation in the scene scripts (enemy: hex id or name)
     python tools/battle_sim.py fight <enemies> [options]     # one fight, both sides, graded
@@ -25,11 +25,11 @@ r"""ANY BATTLE, port against the rule's cartridge: every enemy formation the ROM
   frames=N         run length (default 1500)
   mon=CCEA:1,...   more WRAM regions ($7E addr:len) graded with the rest (the cartridge's --monitor takes 32 in all)
 
-WHY A NEW STAGING. CT has no formation table: the fight takes the enemy OBJECTS on screen (C0/0557 reads `$1101,Y`),
+Why a new staging: CT has no formation table: the fight takes the enemy objects on screen (C0/0557 reads `$1101,Y`),
 and op 0x83 (C0/46DF) is what makes an object an enemy -- its id, its slot (`$0D00` from operand 2), its mode (operand 2
 bit 7 -> mode 6 -> record +7 bit 6, the bit CF/FE4B tests before the death's palette copy), and its sprite and palette
 through the field's allocators. battle_ab's `enemies` pokes only `$1111` (GATO's id): the fight then runs that enemy's
-stats and AI but on GATO's field graphics and palette (measured 2026-10-15: a Blue Shield in GATO's red and white). Here the field's
+stats and AI but on GATO's field graphics and palette (a Blue Shield in GATO's red and white). Here the field's
 own op 0x83 runs on both sides: the bytes `83 id op2 / 8B x y / 89 20 / AA 03 / B2` are written into the script image
 at $7F:3000+ (the ROM's runner reads ops from $7F:2001 + IP; the port's seed takes the image from the WRAM,
 ct_vm.c CtSceneSeedFromWram) and an object's IP `$1180,X` is pointed there. The objects are gato_wait's five non-party
@@ -38,7 +38,7 @@ PC objects 3-7 (parked on B0, `$1100` = 80 -> 00 so the runner visits them, C0/5
 C0/052E itself takes six candidates). The fight then starts from the A that closes TABAN's box.
 
 The catalog reads every scene script's object fn0 for `83 id op2` and the coordinate op after it (8B tiles / 8D
-pixels): a FORMATION is the enemies of one scene whose places chain within 7 tiles of each other, fit one screen (16 x 14 tiles) and
+pixels): a formation is the enemies of one scene whose places chain within 7 tiles of each other, fit one screen (16 x 14 tiles) and
 whose slots differ -- the objects a fight at that spot would stage. A layout is kept but recentred on GATO's tile.
 
 Reports per fight, both sides from the frame both have staged ($AF02):
@@ -268,7 +268,7 @@ def staged_at(rows, total):
 
 
 def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
-    """Both sides from the frame both have staged: the value sequences compared WITHOUT their frames (the first
+    """Both sides from the frame both have staged: the value sequences compared without their frames (the first
     field whose sequence differs), then the frame offsets of the matching changes, then the picture frame by frame."""
     lines = []
     sc0, sp0 = staged_at(rows_c, total), staged_at(rows_p, total)

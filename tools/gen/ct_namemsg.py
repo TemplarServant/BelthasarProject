@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """saves/ct_namemsg.bin -- the "Enter a name, then push the Start Button." prompt box (ct_assets.dat T_NAMEMSG).
 
-The FIRST naming screen (new game, Crono) shows this help message ($FF:CF49, the index-0 string of the help table
+The first naming screen (new game, Crono) shows this help message ($FF:CF49, the index-0 string of the help table
 $FF:CF3B) in a textbox over the keyboard: BG2 (a third window) + BG3 (the dialogue text), composited by the PPU. The
-box is cropped byte-exact from the oracle: the new game's Crono naming screen advanced 20 frames to full brightness,
-the rect (16,104)-(239,151).
+box is cropped from the oracle: the new game's Crono naming screen advanced 20 frames to full brightness, the rect
+(16,104)-(239,151).
 
-The capture: recipe name_crono (atb_vram's next A takes Active and opens Crono's naming screen). Port of
-tools/gen_namemsg.py (which read the owner's saves/crononame.state).
+The capture: recipe name_crono (atb_vram's next A takes Active and opens Crono's naming screen; it stands in for
+saves/crononame.state).
 
     python tools/gen/ct_namemsg.py [--state S] [--out saves/ct_namemsg.bin]
 

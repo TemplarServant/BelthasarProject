@@ -1,8 +1,5 @@
-# Bake the ITEM/EQUIPMENT DESCRIPTION strings into src/data/menu_desc.h.
-#
-# THE POINT: the port used to GENERATE these lines -- menu.c's mItemDesc built "Restores %d HP" out
-# of the baked effect record, and CtMenuEquipDesc built "Power +2" out of a bonus mask, with a
-# comment claiming the ROM has no stored string. It has one. C2/F2F3, the description stager, does:
+# Bake the item/equipment description strings into src/data/menu_desc.h. The ROM stores them;
+# C2/F2F3, the description stager, does:
 #
 #   2F308  STA $020C          ; the item id
 #   2F317  LDX #2EB1 / STX $020D
@@ -11,9 +8,9 @@
 #
 # so $CC:2EB1 is a table of 16-bit LOCAL pointers into bank $CC, indexed by item id.
 #
-# THE ENTRY COUNT IS NOT ASSUMED, IT IS READ OUT OF THE DATA: the smallest pointer in the table is
-# $3095, and 0x2EB1 + 242*2 == 0x3095 exactly -- i.e. the strings start immediately after the table,
-# so the table is exactly 242 entries (ids $00..$F1, which is also the item id space).
+# The entry count comes from the data: the smallest pointer in the table is $3095 and
+# 0x2EB1 + 242*2 == 0x3095, so the strings start right after the table and it has 242 entries
+# (ids $00..$F1, the item id space).
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped

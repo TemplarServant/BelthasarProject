@@ -4,9 +4,9 @@ r"""The ROM-free runtime's scoreboard: how many ROM pages the whole attract stil
     python tools/rom_census_attract.py [frames]        (default 11200: the whole demo, title to title)
 
 Runs Belthasar on the attract (`--scene 433`, CT_AUDIO_LOCKSTEP=1) with CT_ROM_CENSUS (src/rom_census.h) and prints
-tools/rom_census.py's summary: the pages read, per bank and per source file. The goal (memory rom-free-runtime-goal) is
-0; each work package of the plan moves its system's reads into ct_assets.dat and this count goes DOWN -- a re-pin that
-raises it is a regression, never a re-pin.
+tools/rom_census.py's summary: the pages read, per bank and per source file. The goal is 0 (docs/ROM.md, "The ROM-free
+runtime"); each work package moves its system's reads into ct_assets.dat, so a change that raises the count is a
+regression.
 """
 import os
 import subprocess

@@ -1,4 +1,4 @@
-r"""FD/C2C1, the field's HDMA table builder: the native builder (src/hdma_table.c) against the CARTRIDGE, call for call.
+r"""FD/C2C1, the field's HDMA table builder: the native builder (src/hdma_table.c) against the cartridge, call for call.
 
     python tools/hdma_build_cmp.py [--keep] [drive ...]
 
@@ -7,18 +7,20 @@ every call's first instruction and at its RTL (FD:C2D2 set B / FD:C2DE set A; a 
 Each entry image goes through `ct.exe --hdmabuild` (the native builder every caller runs) and is graded against the
 cartridge's exit image:
 
-  * EXACT: all 128 KB equal outside the stack page $0600-$06FF (the routine's JSR / PHB frames land wherever its caller's
+  * exact: all 128 KB equal outside the stack page $0600-$06FF (the routine's JSR / PHB frames land wherever its caller's
     S was; no caller reads them back);
-  * WRITTEN: most calls rewrite tables that are already there, so an exact image alone would pass a builder that writes
-    nothing. The entry image's tables and data ($7F:0F80-$1E26, the DP bytes $01D9-$01EF -- not $1DFB, the wave's step, which the call reads) are overwritten with
-    two poisons ($5A, $A5) and built again: a byte both poisoned builds agree on is one the builder WROTE, and it must be
-    the cartridge's exit byte.
+  * written: most calls rewrite tables that are already there, so an exact image alone would pass a builder that writes
+    nothing. The entry image's tables and data ($7F:0F80-$1E26, the DP bytes $01D9-$01EF -- not $1DFB, the wave's step,
+    which the call reads) are overwritten with two poisons ($5A, $A5) and built again: a byte both poisoned builds agree
+    on is one the builder wrote, and it must be the cartridge's exit byte.
 
 One line a drive, then the census of what the calls exercised (both sets, the three `$0126` modes, `$0127`, the window
 wave `$1DF9` / `$1DFD`, the battle exit's `$53` bit 7, `$7F:0351`'s parity):
     hdma-build: <drive> <N> calls (<k> interrupted, set aside) -> exact <N>/<N>, written <W> bytes, <D> wrong
     hdma-build: census set A modes 0/1/2 a/b/c, set B modes 0/1/2 d/e/f, $0127 <k> values (<j> <= 0A), wave ch3 <k>
                 (under a box <k>) ch2 <k> tail <k>, $53 bit 7 <k>, $0351 odd <k>
+
+Regression check: field-hdma-builder-native-vs-cartridge-census.
 """
 import os
 import subprocess
@@ -35,10 +37,10 @@ DRIVES = [
     ('tent-keeper', 'saves/field_re/tent_keeper_lake.state', '0:11,100:1,0:160', 170, {}),
     # the Manoria cathedral after the Naga-ette fight: a box closed by the press
     ('naga', 'saves/field_re/m81_naga_after_fight_lake.state', '0:300,100:1,0:460', 760, {'CT_HOOK_DUMPCALLS_FROM': '250'}),
-    # Mom's box flipped to the TOP by Y (C0/1985 `EOR #03`: mode 1), then closed by A -- the top window's ramp
+    # Mom's box flipped to the top by Y (C0/1985 `EOR #03`: mode 1), then closed by A -- the top window's ramp
     ('top-box', 'saves/intro_box.state', '0:10,2:1,0:30,100:1,0:80', 125, {}),
     # the attract: loc 16E's window wipe (`FF 94`) and the field around it (the attract from power-on + 2159 under the rule,
-    # made by a recipe -- tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture attract_cena_inicial.state)
+    # made by a recipe -- tools/fixtures/attract_rule.json)
     ('attract', 'saves/attract_cena_inicial_rule.state', '0:900', 900, {'CT_HOOK_DUMPCALLS_FROM': '540'}),
     # the attract's 07D demo battle: the exit tail's C0/0AFF builds twice a frame with `$53` bit 7 (FD:C401 / C95D)
     ('demo-battle', 'saves/attract_07d_battle_f4540.state', '0:660', 660, {'CT_HOOK_DUMPCALLS_FROM': '600'}),

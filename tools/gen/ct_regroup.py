@@ -1,23 +1,23 @@
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
-# Extract the ROM battle-RETURN regroup script templates into a baked C header, so the runtime engine
-# can materialize them in its VM script space (the analog of $7F3700) with no .sfc dependency.
+# The ROM's battle-return regroup script templates, baked into a C header so the engine can place them in its
+# VM script space (the analog of $7F3700) without the ROM.
 #
-# Provenance (disasm/notes/battle_forest_return.md ADDENDUM 2026-07-12, AD.3a). The installer C0/5CEC
+# disasm/notes/battle_forest_return.md AD.3a. The installer C0/5CEC
 # (REP #20; 5x LDX #src / LDY #dst / PHB / LDA #len-1 / MVN $7F,$C0 / PLB) copies:
 #     C0/5D37 -> $7F3700 (0x20)  the RETURN/regroup block (unique)      -- used by the post-victory resume
-#     C0/5D50 -> $7F3720/40/60 (0x20 x3)  the op-0xD9 walk block        -- battle-ENTRY party walk (op 0xD9)
+#     C0/5D50 -> $7F3720/40/60 (0x20 x3)  the op-0xD9 walk block        -- battle-entry party walk (op 0xD9)
 #     C0/5D68 -> $7F3780 (6)     tail: 96 00 00 FF 9D 00
-# The post-victory return (C0/0330 -> C0/5B1F) VM-CALLs the RETURN block on each follower PC; its ops
-# (E3/89/0D/0E/AE/95/71/12 + the 11 jumpback) all already exist in ct_vm.c. loc[0xFF] (= $7F03FE) is the
+# The post-victory return (C0/0330 -> C0/5B1F) VM-calls the RETURN block on each follower PC; its ops
+# (E3/89/0D/0E/AE/95/71/12 + the 11 jumpback) are all in ct_vm.c. loc[0xFF] (= $7F03FE) is the
 # arrival barrier the 12-op polls; the resume seeds it 3-nFollowers so only the last arriver passes E3 01.
 #
 # RETURN block decode ($7F3700):
 #   E3 00 | 89 40 | 0D 00 | 0E 02 | AE | 95 00 | 0E 00 | 71 FF | 12 FF 03 04 04 | E3 01 | 00 | 11 09
-#   lock ctl | speed | coll-gates off | snap ON | autoanime-reset | WALK to PC0 (the LEAD, blocking) |
-#   snap OFF | loc[0xFF]++ | IF loc[0xFF] >= 3 fall-through else JUMP fwd 4 to `11 09` (jump BACK to the IF) |
-#   RESTORE ctl ($011F=1) | RETURN(pop) | (the 11-jumpback target of the 12)
+#   lock ctl | speed | coll-gates off | snap on | autoanime-reset | walk to PC0 (the lead, blocking) |
+#   snap off | loc[0xFF]++ | if loc[0xFF] >= 3 fall through, else jump fwd 4 to `11 09` (jump back to the if) |
+#   restore ctl ($011F=1) | return (pop) | (the 11-jumpback target of the 12)
 ROM = _romlib.load("Chrono_Trigger_USA_SNES.sfc")
 
 def region(off, n):
@@ -46,8 +46,8 @@ with open("src/data/ct_regroup.h", "w") as f:
     f.write("// barrier) is seeded 3-nFollowers so only the last arriver passes the `E3 01` control-restore.\n")
     f.write("//   RETURN block: E3 00|89 40|0D 00|0E 02|AE|95 00|0E 00|71 FF|12 FF 03 04 04|E3 01|00|11 09\n")
     f.write("#ifndef CT_REGROUP_H\n#define CT_REGROUP_H\n#include <stdint.h>\n")
-    emit(f, "ctRegroupReturn", RET)   # $7F3700, the post-victory follower regroup (the STEP-1 return)
-    emit(f, "ctRegroupD9",     D9)    # $7F3720/40/60, op-0xD9 battle-ENTRY party walk (documented; unused here)
+    emit(f, "ctRegroupReturn", RET)   # $7F3700, the post-victory follower regroup
+    emit(f, "ctRegroupD9",     D9)    # $7F3720/40/60, op-0xD9 battle-entry party walk (documented; unused here)
     emit(f, "ctRegroupTail",   TAIL)  # $7F3780 tail (documented; unused here)
     f.write("#endif\n")
 

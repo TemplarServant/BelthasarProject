@@ -5,7 +5,7 @@ r"""Which ROM pages Belthasar still reads at run time, and which code reads them
 
 The files are CT_ROM_CENSUS outputs (src/rom_census.h: `PAGE IMAGE CODEADDR` lines, one per 4 KB page a run read first).
 The union is printed per bank (C0..FF), per source file (the code address resolved through the MSVC link map) and per
-work package of the plan (memory rom-free-runtime-goal):
+work package of the ROM-free plan (docs/ROM.md, "The ROM-free runtime"):
 
     rom-census: <n> of 1024 pages read (<KB> KB) over <k> runs
     rom-census: bank C0 <n> pages ...
@@ -23,7 +23,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PACKAGE = {                                   # the plan's work packages, by the source that reads (rom-free-runtime-goal)
+PACKAGE = {                                   # the ROM-free plan's work packages, by the source that reads
     'battle.c': 'G battle', 'move.c': 'D sprites', 'oam.c': 'D sprites', 'objslot.c': 'P1 small tables',
     'ct_vm.c': 'D sprites / P1', 'lz.c': 'A scene load', 'field_cost.c': 'A scene load', 'field.c': 'field (A/E/P1)',
     'menu.c': 'E text+menus', 'menu_cost.c': 'E text+menus', 'vwf.c': 'E text+menus', 'world.c': 'F overworld',

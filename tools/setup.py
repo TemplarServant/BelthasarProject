@@ -17,7 +17,7 @@ file the build needs that comes from the game (docs/ROM.md):
   5. the other generators write src/data/*.h and src/xlat/*.c;
   6. tools/gen/pack_tables.py packs the tables of src/data/*.h into ct_tables.dat, the file a data-free Belthasar
      (CT_DATAFREE) loads them from instead of compiling them in;
-  7. OPTIONAL, a mod's data: if a Steam copy of Chrono Trigger is installed (or --steam names its folder),
+  7. optional, a mod's data: if a Steam copy of Chrono Trigger is installed (or --steam names its folder),
      tools/steam_wide.py reads its widescreen margins into ct_wide.dat (the option "Steam margins"); without one the
      step says so and the option stays off. --no-steam skips it;
   8. everything is built (tools/build.py).

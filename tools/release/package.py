@@ -7,9 +7,9 @@ r"""Build a player's release of Belthasar from the public tree: no byte of the g
 What a player downloads (docs/RELEASE.md) is a folder -- zipped on Windows, a .tar.gz on Linux:
 
     Belthasar-<version>-<os>-<arch>/
-        Belthasar[.exe]           the game, built DATA-FREE (CT_DATAFREE=1: no generated table compiled in)
+        Belthasar[.exe]           the game, built data-free (CT_DATAFREE=1: no generated table compiled in)
         SDL2.dll                  (Windows) the SDL2 runtime the build links
-        setup/ct[.exe]            the oracle the setup runs, built from the SHAPES (tools/gen/shapes.py: no data)
+        setup/ct[.exe]            the oracle the setup runs, built from the shapes (tools/gen/shapes.py: no data)
         setup/kit/                the public tree itself (git archive HEAD): tools/setup.py and what it runs
         setup/python/             a Python runtime (the one running this script, pruned), unless --no-python
         LICENSE, CREDITS.md, README.txt

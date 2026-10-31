@@ -1,23 +1,19 @@
-"""SNES OAM decode (canonical blob: 512-byte low table + 32-byte high table).
+"""SNES OAM decode (the 544-byte blob: 512-byte low table + 32-byte high table).
 
 Sources of the blob:
   - snes9x states carry it as the PPU block's OAMData field (ctlib.s9x.oam):
-    exactly 544 bytes
+    544 bytes
   - ct.exe --peek <out>.oam sidecars (src/main.c): fwrite(ppu->oam, 2, 512)
-    -- 1024 bytes, of which only the FIRST 512 are the low table (LakeSnes
+    -- 1024 bytes, of which only the first 512 are the low table (LakeSnes
     stores OAM as 256 uint16 words; the write over-reads the struct) --
     then the 32-byte high table at offset 1024, then 512 bytes of CGRAM
     (BGR555 words) at 1056. Total 1568. The build/ppuregs.oam variant is the
     same without CGRAM (1056). load() normalizes all of these to 544 bytes.
 
-Decode lifted from the most complete of the six legacy copies,
-tools/_oambird.py: signed 9-bit X (X -= 512 when >= 256), 9-bit tile
-(attr bit0 is tile bit8), prio=(attr>>4)&3, pal=(attr>>1)&7, v/h flips.
-
-FIXED vs _oambird: the size column. _oambird printed '%dx' % (8*(size+1)+8)
-(= 16/24, nonsense); the high-table size bit only selects small/large --
-the actual pixel dimensions depend on OBSEL ($2101) size-select, which is
-not in this blob. We report the raw bit honestly as size=0 (small) / 1 (large).
+Decode: signed 9-bit X (X -= 512 when >= 256), 9-bit tile (attr bit0 is
+tile bit8), prio=(attr>>4)&3, pal=(attr>>1)&7, v/h flips. `size` is the raw
+high-table bit (0 small, 1 large); the pixel dimensions depend on OBSEL
+($2101), which is not in this blob.
 
 API:
   decode(data: bytes) -> list of 128 dicts

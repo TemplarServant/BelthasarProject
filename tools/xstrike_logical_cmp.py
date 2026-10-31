@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-r"""The attract's X-Strike (loc 0AD's demo battle) against the LOGICAL-FRAME oracle -- the zelda3 model's reference
-(CLAUDE.md, the ONE exception; disasm/notes/oracle_logical_frames.md).
+r"""The attract's X-Strike (loc 0AD's demo battle) against the logical-frame oracle -- the zelda3 model's reference
+(CLAUDE.md; disasm/notes/oracle_logical_frames.md).
 
     python tools/xstrike_logical_cmp.py
 
@@ -8,14 +8,14 @@ The cartridge: saves/attract_demo_battle_f1850.state, `ct.exe --monitor 7E5DBD:1
 once with CT_ORACLE_LOGICAL=1 and once in real time. The port: the attract from scene 433 (`--selftest --frames 3832`,
 CT_BATTLE_TRACE + CT_BATTLE_ASCTRACE + CT_BATTLE_ASCIP), its tech `sel=42` action. Three numbers per side:
 
-  * the PRE-ROLL: the frame `$A013` turns 1 (the port's `pc-act-tech`) to the frame the script's first cursor moves
+  * the pre-roll: the frame `$A013` turns 1 (the port's `pc-act-tech`) to the frame the script's first cursor moves
     (track 0 off its header, `$5DBD` on the cartridge, the first `ascip` line on the port);
-  * the VICTIM TRACK t3 (CE/3D08 and its super CE/D428): each of its cursor steps as an op-frame (frames since that
-    first cursor move), paired in order -- the track the lag frames used to bend (the real cartridge's body of C1/40B0
-    misses vsync on f122/127/134/158/162...);
-  * the SPAN, `$A013` 1 -> 0 (the port's act-end `span=`).
+  * the victim track t3 (CE/3D08 and its super CE/D428): each of its cursor steps as an op-frame (frames since that
+    first cursor move), paired in order -- the track lag frames bend on the real-time cartridge (C1/40B0's body
+    misses vsync there);
+  * the span, `$A013` 1 -> 0 (the port's act-end `span=`).
 
-Tracks 0 and 1 are not graded here: their cursors show the ROM's `ip` parked ON a waiting op where the port shows it
+Tracks 0 and 1 are not graded here: their cursors show the ROM's `ip` parked on a waiting op where the port shows it
 past it, so the two sides print different addresses on the same frames (a representation, not a timing).
 """
 import os

@@ -5,9 +5,9 @@ r"""Crono attacking an enemy whose counter takes no action: the RNG cursor and t
 
 A PC command whose first victim is an enemy arms the counter (C1/BB2D / BC4A / C011: `$B2C0 = 1`); at the action's close
 C1/864B runs the counter loop C1/8671 (block 2 of each victim) and then C1/881C -> C1/8C09, the eval of every enemy whose
-`$B2B6` is 0, with its draws (C1/AF22) -- also when the counter took no action. The port ran the eval only after a counter
-that acted, so from a PC's first hit on such an enemy its RNG cursor `$26` ran a draw behind the cartridge's and every
-roll after it differed (battle_ai_interp.md sec. 25.3, enemy C1).
+`$B2B6` is 0, with its draws (C1/AF22) -- also when the counter took no action. An eval run only after a counter that
+acted leaves the RNG cursor `$26` a draw behind the cartridge's from a PC's first hit on such an enemy, and every roll
+after it differs (battle_ai_interp.md sec. 25.3, enemy C1).
 
 GATO's arena (tools/battle_ab.py: saves/battle_re/gato_wait.state, the enemy id poked into `$1111`), Crono alone, Attack +
 target (A, A) at f640 and every 400 frames after, three times; the cartridge under the rule (`--monitor`), the port seeded

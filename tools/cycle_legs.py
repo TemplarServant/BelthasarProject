@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-r"""The CPU cost of a ROM routine's LEGS, measured on the oracle: non-refresh master cycles between marker PCs.
+r"""The CPU cost of a ROM routine's legs, measured on the oracle: non-refresh master cycles between marker PCs.
 
     python tools/cycle_legs.py <beam trace> <PC> <PC> ... [--first-after PC]
 
 <beam trace> is `ct.exe --cputrace <state> <frames> <out>` run with CPUTRACE_BEAM=1 (every instruction, its v/h beam
 position and the master-cycle counter c=). Each PC is a 24-bit address `BB:AAAA` (C2:80B2). The legs are the spans
-between the FIRST occurrence of each marker, in the order given, after `--first-after` (default: the first marker).
+between the first occurrence of each marker, in the order given, after `--first-after` (default: the first marker).
 Refresh is excluded the way the logical oracle excludes it: 40 master cycles each time the beam crosses h = 536
 (tools/ctlib/beam.py; a phase hold does not move the beam, so it adds none). Prints one line per leg:
 

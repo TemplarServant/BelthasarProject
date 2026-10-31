@@ -11,6 +11,7 @@ three PCs, their techs, 99 MP, `$1111 = B6`); the port runs its own fight and re
 
 Compared: every change of `$7F01EC`, `$7F03FE` and `$011F` from the fight's end to f1100, both sides, frame for frame.
 Prints `lost-continue: cartridge <changes> | port <changes> | IDENTICAL` (or DIFFERENT). Roadmap G1a item 4.
+Regression check: battle-lost-fight-continues-vs-oracle.
 """
 import os
 import re

@@ -4,24 +4,23 @@ timing, and the walk after it -- every frame, the whole picture.
 
     python tools/item_name_cmp.py [first last]          (default: frames 1..300)
 
-Two user reports, 2026-10-07, both on scene 19's obj41 (the sparkle at tile 46,33: `E3 00 / 65 82 D3 / 91 / CA CD /
-4F CD 00 / EC 14 3D 00 / BB 00 / EE / E3 01 / EA 08`):
-  * F5 ct_debug_013: "it should show 'Found 1 Power Tab!' but it shows 'Found 1  item !'". The box's string ends
-    `Found 1 <1F>!`; C2/5B9B names the item from the script local $7F:0200 (`4F CD 00`): CC:0B5F + id * 11, at most
-    10 bytes, up to the first 0xEF (C2/5D23).
-  * F5 ct_debug_018: "crono walked with a fixed animation (back turned) after the dialogue box closed". `E3 01 / EA 08`
-    gives control back and posts the song (`JSL C7/0004`, 36 frames on the cartridge): the main loop is parked inside
-    it, and the lead stands until it returns; the port's host walked him through it with the drain stopped.
+Scene 19's obj41 (the sparkle at tile 46,33: `E3 00 / 65 82 D3 / 91 / CA CD / 4F CD 00 / EC 14 3D 00 / BB 00 / EE /
+E3 01 / EA 08`) covers two things:
+  * the item name ("Found 1 Power Tab!"): the box's string ends `Found 1 <1F>!`; C2/5B9B names the item from the
+    script local $7F:0200 (`4F CD 00`): CC:0B5F + id * 11, at most 10 bytes, up to the first 0xEF (C2/5D23).
+  * the walk after the box: `E3 01 / EA 08` gives control back and posts the song (`JSL C7/0004`, 36 frames on the
+    cartridge): the main loop is parked inside it, and the lead stands until it returns.
 
 The cartridge state saves/field_re/s19_power_tab.state is made from candy_shop_lake.state when missing: `--teleport 19
-45 33 3` (the tile beside the sparkle, facing it). The port is seeded from its WRAM (--loadwram) AND its SPC
-(CT_AUDIO_SEEDSTATE): with a cold driver the sound ops' handshakes are priced on another SPC -- the box opened 4 frames
-late and `EE` (C0/3CC5, the wait for the fanfare) let go 48 frames early, which is what an earlier version of this tool
-pinned as a "residual". The drive, on the cartridge (the port's keys are the oracle's + 1, memory
-ct-frame-alignment-p2): A on frame 10 (opens the box), A on 160 (closes it), Down held from 218 (before control comes
-back at 227). Port frame k is set beside the cartridge's `--peek` k + 2 (the alignment P + 2), the whole 256x224:
+45 33 3` (the tile beside the sparkle, facing it). The port is seeded from its WRAM (--loadwram) and its SPC
+(CT_AUDIO_SEEDSTATE): with a cold driver the sound ops' handshakes would be priced on another SPC (the box opens late
+and `EE`, C0/3CC5, the wait for the fanfare, lets go early). The drive, on the cartridge (the port's keys are the
+oracle's + 1, docs/TESTING.md): A on frame 10 (opens the box), A on 160 (closes it), Down held from 218 (before control
+comes back at 227). Port frame k is set beside the cartridge's `--peek` k + 2 (the alignment P + 2), the whole 256x224:
   item-name: f<k> <n>/57344 identical          (only the frames that differ)
   item-name: <k>/<n> frames identical
+
+Regression check: field-power-tab-box-and-walk-after-vs-rule-cartridge.
 """
 import os
 import struct
@@ -76,7 +75,7 @@ def ensure_seed():
 
 
 def oracle_all(script, ks, region):
-    """Every frame k's crop from ONE oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
+    """Every frame k's crop from one oracle run (PEEK_SHOTS, tools/ctlib/peekshots.py: the same bytes as a --peek cut
     to k)."""
     got = peekshots.shots(STATE, script, ks, env=RULE, prefix=os.path.join(OUT, 'c'))
     out = {}

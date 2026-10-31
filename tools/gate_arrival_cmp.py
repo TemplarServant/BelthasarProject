@@ -8,14 +8,14 @@ in the forest (op 0xFF 90 -> C0/21E1's iris, the window C3/0077 builds), Crono f
     under the rule (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1), PEEK_THUMBS every frame, into loc 071;
   * the port: field-scene8-gate-warp-flow's drive, CT_SHOTS_THUMBS every frame, `gatewarp: the native program takes
     over at f<F>` locating the warp.
-The warp itself lines up at port = cartridge + (F - 18) (tools/gwarp_cmp.py). The ARRIVAL is aligned on its own: the offset
+The warp itself lines up at port = cartridge + (F - 18) (tools/gwarp_cmp.py). The arrival is aligned on its own: the offset
 within two frames of the warp's that makes the most loc-071 frames identical -- the loc's load is where the two can part
 (the field load clock). From the cartridge's first lit loc-071 frame, <frames> (default 300) are compared as 128x112
 thumbnails (a pixel differs when a channel differs by more than 24):
 
   gate-arrival: warp +<W>, arrival +<A>; <n> frames from the lit c<L>: <k> differ, max <m> px, <t> px in all
 
-(disasm/notes/field_iris_window.md.)
+(disasm/notes/field_iris_window.md. Regression check: field-gate-arrival-vs-rule-cartridge.)
 """
 import json, os, struct, subprocess, sys, re
 

@@ -6,8 +6,8 @@ r"""The menu's opening sheet pass and the item heal's clamp, port against cartri
 Every menu opens through C2/8139 -> C2/9875, which cleans the bag (C2/9988) and recomputes all seven character sheets
 and writes their derived block back (C2/99B2 -> C2/8816 + C2/9137: +$03 and +$36..+$40). +$3F/+$40 is the effective max
 HP the item appliers clamp to (C2/8E9E `CMP $003F,Y`), and outside the menu it holds something else -- on
-saves/battle_re/party3_field.state Crono (25/96) carries 1029 there until C2:9160 writes 0060 at f35. The port had no
-such pass, so a Tonic healed past the maximum (user report 2026-09-24).
+saves/battle_re/party3_field.state Crono (25/96) carries 1029 there until C2/9160 writes 0060 at f35. Without this pass
+a Tonic heals past the maximum.
 
 Both sides get the same seed (the oracle state; the port its WRAM, saves/battle_re/party3_field.lakewram) with a Tonic
 (id BD) poked into bag slot 1, and the same drive, pressed on the frames the cartridge reads them: X, then Right (Item),

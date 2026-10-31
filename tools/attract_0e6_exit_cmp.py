@@ -3,13 +3,12 @@ r"""The attract's loc 0E6 exit, port against the rule's cartridge, whole picture
 
     python tools/attract_0e6_exit_cmp.py [--port <Belthasar.exe>]
 
-The cartridge: build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames N under CT_ORACLE_LOGICAL=1, one run per
-frame (in parallel) -- the attract from power-on + 2159 under the rule, made by a recipe (tools/fixtures/attract_rule.json).
-The port: Belthasar --boot on an erased cart with CT_AUDIO_LOCKSTEP=1 (the attract audit's boot vehicle), one run that
-shoots every frame below. The port's frame is the cartridge's + 2157: --boot's frames are the power-on's, the state starts
-2159 frames in, and the field's picture is the cartridge's P+2 (docs/TESTING.md, THE ALIGNMENT). (Until 2026-10-22 the
-cartridge was the owner's real-time capture saves/attract_cena_inicial.state run under the rule, another history: c5577-5581
-and c5674-5679 there, + 2156.)
+Cartridge: build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames N under CT_ORACLE_LOGICAL=1, one run per
+frame (in parallel); the state is the attract from power-on + 2159 under the rule, made by a recipe
+(tools/fixtures/attract_rule.json). Port: Belthasar --boot on an erased cart with CT_AUDIO_LOCKSTEP=1 (the attract
+audit's boot vehicle), one run that shoots every frame below. The port's frame is the cartridge's + 2157: --boot's
+frames are the power-on's, the state starts 2159 frames in, and the field's picture is the cartridge's P+2
+(docs/TESTING.md, the alignment section).
 
 Two things are graded, each against the cartridge's own picture, pixel for pixel over 256x224:
   robots  c5576-5580: obj10 and obj11 stand on one column; the draw list ($0E00, C0/B2A5) has obj11 in front, and the
@@ -18,6 +17,8 @@ Two things are graded, each against the cartridge's own picture, pixel for pixel
 Prints one line per frame and a summary:
 
     0e6-exit: robots c5576..5580 0 px; fade c5673..5678 0 px (6 frames, $0119 14 -> 9)
+
+Regression check: attract-0e6-exit-fade-and-robot-depth-vs-rule-cartridge.
 """
 import os
 import struct

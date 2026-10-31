@@ -6,7 +6,7 @@ r"""Print WRAM bytes of a Belthasar run at a chosen frame, as a greppable signat
 e.g.  python tools/wram_peek.py 2880 21BA:6 -- --assets ct_assets.dat --scene 433 --selftest
 prints `wrampeek: f2880 $21BA = 9D 23 3B 0E B4 09`.
 
-Belthasar's CT_DUMPWRAM/CT_DUMPWRAM_AT write the engine's LIVE 128 KB image ($7E page, then the $7F
+Belthasar's CT_DUMPWRAM/CT_DUMPWRAM_AT write the engine's live 128 KB image ($7E page, then the $7F
 story page) to a file; this runs it with --frames set just past <frame> and reads the bytes back, so a
 regression check can pin a WRAM value the engine never prints -- and pin it against a number measured
 on the oracle, not against the engine's own output.

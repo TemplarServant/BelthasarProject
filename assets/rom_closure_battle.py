@@ -1,4 +1,4 @@
-"""The battle's closures over the ROM's own tables (package G of the ROM-free runtime, memory rom-free-runtime-goal).
+"""The battle's closures over the ROM's own tables (package G of the ROM-free runtime, docs/ROM.md).
 
 Like assets/rom_closure.py: every extent is the reading code's own index range (src/battle.c) or the closure of a program
 it walks -- never a trace of what some run touched. Each function returns (name, start, end) file-offset triples, which

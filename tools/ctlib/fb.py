@@ -1,11 +1,9 @@
 """Framebuffer/screenshot decode + dependency-free PNG writer.
 
-Three capture formats exist in this repo (all observed in the writers):
+Three capture formats exist in this repo:
   1. oracle fb (ct.exe --peek .fb / <peek>.bin): 512x480, 4 bytes per pixel
-     [pad, B, G, R] (read R at +3!). It is a 2x pixel-doubled image, so the
-     visible frame = EVERY OTHER column (2*x) and row (2*y) -> 256x240 RGB.
-     Exactly 983040 bytes. (Reading column x = the left 256 cols showed only
-     the left HALF stretched -- it hid the whole right side of the screen.)
+     [pad, B, G, R] (R at +3), 983040 bytes. It is a 2x pixel-doubled image,
+     so the visible frame is every other column (2*x) and row (2*y) -> 256x240.
   2. Belthasar shot (--shot / CT_OWBOAT_SHOT / .pan.raw, src/field.c):
      [u32le w][u32le h][w*h*3 RGB rows]  (e.g. SHOT.raw = 256x224).
   3. ct_world WORLD_SHOT (src/ct_world.c): [u16le w][u16le h][w*h*3 RGB rows].
@@ -26,9 +24,8 @@ ORACLE_SIZE = FB_W * FB_H * 4  # 983040
 
 def _load_oracle(d):
     """512x480 [pad,B,G,R] -> (256, 240, RGB). The fb is a 2x pixel-doubled
-    image (SNES 256-wide rendered into a 512-wide buffer), so the true frame is
-    every OTHER column (2*x) and row (2*y). Reading column x took only the left
-    256 columns = the left HALF of the screen, stretched."""
+    image (SNES 256-wide rendered into a 512-wide buffer), so the frame is
+    every other column (2*x) and row (2*y)."""
     W, H = ORACLE_W, ORACLE_H
     img = bytearray(W * H * 3)
     for y in range(H):
@@ -61,7 +58,7 @@ def load(path):
 
 
 def png_bytes(w, h, rgb):
-    """Minimal 8-bit RGB PNG (no deps), from tools/_fbpng.py."""
+    """Minimal 8-bit RGB PNG (no dependencies)."""
     raw = bytearray()
     for y in range(h):
         raw.append(0)                                  # filter: None

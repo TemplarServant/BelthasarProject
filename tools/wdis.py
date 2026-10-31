@@ -8,7 +8,7 @@
 #     <hexaddr>  $7E-relative (e.g. 5BCF = $7E:5BCF); >= 0x10000 reads the $7F page.
 #     m,x        initial widths (0 = 16-bit, 1 = 8-bit); REP/SEP toggle them as decoded.
 #
-# ⚠ JSR/JMP labels print as "C0/xxxx" (dis.py derives the bank from the offset); inside the
+# Note: JSR/JMP labels print as "C0/xxxx" (dis.py derives the bank from the offset); inside the
 # overlay they are $7E addresses. Linear decoder: M/X can desync after an unfollowed branch.
 import importlib.util, os, sys
 

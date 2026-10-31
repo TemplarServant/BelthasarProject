@@ -4,11 +4,9 @@ cartridge.
 
     python tools/radius_dispatch_cmp.py
 
-The user, 2026-10-15 (translated from Portuguese): "in the battle against Yakra I used Slurp with Frog on himself, and
-also Fire Whirl with Crono and Lucca; Crono attacked Frog, probably because of the pointer on the ally, and killed Frog".
-The port held the $99C0 the radius tech's target select left until its dispatch and copied it there; a PC-side select
-in between (Slurp, group 80: C1/203A lists the caster first) rewrote $99C0 to `02 00 01` and Fire Whirl struck Frog,
-Crono and Lucca. The cartridge's dispatch runs the area pass C1/C586 (area 03 = CC/2B1C `01 / 01 01 09`): C1/C7A7
+The victims must not be the $99C0 the radius tech's target select left: a PC-side select in between (Slurp, group 80:
+C1/203A lists the caster first) rewrites $99C0 to `02 00 01`, and Fire Whirl would strike Frog, Crono and Lucca.
+The cartridge's dispatch runs the area pass C1/C586 (area 03 = CC/2B1C `01 / 01 01 09`): C1/C7A7
 centres the radius on the action's target ($9605 = $06, $9607 = 09) and C1/1FDD routine 1 = C1/2701 rebuilds $99C0
 before C1/C600 copies it into $AD8E (battle.c battleAreaC586 / battleAreaRadius2701).
 

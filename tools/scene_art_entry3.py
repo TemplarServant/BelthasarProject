@@ -3,8 +3,8 @@
 
 The machine rising over the planet under the red moon (`FF 23` after the Blackbird, `FF 63` in the attract) is drawn for 256
 columns: its BG1 is the field's machinery as one screen. With the widescreen the sides need more of it. This script is the
-art's source: it lays STAMPS (pieces of the machine's own layer, by place: the runtime cuts them from the player's VRAM) and
-PAINTS new pixels over them, in the machine's own palettes and resolution, after the machine's design as the overworld shows
+art's source: it lays stamps (pieces of the machine's own layer, by place: the runtime cuts them from the player's VRAM) and
+paints new pixels over them, in the machine's own palettes and resolution, after the machine's design as the overworld shows
 it (the Black Omen's wings sweeping out and down, a big gold-rimmed pod on each, spikes along their edges). Only the left
 side is drawn; the right one is its mirror, as the machine itself is.
 

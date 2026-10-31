@@ -4,11 +4,12 @@ picture -- the lowered dialogue box uncovers the picture, not the box's window, 
 
     python tools/fill_window_rows_check.py
 
-The owner, 2026-10-25, on the Telepod's warp (scene 8): (1) a strip of the gate's BG3 swirl right across the screen above
-the lowered dialogue box -- channel 5's table gives a box's 2n lines one word ($1534 / set B $1536, field_hdma_tables.md
-modes 1/2), the box's window, which takes BG1/BG2 off the whole line, and the lowered box (fillBoxBegin) leaves the top of
-its band to the picture; (2) the gate's iris off its gate where the field holds its origin (fillHold: the map and the
-objects a line lower than the SNES's, the window rows on the SNES's lines). src/field.c fieldCh5Rows / fillWinRowsHold.
+Two cases on the Telepod's warp (scene 8): (1) above the lowered dialogue box, no strip of the gate's BG3 swirl across the
+screen -- channel 5's table gives a box's 2n lines one word ($1534 / set B $1536, field_hdma_tables.md modes 1/2), the
+box's window, which takes BG1/BG2 off the whole line, and the lowered box (fillBoxBegin) leaves the top of its band to
+the picture; (2) the gate's iris stays on its gate where the field holds its origin (fillHold: the map and the objects a
+line lower than the SNES's, which would leave the window rows on the SNES's lines). src/field.c fieldCh5Rows /
+fillWinRowsHold. Regression check: options-fill-bottom-lines-window-rows-follow-the-picture.
 
 Two interactive runs of scene 8's gate show (CT_OVERLAY_SHOT forces the interactive presentation the mod needs; --selftest
 lets CT_CALLFN start Taban's show; the state is the recipe fxf_scene8_taban_moving's), the mod on and the mod off. Printed:

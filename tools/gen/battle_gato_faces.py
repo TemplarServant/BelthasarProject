@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
 """GATO directional-facing bake (disasm/notes/battle_pc_approach_facing.md PART 2) -> src/data/battle_gato_faces.h.
 
-GATO has FOUR fully-distinct directional pose sets (up/down/left/right; NOT h-flips, dossier 2.4) selected
-per frame by the facing byte $96DE+slot = ctBattleFaceTab[walk bearing] (C1/37E9, table already baked in
-battle_trig.h). DOWN (front, facing 1) is the committed idle bake (battle_anim.h kf6/7 + ctGatoIdleTrajV2)
-and is NOT re-baked (2.6: "default idle = 1 (front/down) -- our current baked idle pose"); this bakes the
-OTHER THREE rep frames from the oracle captures the derive lane produced:
+GATO has four distinct directional pose sets (up/down/left/right; not h-flips, dossier 2.4) selected
+per frame by the facing byte $96DE+slot = ctBattleFaceTab[walk bearing] (C1/37E9, table in battle_trig.h).
+Down (front, facing 1) is the idle bake (battle_anim.h kf6/7 + ctGatoIdleTrajV2, dossier 2.6) and is not
+baked here; this bakes one representative frame for each of the other three:
 
     UP    (facing 0)  gm_60      (the up-return walk, gm_* sidecar set)
     LEFT  (facing 2)  facing/left    (HOLD fight, GATO walks left toward Marle, f739-771)
     RIGHT (facing 3)  facing/right   (same fight, walks right, f1018-1050)
 
-Each = its OAM assembly (pal1 body cells) + streamed tile content, cells stored RELATIVE TO THE LIVE FOOT
+Each is its OAM assembly (pal1 body cells) + streamed tile content, cells stored relative to the live foot
 ($1D0C+6/$1D23+6 from the capture's .wram sidecar) so the renderer draws them at GATO's live foot in any
-fight. COORDINATE CONVENTION (pinned empirically on _gidle400: pal1 ink-top OAM y=60 vs the oracle-fb
-pal1 ink-top row 68 -> oracle fbRow = OAM y + 8; our render rows = oracle - 8 -> OUR fb space == OAM
-space, exactly the equivalence the committed idle render already uses via its OAM-space GATO_REF
-(104,62)): rel = cellOAM - footWRAM, drawn at the render-side live foot verbatim. The within-facing
-walk-cycle tile stream stays OPEN (dossier P4); one rep frame per facing, like every other GATO bake.
+fight. Coordinates: oracle fbRow = OAM y + 8 (checked on _gidle400: pal1 ink top at OAM y 60, fb row 68) and
+the port's render rows = oracle - 8, so the port's fb space is OAM space, as the idle render's GATO_REF
+(104,62) assumes: rel = cellOAM - footWRAM. Not baked: the within-facing walk-cycle tile stream (dossier P4).
 
 Run from repo root:  python tools/gen/battle_gato_faces.py   (CT_GEN_STATE / CT_SCRATCH override the state / scratch dir)
 
-THE CAPTURES are made here from the recipe battle_gato_press_action (tools/recipes/): its HOLD fight (one A boots the
+The captures are made here from the recipe battle_gato_press_action (tools/recipes/): its hold fight (one A boots the
 battle, then nothing -- GATO acts un-hit and walks, battle_pc_approach_facing.md 2.3) passes through every facing.
-The rep frames (peek frames from the state, "100:8,0:N-8"): the idle control _gidle400 = f400; LEFT = f749 (the walk
-toward Marle, f739-779); UP = f813 (the return walk up -- the same cells and tile sheet as the corpus' gm_60, which was
-taken from another capture of the return walk); RIGHT = f902. Each was matched against the bake first made from the
-corpus: cells and the whole OBJ sheet 0x00-0x9F identical, from gato_press_action.state and from the recipe alike.
+The frames (peek frames from the state, "100:8,0:N-8"): the idle control _gidle400 = f400; left = f749 (the walk
+toward Marle, f739-779); up = f813 (the return walk up -- the same cells and tile sheet as the corpus' gm_60, from
+another capture of the return walk); right = f902. They give the same cells and OBJ sheet 0x00-0x9F as the corpus
+captures above, from gato_press_action.state and from the recipe alike.
 """
 import os, sys, hashlib, subprocess
 sys.path.insert(0, 'tools')
@@ -62,7 +59,7 @@ def gato_cells(sprites):
 def foot(wram):
     return wram[0x1D0C + 6], wram[0x1D23 + 6]      # GATO = cmb 6 (enemy slot 3)
 
-# ---- 1. sanity-pin the conventions on the AT-REST idle control capture ----
+# ---- 1. check the conventions on the at-rest idle control capture ----
 vram_i, spr_i, wram_i = load(os.path.join(SP, '_gidle400'))
 cells_i = gato_cells(spr_i)
 fx, fy = foot(wram_i)

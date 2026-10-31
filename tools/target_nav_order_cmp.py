@@ -4,12 +4,12 @@ which frame -- $9614 (the cursor's index into $99C0) and $A62D (the lit targets)
 
     python tools/target_nav_order_cmp.py [--only <text> | --skip <text>]   (the cases whose name holds the text)
 
-C1/1561 runs the group handler (C1/1F79 -> C1/1FF8[$960D & 7F]) BEFORE the pass's own keys, and some handlers take the
+C1/1561 runs the group handler (C1/1F79 -> C1/1FF8[$960D & 7F]) before the pass's own keys, and some handlers take the
 pad themselves (dis.py 12169 0xE2 1 0, 122F5 0x34 1 0):
   0B / 0C / 0D (C1/2169, C1/2203, C1/21AF)  `$EF & 09` (Up|Right) -> C1/27FA, `$EF & 06` (Down|Left) -> C1/27FA: every
-                                            direction steps to the NEXT entry;
+                                            direction steps to the next entry;
   0F / 12 / 1A (C1/22F5, C1/225F)           `$EF & 09` -> C1/27FA (next), `$EF & 06` -> C1/2814 (previous): Down walks
-                                            BACKWARDS through $99C0.
+                                            backwards through $99C0.
 and leave `$960C = 80` (C1/216F / C1/27E8), so C1/15F4 `LDA $960C / BMI` skips the pass's plain walk C1/15F9 (`$EF & 05`
 Down|Right -> C1/176C next, `$EF & 0A` Up|Left -> C1/1786 previous), which every other group takes. C1/27FA / 2814 step
 $9614 through C1/20A9's list (the living enemies, X = 3..0A in order) with the same wrap as C1/176C / 1786, after C1/282D
@@ -23,7 +23,7 @@ $99C0[$9614] (C1/225F -> C1/2701 -> C1/27E8). Slash (tech 02, group 0B, the band
 battle_ab.drive_tech(k) (or the Att's A) with the keys held 2 frames, 60 apart, between the select's open and its A.
 The port: battle.c battleEnemyGroupStep / battleEnemyTargetPass / battleEnemyTargetWalk.
 
-The cases whose name holds ':' grade $9614 as the INDEX into C1/2045's compacted list (dis.py 12045 0x55 1 0; present
+The cases whose name holds ':' grade $9614 as the index into C1/2045's compacted list (dis.py 12045 0x55 1 0; present
 $96F5, $9FF7 bit 7 / $A0A8 / $A09B clear), not an enemy slot: 'gap' stages the fixture without cmb4 (slots 0 / 2 / 3 --
 the Att's Downs walk 0 1 2 0 on the cartridge), 'killed' kills cmb4 first (1 HP, Crono's Att) and opens the select on
 his next turn. The port: battle.c battleEnemyList / battleEnemyCursor / battleTargetNav (battle_target_nav_order.md

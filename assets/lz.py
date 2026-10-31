@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Chrono Trigger LZ decompressor (Evil Peer / Michael Springer routine).
 
-Faithful Python port of the canonical algorithm (CTViewer's lz_decompress.rs),
-matching src/lz.c byte-for-byte. Used by the asset extractors and as a
-cross-check reference for the C port.
+Python port of the algorithm (as in CTViewer's lz_decompress.rs), with the same
+output as src/lz.c. Used by the asset extractors and as a cross-check reference
+for the C port.
 
 CLI: python assets/lz.py <rom.sfc> <hex-offset>
      -> prints decompressed size and an FNV-1a/32 hash of the output.

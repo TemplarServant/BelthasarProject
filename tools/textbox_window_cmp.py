@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-r"""The dialogue window's TEXT against the cartridge, frame by frame (disasm/notes/textbox.md, "four lines, the line
+r"""The dialogue window's text against the cartridge, frame by frame (disasm/notes/textbox.md, "four lines, the line
 buffer and the NMI's upload").
 
     python tools/textbox_window_cmp.py
 
-Two drives, the same on both sides, ALIGNED BY THE RULE (ct-frame-alignment-p2): the logical oracle, the port's key one
-frame after the cartridge's, the port's frame F beside the cartridge's --peek F+2. (Until 2026-10-10 this ran the real-time
-oracle with a peek at F+1, which carried the rule's one-frame compensation: the NMI's text upload had been modelled at the
-head of the NEXT frame to match it. Under the rule the upload is the frame's own -- see tools/textbox_rule_cmp.py.)
+Two drives, the same on both sides, aligned by the rule (docs/TESTING.md): the logical oracle, the port's key one
+frame after the cartridge's, the port's frame F beside the cartridge's --peek F+2. Under the rule the NMI's text upload
+is the frame's own (tools/textbox_rule_cmp.py).
 
-  * the tent keeper (saves/field_re/tent_keeper_lake.state / tent_keeper.lakewram, A at f11): a FOUR-line box typed
+  * the tent keeper (saves/field_re/tent_keeper_lake.state / tent_keeper.lakewram, A at f11): a four-line box typed
     without a press -- the typewriter (one character an iteration, a break's own iteration, the end iteration), the
     NMI's upload of the line buffer into window line $0131 (a character typed in frame f is on screen from f+1), the
     text row (window top + 10) and the closing quote (0xE2, not 0xE1);

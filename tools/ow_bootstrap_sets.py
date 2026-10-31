@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-r"""Run the overworld's OBJECT BOOTSTRAP for every world and report the SET it builds.
+r"""Run the overworld's object bootstrap for every world and report the set of objects it builds.
 
     python tools/ow_bootstrap_sets.py
 
-The ROM does not restore an object array when it enters an overworld: it allocates ONE object
+The ROM does not restore an object array when it enters an overworld: it allocates one object
 (class $0F63, script $7F:0400) and that bootstrap script builds the rest
-(disasm/notes/sequence_table.md section 9). This drives the port's own object VM through that
-bootstrap in each of the eight worlds and asks whether the multiset of CLASSES it produces is the
-one the cartridge produced -- objSnap, the live oracle capture each world asset was packed from.
+(disasm/notes/sequence_table.md sec. 9). This drives the port's own object VM through that
+bootstrap in each of the eight worlds and asks whether the multiset of classes it produces is the
+one the cartridge produced (objSnap, the live oracle capture each world asset was packed from).
 
-⚠ SET, not placement. Which SLOT an object lands in is decided by C2/048A's first-fit, and that
-depends on how the spawns interleave across frames; worlds 1 and 4 still differ there. The six
-per-slot checks (`ow-object-bootstrap*-vs-oracle`) cover placement where it is exact. This one
-covers content, in all eight.
+Note: this grades the set, not the placement. Which slot an object lands in is decided by C2/048A's
+first-fit, which depends on how the spawns interleave across frames; worlds 1 and 4 differ there. The
+six per-slot checks (`ow-object-bootstrap*-vs-oracle`) cover placement where it matches.
 """
 import os
 import subprocess

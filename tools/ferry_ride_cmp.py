@@ -20,10 +20,9 @@ than 24):
 
     ferry <dir>: -> loc <L> (cartridge <Lc>): overworld <n> frames, <k> differ [first c<f>]; lit->fade c<a> p<b>
 
-`lit->fade` is the crossing's length on each side (first lit overworld frame to the first black one). Until 2026-09-29 the
-port installed a captured Truce->Porre boat over the bootstrap object: 1380 black frames, the "Ticket Office" banner over
-the whole crossing, a heuristic drop onto the Porre pier, and the Porre pay replaying the Truce ride.
-The saves/ferry_re states and seeds are how they were made: disasm/notes/ow_ferry.md.
+`lit->fade` is the crossing's length on each side (first lit overworld frame to the first black one).
+How the saves/ferry_re states and seeds were made: disasm/notes/ow_ferry.md. Regression check:
+ow-ferry-both-ways-vs-rule-cartridge.
 """
 import os
 import struct
@@ -44,7 +43,7 @@ RUNS = {
     # dir: (oracle state, oracle btnscript, oracle frames, port scene, port seed, port drive args, port frames, dest loc)
     'truce': ('saves/ferry_re/truce_pay_prompt.state', '100:4,0:1950', 'saves/ferry_re/office_at_clerk.lakewram', 18,
               ['--talk', '8', '--choose', '0', '--select'], 2050, 0x038),
-    # (the Porre crossing also HOLDS the d-pad and presses A mid-sail on both sides: nothing reads the pad without a lead
+    # (the Porre crossing also holds the d-pad and presses A mid-sail on both sides: nothing reads the pad without a lead
     #  in free roam -- C2/3567 `LDA $027C / CMP #01` -- so the cartridge ignores them, and the port must too)
     'porre': ('saves/ferry_re/porre_pay_prompt.state', '100:4,0:60,100:4,0:540,80:120,0:60,20:120,100:4,0:1500',
               'saves/ferry_re/porre_office_at_counter.lakewram', 56,

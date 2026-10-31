@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-r"""The party EXCHANGE (menu mode 5, screen $07), port against the rule's cartridge, every frame.
+r"""The party exchange (menu mode 5, screen $07), port against the cartridge under the frame rule, every frame.
 
     python tools/menu_exchange_cmp.py
 
-GATO's field -- the recipe gato_wait (tools/recipes.py), its state on the cartridge and its WRAM dump on the port, so both
-sides start from one image, the SPC's included (CT_AUDIO_SEEDSTATE: the song task's frames depend on the driver's phase) --
-with the storyline at 0x49 and Robo in the reserve -- `7F0000=49, 2982=02, 2983=03` and `0126=00` (no window side left
-over, or Y only flips the window: C0/1985) -- on both sides. The drive: Y (C0/1916 -> C0/1985 -> C0/19CE `JSL C2/8000` with
-A = 5), Right (the reserve column), A (Robo picked, C2/C674), Left (Marle), A (the swap C2/C70C: Robo in, Marle out), B (the
-close C2/CC0E -> C2/82B2, the field's C0/19D2). The port's SPC is the state's own and runs in lockstep (CT_AUDIO_SEEDSTATE,
-CT_AUDIO_LOCKSTEP): the screen's song task -- `14 3E`, `81 01 FF`, and at the close `81 08 01`, the `$2141` wait, `11 42`,
-`81 10 FF` -- prices frames on both sides.
+Both sides start from one image of GATO's field: recipe gato_wait (tools/recipes.py), its state on the cartridge and its
+WRAM dump on the port, the SPC included (CT_AUDIO_SEEDSTATE; the song task's frames depend on the driver's phase). Pokes
+on both sides: storyline 0x49, Robo in the reserve, no window side left over (otherwise Y only flips the window,
+C0/1985): `7F0000=49, 2982=02, 2983=03, 0126=00`. The drive: Y (C0/1916 -> C0/1985 -> C0/19CE `JSL C2/8000`, A = 5),
+Right (the reserve column), A (Robo picked, C2/C674), Left (Marle), A (the swap C2/C70C: Robo in, Marle out), B (the
+close C2/CC0E -> C2/82B2, the field's C0/19D2). The port's SPC runs in lockstep (CT_AUDIO_LOCKSTEP), so the screen's
+song task (`14 3E`, `81 01 FF`, and at the close `81 08 01`, the `$2141` wait, `11 42`, `81 10 FF`) prices frames on
+both sides.
 
 Compared, frame for frame, each byte while the screen owns it: the party $2980-$2988 and the field's $0119 from the press
 to the end; the picks $0F00-$0F01, the roster $0F02-$0F0C, $0F0D, the song bytes $0F0E-$0F0F and the menu's brightness
@@ -19,7 +19,7 @@ $54 from C2/C649 (P, f86). (C2/940D's fill of $0000-$00FF is not the port's: the
 cartridge's reload rebuilds it -- so $54 / $67 hold the field's bytes until the screen writes them. $68 is each task's
 own, swapped by the scheduler at C2/81FF / C2/8211: not compared.) Prints
 `menu-exchange: <n> frame-fields, <d> differing` and the cartridge's frames of each milestone.
-disasm/notes/menu2_form_screen.md 2.14.
+disasm/notes/menu2_form_screen.md sec. 2.14.
 """
 import os
 import re

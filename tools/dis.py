@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Minimal but correct 65816 disassembler for the CT ROM (HiROM file offsets).
+# Linear 65816 disassembler for the CT ROM (HiROM file offsets).
 # Usage:  python tools/dis.py <hexaddr> <len> [m] [x]
 #   <hexaddr>  ROM file offset. HiROM: file offset == the bank-C0 CPU offset, so
 #              bank-C0 routines are addressed directly (e.g. 0x305D = C0/305D);
@@ -7,13 +7,9 @@
 #   <len>      number of bytes to decode.
 #   m,x        optional initial M/X widths (0 = 16-bit, 1 = 8-bit). Default 8-bit/8-bit
 #              (the field engine runs SEP #$30). REP/SEP toggle them as decoded.
-# The opcode matrix comes from tools/disasm65816.py (full 256-entry table) -- no more
-# '?? XX' on TSB/TRB/(dp)/sr/(abs,X) modes, and MVP/MVN/PER decode at their true length
-# (the old partial table desynced on them). JSR/JMP absolute labels resolve the REAL
-# bank of the address being disassembled (bank = 0xC0 + offset>>16) -- previously every
-# label printed 'C0/' even inside bank-C2 code; JSL/JML use their operand's own bank.
-# This is a *linear* decoder (no branch following) -- M/X width state can desync after
-# an unfollowed branch; read the BNE/BCS targets.
+# The opcode matrix is tools/disasm65816.py's full 256-entry table. JSR/JMP absolute labels
+# take the bank being disassembled (0xC0 + offset>>16); JSL/JML use their operand's bank.
+# Branches are not followed, so the M/X widths can desync after one; check the branch targets.
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped

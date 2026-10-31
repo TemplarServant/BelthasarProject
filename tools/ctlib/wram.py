@@ -4,15 +4,14 @@ Two dump sources, one layout:
   - .wram sidecars from ct.exe --peek (raw 0x20000-byte file)
   - savestates: LakeSnes .state (ctlib.lake) or snes9x .state (ctlib.s9x)
 
-Field-object array lifted from the canonical tools/_rdstate.py, extended with
-the cadence/speed/ticket/facing slots documented in the memory notes:
+Field-object arrays:
   $1801/$1881,X tile   $1800/$1880,X foot px   $1B01,X solid   $0F00,X active
   $1100,X status(move-mode)   $1C00,X prio   $1180,X script ptr (word)
   $1780,X anim mode   $1000/$1001,X cadence/phase   $1A00/$1A01,X speed/ticket
   $1600,X facing      (X = obj*2)
 Globals: $0197 player obj index (*2), locks $0162/$011F/$0120.
 
-Overworld ambient blocks lifted from tools/_oracleamb.py (its only decoder):
+Overworld ambient blocks:
   $0B30-$1B30 stride 0x40, live iff word@+0 == 0x0F63;
   pc @+0x07 (word), attr @+0x0F, pos @+0x14/+0x18 (words), vel @+0x1A/+0x1E.
 
@@ -83,7 +82,7 @@ def player(w):
 
 
 def objs(w, count=30):
-    """Per-object field rows (X = obj*2), the tools/_rdstate.py set + extras."""
+    """Per-object field rows (X = obj*2)."""
     rows = []
     for ob in range(count):
         X = ob * 2
@@ -114,10 +113,9 @@ OW_AMB_SIG = 0x0F63
 
 def ow_ambient(w):
     """Live overworld ambient-object blocks ($0B30-$1B30 stride 0x40,
-    signature word 0x0F63). Layout per tools/_oracleamb.py.
-    CAVEAT: only meaningful for OVERWORLD-mode WRAM -- the field engine
-    reuses this RAM, so on a field-scene dump the signature can match
-    stale/aliased data (same behavior as the legacy tool)."""
+    signature word 0x0F63).
+    Note: only meaningful for overworld-mode WRAM; the field engine reuses
+    this RAM, so on a field-scene dump the signature can match stale data."""
     out = []
     for b in range(OW_AMB_START, OW_AMB_END, OW_AMB_STRIDE):
         if u16(w, b) != OW_AMB_SIG:

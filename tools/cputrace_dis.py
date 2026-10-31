@@ -3,7 +3,7 @@
 #
 #   python tools/cputrace_dis.py <trace.txt> [--frames A-B] [--bank 7E] [--range 3000-6FFF] [--calls]
 #
-# Every (bank, pc) is decoded from the bytes the trace recorded AT EXECUTION with the M/X flags the CPU
+# Every (bank, pc) is decoded from the bytes the trace recorded at execution with the M/X flags the CPU
 # really had, so widths are never guessed and self-modifying code shows every version it ran as:
 # an address whose bytes (or widths) differed between executions prints each variant, marked `*SMC*`.
 # Addresses are grouped into runs; a gap in the listing is code that did not execute in the window.

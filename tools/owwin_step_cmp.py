@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-r"""The overworld's WINDOW OBJECT (op 4E -> $C6:E241 / $C6:E27E, the attract's world-5 left-edge wipe) against the
+r"""The overworld's window object (op 4E -> $C6:E241 / $C6:E27E, the attract's world-5 left-edge wipe) against the
 cartridge, on the cartridge's own inputs (field_window_wipe.md sec. 6):
 
   * `ct.exe --calldump <state> <k> <entry> C21830 in out` runs the oracle to the k-th execution of the entry, dumps the
     128 KB WRAM and prints the registers, the beam and PPU2's latch state there (hSecond, bus2 -- the world engine never
     reads the counter ports itself, so C3/02DD's own toggling and the last byte it read are what the next call sees),
-    runs to the far call's landing C2:1830 and dumps again, then samples window 1 on every visible line that follows;
+    runs to the far call's landing C2/1830 and dumps again, then samples window 1 on every visible line that follows;
   * `Belthasar --owwincall in <entry> port` runs the port's native routine (src/wipe.c CtOwWindowObject, the call the
     world's op 4E makes) on that WRAM;
   * `Belthasar --owwinmask out <ch2 on> <wh0> <wh1>` walks the port's channel-2 model (field.c owWin1Line) over the WRAM
@@ -19,10 +19,10 @@ per-frame call ($C6:E27E's second execution -- its first is the pass-through ins
 table ($7E:9176.., 672 bytes) named, but the 32 stack bytes below the caller's S the routine leaves dead (dead_stack); and
 window 1's edges on every sampled line.
 
-THE VIRTUAL BEAM (CLAUDE.md's one exception, the zelda3 model, 2026-09-18): the seed C3/02DD reads the H/V counters --
-the world VM's position in the frame, which no C engine has -- so both sides read the virtual beam (snes.c
-g_ctVirtualBeam: `$213C` = `$0351`, `$213D` = 00): the port's call always, the oracle with CT_ORACLE_VIRTUAL_BEAM=1.
-The hSecond / bus2 the cartridge's line prints no longer reach the seed. The state is the rule's run from power-on; the
+The virtual beam (CLAUDE.md, the zelda3 model): the seed C3/02DD reads the H/V counters, the world VM's position in the
+frame, which no C engine has, so both sides read the virtual beam (snes.c g_ctVirtualBeam: `$213C` = `$0351`,
+`$213D` = 00): the port's call always, the oracle with CT_ORACLE_VIRTUAL_BEAM=1. The hSecond / bus2 the cartridge's
+line prints do not reach the seed. The state is the rule's run from power-on; the
 frames after it run in real time with the virtual beam, so the world VM's call returns inside the visible frame and window 1
 can be sampled on the lines that follow (under the whole rule its main loop runs from the vblank's start).
 """
@@ -33,8 +33,7 @@ import subprocess
 CT = os.path.abspath('build/ct.exe')
 FIELD = os.path.abspath('build/Belthasar.exe')
 SRC = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json)
-F0 = 99                                      # the state: the attract 6 frames before the world-5 leg's op 4E (100 on the owner's
-                                             # real-time capture, until 2026-10-22: its 1F5 load comes a frame later)
+F0 = 99                                      # the state: the attract 6 frames before the world-5 leg's op 4E
 CALLS = [('install', 'C6E241', 1), ('frame', 'C6E27E', 2), ('later', 'C6E27E', 3)]   # 'later': its edges on lines 101-112 straddle a run
                                                                                   # boundary, which the 112-line split must place
 
@@ -54,9 +53,8 @@ def main():
     if not os.path.exists(SRC):
         print('owwin-step: SKIP -- missing %s' % SRC); return
     vb = dict(os.environ, CT_ORACLE_VIRTUAL_BEAM='1')  # the oracle side reads the virtual beam (the docstring)
-    # The f100 state is THIS oracle's, made on every run (0.5 s): it carries the call's beam and PPU2 bus from the field's
-    # frames before the leg, so a copy kept from an older oracle outlives its rule -- the 2026-09-18 one kept printing
-    # h=768 bus2=04 for three days after the drain's and the runner's virtual beam (a07ca0f, 30ccdce) moved them.
+    # The f100 state is this oracle's, made on every run (0.5 s): it carries the call's beam and PPU2 bus from the field's
+    # frames before the leg, so a copy kept from an older oracle would replay an older rule.
     st = 'build/_ow_vb_f%d.state' % F0
     if os.path.exists(st): os.remove(st)
     run([CT, '--peek', SRC, 'build/_owtmp.raw', '--frames', str(F0)], env=dict(vb, PEEK_SAVE=st))

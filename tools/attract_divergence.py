@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Every frame of the attract demo, port against cartridge: WHERE they diverge, and of WHAT kind.
+r"""Every frame of the attract demo, port against cartridge: where they diverge, and of what kind.
 
     python tools/attract_divergence.py [--out DIR] [--vehicle lockstep|selftest|boot] [--fresh-port] [--fresh-cart]
                                         [--visit LOC] [--selftest]
@@ -8,8 +8,7 @@ The two sides are captured once per frame, as 128x112 thumbnails (the same recor
 [u32 frame][u16 $0100][128*112*3 RGB], 2x2 SNES pixels averaged):
 
     cartridge  build/ct.exe --peek saves/attract_cena_inicial_rule.state --frames 9110   PEEK_THUMBS / _EVERY=1, CT_ORACLE_LOGICAL=1
-               (the attract from power-on + 2159 under the rule, made by a recipe: tools/fixtures/attract_rule.json; until
-               2026-10-22 the owner's real-time capture saves/attract_cena_inicial.state, another history)
+               (the attract from power-on + 2159 under the rule, made by a recipe: tools/fixtures/attract_rule.json)
     port       build/Belthasar.exe --assets ct_assets.dat --scene 433                 CT_SHOTS_THUMBS / _EVERY=1
                (interactive, CT_AUDIO_LOCKSTEP=1, stopped at f11400 by CT_SHOTS_EXIT -- the numbering
                tools/frame_region_cmp.py and every attract check use)
@@ -18,24 +17,24 @@ The cartridge capture never changes and is cached under build/_divergence/cache;
 whenever build/Belthasar.exe or ct_assets.dat changes (or with --fresh-port).
 
 --vehicle selftest captures the port from `--selftest --frames 11400` instead. That run orders a transition's frames
-differently from the interactive one -- the curtain-close blink (disasm/notes/field_window_wipe.md) showed ONLY
-there -- but it fights the demo battles synchronously, so its battle legs come out "not comparable". Run both when
-hunting a one-frame glitch the user saw.
+differently from the interactive one (a curtain-close blink can show only there, disasm/notes/field_window_wipe.md),
+but it fights the demo battles synchronously, so its battle legs come out "not comparable". Run both when hunting a
+one-frame glitch.
 
 Then, for every pair of visits (consecutive frames with the same $0100, paired in order by location):
 
-1. ALIGN. The two timelines are not frame-aligned -- the port boots through the title, a leg can hold a load
+1. Align. The two timelines are not frame-aligned -- the port boots through the title, a leg can hold a load
    window or an action for more or fewer frames -- so each visit is aligned by dynamic time warping: a
    monotonic path through (cartridge frame, port frame) that minimises the picture difference, a hold on either
    side costing a small penalty so that equal pictures (black, a still map) stay on the diagonal. Every frame is
-   in the search, so an ODD offset is found (the survey's every-second-frame thumbnails could not see one).
-2. TIMING. The path's offset, port frame minus cartridge frame, at every cartridge frame: where a leg's clock
-   drifts, and by how much. A timing difference is NOT reported as a picture difference.
-3. PICTURE. At the aligned pair, the share of thumbnail pixels whose largest channel differs by more than 24.
+   in the search, so an odd offset is found (every-second-frame thumbnails, as tools/attract_survey.py's, cannot).
+2. Timing. The path's offset, port frame minus cartridge frame, at every cartridge frame: where a leg's clock
+   drifts, and by how much. A timing difference is not reported as a picture difference.
+3. Picture. At the aligned pair, the share of thumbnail pixels whose largest channel differs by more than 24.
    Runs of frames above the threshold become RENDER events, each with its worst frame, the screen region the
    difference sits in, and a hint: black-vs-picture, brightness (same picture, other level), colour (same
    shape, other palette) or shape.
-4. FLASH. A one-frame brightness spike on one side that the other side does not have within two aligned
+4. Flash. A one-frame brightness spike on one side that the other side does not have within two aligned
    frames -- the class of the curtain blinks (a whole lit frame where the cartridge is black).
 
 Writes <out>/report.txt, <out>/events.json and <out>/report.html (the timeline, the visits and every event
@@ -45,7 +44,7 @@ confirms it at full resolution with tools/frame_region_cmp.py.
 --selftest runs the alignment and the detectors on a synthetic pair (a known hold, a known recolour and a
 known one-frame flash) and prints `attract-divergence: selftest PASS` or what it missed.
 
-The assistant that drives this is .claude/agents/attract-divergence.md.
+The agent that drives this is .claude/agents/attract-divergence.md. Regression check: attract-divergence-tool-selftest.
 """
 import argparse
 import base64
@@ -109,8 +108,8 @@ def capture_cart(cache, fresh):
         return path
     print('attract-divergence: capturing the cartridge, every frame to f%d ...' % CART_FRAMES, flush=True)
     t0 = time.time()
-    # THE RULE'S CARTRIDGE (CLAUDE.md, the zelda3 model): the logical oracle is the truth every check grades against;
-    # a real-time capture puts the battles' lag frames into the timing (the 07D fight came out 56 frames 'longer').
+    # The cartridge under the rule (CLAUDE.md, the zelda3 model), the truth every check grades against; a real-time
+    # run would put the battles' lag frames into the timing.
     env = dict(os.environ, PEEK_THUMBS=path, PEEK_THUMBS_EVERY='1', CT_ORACLE_LOGICAL='1')
     subprocess.run([CT, '--peek', STATE, os.path.join(cache, 'cart_last.raw'), '--frames', str(CART_FRAMES)],
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -277,13 +276,13 @@ def spikes(l):
     if len(l) >= 3:
         up = l[1:-1] - np.maximum(l[:-2], l[2:])
         dn = np.minimum(l[:-2], l[2:]) - l[1:-1]
-        # a spike is a frame above BOTH neighbours or below both -- a monotonic ramp (a fade) is neither
+        # a spike is a frame above both neighbours or below both -- a monotonic ramp (a fade) is neither
         s[1:-1] = np.where(up > 0, up, np.where(dn > 0, -dn, 0.0))
     return s
 
 
 def strong(l, s, i):
-    """A spike worth calling a flash: big in absolute terms AND against the brightest of its three frames."""
+    """A spike worth calling a flash: big in absolute terms and against the brightest of its three frames."""
     if abs(s[i]) < FLASH_T:
         return False
     top = max(l[max(0, i - 1):i + 2])
@@ -291,7 +290,7 @@ def strong(l, s, i):
 
 
 def _flash_unmatched(s_here, idx, s_other, centre, span):
-    """A spike on one side is a flash of THAT side unless the other side spikes the same way within two frames."""
+    """A spike on one side is a flash of that side unless the other side spikes the same way within two frames."""
     lo, hi = max(0, centre - 2), min(span, centre + 3)
     other = s_other[lo:hi]
     if not len(other):

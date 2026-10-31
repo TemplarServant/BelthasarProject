@@ -17,6 +17,7 @@ Not compared: the ladder's own bytes $5DF1 / $5DC9 / $5DBD / $5DC1 -- the port k
 
 Prints per party `victory-teardown: <party> V c<frame> p<frame>, <frames> frames x <fields> fields, <n> differing`, then
 the cartridge's frames (relative to V) of the three removals, the arm and the first publish.
+Regression check: battle-victory-teardown-frames-vs-oracle.
 """
 import os
 import sys

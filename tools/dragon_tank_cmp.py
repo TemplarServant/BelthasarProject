@@ -3,37 +3,38 @@ r"""The Dragon Tank's bridge (loc 01C), port against the rule's cartridge: the t
 
     python tools/dragon_tank_cmp.py
 
-THE SEED: saves/field_re/tank/tele01c.state -- the jackie save ch05 (the prison cell, saves/downloaded/ctjackie) with the
-story page of the user's own run at the bridge (storyline 2E) and the party Crono + Lucca, the tank's two flags cleared
-($7F0198 bit 2, $7F0199 bit 2: the first walk-on and the arrival), then `ct.exe --teleport 28 44 9 2 --method jmp
---frames 60` (the ROM's own load). Its .lakewram is the port's seed (--loadwram). The rule's cartridge (CT_ORACLE_LOGICAL=1).
+Seed: saves/field_re/tank/tele01c.state -- the jackie save ch05 (the prison cell, saves/downloaded/ctjackie) with the
+story page of a run at the bridge (storyline 2E) and the party Crono + Lucca, the tank's two flags cleared ($7F0198
+bit 2, $7F0199 bit 2: the first walk-on and the arrival), then `ct.exe --teleport 28 44 9 2 --method jmp --frames 60`
+(the ROM's own load). Its .lakewram is the port's seed (--loadwram). The cartridge runs under the rule
+(CT_ORACLE_LOGICAL=1).
 
-THE DRIVE: Left until the first trigger (Lucca's "What was that?"), A every 16 frames through the box, Left again into the
+Drive: Left until the first trigger (Lucca's "What was that?"), A every 16 frames through the box, Left again into the
 second (the tank rolls in: obj5 fn4), then A every 16 frames through the fight (Attack, the default target) and the end.
 The port takes the same buttons one frame later: its field answers a press one frame sooner than the console (field.c,
 fieldPadNmi's PHASE note), so this lines the field up and leaves the fight's pad (g_padAutoRead) one frame behind.
 
-ALIGNMENT: on that drive the field's WRAM is the cartridge's frame for frame (--monitor f = CT_FIELD_MEMMON f: every
-object's position, frame and script pointer, the camera and the play clock, f1100-f1700), and the port's PICTURE of frame
-P is the cartridge's --peek P+2 (the project's one alignment, memory ct-frame-alignment-p2: the NMI shows the HDMA set the
-loop before built, field_window_wipe.md) -- 0 px different in the tank box on f150-163, f1196-1212 and f1432-1449. The
-arrival is graded so, port 1438 against cartridge 1440. In the fight the pad one frame behind makes it P+1 (the hurt
-flash's pose changes on port 2156/2159, cartridge 2157/2160): port 2159 against 2160.
+Alignment: on that drive the field's WRAM matches the cartridge's frame for frame (--monitor f = CT_FIELD_MEMMON f:
+every object's position, frame and script pointer, the camera and the play clock), and the port's picture of frame P is
+the cartridge's --peek P+2 (the NMI shows the HDMA set the loop before built, field_window_wipe.md). The arrival is
+graded so, port 1438 against cartridge 1440. In the fight the pad one frame behind makes it P+1 (the hurt flash's pose
+changes on port 2156/2159, cartridge 2157/2160): port 2159 against 2160.
 
-PRINTS
+Prints:
     dragon-tank: arrival c1440 tank box <n>/<N> px identical
     dragon-tank: hit flash c2160 tank box <n>/<N> px identical
     dragon-tank: Crono's attack anims cart <list> port <list>
     dragon-tank: results lines cart <list> port <list>
     dragon-tank: railing c7400 vram holds <k> chips the wram map emptied
     dragon-tank: railing c7400 box <n>/<N> px identical
-The arrival and the flash are the class-3 body (sprite 403, obj13 / combatant 3) the port drew as nothing (field.c's frame
-loop and battleEnemyGenRender); the anims are C1/4A71's walk verdict (battle.c battleTargetWalkable); the lines are the
-TP line's $B2AF bit 4 and the no-celebration box (battleBuildResults, field.c's results render gate).
+The arrival and the flash grade the class-3 body (sprite 403, obj13 / combatant 3; field.c's frame loop and
+battleEnemyGenRender); the anims are C1/4A71's walk verdict (battle.c battleTargetWalkable); the lines are the TP line's
+$B2AF bit 4 and the no-celebration box (battleBuildResults, field.c's results render gate).
 The railing: at the fight's return obj0 fn1 runs `E4 07 0C 0B 0D 07 09 41`, which empties BG1 cells 7-11 x 9-10 in the WRAM
 map; op 0xE4 uploads nothing, so the VRAM keeps the railing in front of the wreck (the cartridge's held chips: the $6000
 ring through $1D99/$1D9A against the WRAM's metatile words) and the port's picture must too (field.c fieldTileCopyDrain,
 scene.c CtFieldScenePicHold; disasm/notes/field_tile_copy_e4.md).
+Regression check: field-dragon-tank-bridge-vs-rule-cartridge.
 """
 import os
 import re
@@ -48,7 +49,7 @@ STATE = os.path.join(ROOT, 'saves', 'field_re', 'tank', 'tele01c.state')
 SEED = os.path.join(ROOT, 'saves', 'field_re', 'tank', 'tele01c.lakewram')
 OUT = os.path.join(ROOT, 'build', '_dragon_tank')
 END = 7400                                   # past the fight's exit (the cartridge's c7349)
-SHOTS = ((1440, 2), (2160, 1))               # (the cartridge's --peek frame, the port's frame behind it): see ALIGNMENT
+SHOTS = ((1440, 2), (2160, 1))               # (the cartridge's --peek frame, the port's frame behind it): see Alignment
 RAIL = 7400                                  # after the E4 (the cartridge's c7363), before the camera's pan (c7528)
 RAIL_BOX = (32, 128, 112, 160)               # BG1 cells 7-11 x 9-10 at the camera $1D0A = 0A, $1D0E = 02
 BOX = (0, 40, 128, 168)                      # the tank, render coordinates (x0, y0, x1, y1)

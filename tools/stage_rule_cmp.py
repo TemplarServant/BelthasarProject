@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
-"""stage_rule_cmp.py -- a translated $C3 stage of the attract, EVERY frame from its hand-off to its exit, against the
-cartridge UNDER THE RULE (CLAUDE.md's exception, the zelda3 model; sequence_table.md 11.13).
+"""stage_rule_cmp.py -- a translated $C3 stage of the attract, every frame from its hand-off to its exit, against the
+cartridge under the rule (the zelda3 model, CLAUDE.md; sequence_table.md 11.13).
 
     python tools/stage_rule_cmp.py race|entry3 [--frames N]
 
 Both sides are run here, nothing is a pinned frame number:
-  * the cartridge: from POWER-ON with the virtual beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1),
+  * the cartridge: from power-on with the virtual beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1),
     `ct.exe --xlatentries boot` names the frame P C3:0000 runs on for the stage (the entry whose 7E:3000 shows $0384 =
     6x), and `PEEK_SAVE=<state> ct.exe --peek boot out --frames P-H+1` saves the state H frames before it (a state's own
-    count starts one later than power-on's: the 2026-09-26 race state, f8247, ran C3:0000 at its f19 = power-on f8265);
-    `--xlatentries <state>` re-measures H on it (HANDOFF below). `--peek <state> --frames HANDOFF+N` with
-    PEEK_THUMBS_EVERY=1 gives every frame as a 128x112 thumbnail. The state is THIS oracle's: both runs start at power-on
-    (~60 s each), so they are kept under build/_stagerule/ named by ct.exe's sha1 and made again by the next exe -- every
-    link is one (the linker stamps the exe: the same sources rebuilt hash differently), so the first run after a build
-    pays the two runs and the next ones read them. The committed saves/attract_*_handoff_rule_*.state were made
-    2026-09-26, before the drain's and the runner's virtual beam (a07ca0f, 30ccdce) moved the attract -- a state outlives
-    the oracle that made it (field_window_wipe.md "The virtual beam", 2026-09-30).
+    count starts one later than power-on's); `--xlatentries <state>` re-measures H on it (HANDOFF below).
+    `--peek <state> --frames HANDOFF+N` with PEEK_THUMBS_EVERY=1 gives every frame as a 128x112 thumbnail. The state is
+    this oracle's: both runs start at power-on (~60 s each), so they are cached under build/_stagerule/ named by ct.exe's
+    sha1 and made again for the next exe (the linker stamps the exe, so every link is a new one); the first run after a
+    build pays for the two runs. The committed saves/attract_*_handoff_rule_*.state are not used: a state outlives the
+    oracle that made it (field_window_wipe.md "The virtual beam").
   * the port: the attract from scene 433 (CT_NOPACE, CT_AUDIO_LOCKSTEP, as entry3_stage_cmp.py), CT_STAGE_HANDOFF_WRAM to
     print the frame the host opens the stage on (`stage-handoff: frame F $0384=6x`: the native stage, seq_race.c /
     seq_entry3.c), CT_SHOTS_THUMBS over a window that contains it -- the same thumbnail records (field.c, 2x2 blocks
     averaged).
-Port frame F + k is compared with cartridge frame HANDOFF + k + PIC, k = 0 .. N-1 (PIC = 2: THE ALIGNMENT, docs/TESTING.md --
-the port's frame P PICTURE is the logical oracle's `--peek` P+2 while the WRAM aligns at the same number; the native stages
-draw on the field's clock like every other picture; the translated one ran its own PPU and graded at +0) (N = the stage's own length: the port's
-`entry n (native) ended after N frames from C3:0000`, else --frames). The port's seed history equals the cartridge's for every call
-(seed_history_cmp.py), so the stage's opening transition -- C3/02DD's -- is graded like the rest.
+Port frame F + k is compared with cartridge frame HANDOFF + k + PIC, k = 0 .. N-1 (PIC = 2, the alignment in
+docs/TESTING.md: the port's frame P picture is the logical oracle's `--peek` P+2 while the WRAM aligns at the same number;
+the native stages draw on the field's clock like every other picture). N is the stage's own length (the port's
+`entry n (native) ended after N frames from C3:0000`), else --frames. The port's seed history equals the cartridge's for
+every call (seed_history_cmp.py), so the stage's opening transition (C3/02DD's) is graded like the rest.
 
   stage-rule-state: <stage> C3:0000 at power-on f<P> ($0386 = <s>) -> state f<P-H+1>, its f<H>, ct.exe <sha1>
   stage-rule-cmp: <stage> port f<F>..f<F+N-1> vs cartridge +<H>..+<H+N-1> under the rule -> <n> / <N> frames identical
@@ -41,7 +39,7 @@ REC = 6 + 128 * 112 * 3
 RULE = {'CT_ORACLE_VIRTUAL_BEAM': '1', 'CT_ORACLE_LOGICAL': '1'}
 CACHE = 'build/_stagerule'
 PIC = 2           # the picture alignment (above)
-SEARCH = 9300     # power-on frames --xlatentries walks: past entry 3's hand-off (f8863 on the 2026-09-30 oracle)
+SEARCH = 9300     # power-on frames --xlatentries walks: past entry 3's hand-off (about f8863)
 
 
 def exe_tag(path):
@@ -50,7 +48,7 @@ def exe_tag(path):
         for chunk in iter(lambda: f.read(1 << 20), b''):
             h.update(chunk)
     # ...and the oracle's frame rule: the same ct.exe makes another attract under CT_ORACLE_NMION_HOLD / CT_ORACLE_LINE64
-    # (the migration switches of 'NMI-on work never costs frames', CLAUDE.md), so a state made under one is not the other's.
+    # (measurement switches, CLAUDE.md), so a state made under one is not the other's.
     rule = ''.join(k for k, e in (('h', 'CT_ORACLE_NMION_HOLD'), ('l', 'CT_ORACLE_LINE64'), ('a', 'CT_ORACLE_HOLDAPU'),
                                   ('i', 'CT_ORACLE_IFAST'))
                    if os.environ.get(e, '0' if e == 'CT_ORACLE_HOLDAPU' else '1') not in ('', '0'))

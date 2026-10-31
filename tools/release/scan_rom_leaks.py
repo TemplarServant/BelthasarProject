@@ -105,7 +105,7 @@ def runs_from_text(text):
 
 
 def is_ramp(win):
-    """A window made of STRUCTURE, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
+    """A window made of structure, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
     longs), each one steps by a constant (00 01 02 .., 00 00 01 00 02 00 .., a run of one value) or holds only zero
     and powers of two (80 40 20 .. 01: bit masks); or two such byte pieces end to end (a padding run, then an index
     table: 00 00 .. 00 01 02 03 ..). Identity, index and bit tables: any program and any data may hold them."""

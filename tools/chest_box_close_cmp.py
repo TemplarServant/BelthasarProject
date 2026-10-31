@@ -11,13 +11,15 @@ the lead: he walks with it on screen, and it goes when the chest leaves the view
 
 The cartridge state saves/field_re/s49_chest_walk.state is made from s19_power_tab.state when missing: `--teleport 49 12
 38 0` (loc 031, the tile below the chest (12,37), facing it). The drive, on the cartridge (the port's keys are the
-oracle's + 1, memory ct-frame-alignment-p2): A on frame 10 (opens the chest), Down held from 34, Right from 134, Down from
-534. The cartridge closes at f280 ($1D0E = 4A: the camera's top row is the chest's) and clears $0129 at f291. Port frame
-k is set beside the cartridge's `--peek` k + 2 (the alignment P + 2), the whole 256x224:
+oracle's + 1, docs/TESTING.md): A on frame 10 (opens the chest), Down held from 34, Right from 134, Down from 534. The
+cartridge closes at f280 ($1D0E = 4A: the camera's top row is the chest's) and clears $0129 at f291. Port frame k is
+set beside the cartridge's `--peek` k + 2 (the alignment P + 2), the whole 256x224:
   chest-close: cartridge $0129 <v>@f<n> ...      (the box machine's state on each change, `--monitor 0129 --diff`)
   chest-close: port      $0129 <v>@f<n> ...      (CT_TBTRACE; the port's frame n is the cartridge's n - 1, the key)
   chest-close: f<k> <n>/57344 identical          (only the frames that differ)
   chest-close: <k>/<n> frames identical
+
+Regression check: field-chest-box-closed-by-camera-vs-rule-cartridge.
 """
 import os
 import re

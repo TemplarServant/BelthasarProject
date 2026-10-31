@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-r"""The overworld's SPRITE PIPELINE against the cartridge, on the attract's 2300 A.D. walkers.
+r"""The overworld's sprite pipeline against the cartridge, on the attract's 2300 A.D. walkers.
 
     python tools/ow_objlayer_cmp.py
 
-What an overworld sprite is on the cartridge, and what the port now builds the same way:
-  * the per-frame DRAW LIST in WRAM ($7E:B000 nodes, head $B500; C2/0C4D empties it, the anim sub-VM's op 4 enqueues
-    through C2/0B53 in descending Y) and the OAM SHADOW C2/0CEA -> C2/0D08 decodes it into ($7E:0700/$0900);
-  * the OBJ GRAPHICS and PALETTES the world loader takes from the ROM for whoever is in the party (C2/2768, C2/2B61,
-    C2/2882, C2/28ED, C2/2D13) -- the captured world blob had the wrong members in OBJ palettes 5 and 6;
-  * the op-0x34 native C2/786F, which gives the party's ids to the walkers' scripts ($1BA3-$1BA5): without it Robo left
-    the dome on Crono's script.
+What an overworld sprite is on the cartridge, and what the port builds the same way:
+  * the per-frame draw list in WRAM ($7E:B000 nodes, head $B500; C2/0C4D empties it, the anim sub-VM's op 4 enqueues
+    through C2/0B53 in descending Y) and the OAM shadow C2/0CEA -> C2/0D08 decodes it into ($7E:0700/$0900);
+  * the OBJ graphics and palettes the world loader takes from the ROM for whoever is in the party (C2/2768, C2/2B61,
+    C2/2882, C2/28ED, C2/2D13), not from the captured world blob (its OBJ palettes 5 and 6 hold other members);
+  * the op-0x34 native C2/786F, which gives the party's ids to the walkers' scripts ($1BA3-$1BA5): without it Robo
+    leaves the dome on Crono's script.
 
 The cartridge side is saves/attract_2300ad_f5800.state + 131 frames (the three walkers mid-stride). The port side is the
 attract run from scene 433 with CT_OWDUMP over its whole 2300 A.D. visit; the frame whose walker blocks (class $0F63,
-attr $A8/$AA/$AC: script pc, X, Y, anim pointer, dwell) equal the cartridge's is the aligned one -- found, not assumed,
-so a shift in the attract's timeline elsewhere does not break the grade. At that frame all 128 OAM entries (a parked
+attr $A8/$AA/$AC: script pc, X, Y, anim pointer, dwell) equal the cartridge's is the aligned one (searched for, so a
+shift in the attract's timeline elsewhere does not break the grade). At that frame all 128 OAM entries (a parked
 entry is only its Y), VRAM $2000-$3FFF (the OBJ name table the walkers use) and the 256 colours at $7F:8C00 must be equal.
 """
 import os
@@ -70,7 +70,7 @@ def main():
     fr, d = hit
     pw, pv = d[:0x20000], d[0x20000:0x30000]
     # C2/034D parks an entry by its Y alone ($E0) and leaves X, tile and attribute as the last frame that used it left
-    # them, which is history; an entry is equal when both are parked, or when all four bytes and its two high-table
+    # them, which is stale; an entry is equal when both are parked, or when all four bytes and its two high-table
     # bits agree.
     def entry(w, i):
         if w[0x701 + i * 4] == 0xE0:

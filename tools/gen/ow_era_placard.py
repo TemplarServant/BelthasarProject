@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""src/data/ow_era_placard.h -- the overworld ERA PLACARD's pixels, per era id, from the oracle's isolated OBJ layer.
+"""src/data/ow_era_placard.h -- the overworld era placard's pixels, per era id, from the oracle's isolated OBJ layer.
 
     python tools/gen/ow_era_placard.py [--capture] [--out PATH]
 
 The placard is an ordinary overworld ambient-VM object (class $0F63, attr $31) parked at (8,192); object-VM op 0x30
 (C2/160F -> C2/1CDA) points it at entry [id] of $C3:E000, a one-op script `04 <descriptor> 00`. Ids $75..$7B are the
-era placards (disasm/notes/ow_era_placard.md). Which placard, where and when are ported as code; only the PIXELS are
+era placards (disasm/notes/ow_era_placard.md). Which placard, where and when are ported as code; only the pixels are
 baked, because the port keeps no overworld OBJ VRAM. Per descriptor and not per tile name: the OBJ tile names are
 per-world VRAM slots (tile $1AC is piece 0 of five descriptors and its art differs between worlds).
 
 Each source state runs 240 frames under `ct.exe --peek ... --btnscript 0:240` with PEEK_ISOBG=4 (the OBJ layer alone,
-the plain oracle as the original bake ran); the pieces are the OAM rows at Y 192 with attribute $31 and the strip is
-cut from the picture, the isolated layer's backdrop (its modal colour) as the transparent key.
+on the plain oracle); the pieces are the OAM rows at Y 192 with attribute $31 and the strip is cut from the picture,
+the isolated layer's backdrop (its modal colour) as the transparent key.
 
-Sources (the names in the header's comments are the moments, as the original bake named them):
+Sources (the header's comments name each by these moments):
   saves/ow_w0.state         $75  1000 A.D.        default: recipe ow_nav_w0
   saves/com_jogo_salvo.state $76  600 A.D.         default: recipe com_jogo_salvo ($7E:1BAD bit0 set)
   saves/ow_w3.live          $78  world 3          default: `ct.exe --owforce <ow_nav_w0> 3`
@@ -85,7 +85,7 @@ def main():
     ap.add_argument('--capture', action='store_true', help='read the original saves/ states')
     ap.add_argument('--out', default=OUT)
     a = ap.parse_args()
-    os.environ.pop('CT_ORACLE_LOGICAL', None)          # the plain oracle, as the original bake
+    os.environ.pop('CT_ORACLE_LOGICAL', None)          # the plain oracle
     if not a.capture:
         w0 = recipe('ow_nav_w0')
         states = {0x75: w0, 0x76: recipe('com_jogo_salvo')}

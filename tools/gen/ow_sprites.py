@@ -10,8 +10,8 @@ Writes, under DIR (default: the repository root):
                          order: the frames that are, pixel for pixel, a tile of the gull flap sequence C3:E6A2
                          (descriptors E77A/E77F/E784 -> OBJ names 1CA, 1CC, 1CE) decoded from the same state's VRAM in
                          the gull's palette (attr BA -> OBJ palette 5); the other birds --owbirds sees are dropped and
-                         the kept frames renumbered from 0. This is the filtering the original capture left unrecorded
-                         (disasm/notes/ow_objvm.md), recovered by the same pixel identity tools/gen/ow_gullmap.py uses.
+                         the kept frames renumbered from 0 (disasm/notes/ow_objvm.md; the same pixel matching
+                         tools/gen/ow_gullmap.py uses).
   saves/ow_balloons.spr  (id 3) the Leene's Square fair sprites of the new-game pan: the booth explosion puffs (OBJ
                          chars 00 02 04 06 08, palette 1) and the rising bunches (char 0A, palettes 1/2/3), decoded from
                          the pan 625 frames after the capture instant -- the moment of the owner's
@@ -20,7 +20,7 @@ Writes, under DIR (default: the repository root):
 The states:
   default    the recipes ow_nav_w0 (stands in for saves/ow_w0.state) and ow_intro_pan (for start_scene.state)
   --capture  saves/ow_w0.state, and for the balloons the snes9x state anim_leenes_square.state (--leenes PATH)
-The --ow* captures run the plain oracle, as they always did.
+The --ow* captures run the plain oracle.
 """
 import argparse
 import os

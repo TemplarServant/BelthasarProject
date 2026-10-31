@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The attract Zombor's EFFECT PROGRAM (bank D1, program 4D at D1/74F8 and its continuation at D1/A208) and what it drives,
+r"""The attract Zombor's effect program (bank D1, program 4D at D1/74F8 and its continuation at D1/A208) and what it drives,
 against the cartridge, frame by frame -- op AA (CD/1C32: the slot's anchor = minus bound point k), the objslot record
 service's mode 4 (FD/E82C: the fade toward white, sub-mode 0 = FD/E8D7), op BF's wait on the records, and the script's
 screen-shake requests (`80 45 ..` = D1/F6B4, `80 51` = D1/F692).

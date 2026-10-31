@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""saves/ct_namewin.bin -- the name-entry screen's WINDOW BACKGROUND (ct_assets.dat T_NAMEWIN), byte-exact.
+"""saves/ct_namewin.bin -- the name-entry screen's window background (ct_assets.dat T_NAMEWIN).
 
 The naming screen's windows (frame + diagonal weave + per-scanline HDMA gradient) are SNES BG2, composited by the
 PPU's colour math -- not recoverable from the final picture (the weave is a diagonal tile texture, the gradient is
-per-scanline). So BG2 is rendered in ISOLATION by the oracle: one frame with only layer 1 (BG2) on the main screen
+per-scanline). So the oracle renders BG2 alone: one frame with only layer 1 (BG2) on the main screen
 (PEEK_ISOBG=1, the g_ppuIsoBg hook in snes/ppu.c), keeping its real gradient and colour math but dropping the content
 layer (BG1 = portrait/keyboard/name) and the sprites. The result is character-independent; field.c blits it and draws
 the content on top.
 
 The capture: Lucca's naming screen (recipe name_lucca: home_downstairs's walk down to Mom, stopped on the naming
-screen before its Start). Port of tools/gen_namewin.py (which read the owner's saves/luccaname.state).
+screen before its Start; it stands in for saves/luccaname.state).
 
     python tools/gen/ct_namewin.py [--state S] [--out saves/ct_namewin.bin]
 

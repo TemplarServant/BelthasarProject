@@ -3,14 +3,12 @@ r"""The Telepod (loc 008) climbed with A pressed as Crono raises his arms, port 
 
     python tools/telepod_latch_cmp.py
 
-The user, 2026-10-19 (translated from Portuguese): "on climbing the pod in scene 8, picking up the pendant to go after
-Marle, sometimes Crono does the arms-raising animation, lowers them and raises them again". obj11's fn1 (A) and fn2
-(touch) are the same code, `EB 30 00 / CA D6 / 04 06 36 / ...` -- `04 06 36` calls Crono's fn6 (the raised arms) at
-priority 3 and waits, the latch $7F0980 set. The touch runs it at priority 2; an A press on the frame Crono's fn6 starts
-pre-empts it with fn1 at priority 1 (C0/5AC5), and fn1's own `04 06 36` meets the latch still set: C0/6109 `BRL 61A7`,
-the POLL on its own operands -- it waits for the fn6 already playing and goes on, ONE raise. The port installed the call
-afresh and Crono raised his arms a second time. (ct_vm.c: the 0x02-0x07 arm's latch branch, ssPushAddr;
-disasm/notes/call_wait_latch_preempt.md sec. 4.)
+obj11's fn1 (A) and fn2 (touch) are the same code, `EB 30 00 / CA D6 / 04 06 36 / ...` -- `04 06 36` calls Crono's fn6
+(the raised arms) at priority 3 and waits, the latch $7F0980 set. The touch runs it at priority 2; an A press on the frame
+Crono's fn6 starts pre-empts it with fn1 at priority 1 (C0/5AC5), and fn1's own `04 06 36` meets the latch still set:
+C0/6109 `BRL 61A7`, the poll on its own operands -- it waits for the fn6 already playing and goes on, one raise.
+Installing the call afresh would raise Crono's arms a second time. (ct_vm.c: the 0x02-0x07 arm's latch branch,
+ssPushAddr; disasm/notes/call_wait_latch_preempt.md sec. 4.)
 
 The cartridge: saves/field_re/scene8_pod_latch.state (tools/recipes/fxr_scene8_pod.json: Crono below the left pod after Marle vanished),
 `--monitor` with Up held 25 frames and A on the 22nd. The port: the same WRAM (--loadwram) and SPC (CT_AUDIO_SEEDSTATE),

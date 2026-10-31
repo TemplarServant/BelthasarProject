@@ -12,7 +12,7 @@ CGRAM. Both sides run live (set CT_AUDIO_LOCKSTEP in the environment when the le
     fx-sprite-cmp: frame table ($4500 $A05B $5D00 $A07B $987A-$9886) <same> / 6333 identical
     fx-sprite-cmp: port f<P> vs oracle f<O>: cloud (OAM 4-19) <n> sprites, visible pixels <same> / <total> identical
 
-The cloud is drawn here from the CARTRIDGE's own OAM, VRAM and CGRAM (ppu.c's ppu_evaluateSprites rule, 16x16 for
+The cloud is drawn here from the cartridge's own OAM, VRAM and CGRAM (ppu.c's ppu_evaluateSprites rule, 16x16 for
 the large bit, the OAM row = the port framebuffer row = the oracle row + 8); the pixels graded are those where the
 cartridge's picture shows that sprite (a BG3 priority tile may cover a few). The frame table and the sheets are
 static once the action has loaded them, so the WRAM taken before the port's tick grades them directly.

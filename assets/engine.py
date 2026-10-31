@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Cooperative scene-script scheduler (M2) + player-input hooks.
+"""Cooperative scene-script scheduler + player-input hooks (a Python prototype).
 
-Runs a scene's object scripts frame-by-frame with Chrono Trigger's real model:
+Runs a scene's object scripts frame by frame with Chrono Trigger's model:
 per-object script state (16 function pointers, 8 priority return pointers, current
-priority — 7 = init/idle), a per-frame run cycle (delay countdown, up to 5 ops or
+priority; 7 = init/idle), a per-frame run cycle (delay countdown, up to 5 ops or
 until a yield), req/call/return priority switching between objects, wait/yield, and
 a textbox state machine (a text op blocks the actor until the box is dismissed).
 
 Player input is exposed as `activate(obj)` (talk, slot 1) and `touch(obj)` (slot 2);
-a real front-end would call these on a key press near an NPC. `tick()` advances one
+a front-end calls these on a key press near an NPC. `tick()` advances one
 frame; `advance()` dismisses the current textbox. Built on script.py + text.py.
 
 Usage:
@@ -85,7 +85,7 @@ class SceneEngine:
         self.textbox = None              # the string currently shown (None = no box)
         self.frame = 0
         self._init_scene()
-        # field collision + a player actor (CTViewer doesn't do these; our own layer)
+        # field collision + a player actor (not in CTViewer; this module's own layer)
         try:
             self.cw, self.ch, self.coll, self.zp, self.zf, self.mv = maps.scene_props(rom, scene)
         except Exception:
@@ -97,7 +97,7 @@ class SceneEngine:
         self.player = {'sprite': 0, 'pos': (sx, sy), 'facing': 1, 'z': pz}   # Crono
         self.exits = maps.scene_exits(rom, scene)                        # doors / transitions
 
-    # ---- collision + player walking (our own; CT collision types from the props) ----
+    # ---- collision + player walking (CT collision types from the props) ----
     WALKABLE = (0, 30)                   # SceneTileCollision None / Ladder
 
     def walkable(self, tx, ty):
@@ -106,7 +106,7 @@ class SceneEngine:
         return self.coll[ty * self.cw + tx] in self.WALKABLE
 
     def _zsolid(self, z):
-        """Z-plane gating, verified from the CT routine at C0/9C3B: a tile is solid by
+        """Z-plane gating, from the ROM routine at C0/9C3B: a tile is solid by
         z-plane when z==0 (transition-solid) or it is on a different plane than the
         player; walkable when z==3 (transition), z==player plane, or player plane==3."""
         pz = self.player['z']
@@ -152,10 +152,9 @@ class SceneEngine:
         return None
 
     def enter_scene(self, scene, pos, facing):
-        """Door-entry driver: load `scene` carrying the CURRENT story flags forward (so
-        flag-gated NPCs appear exactly as the accumulated story dictates), and drop the
-        player at the entry pos/facing. This is how Lucca's house etc. become populated:
-        as events set global flags during play, later scene entries reflect them."""
+        """Door-entry driver: load `scene` carrying the current story flags forward (so
+        flag-gated NPCs appear as the story so far dictates), and drop the player at the
+        entry pos/facing."""
         e = SceneEngine(self.rom, scene, gmem=bytes(self.mem.g))
         e.player['pos'] = (float(pos[0]), float(pos[1]))
         e.player['facing'] = facing & 3
@@ -434,7 +433,7 @@ class SceneEngine:
                 self._req(body[addr + 1] // 2, body[addr + 2] & 0x0F, (body[addr + 2] & 0xF0) >> 4)
             return 'complete'
 
-        # --- jumps / conditions (jump when FALSE) ---
+        # --- jumps / conditions (jump when false) ---
         if op == 0x10: st.addr = addr + body[addr + 1] + 1; return 'jumped'
         if op == 0x11: st.addr = addr - body[addr + 1] + 1; return 'jumped'
         if op in (0x12, 0x13, 0x14, 0x15, 0x16, 0x18, 0x1A):
@@ -694,7 +693,7 @@ if __name__ == '__main__':
         print("scene %d z-plane: counts %s, %d door tiles -> %dx%d '%s'"
               % (scene, dict(Counter(zp)), sum(1 for f in zf if f & 8), W, H, out))
     elif mode == 'populate':
-        # Populate a scene from a story-flag state: `@file` loads the REAL global flags
+        # Populate a scene from a story-flag state: `@file` loads the global flags
         # ($7F0000) captured from the oracle (ct.exe --dumpflags), else a hex byte-fill.
         arg = sys.argv[4] if len(sys.argv) > 4 else 'FF'
         out = sys.argv[5] if len(sys.argv) > 5 else None

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-r"""The field NMI's tilemap arm skips the CGRAM upload -- port against the LOGICAL oracle.
+r"""The field NMI's tilemap arm skips the CGRAM upload: port against the logical oracle.
 
     python tools/nmi_cgram_cmp.py
 
-disasm/notes/field_tile_copy_e5.md section 2. The field NMI starts `EAD1 LDA $46 / BNE`: when C0/179A's style branch
+disasm/notes/field_tile_copy_e5.md sec. 2. The field NMI starts `EAD1 LDA $46 / BNE`: when C0/179A's style branch
 left a tilemap in $46 (1-4, or bits 3/4) the NMI uploads it and `BRL EC15`s past C0/EB79-EC13 -- no CGRAM upload
 (C0/712E, $7E:2200 x $200), no OAM, no VRAM queue, no text line. FD/E39C keeps stepping the page during the hold
 (C0/00DE's FD:FFF7), so a location whose colours animate shows the colours of the frame before the first upload for as
@@ -13,7 +13,7 @@ long as the NMIs are taken.
          four E5 copies of style 3 (mask 3B) -- the room's lights (CGRAM 55-59) flip bright/dim every 2 frames on the
          page. Per frame: the NMIs that do not reach C0/712E (the cartridge's `--hookpc 712E`, the port's
          CT_XFERTRACE `nmi:` lines), the frames on which the page differs from what CGRAM holds (the cartridge's page
-         against its NMIs), and the picture: the port's P against the cartridge's P+2 (memory ct-frame-alignment-p2).
+         against its NMIs), and the picture: the port's P against the cartridge's P+2 (the field's display alignment).
 
 Lines:
   nmi-cgram: lever no-cgram <runs> cartridge|port

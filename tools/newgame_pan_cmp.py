@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Compare the new-game 1000 A.D. overworld pan's CAMERA in the port against the cartridge, frame by frame.
+r"""Compare the new-game 1000 A.D. overworld pan's camera in the port against the cartridge, frame by frame.
 
     python tools/newgame_pan_cmp.py
 

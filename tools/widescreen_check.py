@@ -7,21 +7,19 @@ For each scene (default 5 6 112) runs Belthasar twice with a settings file (CT_S
 window at x1 with the picture at integer scale, so the window's pixels are the picture's -- and saves the frame at f150
 without the overlay (CT_OVERLAY_SHOT ...:9, under the dummy video driver). Then:
 
-    widescreen: scene 5 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 0 black
-    widescreen: scene 6 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 29962 black
+    widescreen: scene <n> <w>x224: the middle 256 == the 256 picture (<d> px differ); sides <s> px, <b> black
 
 The sides' black pixels are the room's end (the scroll mask): a room no wider than the screen shows nothing beside it.
 
-Two more cases (in the default set) need a seed and a frame of their own: `roll`, the staff roll's caption plane (scene
-05B's roll from tools/caption_plane_cmp.py's seed), f450; and `line`, the tutorial's colour window (scene 254's line from
-tools/tutorial_cmp.py's seed), f100. Both wrote their rows with the 256 picture's stride into the wide one (2026-10-10).
-And `forest`, a live battle (scene 19 from saves/battle_re/forest_pre_wrapped.lakewram, A mashed), f300: the arena is
-composed wide round the battle's own 256 view. A room as wide as its map ends at its edge like any other (the option
-that wrapped the map there, wide_room_wrap, was removed 2026-10-23): black past it but for a background layer. The widescreen's
-camera is the Steam release's clamped one (2026-10-28): at a room's edge the room's edge stands at the wide screen's
-edge and the view slides off the middle (`5-edge`, the fair with Crono at its left edge: the view at x 0; the forest's
-fight at f300). When the view stands off the middle the line says where (the screen-fixed boxes stay at the middle:
-what still differs there).
+More cases (in the default set) need a seed and a frame of their own: `roll`, the staff roll's caption plane (scene
+05B's roll from tools/caption_plane_cmp.py's seed), f450; `line`, the tutorial's colour window (scene 254's line from
+tools/tutorial_cmp.py's seed), f100 -- both must write their rows with the wide picture's stride; and `forest`, a live
+battle (scene 19 from saves/battle_re/forest_pre_wrapped.lakewram, A mashed), f300: the arena is composed wide round
+the battle's own 256 view. A room as wide as its map ends at its edge like any other: black past it but for a
+background layer. The widescreen's camera is the Steam release's clamped one: at a room's edge the room's edge stands
+at the wide screen's edge and the view slides off the middle (`5-edge`, the fair with Crono at its left edge: the view
+at x 0; the forest's fight at f300). When the view stands off the middle the line says where (the screen-fixed boxes
+stay at the middle: what still differs there).
 """
 import os
 import subprocess

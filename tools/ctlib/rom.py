@@ -1,15 +1,13 @@
 """ROM access: load (copier-header strip), HiROM addressing, xref scanning.
 
-Addressing comes from the proven tools/disasm65816.py hirom_off (imported,
-not re-derived -- the legacy _find*/_refscan scripts each re-invented this
-math, inconsistently).
+Addressing is tools/disasm65816.py hirom_off, imported.
 
-refs() generalizes tools/_refscan.py: for a target address it finds
-  callers: JSR abs (0x20 lo hi; a JSR only reaches its OWN bank, so the call
-           site's bank names the real target) and JSL long (0x22 lo hi bk)
+refs(): for a target address it finds
+  callers: JSR abs (0x20 lo hi; a JSR only reaches its own bank, so the call
+           site's bank names the target) and JSL long (0x22 lo hi bk)
   writers: STA abs/abs,X/abs,Y (8D/9D/99) and STZ abs/abs,X (9C/9E)
-NOTE: this is a heuristic byte-pattern scan (can false-positive on data /
-operand coincidences) -- confirm hits by disassembling around them.
+Note: this is a heuristic byte-pattern scan (it can match data or operand
+bytes by coincidence); confirm hits by disassembling around them.
 
 API:
   load(path=None) -> ROM bytes (auto-strips a 512-byte copier header)
@@ -69,7 +67,7 @@ def load(path=None, check=True):
 
 def off_to_snes(off):
     """HiROM file offset -> (bank, addr16). Inverse of hirom_off for the
-    canonical $C0-$FF mapping (bank = 0xC0 + off>>16)."""
+    $C0-$FF mapping (bank = 0xC0 + off>>16)."""
     return (0xC0 + (off >> 16), off & 0xFFFF)
 
 
@@ -88,13 +86,13 @@ def _scan(rom, pat):
 def refs(rom, addr):
     """Cross-references to `addr`.
 
-    addr <= 0xFFFF: bank-agnostic -- JSR callers from ANY bank are reported
-    (each labelled with the site's own bank, which IS the target bank for a
+    addr <= 0xFFFF: bank-agnostic -- JSR callers from any bank are reported
+    (each labelled with the site's own bank, which is the target bank for a
     JSR); JSL matches any ROM operand bank >= 0xC0.
     addr > 0xFFFF (24-bit, e.g. 0xC05A93): JSR callers only from that bank,
     JSL only with that exact operand bank.
     Returns {'note': NOTE, 'callers': [...], 'writers': [...]}; each entry is
-    {'kind', 'bank', 'addr', 'off'} for the SITE of the reference."""
+    {'kind', 'bank', 'addr', 'off'} for the site of the reference."""
     a16 = addr & 0xFFFF
     bank = (addr >> 16) & 0xFF if addr > 0xFFFF else None
     lo, hi = a16 & 0xFF, (a16 >> 8) & 0xFF

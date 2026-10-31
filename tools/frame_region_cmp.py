@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Compare ONE rectangle of a port frame against the cartridge.
+r"""Compare one rectangle of a port frame against the cartridge.
 
     python tools/frame_region_cmp.py <oracle_state> <oracle_frame> <port_frame> <x0> <y0> <x1> <y1> [<7 more> ...] -- <Belthasar args...>
 
@@ -13,9 +13,9 @@ Oracle framebuffer = 512x480 [pad,B,G,R], downsampled 2x; the port's row y is th
 (FRAME_CMP_DY=<n> adds n, for the measured one-line residual some modes carry; FRAME_CMP_ORACLE_ARGS=<args> are added to the
 oracle's --peek, e.g. its --btnscript). Both sides run live.
 
-Several rectangles (each its own 7 values, before the --) share ONE run of the port: it dumps every port frame named
+Several rectangles (each its own 7 values, before the --) share one run of the port: it dumps every port frame named
 and stops after the last, and each rectangle prints its own line, in the order given -- the same line its own run
-prints. The suite's checks of one port run use this (tools/regress_share.py proves them equivalent).
+prints. The suite's checks of one port run use this (tools/regress_share.py checks them equivalent).
 """
 import os
 import struct
@@ -34,7 +34,7 @@ def main():
              for i in range(1, k, 7)]
     args = sys.argv[k + 1:]
     tmp = 'build/_frcmp_%d' % os.getpid()
-    pfs = sorted({pf for _, _, pf, _ in specs})               # CT_SHOTS_EXIT stops after the LAST listed frame
+    pfs = sorted({pf for _, _, pf, _ in specs})               # CT_SHOTS_EXIT stops after the last listed frame
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS=tmp, CT_SHOTS_AT=','.join(map(str, pfs)), CT_SHOTS_EXIT='1')
     subprocess.run([FIELD] + args, env=env,

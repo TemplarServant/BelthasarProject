@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# Simulate the TITLE SEQUENCE's overlay machine frame by frame and diff it against the oracle's
-# live WRAM.  This is the DERIVATION HARNESS for disasm/notes/title_intro.md section 6+: the $C3
+# Simulate the title sequence's overlay machine frame by frame and diff it against the oracle's
+# live WRAM. This is the derivation harness for disasm/notes/title_intro.md section 6+: the $C3
 # script interpreter (C3/0B03, DP = $0A00), the NMI's two hook lists, every task the title installs,
 # the sprite-package drawers (C3/0D0E / C3/0D5E) and the ROM's palette-job runner (FD/E39C).
 #
@@ -61,7 +61,7 @@ class Machine:
                                             0x68, 0x6C, 0x6E, 0x70, 0x72, 0xFE))
         self.slide = [u16(0x46 + i * 2) for i in range(5)]
         self.tgt = [u16(0x50 + i * 2) for i in range(5)]
-        self.f = bytearray(w[0xF0:0xFA])                 # the $F0..$F9 scratch, byte-exact
+        self.f = bytearray(w[0xF0:0xFA])                 # the $F0..$F9 scratch
         self.wave = [u16(0x0C00 + i * 2) for i in range(64)]
         self.oam = bytearray(w[0x0700:0x0920])
         self.job = [bytearray(w[0x520 + r * 12:0x520 + r * 12 + 12]) for r in range(12)]
@@ -73,8 +73,8 @@ class Machine:
         self.joy = 0
         self.exitflag = 0
         self.bri = [w[0x038D], w[0x038E], w[0x038F]]       # $038D brightness / $038E period / $038F
-        self.mail = list(w[0x1E00:0x1E04])                 # the sound mailbox -- PERSISTENT RAM
-        self.snd = [w[0x0388], w[0x0389], w[0x038A]]        # busy / song PLAYING / song WANTED
+        self.mail = list(w[0x1E00:0x1E04])                 # the sound mailbox -- persistent RAM
+        self.snd = [w[0x0388], w[0x0389], w[0x038A]]        # busy / song playing / song wanted
 
     # ---- the $F0 scratch, as words -------------------------------------------------------------
     def fw(self, a):
@@ -85,10 +85,9 @@ class Machine:
         self.f[a - 0xF0 + 1] = (v >> 8) & 0xFF
 
     def mul(self):
-        """$7E:31BF -- 16x16 -> 32 out of four hardware 8x8s. ⭐ It zeroes $F6 (and $F7) and then
-        ROLs the WORD at $F7, so BIT 7 OF THE STALE $F8 rotates INTO the middle ADC as a carry --
-        and $F8 is left shifted one place. That quirk is the whole reason the matrix looked
-        underivable; modelled here it is exact."""
+        """$7E:31BF -- 16x16 -> 32 out of four hardware 8x8s. Note: it zeroes $F6 (and $F7) and then
+        ROLs the word at $F7, so bit 7 of the stale $F8 rotates into the middle ADC as a carry, and
+        $F8 is left shifted one place. The matrix depends on this quirk."""
         f0, f2 = self.fw(0xF0), self.fw(0xF2)
         p0 = (f2 & 0xFF) * (f0 & 0xFF)
         p1 = (f2 & 0xFF) * (f0 >> 8)
@@ -100,7 +99,7 @@ class Machine:
         a = (p1 + p2) & 0xFFFF
         carry = 1 if (p1 + p2) > 0xFFFF else 0
         rol = ((word << 1) | carry) & 0xFFFF              # ROL $F7  (16-bit)
-        cout = (word >> 15) & 1                           # ⭐ bit 7 of the old $F8
+        cout = (word >> 15) & 1                           # bit 7 of the old $F8
         self.f[7] = rol & 0xFF
         self.f[8] = (rol >> 8) & 0xFF
         t = a + self.fw(0xF5) + cout                      # ADC $F5
@@ -120,7 +119,7 @@ class Machine:
     # ---- the sprite-package drawers ------------------------------------------------------------
     def draw(self, addr, large):
         """C3/0D0E (small) / C3/0D5E (large). Both append to the OAM shadow at the $11 cursor and
-        shift the high-table byte at $13 two bits per sprite -- from the TOP for 0D5E (so every
+        shift the high-table byte at $13 two bits per sprite -- from the top for 0D5E (so every
         sprite it emits is 16x16), zeros from the top for 0D0E (so every one is 8x8)."""
         w = self.script
         n = w[addr] - 1
@@ -259,7 +258,7 @@ class Machine:
         pass
 
     def call_sub(self, a):
-        if a == 0x5DA7:                                    # ⭐ the mode switch: $2105 = 2, reg2 = BG1VOFS
+        if a == 0x5DA7:                                    # the mode switch: $2105 = 2, reg2 = BG1VOFS
             self.mode = 2
             self.reg[2] = 0xFFB9
         elif a == 0x5DB4:
@@ -400,7 +399,7 @@ class Machine:
                 self.listdel(self.pend, 0x5BBF)
 
     def t_5B99(self):
-        """$7E:5B99 -- leaves on ANY button, latches $0070, installs the fade, and only then lets
+        """$7E:5B99 -- leaves on any button, latches $0070, installs the fade, and only then lets
         `BIT #$30` (L or R) decide whether $7F0060 is left behind."""
         if self.m[0x6E] or self.m[0x70]:
             return
@@ -413,8 +412,8 @@ class Machine:
         self.listdel(self.pend, 0x5B99)
 
     def nmi_sound(self):
-        """C3/09A4 -- the NMI's OTHER half, called right after C3/08D0. A song-change watcher: when
-        the song WANTED ($038A) differs from the song PLAYING ($0389) it loads the wanted one. The
+        """C3/09A4 -- the NMI's other half, called right after C3/08D0. A song-change watcher: when
+        the song wanted ($038A) differs from the song playing ($0389) it loads the wanted one. The
         title latches both in its setup, so here it only ever finds them equal."""
         if self.snd[0]:
             return
@@ -438,14 +437,14 @@ class Machine:
         self.mail[0] = 0
 
     def t_34AB(self):                                      # the exit: sound, then become the fade
-        # `LDX #$0040 / STX $1E01` is 16-bit: $1E01 = $40 AND $1E02 = $00. $1E03 is NOT touched.
+        # `LDX #$0040 / STX $1E01` is 16-bit: $1E01 = $40 and $1E02 = $00. $1E03 is not touched.
         self.mail[1] = 0x40
         self.mail[2] = 0x00
         self.mail[0] = 0x81
         self.post()
         self.listswap(self.pend, 0x34AB, 0x34C2)
 
-    def t_34C2(self):                                      # the brightness ramp, and the DONE flag
+    def t_34C2(self):                                      # the brightness ramp, and the done flag
         self.bri[2] = (self.bri[2] - 1) & 0xFF
         if self.bri[2]:
             return
@@ -453,7 +452,7 @@ class Machine:
         self.bri[0] = (self.bri[0] - 1) & 0xFF
         if self.bri[0]:
             return
-        self.mail[0] = 0xF0                                # $34D5 writes the command byte ALONE
+        self.mail[0] = 0xF0                                # $34D5 writes the command byte alone
         self.post()
         self.done = 1
         self.listdel(self.pend, 0x34C2)
@@ -513,7 +512,7 @@ class Machine:
 
     # ---- one NMI ------------------------------------------------------------------------------
     def frame(self):
-        for h in self.vbl:                                 # the VBLANK hook list ($0940)
+        for h in self.vbl:                                 # the vblank hook list ($0940)
             if h == 0x380B:
                 b = self.oam[0x200 + (self.m[0x13] - 0x900)]
                 k = (self.m[0x11] >> 2) & 3
@@ -569,7 +568,7 @@ def swap(v):
 
 
 def scenario(name, nframes, btn):
-    """Run the machine against one oracle stream. The window ends where the SEQUENCE does: the frame
+    """Run the machine against one oracle stream. The window ends where the sequence does: the frame
     $7E:34C2 sets $7E:0000. Past it the ROM has torn its own task list down (every slot reads $FFFF)
     and is loading whatever comes next, which is not this file's business -- so those rows are
     counted and reported separately instead of being blurred into the result."""
@@ -579,7 +578,7 @@ def scenario(name, nframes, btn):
     bad = tail = checked = 0
     handover = SEED_FRAME + len(rows)
     for i, r in enumerate(rows):
-        mach.joy = le(r['0002'])                           # the pad C3/0A8E latched THIS frame
+        mach.joy = le(r['0002'])                           # the pad C3/0A8E latched this frame
         mach.frame()
         m = mach.m
         exp = [('reg0', le(r['0A00'], 0), mach.reg[0]), ('reg1', le(r['0A00'], 4), mach.reg[1]),
@@ -595,7 +594,7 @@ def scenario(name, nframes, btn):
                ('$038F', r['038D'][4:6], '%02X' % mach.bri[2]),
                ('$0070', le(r['0070']), m[0x70]),
                ('$7F0060', r['7F0060'], '%02X' % mach.exitflag)]
-        # ⚠ The mailbox is compared only WHILE THE SEQUENCE OWNS IT. On the frame $34C2 sets
+        # Note: the mailbox is compared only while the sequence owns it. On the frame $34C2 sets
         # $7E:0000 the ROM's main loop has already rebooted and staged its own command over the
         # $F0 -- the oracle reads `00 00 FF 05` there, which is the next stage's, not the title's.
         exp.append(('$0388', r['0388'], ''.join('%02X' % b for b in mach.snd)))
@@ -636,7 +635,7 @@ def main():
     b, c = scenario('button', 900, '0:600,1:4,0:296')
     bad += b
     checked += c
-    # ...and the third way: a SHOULDER button. $7E:5B99 still leaves and still installs the fade,
+    # ...and the third way: a shoulder button. $7E:5B99 still leaves and still installs the fade,
     # but `BIT #$30` keeps $7F0060 at zero, which is what drops the boot into the attract demo
     # instead of the game. Mask $400 is L (measured: it puts $0020 in $7E:0002).
     b, c = scenario('shoulder', 900, '0:600,400:4,0:296')

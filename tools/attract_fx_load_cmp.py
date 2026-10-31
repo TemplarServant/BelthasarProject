@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Compare X-Strike's EFFECT LOAD in the port against the cartridge, byte for byte.
+r"""Compare X-Strike's effect load in the port against the cartridge, byte for byte.
 
     python tools/attract_fx_load_cmp.py [<port_frame> <oracle_frame>]     (default 290 111)
 
@@ -13,6 +13,8 @@ first block upload is replaced, so what is compared is what CD/0EBD built:
   map     VRAM $F800-$FFFF    -- CD/0FFD's DMA of the fill plus CD/0607's upload of block 0 at $7C00
   pal     WRAM $2032/$203A x3 and $2232/$223A x3 -- CGRAM 25-27 / 29-31 from D1:6002[$CA95 / $CA96] (base page; the
           live page is also the arena fade's, which the port reaches one frame apart, so only the base is compared)
+
+Regression check: attract-demo-battle-xstrike-fx-load-vs-oracle.
 """
 import os
 import subprocess

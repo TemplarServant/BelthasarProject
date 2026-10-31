@@ -2,8 +2,8 @@
 """Render the CT overworld from a live engine snapshot (the map is assembled at runtime in WRAM).
 Inputs (build/): ow_wram.bin (128KB; grids BG1 $7E:4000/defs $7E:3000, BG2 $7E:5800/defs $7E:3800, palette
 $7F:8C00), ow_vram.bin (64KB char). Palette = CGRAM ($7F:8C00), 4bpp/16 colors per sub-palette; sub-palette
-use (user-confirmed): 0=grass/sand/cliff, 2=sea, 3=forest, 4/5=village, 6=castle, 7=rock/mountain.
-Composite: BG2 (base, opaque) then BG1 (land/structures, transparent over it). Chip order [TL,BL,TR,BR].
+use: 0=grass/sand/cliff, 2=sea, 3=forest, 4/5=village, 6=castle, 7=rock/mountain.
+Composite: BG2 (base, opaque) then BG1 (land/structures, transparent over it). Chip order [TL,TR,BL,BR].
 CLI: python assets/overworld_live.py [out.png]
 """
 import sys, os

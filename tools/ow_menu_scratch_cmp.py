@@ -3,11 +3,10 @@ r"""The overworld's map tables across the X menu, port against the rule's cartri
 
     python tools/ow_menu_scratch_cmp.py
 
-The menu uses $7E:3000.. as its own scratch (C2:9641 / C2:971B / C2:97B9 .. while it builds its screens); C2/2E72's six
-stash blocks do not cover it, and C2/2C93's rebuild decompresses it again from the world's packets (C3:07BB). The port
-left the menu's bytes in the block definitions, and every map column streamed in after the menu was built from them --
-roofs in the forest, the castle's stairs gone; in widescreen (a mod) the sides at once (the user, 2026-10-13: "after
-opening and closing the menu on the overworld, some places were damaged").
+The menu uses $7E:3000.. as its own scratch (C2/9641 / C2/971B / C2/97B9 .. while it builds its screens); C2/2E72's six
+stash blocks do not cover it, and C2/2C93's rebuild decompresses it again from the world's packets (C3/07BB). If the
+menu's bytes stay in the block definitions, every map column streamed in after the menu is built from them (roofs in
+the forest, the castle's stairs gone; in widescreen, a mod, the sides at once).
 
 Cartridge: saves/ow_w0.state under the rule, `--peek` before the menu (f70) and after the return (f300; X at f80, B at
 f202, B at f264). Port: saves/field_re/ow_w0.lakewram, X at f80, B at f162, CT_OWDUMP (the world's own WRAM) at f70 and

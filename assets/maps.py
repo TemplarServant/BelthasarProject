@@ -190,13 +190,11 @@ def scene_props(rom, scene):
     16:SPRITE_FRONT_BOTTOM(prop2&0x40) 32:SPRITE_FRONT_TOP(prop1&0x40). The two sprite-front
     flags = the engine's $6E/$6F (= $0C00/$0C01): top half = prop1&0x40, bottom half = prop2&0x40;
     a set flag = that half gets OAM priority 3 (drawn in front of the BG1/BG2 priority-1 foreground).
-    mover = prop2 bit7 (b2 & 0x80): the per-tile MOVER-SOLID flag the field-load loop streams RAW to
-    $7E7040,X (C0/A630). The cat/object mover path C0/ACFD (and C0/31E5, op-0x96 C0/4FE0) does
-    `LDA $7E7040,X / BMI` -> bit7 set = solid for movers (bounce/stall). This is DISTINCT from the
-    player path (C0/9C5C reads $7E7080 = the SHAPE-table-expanded plane), so stair-mouth tiles are
-    mover-solid here yet player-walkable via the slope shapes. Verified byte-exact against the oracle
-    WRAM probe_base.raw.wram[$7040] for scene 1. (Previously dropped: zflags carried prop1&0x40 as its
-    top bit, an OAM-priority flag, NOT this mover bit -- that mismatch let the cat climb the stairs.)"""
+    mover: bit0 = prop2 bit7, the mover-solid flag the field load streams raw to $7E7040,X (C0/A630);
+    the object mover paths (C0/ACFD, C0/31E5, op 0x96 C0/4FE0) test it with `LDA $7E7040,X / BMI`.
+    The player path reads $7E7080 (the shape-expanded plane) instead, so stair-mouth tiles are
+    mover-solid yet player-walkable. bit1 = prop2 bit4, the high bit of the solid-plane z that the
+    9B62 solid tail reads as (b2 & 0x18) >> 3 (zflags does not hold it). disasm/notes/collision.md."""
     h = rom[SCENE_HDR + scene * 14: SCENE_HDR + scene * 14 + 14]
     map_i = h[4] | (h[5] << 8)
     md = lz_decompress(rom, get_entries_3byte(rom, MAP_PTRS, 202)[map_i])
@@ -215,11 +213,8 @@ def scene_props(rom, scene):
         c = (b0 >> 2) & 0x1F
         z = b2 & 3
         zf = (1 if b2 & 0x04 else 0) | (2 if b2 & 0x08 else 0) | (4 if b2 & 0x20 else 0) | (8 if b1 & 0x10 else 0) | (0x10 if b2 & 0x40 else 0) | (0x20 if b1 & 0x40 else 0)
-        # mover plane: bit0 = prop2 bit7 ($7E7040,X bit7 = MOVER-SOLID); bit1 = prop2 bit4, the HIGH
-        # bit of the SOLID-plane z ($7E7040 bits3-4, read by the 9B62 solid tail as (b2&0x18)>>3 when a
-        # slope shape blocks the foot). zflags only carried prop2 bit3 (INVERTED) + bit5 (Z_NEUTRAL),
-        # so bit4 was dropped -> stairs whose slope-blocked half is same-plane (e.g. scene-13 (14,29)
-        # b2=0x12: solid-z=2) read as solid-z=0 = transition-solid and wrongly blocked the climb.
+        # mover plane (see the docstring); bit1 matters where a slope blocks the foot on a same-plane
+        # stair half (e.g. scene 13 (14,29), b2 = 0x12: solid z = 2, not the transition-solid 0)
         mv = (1 if b2 & 0x80 else 0) | (2 if b2 & 0x10 else 0)
         rep = 1
         if b0 & 0x80:
@@ -237,7 +232,7 @@ def scene_collision(rom, scene):
 
 def scene_exits(rom, scene):
     """Scene exits (doors): table @0x250000 (512 scenes, local u16 ptrs, ordered); each
-    SNES record is 7 bytes — x,y (*16 px), size_bits, dest_index+facing (u16), dest
+    SNES record is 7 bytes: x,y (*16 px), size_bits, dest_index+facing (u16), dest
     tile x,y. Returns [{pos,size,kind('scene'/'world'),dest,dpos,facing}]."""
     BASE = 0x250000
     addr = BASE + u16(rom, BASE + scene * 2)

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-r"""Sequence-table ENTRY 3 (the attract's Blackbird / Zeal mirror leg, loc 06B's `FF 63`) against the cartridge:
-the VRAM + CGRAM the field hands the translated stage, and the stage's PICTURE, pixel for pixel.
+r"""Sequence-table entry 3 (the attract's Blackbird / Zeal mirror leg, loc 06B's `FF 63`) against the cartridge:
+the VRAM + CGRAM the field hands the translated stage, and the stage's picture, pixel for pixel.
 
     python tools/entry3_stage_cmp.py [port frame] [oracle +frames]
 
 Both sides are derived live, nothing here is a pinned constant:
 
-  * the cartridge UNDER THE RULE: the attract from power-on with the virtual beam and logical frames, 18 frames before
+  * the cartridge under the rule: the attract from power-on with the virtual beam and logical frames, 18 frames before
     `FF 63` (C3:0000 at f18) -- by default this ct.exe's own (stage_rule_cmp.py), with --committed the recipe-made
     saves/attract_entry3_handoff_f6750.state (tools/fixtures/attract.json: power-on + 8776 under the rule). `ct.exe --peek <state> out --frames 18`
     (with CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1) dumps the PPU's VRAM at the hand-off (out.vram; out.oam = OAM
@@ -14,38 +14,35 @@ Both sides are derived live, nothing here is a pinned constant:
     row (y+8)*2 -- ctlib/fb.py's decode).
   * the port: the attract from scene 433 with CT_STAGE_HANDOFF_VRAM (the 64 KB image + the 256 CGRAM words the host
     built for the stage: ct_lz_load_tiles, CtFieldSceneVramTilemaps, fieldPalettePages -- field.c) and CT_SHOTS_AT
-    on the frame that presents the same stage frame (f8927 today: the hand-off is at f8795 under the suite's
-    CT_AUDIO_LOCKSTEP=1 / CT_NOPACE=1 env, which this tool sets -- without the lockstep the audio's post price moves
-    the attract by a frame from run to run; sequence_table.md 11.11).
+    on the frame that presents the same stage frame (PORT_FRAME, argv[1], under the suite's CT_AUDIO_LOCKSTEP=1 /
+    CT_NOPACE=1 env, which this tool sets -- without the lockstep the audio's post price moves the attract by a frame
+    from run to run; sequence_table.md 11.11).
 
 Graded region by region: the six tile packets ($2000-$4F7F words), the BG3 tileset ($5000-$57FF), the three 64x32
 tilemaps ($6000 / $6800 / $7000) and the CGRAM, then the whole 256x224 picture and its two bands. The OBJ region
 ($0000-$1FFF) is reported, not graded: the stage rewrites it before it draws (11.8).
 
-Then EVERY stage frame from the hand-off's own (+18) to the graded one, as 128x112 thumbnails (ct.exe --peek PEEK_THUMBS against
-the port's shots averaged the same way, 2x2 of 256x224 = 4x4 of 512x480): one frame is not enough. The host stops the
-stage where snes_runFrame stops (seq_xlat.c stageHook), and when it stopped 225 lines early instead (the step at
-v=0 h=0 where the frame counter has wrapped and inVblank not yet dropped) it showed the frame before again -- six
-stage frames of 89 wrong while the single graded one happened to be right (sequence_table.md 11.12). The frames
-before +62 are the opening transition C3/02DD draws: once excused as the beam's history (11.4), graded since the seed's
-whole history is the cartridge's under the rule (11.13, tools/seed_history_cmp.py).
+Then every stage frame from the hand-off's own (+18) to the graded one, as 128x112 thumbnails (ct.exe --peek
+PEEK_THUMBS against the port's shots averaged the same way, 2x2 of 256x224 = 4x4 of 512x480), since a single graded
+frame can be right while others are wrong. The host stops the stage where snes_runFrame stops (seq_xlat.c stageHook;
+sequence_table.md 11.12). The frames before +62 are the opening transition C3/02DD draws; they are graded because the
+seed's whole history is the cartridge's under the rule (11.13, tools/seed_history_cmp.py).
+Regression check: attract-entry3-stage-picture-vs-oracle.
 """
 import os
 import struct
 import subprocess
 import sys
 
-# UNDER THE RULE (CLAUDE.md's exception, the zelda3 model -- sequence_table.md 11.13): the cartridge from POWER-ON with
-# the virtual beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1), saved 18 frames before its `FF 63`
-# (recipe attract_entry3_handoff, power_on 8776; --xlatentries on it: C3:0000 f18 with $0386 = E4). The port's seed history
-# is the cartridge's call for call (seed_history_cmp.py), so the opening transition C3/02DD draws is graded too: every stage
-# frame from the hand-off's own. (Until 2026-10-22 this was saves/attract_entry3_handoff_rule_f8859.state, saved by hand
-# 2026-09-26 under an earlier rule; the recipe's state is the same moment under today's.)
+# Under the rule (the zelda3 model, CLAUDE.md; sequence_table.md 11.13): the cartridge from power-on with the virtual
+# beam and logical frames (CT_ORACLE_VIRTUAL_BEAM=1 CT_ORACLE_LOGICAL=1), saved 18 frames before its `FF 63` (recipe
+# attract_entry3_handoff, power_on 8776; --xlatentries on it: C3:0000 f18 with $0386 = E4). The port's seed history is
+# the cartridge's call for call (seed_history_cmp.py), so every stage frame from the hand-off's own is graded.
 STATE = 'saves/attract_entry3_handoff_f6750.state'
-# ...but a recipe's state is the oracle's that made it (a state outlives the oracle that made it: stage_rule_cmp.py's
-# docstring), and the stage's colours follow the palette records the field hands over (sequence_table.md 11.12). So by
-# default the state is THIS oracle's, made from power-on by stage_rule_cmp.py (cached under build/_stagerule by ct.exe's
-# sha1; C3:0000 on its f18 as well); `--committed` reads the file above. The port's picture P is the cartridge's P+2 (THE ALIGNMENT, docs/TESTING.md): the check passes the frames so.
+# A recipe's state belongs to the oracle that made it (stage_rule_cmp.py's docstring), and the stage's colours follow
+# the palette records the field hands over (sequence_table.md 11.12). So by default the state is this oracle's, made
+# from power-on by stage_rule_cmp.py (cached under build/_stagerule by ct.exe's sha1; C3:0000 on its f18 as well);
+# `--committed` reads the file above. The port's picture P is the cartridge's P+2 (docs/TESTING.md, the alignment).
 if '--committed' in sys.argv: sys.argv.remove('--committed')
 else:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -65,9 +62,9 @@ REGIONS = [('tiles $2000-$4F7F', 0x2000, 0x4F80, 1), ('bg3 tiles $5000-$57FF', 0
 
 
 def oracle(frames, tag):
-    # ...kept per oracle frame rule: the same state runs another stage under the migration switches (CT_ORACLE_NMION_HOLD /
-    # CT_ORACLE_LINE64 / CT_ORACLE_HOLDAPU / CT_ORACLE_IFAST, CLAUDE.md), as stage_rule_cmp.py keys its own -- a cache made
-    # under one was read under the other (the valve's port against the infinitely fast CPU's cartridge: 110 / 134).
+    # Cached per oracle frame rule: the same state runs another stage under the measurement switches
+    # (CT_ORACLE_NMION_HOLD / CT_ORACLE_LINE64 / CT_ORACLE_HOLDAPU / CT_ORACLE_IFAST, CLAUDE.md), so the cache is keyed
+    # on them as stage_rule_cmp.py keys its own.
     rule = ''.join(k for k, e in (('h', 'CT_ORACLE_NMION_HOLD'), ('l', 'CT_ORACLE_LINE64'), ('a', 'CT_ORACLE_HOLDAPU'),
                                   ('i', 'CT_ORACLE_IFAST')) if os.environ.get(e, '0' if e == 'CT_ORACLE_HOLDAPU' else '1') not in ('', '0'))
     out = 'build/_e3orc_rule_%s_%s%s.raw' % (os.path.splitext(os.path.basename(STATE))[0], tag, ('_' + rule) if rule else '')

@@ -1,5 +1,5 @@
-"""What the game can reach from the ROM's own tables -- the closures the ROM-free runtime packs (memory
-rom-free-runtime-goal). Never a trace of what some run touched: a run reaches only part of the game.
+"""What the game can reach from the ROM's own tables: the closures the ROM-free runtime packs (docs/ROM.md,
+"The ROM-free runtime"). Never a trace of what some run touched: a run reaches only part of the game.
 
 The location load (C0/00F4 and its packets; src/lz.c ct_lz_load_cost / ct_lz_return_cost, disasm/notes/field_load_cost.md):
 every one of the 512 location records ($F6:0000, 14 bytes) names
@@ -166,7 +166,7 @@ def sequence_tables(rom, raw_offsets):
 # The sprites (src/ct_vm.c loadGfxMirror, src/move.c's loaders and anim drain, src/oam.c): every sprite record -- the
 # PCs' and NPCs' at $E4:F000 (5 bytes: gfx, assembly, palette, anim, class; sprite s at F000 + 5s) and the enemies' at
 # $E4:F600 (10 bytes) -- through the meta at $E4:FFE0 (the gfx, assembly, frame-table and duration-table pointer tables).
-# ALL records, not the ones some script names: the closure is the tables'.
+# All records, not only the ones some script names: the closure is the tables'.
 E4 = 0x240000
 SPRITE_RECS = ((E4 + 0xF000, 5, (0xF600 - 0xF000) // 5), (E4 + 0xF600, 10, (0xFFE0 - 0xF600) // 10))
 

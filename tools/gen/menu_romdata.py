@@ -1,16 +1,16 @@
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
-# Extract the menu's ROM data tables ONCE at build into a baked header, so the menu is fully ROM-free
-# (runtime needs only ct_assets.dat). Raw contiguous regions (the engine keeps its CT-text decode):
+# The menu's ROM data tables, baked into a header so the menu reads no ROM at run time.
+# Raw contiguous regions (the engine keeps its CT-text decode):
 #   CC 0x0C0B5E..0x0C257B : item names + single-tech names + tech MP
 #   C2 0x02BD40..0x02C5B3 : per-char tech-id range + config cell-offset/value-base tables
 #        (+ C2:C5A7, the button map's six row offsets in the $2E00 buffer, C2/C57A / C2/C5C7)
-#   CFG 0x3FD3FE..0x3FD564 : config master string ptr table + its target strings ($FF/D462+)
+#   CFG 0x3FD3FE..0x3FD57A : config master string ptr table + its target strings ($FF/D462+)
 #        (+ FF/D554, the button glyph words C2/C5B3 reads: A X L R B Y S; FF/D562, the bar icon per $0417, C2/C4BC)
 #   MAXCNT 0x03FF951..0x03FF959 : per-char single-tech "add" threshold
-# The item-category strings ($FF/B310 ptrs -> $FF-bank strings) are scattered ROM-wide, so we RESOLVE
-# them here into a per-item decoded table (ctItemCat) instead of baking the whole bank.
+# The item-category strings ($FF/B310 ptrs -> $FF-bank strings) are scattered, so they are resolved
+# here into a per-item decoded table (ctItemCat) instead of baking the whole bank.
 ROM=_romlib.load("Chrono_Trigger_USA_SNES.sfc")
 def region(lo,hi): return ROM[lo:hi]
 CC=(0x0C0B5E,0x0C257B); C2=(0x02BD40,0x02C5B3); CFG=(0x3FD3FE,0x3FD57A); MC=(0x03FF951,0x03FF959)
@@ -18,7 +18,7 @@ CC=(0x0C0B5E,0x0C257B); C2=(0x02BD40,0x02C5B3); CFG=(0x3FD3FE,0x3FD57A); MC=(0x0
 #   NAV  FF/B5A0 : the 21-cell cursor graph, 6 bytes per cell [x, y, up, down, left, right].
 #        The screen builder C2/C3B5 copies it verbatim to $7E:9380 and C2/E9E2 walks it; the
 #        first two bytes are the hand sprite position (C2/E964 LDA $9380,X / STA $0770).
-#   CDEF C2/FCA6 : the NEW-GAME config defaults -- 12 bytes MVNd to $2990 by C2/95D4..C2/960A.
+#   CDEF C2/FCA6 : the new-game config defaults -- 12 bytes MVNd to $2990 by C2/95D4..C2/960A.
 #        [0..2] = the packed config $2990/$2991/$2992, [3..11] = the live button map $2993..$299B
 #        (the same 9 bytes are MVNd to $0408 from C2/FCA9, i.e. this block overlaps at +3).
 NAV=(0x3FB5A0,0x3FB5A0+21*6); CDEF=(0x02FCA6,0x02FCA6+12)

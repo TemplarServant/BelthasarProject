@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The attract's second demo battle (loc 07D, Crono/Frog/Robo vs Hench/Vamp/Sorcerer): the colours each PC is DRAWN
+r"""The attract's second demo battle (loc 07D, Crono/Frog/Robo vs Hench/Vamp/Sorcerer): the colours each PC is drawn
 with, against the cartridge's CGRAM.
 
     python tools/attract_07d_pcpal_cmp.py
@@ -7,15 +7,15 @@ with, against the cartridge's CGRAM.
 The ROM has no per-character battle palette. CC/E6F8 gives seats 0/1/2 OBJ palettes 5/6/7 ($9888 = 0A/0C/0E), the
 boot copies the base CGRAM page onto the live page (CC/E6EC) and writes each seat's weapon colours 13..15 from
 $D1:4B00 (CC/E710-E753), and CF/E3C0 uploads the live page every NMI. The cartridge's OAM for Robo carries attribute
-$3E = palette 7. The port used baked tables for Crono/Marle/Lucca/Frog and fell back to Crono's for anyone else,
-so Robo was drawn pink.
+$3E = palette 7.
 
 Port: the live battle path (`--scene 433`, no --selftest), CT_BATTLE_PCPALTRACE=1, the last palette printed per seat
-before field frame 6900 (6230 until 2026-09-16: the 0AD battle now pays its exit tail and return). Cartridge: saves/attract_07d_battle_f4540.state + 40 frames, CGRAM from the --peek .oam
+before field frame 6900. Cartridge: saves/attract_07d_battle_f4540.state + 40 frames, CGRAM from the --peek .oam
 sidecar (544 bytes OAM + high table, then 512 bytes CGRAM); OBJ palette p = CGRAM words 128 + 16p.
-FIXTURE PROVENANCE: made by a recipe today (tools/fixtures/attract.json: fxa_attract_cena_inicial + pad 0:4451); first
-captured as build/ct.exe --peek saves/attract_cena_inicial.state ... --frames 3300 with PEEK_SAVE, then --peek of that
-state --frames 1240 with PEEK_SAVE (attract frame 4540, loc 07D, 41 frames after the battle's `70 01`).
+The state is made by a recipe (tools/fixtures/attract.json: fxa_attract_cena_inicial + pad 0:4451): attract frame
+4540, loc 07D, 41 frames after the battle's `70 01`.
+
+Regression check: attract-07d-pc-battle-palettes-vs-oracle.
 """
 import os
 import re

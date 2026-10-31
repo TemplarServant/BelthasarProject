@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-r"""One SFX's sound, alone, on the cartridge and on the port (the user, 2026-09-27: "after the race scene, the curtains'
-sound is damaged" -- the window wipe's whoosh, `18 BA`, keyed on voices 6/7 with sources 02/07 then 04).
+r"""One SFX's sound, alone, on the cartridge and on the port (by default the window wipe's whoosh after the race,
+`18 BA`, keyed on voices 6/7 with sources 02/07 then 04).
 
     python tools/sfx_voice_cmp.py [--mask C0] [--kon "val=C0 v6:srcn=02 v7:srcn=07"] [--window 16000]
                                   [--oframes 7400] [--pframes 9300]
@@ -10,8 +10,7 @@ and CT_DSP_RAWPCM (every sample the DSP makes, in order) and CT_DSP_KONTRACE (ea
 sample count). Each key-on matching --kon is one occurrence of the sound; the i-th on the cartridge is paired with the
 i-th on the port, and the --window samples from each key-on are cut out of each side's raw stream and compared: peak,
 RMS, the samples identical, the largest difference, and where the first difference falls. The cartridge: ct.exe --peek
-from saves/attract_cena_inicial_rule.state under the rule (until 2026-10-22 the owner's real-time capture
-saves/attract_cena_inicial.state); the port: Belthasar --scene 433 under CT_AUDIO_LOCKSTEP.
+from saves/attract_cena_inicial_rule.state under the rule; the port: Belthasar --scene 433 under CT_AUDIO_LOCKSTEP.
 """
 import argparse
 import os

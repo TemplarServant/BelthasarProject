@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-r"""Find the suite's STALE mutations and re-target the ones a refactor only moved.
+r"""Find the suite's stale mutations and re-target the ones a refactor only moved.
 
     python tools/mutation_retarget.py [--write] [--names-out FILE]
 
 A mutation (tools/regress_checks.json, `--mutate`) names an exact `find` text in a source file; when the code around it
-is refactored -- `h->pcDefer[k]` became `BT_PCDEFER(h, k)` -- the text is gone, `--mutate` reports it STALE, and the
+is refactored (say `h->pcDefer[k]` becomes `BT_PCDEFER(h, k)`) the text is gone, `--mutate` reports it STALE, and the
 check is no longer proven to grade anything. For each stale edit this:
 
   1. finds the source lines that best match the old `find` (difflib, the same number of lines, line by line); the match
      must be good (ratio >= 0.6), clearly the best (the next best scores at most 0.9 of it), and occur once in the file;
-  2. takes the DRIFT -- the token edits from the old find to those lines -- and the MUTATION -- the token edits from the
-     old find to the old replace -- and composes them: the mutation's edits are applied to the new lines, at the
+  2. takes the drift (the token edits from the old find to those lines) and the mutation (the token edits from the
+     old find to the old replace) and composes them: the mutation's edits are applied to the new lines, at the
      places the drift left unchanged. When a mutation edit touches a token the drift changed, nothing is guessed: the
-     edit is tried as a SUBSTITUTION instead -- the drift's token rewrites (`h->pcDefer[k]` -> `BT_PCDEFER(h, k)`)
-     applied to the old replace, only when they turn the old find into the new one exactly -- and else reported for
+     edit is tried as a substitution instead (the drift's token rewrites, `h->pcDefer[k]` -> `BT_PCDEFER(h, k)`,
+     applied to the old replace, only when they turn the old find into the new one exactly), and else reported for
      a person;
   3. refuses a replace that names an identifier the file no longer has (outside comments), then prints old and new;
      with --write it rewrites the edit's find/replace and adds a line to the check's notes.
 
 A re-targeted mutation is a claim, not a proof: run `python tools/regress.py --mutate NAME ...` on the checks it names
-(--names-out writes them to a file) -- a mutation that SURVIVES there is the check's or the mutation's to re-derive.
+(--names-out writes them to a file); a mutation that survives there is the check's or the mutation's to re-derive.
 An edit whose find occurs twice is reported, not re-targeted: which site it meant is for a person to say.
 """
 import argparse

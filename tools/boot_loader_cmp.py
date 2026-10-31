@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The boot LOAD screen (screen $0E) with a given battery, the port against the cartridge, pixel for pixel.
+r"""The boot Load screen (screen $0E) with a given battery, the port against the cartridge, pixel for pixel.
 
     python tools/boot_loader_cmp.py <battery.srm>
 
@@ -26,8 +26,8 @@ def main():
     tag = os.path.splitext(os.path.basename(srm))[0]
     os.chdir(ROOT)
     os.makedirs('build/_bootldr', exist_ok=True)
-    # a run that writes nothing must not be graded on a previous run's frames (from d9ef0da to the fix, the port wrote
-    # no --selftest dump from the shell's screen $0E: a stale _p.raw from an older build would have read as a pass)
+    # a run that writes nothing must not be graded on a previous run's frames (a stale _p.raw from an older build would
+    # read as a pass)
     for f in os.listdir('build/_bootldr'):
         if f.startswith(tag + '_'):
             os.remove(os.path.join('build/_bootldr', f))

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-r"""The ORBIT op of the battle animation script (op $C1 -> C1/6F31 / C1/6E8F, mover mode 3 = CF/F68D) against the cartridge,
+r"""The orbit op of the battle animation script (op $C1 -> C1/6F31 / C1/6E8F, mover mode 3 = CF/F68D) against the cartridge,
 frame by frame, on the attract's Zombor triple tech (loc 087, tech $3A: four scratch objects circling the stored point in
 three rounds -- radius 12 for 32 steps, 10 for 16, 8 for 16).
 
     python tools/zombor_orbit_cmp.py
 
   * cartridge: saves/attract_087_leg_rule.state (the 087 leg's start, the power-on + 9112 under the rule, made by a recipe:
-    tools/fixtures/attract_rule.json; until 2026-10-22 the owner's real-time capture run to f7085, build/_z_f7085.state),
-    then `ct.exe --monitor` under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) prints the mover's arrays on every frame of the leg: $A240/$A250 (the objects' X/Y, slot*2), $AAA5
-    (angles), $AAC3 (16-bit counts), $A1E0 (done), $AA7F/$AA92 (centres), $A342 (active);
+    tools/fixtures/attract_rule.json), then `ct.exe --monitor` under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM) prints
+    the mover's arrays on every frame of the leg: $A240/$A250 (the objects' X/Y, slot*2), $AAA5 (angles), $AAC3 (16-bit
+    counts), $A1E0 (done), $AA7F/$AA92 (centres), $A342 (active);
   * port: the pre-battle fixture saves/attract_zombor_pre.lakewram (the cartridge's WRAM 9 frames before the leg's `D8`,
     `--scene 135 --loadwram`) with CT_BATTLE_ORBTRACE=1: the same arrays after every frame's mover pass.
 
 The two runs are aligned on the first frame the mover services slot 1 (its count leaves the armed value). Graded per
 frame from there: the eight angles, the eight counts, the eight done flags, the eight active flags, and the objects'
-positions RELATIVE to their centres -- the centres themselves are the stored point, which is where the party stood when
+positions relative to their centres -- the centres themselves are the stored point, which is where the party stood when
 the battle was staged (C0/04DE's $29B0 records), a field-position residual of the 087 leg reported separately.
 """
 import os

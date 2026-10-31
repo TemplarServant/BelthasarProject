@@ -3,19 +3,18 @@ r"""The title's first pendulum tick against the title's picture, port against ca
 
     python tools/attract_title_sound_sync_cmp.py
 
-The user, 2026-09-27: "after the demo, when the pendulum repeats, apparently the sound is still out of sync". The title's
-setup posts its song ($3775 `JSL $C7:0004`, synchronous: the loader keeps the CPU until the driver has it) and spins on
-$2143 ($5AAA), both with the NMI off, so the pendulum starts when they end -- and how long the upload takes depends on
-what the driver already holds (power-on 35 + 6 frames, after the demo 15 + 6). The port held a fixed 43 (the power-on
-count) and the second title's tick came ~20 frames before its pendulum; it now holds the loader clock's price of the
-post plus the spin (src/field.c, the title's opening).
+The title's setup posts its song ($3775 `JSL $C7:0004`, synchronous: the loader keeps the CPU until the driver has it)
+and spins on $2143 ($5AAA), both with the NMI off, so the pendulum starts when they end -- and how long the upload
+takes depends on what the driver already holds (power-on 35 + 6 frames, after the demo 15 + 6). The port holds the
+loader clock's price of the post plus the spin (src/field.c, the title's opening), not a fixed count.
 
 Port: the interactive attract (--scene 433, CT_AUDIO_LOCKSTEP=1): CT_DSP_KONTRACE's key-ons at their own sample frame
-(from the first presented frame) and CT_SHOTS_LUMA's picture: for each title, the
-frame of the first tick (`02 v1:srcn=25`) less the first lit frame (mean > 3). Cartridge: the attract state's second
-title (the demo's end; the state begins after the power-on one): under the rule, a state 8761 frames in (PEEK_SAVE; 8950 on
-the owner's real-time capture until 2026-10-22, whose demo ends 189 frames later), then its key-ons
+(from the first presented frame) and CT_SHOTS_LUMA's picture: for each title, the frame of the first tick
+(`02 v1:srcn=25`) less the first lit frame (mean > 3). Cartridge: the attract state's second title (the demo's end;
+the state begins after the power-on one): under the rule, a state 8761 frames in (PEEK_SAVE), then its key-ons
 (CT_DSP_KONTRACE, 534 samples a frame) and thumbnails (PEEK_THUMBS) over 400 frames.
+
+Regression check: attract-title-tick-with-its-pendulum-vs-cartridge.
 """
 import os
 import re
@@ -25,8 +24,8 @@ import sys
 
 FIELD = os.path.abspath('build/Belthasar.exe')
 CT = os.path.abspath('build/ct.exe')
-STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json;
-RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}   # until 2026-10-22 the owner's real-time capture)
+STATE = 'saves/attract_cena_inicial_rule.state'   # the attract from power-on + 2159 under the rule (tools/fixtures/attract_rule.json)
+RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 TICK = '02 v1:srcn=25'
 LIT = 3
 START = 8761      # the cartridge's state this many frames into STATE: before the title after the demo
@@ -42,9 +41,9 @@ def main():
     pr = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '433'], env=env, capture_output=True, text=True,
                         errors='replace')
     # The tick: the key-on's own sample frame (`dspkon s=.. f=..`, as on the cartridge's side), counted from the first
-    # presented frame. Since 404971a the title's opening runs its SPC time as one priced stretch -- a single slice queues
-    # the whole upload's output, played over the muted frames after it -- so the output index a key-on is generated in
-    # is not the frame it is heard on. The power-on run's frames start below 0 (f-91): the patterns take a sign.
+    # presented frame. The title's opening runs its SPC time as one priced stretch -- a single slice queues the whole
+    # upload's output, played over the muted frames after it -- so the output index a key-on is generated in is not the
+    # frame it is heard on. The power-on run's frames start below 0 (f-91): the patterns take a sign.
     ticks, lum, titles = [], {}, []
     for l in pr.stderr.splitlines():
         m = re.search(r'dspkon s=\d+ f=(\d+) ', l)

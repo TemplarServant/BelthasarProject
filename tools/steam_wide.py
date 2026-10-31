@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The Steam release's widescreen margins, read from the player's OWN copy into a local file (a mod's data; never shipped).
+r"""The Steam release's widescreen margins, read from the player's own copy into a local file (a mod's data; never shipped).
 
     python tools/steam_wide.py "<Steam's Chrono Trigger folder or its resources.bin>" [-o ct_wide.dat]
     python tools/steam_wide.py <folder> --list            (the locations that carry margins, and their sizes)
@@ -16,8 +16,7 @@ CTExplore). A margins map: [w, h] (16-px cells) then four planes of w*h little-e
 location's BG1/BG2 metatile v - 1 (the Steam executable's drawer, 0x54FD5C: page (v - 1) >> 8, tile (v - 1) & 255 of a
 16 x 16 sheet; pages 2 and up are tiles the Steam release added, below). It spans the room's columns -x .. right+x and
 rows 0 .. bottom, where x = (w - (right + 1)) / 2 (6 for a room as narrow as the screen); the planes are drawn 3, 2, 1, 0.
-After them an optional u16 flag and a fifth plane (the loader 0x4DAE30). Checked against the owner's Steam 16:9
-screenshots of 0x014 (scroll top and bottom): the strips they show, 99.9% of their pixels.
+After them an optional u16 flag and a fifth plane (the loader 0x4DAE30).
 
 The margins are drawn with the Steam release's own tiles: it redefined metatiles the margins use (Guardia Forest's 268,
 284, 300, 316: a closed canopy where the SNES's were partly empty) and loads chip sets the SNES's tileset leaves empty
@@ -126,7 +125,7 @@ def sheet_pages(loc):
 def steam_palette(f, files, loc):
     """The Steam release's palette of a location, its BG half (CGRAM 0-127, 128 LE BGR555): `palette_bin/plt<id>.bin`
     (u16 0x100, then 256 colours), id = the location's ROM header byte 3 (`Mapinfo` u16 5, equal to it in 511 of 512) -- or None. The Steam release
-    recoloured its rooms; the port keeps the ROM's colours (the owner, 2026-10-22 and 2026-10-28), so this is never drawn:
+    recoloured its rooms; the port keeps the ROM's colours, so this is never drawn:
     the added sheets were painted with its indices, and where two of them are one colour in it but not in the ROM's (06B's
     0x2A and 0x5A, both 080808: the sky's 000010 and the machine's body 000000 in the ROM's) it tells the port which of
     the room's own colours a sheet's pixel stands for (scene.c CtFieldSceneBakeExt)."""
@@ -379,7 +378,7 @@ def main():
         o.write(b'SPCL' + struct.pack('<I', len(spc)))   # (after the locations: a version-3 reader stops before it)
         for name, w, h, px in spc:
             o.write(struct.pack('<B', len(name)) + name.encode() + struct.pack('<HH', w, h) + px)
-        o.write(b'PALS' + struct.pack('<I', len(pals)))  # (after the images: a reader of before stops ahead of it)
+        o.write(b'PALS' + struct.pack('<I', len(pals)))  # (after the images: an older reader stops ahead of it)
         for loc, pal in sorted(pals.items()):
             o.write(struct.pack('<H', loc) + pal)
     print('steam-wide: %d locations with margins, %d chip sets, %d sheets, %d special images, %d palettes -> %s'

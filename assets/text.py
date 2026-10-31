@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Decode Chrono Trigger (SNES/USA) text — the dialogue dictionary + tokenized
-strings, and the fixed-width "mapped" strings (item names). Reverse-engineered from
-CTViewer's text_decoder.rs, verified against the ROM.
+"""Decode Chrono Trigger (SNES/USA) text: the dialogue dictionary + tokenized
+strings, and the fixed-width "mapped" strings (item names). Follows CTViewer's
+text_decoder.rs, checked against the ROM.
 
 Two encodings:
   - Tokenized / dictionary ("huffman"): dialogue, world names, textbox tables.
@@ -37,24 +37,21 @@ def parse_character(v):
 
 # Control codes 0x04-0x20, rendered readably (names = their default). Returns
 # (text, extra_bytes_consumed). 0x12 (tech name) consumes one inline byte.
-# 0x13-0x20 are NAME SUBSTITUTIONS: the ROM's text decoder copies them at render time from
+# 0x13-0x20 are name substitutions: the ROM's text decoder copies them at render time from
 # the RAM character-name buffers at $7E:2C23 (token handler C2/5B15, pointer table C2/5FD8;
-# party slots 0x1B-0x1D via the active party at $7E:2980, C2/5B70). To keep the names as true
-# VARIABLES (the original design -- a future naming screen edits them), the asset packer emits
-# a MARKER '\x01'+<code> that the field engine resolves from its own name table, instead of
-# baking a default. The standalone CLI dumps (namesub=False) keep readable default names.
+# party slots 0x1B-0x1D via the active party at $7E:2980, C2/5B70). So that the names stay
+# variables, the asset packer emits a marker '\x01'+<code> that the field engine resolves from
+# its own name table. The standalone CLI dumps (namesub=False) print the default names.
 _NAME_CODES = {0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x20}
 _NAME_DEFAULT = {0x13: 'Crono', 0x14: 'Marle', 0x15: 'Lucca', 0x16: 'Robo', 0x17: 'Frog',
                  0x18: 'Ayla', 0x19: 'Magus', 0x1A: 'Crono', 0x1B: '{pt1}', 0x1C: '{pt2}',
                  0x1D: '{pt3}', 0x20: 'Epoch'}
-# THE THREE SPACES ARE PART OF THE BREAK TOKEN. Codes 0x06/0x08/0x0A are ONE token meaning
-# "line break, then indent three"; 0x0C is the page break's indented twin. 0x05/0x07/0x09/0x0B
-# are their bare siblings. The ROM's typewriter (C0/2126) spends exactly ONE iteration on a
-# control code -- the indent it carries is never typed -- so a consumer that expands the token
-# into four characters and charges a frame each runs three frames late per indented line.
-# `ind` is what the indent expands to: the packer passes a MARKER (see pack_dialogue) so the
-# field engine can still tell the token's own indent from literal spaces in the text; every
-# other caller keeps the readable three spaces.
+# The three spaces are part of the break token: 0x06/0x08/0x0A mean "line break, then indent
+# three", 0x0C is the page break's indented twin, and 0x05/0x07/0x09/0x0B are their bare
+# siblings. The typewriter (C0/2126) spends one iteration on a control code, so the indent is
+# never typed. `ind` is what the indent expands to: the packer passes a marker (see
+# pack_dialogue) so the field engine can tell it from literal spaces; other callers keep three
+# spaces. disasm/notes/textbox.md, "the indent belongs to the break token".
 _IND = '\x02'                                 # per-space marker char (packer only)
 _NAMES = {0x05: '\n', 0x06: '\n%s', 0x07: '\n', 0x08: '\n%s', 0x09: '\n', 0x0A: '\n%s',
           0x0B: '\n———\n', 0x0C: '\n———\n%s',
@@ -81,8 +78,8 @@ def special(v, rom, o, namesub=False, ind='   '):
 def _decode_tokens(rom, o, subs, length=None, pb='\n———\n', namesub=False, ind='   '):
     """Decode a token stream. If `length` is None, run to a NUL terminator (dialogue);
     otherwise iterate exactly `length` tokens (dictionary substrings, no nested refs).
-    `pb` is what the page-break codes 0x0B/0x0C render to (default the readable '———'
-    separator; the asset packer passes '\\f' so the field engine can break pages there).
+    `pb` is what the page-break codes 0x0B/0x0C render to (default a readable line of
+    dashes; the asset packer passes '\\f' so the field engine can break pages there).
     `namesub`=True makes name codes 0x13-0x20 emit a render-time marker (see `special`)."""
     out = []
     count = 0
@@ -96,12 +93,10 @@ def _decode_tokens(rom, o, subs, length=None, pb='\n———\n', namesub=False,
         elif v == 1 or v == 2:
             out.append(parse_character(rom[o])); o += 1
         elif v == 3:
-            # THE PAUSE: ONE argument byte (C2/5945 `LDA [$31] / STA $16 / INC $31`, $15 = 03 -- measured on the rule's
-            # cartridge, Last Village 182's "A tidal wave!" `03 08 03 00`: the pointer steps 2 over `03 08`). The typewriter
-            # C0/21A8 waits $0216 * 15 frames in state 7 and types on (2096 -> 6); `03 00` leaves state 7 with $0134 as it
-            # stands and C0/2096 closes the box (2081) -- nothing after it is ever typed, so it ends the string.
-            # This consumed a SECOND byte ("tick byte"), which dropped the character after every pause (290 of them in
-            # the dialogue) and only came out right when that byte was a `03 00`.
+            # The pause: one argument byte (C2/5945 `LDA [$31] / STA $16 / INC $31`). The typewriter
+            # C0/21A8 waits $0216 * 15 frames in state 7 and types on; `03 00` makes C0/2096 close the
+            # box, so nothing after it is typed and it ends the string.
+            # disasm/notes/ocean_palace_aftermath.md sec. 6.
             delay = rom[o]; o += 1
             if pb == '\f':                     # the packer: the field engine's markers (field.c TB_PAUSE / TB_AUTOEND)
                 if delay == 0:
@@ -112,15 +107,15 @@ def _decode_tokens(rom, o, subs, length=None, pb='\n———\n', namesub=False,
                 break
         elif v == 0x0B:                        # wait-for-input + clear: a hard page break
             out.append(pb)
-        elif v in (0x09, 0x0A) and pb == '\f': # the packer: the page break that turns ITSELF (C0/2181 -> 21D8 leaves
+        elif v in (0x09, 0x0A) and pb == '\f': # the packer: the page break that turns itself (C0/2181 -> 21D8 leaves
             out.append('\v' + (ind if v == 0x0A else ''))   # $0134 at 0, state 7 advances with no press) -- field.c
                                                # TB_AUTOPG. Readable dumps keep them as line breaks.
         elif v == 0x0C:
-            out.append(pb + ind)              # page break + the token's OWN indent
+            out.append(pb + ind)              # page break + the token's own indent
         elif length is None and 0x21 <= v <= 0x9F:
             out.append(subs[v - 0x21])         # dictionary word (top level only)
         elif (length is None and v > 0x9F) or (length is not None and v >= 0x9F):
-            # the packer keeps the CLOSING quote 0xE2 apart from the opening 0xE1 (two glyphs in the ROM's font; the
+            # the packer keeps the closing quote 0xE2 apart from the opening 0xE1 (two glyphs in the ROM's font; the
             # field engine maps U+201D back to 0xE2) -- readable dumps print both as '"'
             out.append('”' if (namesub and v == 0xE2) else parse_character(v))
         else:
@@ -188,9 +183,9 @@ def read_string_list(rom, ptr_start, count, subs):
 def read_textbox_table(rom, addr, subs, max_strings=256, max_len=512, pb='\n———\n', namesub=False, ind='   '):
     """Decode a dialogue string table: up to 256 page-relative u16 pointers, stopping
     when consecutive pointers stop looking like valid string bounds (CTViewer heuristic).
-    ⚠ NOT the ROM's read: the bound test needs a NEXT pointer, so the table's LAST string always fails it (the word
-    after the array is string 0's text). Readable dumps and the packer's B8 filter only -- the packed strings are
-    read_dialogue_table's."""
+    Note: not the ROM's read. The bound test needs a next pointer, so the table's last string always fails it (the
+    word after the array is string 0's text). For readable dumps and the packer's B8 filter only; the packed strings
+    come from read_dialogue_table."""
     page = addr & 0xFF0000
     out = []
     for i in range(max_strings):
@@ -202,13 +197,12 @@ def read_textbox_table(rom, addr, subs, max_strings=256, max_len=512, pb='\n—�
     return out
 
 def read_dialogue_table(rom, addr, subs, pb='\n———\n', namesub=False, ind='   '):
-    """A dialogue string table AS THE ROM READS IT. The box machine hands the text engine the op's string byte and the
+    """A dialogue string table as the ROM reads it. The box machine hands the text engine the op's string byte and the
     table (C0/20F2: $020C = $2A, $020D-F = $2B-D) and C2/57E7 fetches the string with
         LDA $0C / AND #00FF / ASL / TAY / LDA [$0D],Y / STA $31      ; $33 = $0F, the table's own bank
     -- string i is the u16 at table + 2*i, in the table's bank. The ROM keeps no count and tests no bound, and the index
-    is a byte, so a table answers all 256 indices. The old CTViewer bound (read_textbox_table) dropped every table's
-    LAST string, and 16 script boxes ask for exactly that one (loc 010's obj9 `BB 26`: an empty window that never
-    typed, so never reached state 7 and never took the press)."""
+    is a byte, so a table answers all 256 indices (read_textbox_table's bound would drop each table's last string,
+    which some script boxes ask for, e.g. loc 010's obj9 `BB 26`)."""
     page = addr & 0xFF0000
     return [decode_string(rom, page + (rom[addr + i * 2] | (rom[addr + i * 2 + 1] << 8)), subs, pb, namesub, ind)
             for i in range(256)]

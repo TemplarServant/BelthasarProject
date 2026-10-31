@@ -3,20 +3,21 @@ r"""The ending's $C3 stage, native (src/seq_ending.c: CtEndingStageOpen + one Ct
 
     python tools/ending_stage_cmp.py [-v]
 
-From saves/ending_re/ending_pre_ff2b.state (Leene's Square, scene 81, the talk already made: obj10's `FF 2B` at f131 -- the
-oracle route is in the memory note endgame-oracle-route): the cartridge runs under the rule with no input (`--monitor` of the
-stage's LOGIC bytes, on change); the port runs the native stage (`ct.exe --seqstage`) from the cartridge's own state at the
-hand-off (f130, saves/ending_re/ending_handoff_f130.state): its WRAM, and its sound processor seeded into the port's, which the
-scripts' `F5` waits read. The port's frame 0 is the state after the setup (the cartridge's black frames): the port's frame k is
-the cartridge's k + SHIFT, and the SPC runs HOLD frames before the port's first NMI -- both the cartridge's, measured (page A's
-first visit after the setup at f179; HOLD puts the port's SPC on the cartridge's own frame). Every frame to the END is compared:
+From saves/ending_re/ending_pre_ff2b.state (Leene's Square, scene 81, the talk already made: obj10's `FF 2B` at f131): the
+cartridge runs under the rule with no input (`--monitor` of the stage's logic bytes, on change); the port runs the native
+stage (`ct.exe --seqstage`) from the cartridge's own state at the hand-off (f130, saves/ending_re/ending_handoff_f130.state):
+its WRAM, and its sound processor seeded into the port's, which the scripts' `F5` waits read. The port's frame 0 is the state
+after the setup (the cartridge's black frames): the port's frame k is the cartridge's k + SHIFT, and the SPC runs HOLD frames
+before the port's first NMI, both taken from the cartridge (page A's first visit after the setup at f179; HOLD puts the port's
+SPC on the cartridge's own frame). Every frame to the END is compared:
 
     endingstage: FF 2B <n> frames compared, <d> differing, END cartridge f<c> port f<p> (same|DIFFERENT)
     endingstage: FF 2B song markers cartridge <frames> port <frames>
 
 The bytes graded are the stage's own: the END flag ($0000), the sequence shadows ($0380-$039B less the picture's: the credits
-pointer $0382, which task $9B4F advances, and the RNG $039B, which only the shooting stars draw from), the task list ($0920-$093F) and both script pages' registers, IPs, loop counters
-and return ($0A00-$0A2F, $0B00-$0B2F). The picture's tasks, hooks and inline calls are stage 2.
+pointer $0382, which task $9B4F advances, and the RNG $039B, which only the shooting stars draw from), the task list
+($0920-$093F) and both script pages' registers, IPs, loop counters and return ($0A00-$0A2F, $0B00-$0B2F). The picture's
+tasks, hooks and inline calls are stage 2. Regression checks: ending-stage-logic-vs-oracle and the other *-stage-logic-*.
 """
 import argparse
 import os
@@ -50,10 +51,9 @@ DRIVES = {
                shift=53, hold=54, total=4100, wait=(0x9669, 0x925E)),
     # entry 3 from the story (`FF 23`, scenes 102-107 after the Blackbird) -- the attract's own hand-off with the story's two
     # bytes put back ($7F0057 bit 2 clear, the storyline D3): scene 107's controller then takes the story's arm, `DD F6 03
-    # 91 35 / FF 23`, on the cartridge (the recipe lg_blackbird_story_poked: the attract's hand-off under today's rule, power-on
-    # + 8776, the two bytes poked; the hand-off at f25, FF 23 on f26). SHIFT 18 since 2026-10-22: from today's rule the
-    # opening's vblank wait ($7E:3010 -> $31B0) is reached at v224 h898 and catches line 225 -- 17 frames from the jump; the
-    # older rule's capture reached it at h1356, 462 cycles later, and waited a frame more (SHIFT 19)
+    # 91 35 / FF 23`, on the cartridge (the recipe lg_blackbird_story_poked: the attract's hand-off under the rule, power-on
+    # + 8776, the two bytes poked; the hand-off at f25, FF 23 on f26). SHIFT 18: the opening's vblank wait ($7E:3010 ->
+    # $31B0) is reached at v224 h898 and catches line 225, 17 frames from the jump
     '23': dict(state=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'), handoff=0,
                hstate=os.path.join(ROOT, 'saves', 'blackbird_re', 'ff23_handoff_f25.state'),
                shift=18, hold=19, total=650, tag='seqstage',
@@ -77,7 +77,7 @@ DRIVES = {
                hstate=os.path.join(ROOT, 'saves', 'lavos_re', 'ff07_handoff_f10.state'),
                shift=34, hold=25, total=1150, tag='seqstage', press=[(900, 0x100, 2)],
                extra=[(0x0C00, 0xC0), (0x0360, 8), (0x0520, 0x0C)], unskip={0x039B}),
-    # entry 6 (`FF 26`, scene 432 = loc 1B0: the Epoch into Lavos's shell) -- the user's Epoch capture (saves/epoch_re/
+    # entry 6 (`FF 26`, scene 432 = loc 1B0: the Epoch into Lavos's shell) -- an Epoch capture (saves/epoch_re/
     # epoch_user.state: world 1F0, storyline D6), the time gauge (Y), 1999 A.D. (Up), A, then A every 32 frames through the
     # cockpit's question and the party's lines (ff26_pre_f2760.state): `FF 26` on its f10, the END 1643 frames later. Page B's
     # r5 and $0386-7 are the Epoch's shake and lightning (C3/02DD in 16 bits, on $2138 / $213E: stage 2) -- skipped.
@@ -88,7 +88,6 @@ DRIVES = {
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the
-# shooting stars draw from (the setup's $9BB8 and task $9BF9: their positions and timings, stage 2)
 # shooting stars draw from (the setup's $9BB8 and task $9BF9: their positions and timings, stage 2)
 # and page A's r10-r15 ($0A14-$0A1F), the scratch of the picture's vblank hooks: $9AF3 (`LDA $0B0C / STA $0A1E`, then the
 # mode-7 matrix from it) and $56C0 ($0A16 / $0A18 from the sine of r5) -- no script reads them (`r = rX` only reads r9)

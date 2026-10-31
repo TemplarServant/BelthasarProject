@@ -4,15 +4,15 @@ hand-written cost model (src/field_cost.c) are derived.
     P = PathCost(costtab)                     # a ctlib.costtab.CostTab over the traces
     P.cost(pc, decide, m=1, x=0, d=0x0100, db=0x7E, stop=None, mvn=None, ind=None, skip=())
 
-The walk decodes the ROM from `pc` with the widths it really has (REP / SEP followed) and charges each instruction its
-cost: an executed PC's own (single) cost, else an executed instruction's with the same key (CostTab.equiv: opcode,
-widths, the region its operand lands in), else -- an indirect access -- the single cost every executed instruction with
-that opcode and widths had (they read the same FastROM tables). A conditional branch is 12 not taken / 18 taken, and
-`decide(pc, n)` says which (n = how many times this branch was met on the path so far). JSR / JSL are followed, RTS / RTL
-return; the walk ends at the routine's own RTS / RTL or at `stop`. `skip` = callees charged their JSR only (the model
-prices them itself); a JSL into C7 (the sound driver: the loader clock's) is charged nothing, into C3 (the
-decompressor: lz.c's) its vector's JMP (18). `mvn(pc)` = the bytes a block move moves (46 a byte WRAM to WRAM, 44 from
-ROM -- the traces' own where they ran), `ind(pc)` the target of a JSR / JMP (abs,X).
+The walk decodes the ROM from `pc`, following REP / SEP for the widths, and charges each instruction its cost: an
+executed PC's own (single) cost, else an executed instruction's with the same key (CostTab.equiv: opcode, widths, the
+region its operand lands in), else (an indirect access) the single cost every executed instruction with that opcode and
+widths had (they read the same FastROM tables). A conditional branch is 12 not taken / 18 taken, and `decide(pc, n)`
+says which (n = how many times this branch was met on the path so far). JSR / JSL are followed, RTS / RTL return; the
+walk ends at the routine's own RTS / RTL or at `stop`. `skip` = callees charged their JSR only (the model prices them
+itself); a JSL into C7 (the sound driver, priced by the loader clock) is charged nothing, one into C3 (the
+decompressor, priced by lz.c) its vector's JMP (18). `mvn(pc)` = the bytes a block move moves (46 a byte WRAM to WRAM,
+44 from ROM, or the traces' own cost where they ran), `ind(pc)` the target of a JSR / JMP (abs,X).
 """
 import collections
 import os

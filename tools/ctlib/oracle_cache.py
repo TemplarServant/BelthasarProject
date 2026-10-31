@@ -1,31 +1,31 @@
-"""A content-addressed cache of ORACLE runs (build/ct.exe --peek / --monitor / --hdma / --fb), so a re-run of the suite pays
+"""A content-addressed cache of oracle runs (build/ct.exe --peek / --monitor / --hdma / --fb), so a re-run of the suite pays
 only for what changed.
 
-A run of those modes is a pure function of (the ct.exe binary, its arguments, its environment, the files it reads); every
-one of them goes into the key:
+A run of those modes is a pure function of the binary, its arguments, its environment and the files it reads; the key
+holds all of them:
 
-  * sha256 of the binary that runs it, minus its link identity (_exe_sha) -- build/ct_oracle.exe when it is there (the
-    oracle alone: main.c's four modes + snes/*.c + the CPU infra and state loader, CMakeLists.txt), so a rebuilt oracle
-    (snes/*.c, src/main.c, ct_cpu_infra.c ...) misses and an edit to the port (battle.c, ct_vm.c, field.c ...) does not;
-  * the arguments and the working directory, minus the OUTPUT paths (`--peek <state> <OUT>`, and the env outputs below);
+  * sha256 of the binary that runs it, minus its link identity (_exe_sha): build/ct_oracle.exe when present (the oracle
+    alone: main.c's four modes + snes/*.c + the CPU infra and state loader, CMakeLists.txt), so a rebuilt oracle misses
+    and an edit to the port (battle.c, ct_vm.c, field.c ...) does not;
+  * the arguments and the working directory, minus the output paths (`--peek <state> <OUT>`, and the env outputs below);
     under CT_ORACLE_CACHE_ALIAS=<root>|<as root> (a mutation lab: tools/ctlib/mutlabs.py) a path under <root> in any of
     them, or in the environment, keys as the same path under <as root>;
   * the environment variables the binary can read: a name it holds as a C string (`getenv("CT_ORACLE_LOGICAL")` puts
     "CT_ORACLE_LOGICAL\0" in it; no oracle source builds a name at run time), minus the operating system's own (PATH,
     TEMP, ...). A variable only the port reads (CT_AUDIO_LOCKSTEP, CT_SHOTS ...) or the host sets (a per-command trace
-    id) does not split the cache: before 2026-10-24 every variable was in, and a cloud container's per-command
-    TRACEPARENT made every run of one tool miss the last;
-  * the CONTENT of every argument or environment value that names an existing file (a state, a .lakewram, the ROM given
+    id such as TRACEPARENT) does not split the cache;
+  * the content of every argument or environment value that names an existing file (a state, a .lakewram, the ROM given
     by --rom, CT_ORACLE_SRAM ...), and of the ROM ct.exe opens by default in the working directory.
 
-Its outputs are ENUMERATED, never guessed: `--peek`'s <OUT> and <OUT>.wram/.vram/.oam, `--fb`'s <OUT> and <OUT>.wram, PEEK_SAVE, PEEK_THUMBS, PEEK_PCM,
-PEEK_ARAM, CT_DSP_RAWPCM, and PEEK_SHOTS' <prefix>_f<n>.raw (+ sidecars) for each n of PEEK_SHOTS_AT. They are stored
-by ROLE (argument OUT, env PEEK_SAVE, ...) and a hit writes them to the paths THIS call names -- a tool that puts its pid
-in a temporary name still hits. With stdout, stderr and the exit code, a hit returns the same CompletedProcess.
+Its outputs are enumerated, never guessed: `--peek`'s <OUT> and <OUT>.wram/.vram/.oam, `--fb`'s <OUT> and <OUT>.wram,
+PEEK_SAVE, PEEK_THUMBS, PEEK_PCM, PEEK_ARAM, CT_DSP_RAWPCM, and PEEK_SHOTS' <prefix>_f<n>.raw (+ sidecars) for each n of
+PEEK_SHOTS_AT. They are stored by role (argument OUT, env PEEK_SAVE, ...) and a hit writes them to the paths this call
+names, so a tool that puts its pid in a temporary name still hits. A hit returns the same CompletedProcess (stdout,
+stderr, exit code).
 
 Opt-in by environment: CT_ORACLE_CACHE=<dir> turns it on (tools/regress.py sets build/_oracle_cache for its checks and
 their tools, through tools/oracle_cache_site/sitecustomize.py; `--no-oracle-cache` turns it off, `--clear-oracle-cache`
-empties it). Only subprocess.run / check_output calls are routed (a Popen is not), and only for the three modes above.
+empties it). Only subprocess.run / check_output calls are routed (a Popen is not), and only for the modes above.
 """
 import hashlib
 import json
@@ -82,10 +82,10 @@ def _file_sha(path):
 
 
 def _pe_identity_spans(b):
-    """[(offset, length)] of the bytes a Windows linker writes FRESH on every link of the same code: the COFF header's
+    """[(offset, length)] of the bytes a Windows linker writes fresh on every link of the same code: the COFF header's
     TimeDateStamp, the optional header's CheckSum, each debug directory entry's TimeDateStamp, the CodeView record's PDB
     GUID + age, and the REPRO entry's hash. With /Brepro and /INCREMENTAL:NO (CMakeLists.txt) these are the only bytes two
-    links of the same objects differ in (measured: 69 bytes, 2026-10-16). None for a file that is not a PE32+ image."""
+    links of the same objects differ in. None for a file that is not a PE32+ image."""
     u16 = lambda o: int.from_bytes(b[o:o + 2], 'little')
     u32 = lambda o: int.from_bytes(b[o:o + 4], 'little')
     if len(b) < 0x40 or b[:2] != b'MZ':
@@ -174,7 +174,7 @@ def _outputs(argv, env, cwd):
 
 # The exact size of every dump whose format fixes it (src/main.c runPeek / runDumpFb / PEEK_SHOTS): 512x480 [pad,B,G,R],
 # the 128 KB WRAM, the 64 KB VRAM, OAM 544 + CGRAM 512 (+ the high table: 2*512 + 32 + 2*256). A file of another size is
-# a run that did not finish writing it (a full disk, 2026-10-08: 11 truncated dumps were stored and replayed as truth).
+# a run that did not finish writing it (e.g. a full disk); such a dump is never stored or replayed.
 _SIZES = {'': 512 * 480 * 4, '.wram': 0x20000, '.vram': 0x10000, '.oam': 2 * 512 + 32 + 2 * 256}
 
 
@@ -296,10 +296,10 @@ def run(argv, kwargs, real_run, cache=None):
     env = kwargs.get('env')
     env = dict(env) if env is not None else dict(os.environ)
     cwd = os.path.abspath(kwargs.get('cwd') or os.getcwd())
-    # THE ORACLE ALONE: the same four modes from ct_oracle.exe (CMakeLists.txt, src/main.c CT_ORACLE_ONLY), built beside
-    # ct.exe from ct.exe's own main.c with every other mode compiled out -- it links none of the port, so an edit to the
-    # port leaves its bytes, and so this key, alone. The run is made by the binary the key names. A mode whose flags take
-    # another branch of main()'s chain gets ORACLE_REFUSED from it and is run by ct.exe itself, uncached.
+    # The oracle alone: ct_oracle.exe (CMakeLists.txt, src/main.c CT_ORACLE_ONLY) is built beside ct.exe from the same
+    # main.c with every other mode compiled out, so it links none of the port and an edit to the port leaves its bytes,
+    # and this key, unchanged. The run is made by the binary the key names. A call whose flags take another branch of
+    # main() gets ORACLE_REFUSED from it and is run by ct.exe itself, uncached.
     xargv = argv
     oracle = os.path.join(os.path.dirname(argv[0]), 'ct_oracle.exe')
     if os.path.isfile(oracle):

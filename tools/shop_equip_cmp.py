@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The SHOP's equip sub-mode (substates 6-8, disasm/notes/shop_screen.md section 8) against the cartridge, EVERY frame.
+r"""The shop's equip sub-mode (substates 6-8, disasm/notes/shop_screen.md section 8) against the cartridge, every frame.
 
     python tools/shop_equip_cmp.py [--keep] [--peek F ...]
 
@@ -10,9 +10,9 @@ Down, Up (the live preview C2/E162: Power up / Speed down, the Third Eye's doubl
 B, B (back to Buy/Sell), A (the buy list: the party panel after the mode), B, B (the shop closes).
 
 Both sides write a 128x112 thumbnail of every frame (the oracle's PEEK_THUMBS, the port's CT_SHOTS_THUMBS -- the same
-records, see docs/DEBUG_SURFACE.md), so the whole drive is two runs. The cartridge side is the LOGICAL oracle (the
+records, see docs/DEBUG_SURFACE.md), so the whole drive is two runs. The cartridge side is the logical oracle (the
 real-time one has a lag frame inside C2/DACA; CLAUDE.md grades a lag frame against the logical mode). A frame's state
-reaches the screen through its NMI, so the cartridge DISPLAYS frame P's state during P+1, which is thumbnail P+2: the
+reaches the screen through its NMI, so the cartridge displays frame P's state during P+1, which is thumbnail P+2: the
 port's frame P is the oracle's thumbnail P + SHIFT (tools/menu_audit_cmp.py measured it on every kind of change). Prints
 
     shop-equip-cmp: f<A>-f<B>: <N> of <M> frame(s) differ [first ...]
@@ -91,7 +91,7 @@ def run_port(thumbs, shots=()):
         if m in HOLD:
             hold.append('%X@%d:1' % (HOLD[m], f + PRESS - HOLD_LEAD))
             continue
-        pf = f + PRESS                               # the talk A too (every key the cartridge's + 1; until 2026-10-19 the talk kept its frame)
+        pf = f + PRESS                               # the talk A too: every key is the cartridge's + 1
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[m])

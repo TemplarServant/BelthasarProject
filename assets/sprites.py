@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pair Chrono Trigger NPC/PC sprite graphics with their palettes via the ROM
-tables (reverse-engineered as in CTViewer's backend_snes.rs), so any sprite pack
-can be colorized with its real palette.
+tables (as in CTViewer's backend_snes.rs), so any sprite pack can be colorized
+with its own palette.
 
 Tables (SNES/USA):
   - 7-pointer table @ 0x24FFE0 (2-byte local pointers in bank 0x240000):
@@ -104,7 +104,7 @@ def compose_frame(rom, index, frame=0):
                 if val == 0:
                     continue
                 px, py = ox + lx + x + O, oy + ly + y + O
-                # the FIRST unit is in front: unit k is OBJ tile k, copied into ascending OAM slots, and a
+                # the first unit is in front: unit k is OBJ tile k, copied into ascending OAM slots, and a
                 # lower slot wins (src/scene.c CtComposeSprite; Flea's cape pose hides her face otherwise)
                 if 0 <= px < S and 0 <= py < S and not cv[py * S + px]:
                     cv[py * S + px] = val
@@ -132,15 +132,13 @@ def render_frame(rom, index, out, zoom=4):
 
 def read_header(rom, index):
     if index >= 0x100:
-        # ENEMY sprite (op-0x83; our index = 256 + enemy id): the field enemy record at
-        # $E4:F600 + id*10 opens with the SAME 5-byte header shape as the NPC table --
-        # the ROM op-0x83 handler C0/46DF consumes byte0->gfx set ($E3 -> allocator
-        # C0/5C90), byte1->assembly ptr ($1380/$1300 via [$B2]), byte2*24->palette
-        # offset ($1400), byte3->anim set ($1480/$1500/$1580 via [$B5]/[$B8]),
-        # byte4->size ($1201). Oracle fresh loc-6: GATO id 0x92 rec `7B 76 B6 57 02`
-        # -> $1300/$1380 = E3:0000 = asm_ptrs[0x76], $1400 = 0x1110 = 0xB6*24,
-        # $1201 = 02. Reading the NPC header at 0x24F000 + index*5 for these indices
-        # landed inside the enemy table itself = garbage sprite records.
+        # Enemy sprite (op 0x83; index = 256 + enemy id): the field enemy record at
+        # $E4:F600 + id*10 opens with the same 5-byte header shape as the NPC table.
+        # The op 0x83 handler C0/46DF consumes byte0 -> gfx set ($E3 -> allocator
+        # C0/5C90), byte1 -> assembly ptr ($1380/$1300 via [$B2]), byte2*24 -> palette
+        # offset ($1400), byte3 -> anim set ($1480/$1500/$1580 via [$B5]/[$B8]),
+        # byte4 -> size ($1201). E.g. GATO, id 0x92: record `7B 76 B6 57 02`.
+        # (0x24F000 + index*5 for these indices would land inside the enemy table.)
         o = 0x24F600 + (index - 0x100) * 10
         return {'bitmap': rom[o], 'assembly': rom[o + 1], 'palette': rom[o + 2],
                 'anim': rom[o + 3], 'size': rom[o + 4]}
@@ -183,7 +181,7 @@ def build_anim(rom, sprite_index, action):
         action = 0
     dbase = dp[si]
     frames = []
-    # The ROM ticker (C0/CA0F) addresses rows at anim*4 but ends them ONLY at a zero
+    # The ROM ticker (C0/CA0F) addresses rows at anim*4 but ends them only at a zero
     # duration byte -- rows freely run past their 4-byte slot (the player's walk = 6
     # steps, frames 10-15, overrunning into the anim-2 slot).
     for f in range(32):
@@ -218,7 +216,7 @@ def read_sprite_palette(rom, pal_ptrs, palette_index):
     cols += [(0, 0, 0)] * 3                                              # 13..15
     return cols
 
-# bitmap_index <= 6 => the 7 playable characters: graphics are stored UNCOMPRESSED.
+# bitmap_index <= 6 => the 7 playable characters: graphics are stored uncompressed.
 # bitmap_index >  6 => NPC/enemy graphics, LZ-compressed.
 PC_GFX_BYTES = 0x1A00
 
@@ -226,9 +224,8 @@ def read_sprite_graphics(rom, gfx_ptrs, bitmap_index):
     off = gfx_ptrs[bitmap_index]
     if bitmap_index <= 6:
         # PC graphics are uncompressed; the block runs to the next gfx pointer (capped at the
-        # 10-bit chip range, 1024 tiles). The old fixed PC_GFX_BYTES (0x1A00 = 208 tiles) truncated
-        # the set, dropping the higher tiles some frames use -> incomplete frames (e.g. Crono's
-        # up-walk references tiles 839-858, beyond 208, so 6 chips were skipped on one frame).
+        # 10-bit chip range, 1024 tiles). PC_GFX_BYTES (208 tiles) is too short: e.g. Crono's
+        # up-walk references tiles 839-858.
         hi = [p for p in gfx_ptrs if p > off]
         size = min(0x8000, (min(hi) - off) if hi else 0x8000)
         return rom[off:off + size]
@@ -282,7 +279,7 @@ if __name__ == '__main__':
                   % (i, h['bitmap'], h['palette'], gfx_ptrs[h['bitmap']], pal_ptrs[h['palette']]))
     elif cmd == 'render':       # raw chip sheet (debug)
         render_sprite(rom, int(sys.argv[3]), sys.argv[4])
-    elif cmd == 'frame':        # assembled, colorized frame 0 (the real sprite)
+    elif cmd == 'frame':        # assembled, colorized frame 0
         render_frame(rom, int(sys.argv[3]), sys.argv[4])
     elif cmd == 'chars':
         render_chars(rom, sys.argv[3])

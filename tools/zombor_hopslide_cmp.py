@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""The HOP-SLIDE family of the battle animation script -- op D2 (C1/705A: mover mode 4, CF/F6E2 for a scratch object and
+r"""The hop-slide family of the battle animation script -- op D2 (C1/705A: mover mode 4, CF/F6E2 for a scratch object and
 CF/F23D for a combatant), op D3 (C1/720E: the slide to the midpoint, mode 0 = CF/F4B2), op D7 (C1/740B: the point nn steps
 toward a target) and the waits D4/D5/D6 -- against the cartridge, frame by frame, on the attract's Zombor triple tech
 (loc 087, tech $3A): five scratch objects and the actor hop from the actor's foot to the victim's centre, and the sixth
@@ -8,8 +8,8 @@ object slides to the hop's midpoint.
     python tools/zombor_hopslide_cmp.py
 
   * cartridge: saves/attract_087_leg_rule.state (the 087 leg's start under the rule, made by a recipe: tools/fixtures/
-    attract_rule.json; until 2026-10-22 the owner's real-time capture run to f7085, build/_z_f7085.state), then `ct.exe
-    --monitor` prints the movers' arrays on every frame of the leg UNDER THE LOGICAL-FRAME RULE (CT_ORACLE_LOGICAL=1
+    attract_rule.json), then `ct.exe
+    --monitor` prints the movers' arrays on every frame of the leg under the logical-frame rule (CT_ORACLE_LOGICAL=1
     CT_ORACLE_VIRTUAL_BEAM=1, CLAUDE.md: no lag frame exists; cached as build/_z_orc_m4b_logical.txt). The real-beam
     cartridge lags inside the leg (the tracks' `20 0D`/`20 10` pauses released 1-2 frames late, the D8 shake 3 late),
     and a per-mover alignment cannot absorb a lag frame inside a mover's run;
@@ -19,7 +19,7 @@ object slides to the hop's midpoint.
 Three movers, each aligned on its own arm so the script's sync residuals (a `24 05` released a frame apart) do not
 mask the mover's law:
   * slots 1-5 (op D2, mode 4): aligned on the first frame slot 4 is in mode 4 (C1/71CA); graded per frame -- positions
-    ($A240/$A250, ABSOLUTE: the party's staged records are byte-identical since C0/1770's align wait), modes, phases
+    ($A240/$A250, absolute: the party's staged records are identical since C0/1770's align wait), modes, phases
     ($A9F4), heights ($A99A high words), done, active, the arrival latches $AB0B -- while the cartridge keeps any of
     them active;
   * slot 0 (op D3, mode 0): aligned on its first step ($ABF6 leaving the armed count); positions, counts, done, active;
@@ -116,14 +116,12 @@ def grade(orc, port, fo, fp, view, keys, alive):
 def main():
     if not os.path.exists(SRC) or not os.path.exists(FIX):
         print('zombor-hopslide: SKIP -- missing %s or %s' % (SRC, FIX)); return
-    # ...and per BINARY and per switch: a trace kept across an oracle rebuild is another oracle's. The suite passed on a
-    # trace made before CT_ORACLE_RDNMI became the default (2026-10-09: the cartridge's f502 where the rule's is f500).
+    # ...and per binary and per switch: a trace kept across an oracle rebuild is another oracle's.
     sw = ','.join('%s=%s' % (k, os.environ.get(k, '')) for k in ('CT_ORACLE_RDNMI', 'CT_ORACLE_LINE64', 'CT_ORACLE_VIRTUAL_BEAM'))
     orc_path = '%s_%s.txt' % (ORC[:-4], hashlib.sha256(open(CT, 'rb').read() + sw.encode() + STATE.encode()).hexdigest()[:12])
     if not os.path.exists(orc_path):
         # stdout only: the logical oracle prints its `logical-frame:` summary on stderr at exit, and merged into the same
-        # pipe it can land inside the last --monitor row (it did under the rule's switches: the cache's f794 row ended
-        # `0logical-frame: ...` and parse_orc's fromhex failed).
+        # pipe it can land inside the last --monitor row (breaking parse_orc's fromhex).
         open(orc_path, 'w').write(subprocess.run([CT, '--monitor', MON, '--from', STATE, '--frames', '800'],
                                                  env=dict(os.environ, CT_ORACLE_LOGICAL='1', CT_ORACLE_VIRTUAL_BEAM='1'),
                                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,

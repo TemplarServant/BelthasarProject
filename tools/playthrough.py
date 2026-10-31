@@ -6,8 +6,8 @@ r"""The playthrough: one route from power-on to "The End", played on the rule's 
     python tools/playthrough.py cmp  <leg>|all [-v] [-jN] each leg on both sides from its start state, compared (-jN: N legs at a time)
     python tools/playthrough.py scene <leg> "<pad>"     authoring: the pad, then a scene played by its boxes (A when one waits)
 
-THE ROUTE (tools/playthrough/route.txt) is the cartridge's pad, frame by frame, in the --btnscript grammar (`hexbtn:frames`,
-LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800), cut into LEGS:
+The route (tools/playthrough/route.txt) is the cartridge's pad, frame by frame, in the --btnscript grammar (`hexbtn:frames`,
+LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800), cut into legs:
 
     ## 01_bedroom -- Crono wakes; Mom; down to the kitchen
     0:120,100:2,0:40
@@ -15,13 +15,13 @@ LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80 A=10
 
 A leg starts where the one before it ended (the first at power-on, on an erased cartridge) and lasts exactly the frames its
 pad holds. `## name -- note [oracle-only]` opens one; `#` lines are comments; a line may repeat a group: `(100:2,0:38)*20`.
-Every leg is written by looking (`try`), never by guessing -- the route is the cartridge's own play, under the rule
+Every leg is written by playing it on the cartridge (`try`): the route is the cartridge's own play, under the rule
 (CT_ORACLE_LOGICAL=1). Its states are made from power-on by `play` (saves/playthrough/, local: they are the ROM's output and
 `play all` rebuilds them).
 
-THE COMPARISON (`cmp`). From the leg's start state, the cartridge plays the pad (`ct.exe --monitor`) and the port plays the
+The comparison (`cmp`). From the leg's start state, the cartridge plays the pad (`ct.exe --monitor`) and the port plays the
 same pad from the same WRAM and sound (`Belthasar --scene <loc> --loadwram`, CT_AUDIO_SEEDSTATE, CT_AUDIO_LOCKSTEP; the pad
-as the walkscript's raw `H` tokens, one frame later -- the port's keys are the cartridge's + 1, ct-frame-alignment-p2).
+as the walkscript's raw `H` tokens, one frame later: the port's keys are the cartridge's + 1).
 Graded: the chain of locations ($0100), the storyline's values ($7F:0000) and the party ($2980-$2982) in order, and the
 leg's last values -- the things a player sees happen, with no frame tolerance needed. Each change's frame on both sides is
 printed (the offset, informational). One line a leg:
@@ -50,7 +50,7 @@ MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', 
        ('gold', '7E2C53', '2C53', 3), ('hp', '7E2603', '2603', 2),          # gold (C1/D0A2), Crono's current HP ($2600 + 3)
        ('ctrl', '7E011F', '011F', 1),                                        # the player's control (op E3; a fight takes it)
        ('bri', '7E0119', '0119', 1)]                                         # the brightness: not graded, it gates `ctrl`
-# A LOAD'S INSIDE IS NOT GRADED. A location load runs with the NMI off: C0/0BC4 sets $011F = 1 at its start and the new
+# A load's inside is not graded. A location load runs with the NMI off: C0/0BC4 sets $011F = 1 at its start and the new
 # scene's fn0 may take it back before the fade-in (002: 1 at f511, `E3 00` at f541, the ramp from f551) -- CPU time on a
 # black screen with no joypad, which the port does in one go (CLAUDE.md: timing artefacts are not reproduced). So the
 # control byte is graded only on frames whose $0119 is not 0: the frames a player can see and act on.
@@ -286,8 +286,8 @@ def box_step(w, waited):
     """One step through a scene, keyed on the message box (C0/1F87, field_textbox_a_press.md): A only when the box waits
     for it -- `$0129` = 7 with `$0134` = FFFF (no auto-advance countdown), or a decision box (`$0162` != 0) -- and only
     after it has waited BOX_SLACK frames, so the press lands inside the wait on both sides when they are a frame or two
-    apart (a fixed-cadence press that met a box on its first waiting frame missed it on the side a frame late, and the
-    rest of the scene ran a box apart). Returns (pad, waited)."""
+    apart (a fixed-cadence press that meets a box on its first waiting frame misses it on the side a frame late, and the
+    rest of the scene runs a box apart). Returns (pad, waited)."""
     waiting = w[0x0129] == 7 and ((w[0x0134] | (w[0x0135] << 8)) == 0xFFFF or w[0x0162] != 0)
     if not waiting:
         return [(0, 4)], 0
@@ -396,8 +396,8 @@ def port_timeline(start, pad):
                CT_AUDIO_SEEDSTATE=start, CT_WS_BATTLE_LEAD='1', CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in MON),
                CT_SHOTS=os.path.join(TMP, 'p'), CT_SHOTS_AT=','.join(map(str, at)), CT_SHOTS_EXIT='1',
                # the cartridge's battery: the route starts on an erased cartridge, so the port's is erased too (a save
-               # left in the tree's ct_sram.srm changed the port's legs 45, 54 and 82), and a save a leg makes lands in
-               # its own scratch, never over the player's file
+               # left in the tree's ct_sram.srm would change the port's legs), and a save a leg makes lands in its own
+               # scratch, never over the player's file
                CT_SRAM_FRESH='1', CT_SRAM=os.path.join(TMP, 'port.srm'))
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,

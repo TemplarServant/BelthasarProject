@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-r"""The SHOP screen ($0C) against the cartridge, picture for picture (disasm/notes/shop_screen.md).
+r"""The shop screen ($0C) against the cartridge, picture for picture (disasm/notes/shop_screen.md).
 
     python tools/shop_screen_cmp.py
 
-Drives the SAME shop on both sides -- the fair merchant (loc 5 obj16, `C8 90` = shop $10) from
+Drives the same shop on both sides -- the fair merchant (loc 5 obj16, `C8 90` = shop $10) from
 saves/field_re/shop90_lake.state (oracle) and saves/field_re/shop90.lakewram (the port, its WRAM) -- through
 Buy / a Karate Gi / confirm / B / Sell / the Karate Gi / confirm, and compares whole 256x224 frames at aligned
 moments. Prints one line per moment:
@@ -11,10 +11,10 @@ moments. Prints one line per moment:
     shop-screen-cmp: <name> oracle f<O> port f<P> -> <N> px differ
 
 and, for shop $11 (the oracle's script byte poked to `C8 91`, the port's CT_SHOPNO=11), the buy list with its
-PROPORTIONAL description line ("Restores 50 HP", C2/F2F3 -> C2/FA49).
+proportional description line ("Restores 50 HP", C2/F2F3 -> C2/FA49).
 
-THE ALIGNMENT (docs/TESTING.md, "THE ALIGNMENT (2026-09-24), for every menu tool"; memory ct-frame-alignment-p2):
-  * the cartridge side is the LOGICAL oracle (CLAUDE.md grades a lag frame against that mode; the real-time one has a
+The alignment (docs/TESTING.md, the alignment for every menu tool):
+  * the cartridge side is the logical oracle (CLAUDE.md grades a lag frame against that mode; the real-time one has a
     lag frame inside C2/DACA);
   * the cartridge displays frame P's state during P+1 -- the NMI at the end of P uploads its tiles, sprites and
     brightness together -- so the port's frame P is the oracle's --peek after P+2 frames;
@@ -65,7 +65,7 @@ def oracle_frame(frame, env=None):
 def port_frames(frames, extra_env=None):
     walk, t = [], 0
     for mask, f in DRIVE:
-        pf = f if f == 10 else f - PRESS                 # the talk A is a FIELD press: same frame on both sides
+        pf = f if f == 10 else f - PRESS                 # the talk A is a field press: same frame on both sides
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[mask])

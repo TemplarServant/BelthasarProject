@@ -3,27 +3,24 @@ r"""Crono's Cyclone on Blue Imps + Roly (loc 070), every victim's damage, port a
 
     python tools/cyclone_victims_cmp.py
 
-The user, 2026-10-09: "in the battle against roly and blue imps, when using cyclone on two enemies, only one of them took
-damage". Bit 1 of $B1FC is the one-victim latch: an enemy's physical attack sets it (AI op 01, C1/99C2) and C1/D357 reads
-it after every victim of a kind-3 damage loop. The PC command's tech arm clears it (C1/BB66-BB6B `LDA $B1FC / AND #FD /
-STA $B1FC`); the port did that only for the demo's commands, so a Cyclone dispatched after a Blue Imp's attack stopped
-at its first victim (the list is processed last-first: the Roly took the damage, the Imps none). The victims themselves
+Bit 1 of $B1FC is the one-victim latch: an enemy's physical attack sets it (AI op 01, C1/99C2) and C1/D357 reads it
+after every victim of a kind-3 damage loop. The PC command's tech arm clears it (C1/BB66-BB6B `LDA $B1FC / AND #FD /
+STA $B1FC`) on every command, not only the demo's; left set, a Cyclone dispatched after a Blue Imp's attack stops at
+its first victim (the list is processed last-first: the Roly takes the damage, the Imps none). The victims themselves
 are the $99C0 the dispatch's area pass rebuilds around the action's target (C1/C586 -> C1/C7A7 + C1/2701) and
 C1/C600-C63E copies into $AD8E / $AECC (battle_multitarget.md sec. 3.1, tools/radius_dispatch_cmp.py).
 
 The cartridge: saves/battle_re/loc070_imps_roly_pre_lake.state -- loc 070 reloaded by the ROM's own loader after the
-bat6 fight was won (its group of two Blue Imps + a Roly respawned), Crono 60 frames into a walk down onto them (the recipe
-twin since 2026-10-22, tools/recipes/fxr_loc070_imps_roly.json: its scene runs 7 frames after the capture's). Down for
-60 frames (the ambush, obj22's fn1), then Down, A, A, A from the cartridge frame 338 (Tech, Cyclone, the primary =
-enemy slot 2): the select confirms while a Blue Imp's attack is running (its AI op 01 sets $B1FC bit 1), and the
-Cyclone dispatches after it. The port: the same WRAM (saves/battle_re/loc070_imps_roly_pre.lakewram, --loadwram) and
-SPC, the same walk and the same keys on the same frames.
+bat6 fight was won (its group of two Blue Imps + a Roly respawned), Crono 60 frames into a walk down onto them (made by
+the recipe tools/recipes/fxr_loc070_imps_roly.json). Down for 60 frames (the ambush, obj22's fn1), then Down, A, A, A
+from the cartridge frame 338 (Tech, Cyclone, the primary = enemy slot 2): the select confirms while a Blue Imp's attack
+is running (its AI op 01 sets $B1FC bit 1), and the Cyclone dispatches after it. The port: the same WRAM
+(saves/battle_re/loc070_imps_roly_pre.lakewram, --loadwram) and SPC, the same walk and the same keys on the same frames.
 
-The ambush itself is graded first (2026-10-09): obj22's fn1 `E3 00 / DA / E3 00 / AD 05 ...` meets op 0xDA with no
-follower in party slot 1, and C0/3463 `INX / CLC` ENDS the visit there; the live VM kept running, reached the wait 4
-frames early (obj22 runs every 4th frame) and the fight began 8 frames early. Per side: obj22's IP ($11AC), the three
-enemies' X/Y, loc[6] / loc[7] ($7F020C / $7F020E), the D8's $2989 and Crono's ready ($A6D9), change by change:
-
+The ambush itself is graded first: obj22's fn1 `E3 00 / DA / E3 00 / AD 05 ...` meets op 0xDA with no follower in
+party slot 1, and C0/3463 `INX / CLC` ends the visit there (a VM that runs on reaches the wait 4 frames early -- obj22
+runs every 4th frame -- and the fight begins 8 frames early). Per side: obj22's IP ($11AC), the three enemies' X/Y,
+loc[6] / loc[7] ($7F020C / $7F020E), the D8's $2989 and Crono's ready ($A6D9), change by change:
     cyclone-victims: ambush <region> identical (<n> changes)      (or: differs from f<F>: cartridge .. port ..)
     cyclone-victims: Crono ready ($A6D9 = 00) cartridge f<C> port f<P>
 
@@ -31,6 +28,8 @@ enemies' X/Y, loc[6] / loc[7] ($7F020C / $7F020E), the D8's $2989 and Crono's re
     cyclone-victims: cmb<k> took damage cartridge <yes|no> port <yes|no>  (dead: cartridge <y|n> port <y|n>)
     cyclone-victims: <n>/<m> victims identical
     cyclone-victims-info: cmb<k> HP cartridge <a>-><b> port <c>-><d>       (not graded: the RNG's cursor)
+
+Regression check: battle-cyclone-every-victim-after-an-enemy-attack-vs-rule-cartridge.
 """
 import os
 import re

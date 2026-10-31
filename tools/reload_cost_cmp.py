@@ -4,7 +4,7 @@ cartridge, leg by leg.
 
     python tools/reload_cost_cmp.py [--make]
 
-Each fixture is a menu close on the LOGICAL oracle (CT_ORACLE_LOGICAL=1), from a committed save and a button script
+Each fixture is a menu close on the logical oracle (CT_ORACLE_LOGICAL=1), from a committed save and a button script
 up to a few frames before the close's RTL. The tool dumps the cartridge's WRAM at C0/0B5D (the NMI-off) and at
 C0/286C (the pass) with `ct.exe --hookpc` + CT_HOOK_DUMPWRAM, and grades:
   * the pass, `Belthasar --passcost` over the WRAM at C0/286C;
@@ -15,7 +15,7 @@ re-traces (`ct.exe --cputrace`, CPUTRACE_BEAM=1, ~100 MB a fixture) and re-measu
 spans are floor(C / 346,886), + 1 when C0/0B38's `LDA $4210` lands past that frame's vblank (RDNMI is cleared at line 0):
 the stretch starts at phase 0, so its remainder is measured from a vblank's start.
 
-    reload: p3 loc 082 (x): pass 1728455 / 1728472 (-17), total 13244133 / 13245448 (-1315): 39 / 39 frames
+    reload: <tag> loc <loc> (<caller>): pass <port> / <cart> (<diff>), total <port> / <cart> (<diff>): <port> / <cart> frames
 
 The residual is the map build's model (lz.c ct_map_build_cycles, its MBC_ONESHOT) and the DMA legs' sync.
 """
@@ -35,7 +35,7 @@ OUT = os.path.join(ROOT, 'build', '_menuinit')
 # measured (C0/0B5D -> C0/0B38, C0/286C -> C0/0B38) non-refresh cycles on the logical oracle
 FIXTURES = [
     ('p3', 'saves/battle_re/party3_field.state', '0:4,200:2,0:54,1:2', 50, 'x', (13245448, 1728472)),
-    # (re-measured 2026-10-10 on the recipe-made shop90_lake.state, tools/fixtures/menu.json; the capture's: 12552248, 1924502)
+    # measured on the recipe-made shop90_lake.state (tools/fixtures/menu.json)
     ('shop', 'saves/field_re/shop90_lake.state', '0:10,100:2,0:418,1:2', 55, 'c8', (12556860, 1929108)),
     # party3_field again, the X pressed right after a walk: the remainder lands inside a vblank (C0/0B38 falls through)
     ('walk', 'saves/battle_re/party3_field.state', '0:4,80:16,200:2,0:52,1:2,0:2', 55, 'x', (13189458, 1672476)),
@@ -52,8 +52,8 @@ def env():
 
 
 def state_of(tag, save, script):
-    """THIS oracle's state a few frames before the close, made on every run (~0.6 s): one kept from an older oracle
-    would replay the rule that made it (the 2026-09-30 note in field_window_wipe.md, "The virtual beam")."""
+    """This oracle's state a few frames before the close, made on every run (~0.6 s): one kept from an older oracle
+    would replay the rule that made it (field_window_wipe.md, "The virtual beam")."""
     st = os.path.join(OUT, tag + '_close.state')
     os.makedirs(OUT, exist_ok=True)
     if os.path.exists(st):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Survey the whole attract, port against cartridge, for VISUAL differences.
+r"""Survey the whole attract, port against cartridge, for visual differences.
 
     python tools/attract_survey.py <oracle_thumbs.bin> <port_thumbs.bin> [<outdir>]
 
@@ -9,9 +9,9 @@ Both files are the 128x112 thumbnail records `[u32 frame][u16 $0100][128*112*3 R
             with CT_SHOTS_THUMBS=<file> CT_SHOTS=<p> CT_SHOTS_AT=<end> CT_SHOTS_EXIT=1
 
 The two timelines are not frame-aligned (the port boots through the title; its legs have their own residual lengths), so
-the survey aligns them VISIT BY VISIT: consecutive records with the same $0100 form a visit, the two visit lists are
+the survey aligns them visit by visit: consecutive records with the same $0100 form a visit, the two visit lists are
 paired in order by location, and every sampled cartridge frame is compared with the best-matching port frame inside the
-paired visit, searched around the same offset from the visit's start. A sample whose BEST match still differs is a visual
+paired visit, searched around the same offset from the visit's start. A sample whose best match still differs is a visual
 difference of the port, not a timing one. What is reported per visit: the lengths, the median best difference, and the
 worst sample; the worst samples overall are written as PNG strips (cartridge | port | |difference| x4).
 
@@ -124,7 +124,7 @@ def main():
         s = np.concatenate([a, np.full((112, 4, 3), 255, np.uint8), b, np.full((112, 4, 3), 255, np.uint8), diff], axis=1)
         return Image.fromarray(s).resize((s.shape[1] * 2, s.shape[0] * 2), Image.NEAREST)
 
-    for dv, share, loc, ofr, pfr, vi in per_visit:   # the worst sample of EVERY visit, for a pass through the legs in order
+    for dv, share, loc, ofr, pfr, vi in per_visit:   # the worst sample of every visit, for a pass through the legs in order
         strip(ofr, pfr).save(os.path.join(outdir, 'visit_%02d_%03X_c%d_p%d.png' % (vi, loc, ofr, pfr)))
     seen = set()
     written = 0

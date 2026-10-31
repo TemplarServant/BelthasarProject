@@ -1,31 +1,33 @@
 #!/usr/bin/env python3
-r"""The FIELD's animation under a battle, port against the cartridge: the attract's 07D fight, its entry and its exit tail.
+r"""The field's animation under a battle, port against the cartridge: the attract's 07D fight, its entry and its exit tail.
 
     python tools/battle_field_anim_cmp.py
 
 The arena is the field's own layers, and the field's machines keep running under the fight (the derivation is in the
 comments of src/battle.c battleNmiTail / CtBattleTailFrame and src/field.c fieldBattleIrqTiles):
-  - the TILES: the battle's IRQ D1/FE97 runs FD/E022 on every frame whose $7C is odd (and $CD02 clear), $7C being the
+  - the tiles: the battle's IRQ D1/FE97 runs FD/E022 on every frame whose $7C is odd (and $CD02 clear), $7C being the
     count the fight's NMI D1/E77C steps (D1/E7E7), zeroed where D1/F1B0 installs that NMI (D1/F253);
-  - the COLOURS: FD/E39C, the objslot records at $0520.., from the fight's NMI (CD/09BF) and from the exit tail's NMI
+  - the colours: FD/E39C, the objslot records at $0520.., from the fight's NMI (CD/09BF) and from the exit tail's NMI
     D1/F4C0 (D1/F54D), which also drifts the layers and leaves $7C alone;
   - $0153 bit 0, which the field's C0/1895 flips once on the way in (C0/00DE -> FD/C2C1) and the field's IRQ reads again
     after the ack.
 The two frames between the staging and the fight's NMI are the field's: tick 1 = C0/1895 (the drift, the flip, FD/E39C),
 tick 2 = C1/0000's first frame (D1/F1B0: $7C = 0, one drift, no FD/E39C).
 
-Both sides run the whole attract from power-on to the 07D fight's return: the cartridge UNDER THE RULE (build/ct.exe
---monitor --from boot, CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 -- the real cartridge's lag frames step $7C and
-the records through NMIs the port does not have, and carry $0153's parity into the fight) and the port (build/Belthasar.exe
---scene 433, CT_AUDIO_LOCKSTEP=1, CT_FIELD_MEMMON). The fight itself is not graded frame for frame -- its length is its
-own question (the port's is 10 frames short: the boot's CPU frames CT_BATTLE_BOOT_CPU and more) -- only two windows,
-each aligned on its own event:
+Both sides run the whole attract from power-on to the 07D fight's return: the cartridge under the rule (build/ct.exe
+--monitor --from boot, CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1 -- a real-time cartridge's lag frames would step $7C
+and the records through NMIs the port does not have, and carry $0153's parity into the fight) and the port
+(build/Belthasar.exe --scene 433, CT_AUDIO_LOCKSTEP=1, CT_FIELD_MEMMON). The fight itself is not graded frame for
+frame -- its length is its own question (open: the port's is shorter, the boot's CPU frames CT_BATTLE_BOOT_CPU and
+more) -- only two windows, each aligned on its own event:
   entry  the staging frame (the port's `battlephase: begins`, the cartridge's install frame - 2) and the 60 after it
   tail   the ack ($0117 -> 00) and the 16 frames before it
 Per window and per quantity (tile steps = $051D changes, $7C -- in the tail its parity and whether it moved, the fight's
 length being in its value --, colour steps = record 0's counter changes, $0153):
   battle-field-anim: <window> <quantity> <n> frame(s): same | DIFFER at +<k> (cartridge .. port ..)
   battle-field-anim: -> same | DIFFER
+
+Regression check: attract-07d-field-anim-under-the-battle-vs-logical-oracle.
 """
 import os
 import re

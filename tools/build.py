@@ -1,37 +1,30 @@
 #!/usr/bin/env python3
-"""Honest build driver for the Chrono Trigger decomp (stdlib only).
+"""Build driver for the Chrono Trigger decomp (stdlib only).
 
-macOS/Linux use cmake and ninja from PATH; CMake discovers system SDL2.
-Native executables have .exe compatibility aliases for the existing asset and test tools.
+Windows: VS 2022 BuildTools vcvars64 -> cmake -S . -B build -G Ninja (RelWithDebInfo; CT_BUILD_TYPE overrides) ->
+cmake --build. macOS/Linux use cmake and ninja from PATH; CMake discovers system SDL2. Native executables have .exe
+compatibility aliases for the existing asset and test tools. tools/build.bat is a thin wrapper around this script.
 
-Replaces the logic that used to live in tools/build.bat (which is now a thin
-wrapper around this script). Same flow: VS 2022 BuildTools vcvars64 ->
-cmake -S . -B build -G Ninja (RelWithDebInfo; CT_BUILD_TYPE overrides) -> cmake --build. On top of that it
-kills the three historical FALSE-'Build OK' mechanisms:
+It guards against three ways a build can look OK when it is not:
 
-  1. LNK1168 on a locked exe leaving the OLD exe runnable while the failure
-     scrolls away  -> pre-flight FAILS if a ct*.exe from build/ is RUNNING,
-     and every failure ends in a loud '=== BUILD FAILED ===' banner.
-  2. The old banner named only ct.exe and printed even when the SDL2 targets
-     were silently skipped or nothing was scheduled  -> per-target status
-     table (BUILT / UP-TO-DATE / SKIPPED / FAILED); 'Build OK:' prints ONLY
-     when every expected target verified.
-  3. mtime/clock-skew: a source whose mtime did not advance past its .obj is
-     silently not recompiled  -> after the build, per-target source-content
-     hashes (sha1) are compared against build/.ctbuildstamp.json; a changed
-     source whose exe hash did NOT change is the skew trap: auto-heal by
-     os.utime(now) on the changed sources, rebuild once, re-verify, and FAIL
-     loudly ('STALE: ...') if the exe still does not change -- unless the re-run
-     provably compiled every changed source (its object is newer than the bump):
-     then the edit changes no code (a comment) and the build is certified.
+  1. LNK1168 on a locked exe leaves the old exe runnable while the failure scrolls away -> the pre-flight fails if a
+     ct*.exe from build/ is running, and every failure ends in a '=== BUILD FAILED ===' banner.
+  2. A banner that ignores skipped or unscheduled targets -> a per-target status table (BUILT / UP-TO-DATE / SKIPPED /
+     FAILED); 'Build OK:' prints only when every expected target verified.
+  3. mtime/clock skew: a source whose mtime did not advance past its .obj is silently not recompiled -> after the
+     build, per-target source-content hashes (sha1) are compared against build/.ctbuildstamp.json; a changed source
+     whose exe hash did not change is the skew trap: auto-heal by os.utime(now) on the changed sources, rebuild once,
+     re-verify, and fail ('STALE: ...') if the exe still does not change -- unless the re-run provably compiled every
+     changed source (its object is newer than the bump): then the edit changes no code (a comment) and the build is
+     certified.
 
 Usage:  python tools/build.py [ct|Belthasar|ct_world|ct_viewer|ct_tables_proof]
         CT_DATAFREE=1: Belthasar without the generated tables compiled in (docs/ROM.md)
-        (no argument = build all configured targets, like before)
+        CT_BUILD_DIR=<dir under the repo>: build into another tree (e.g. build_alt)
+        (no argument = build all configured targets)
 
-Read-only with respect to the engine: it uses CMake's configured targets
-and source lists for freshness checks (including
-conditional target_sources and file(GLOB)); it never edits source content.
+Read-only with respect to the engine: it uses CMake's configured targets and source lists for freshness checks
+(including conditional target_sources and file(GLOB)); it never edits source content.
 """
 import glob as globmod
 import hashlib
@@ -58,7 +51,7 @@ NINJA_REL = r"Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 KNOWN_TARGETS = ("ct", "ct_oracle", "Belthasar", "ct_world", "ct_viewer", "ct_tables_proof")
 # Built only when named: the table pack's byte-for-byte proof (tools/gen/tables_proof.py; EXCLUDE_FROM_ALL in CMake).
 OPTIONAL_TARGETS = ("ct_tables_proof",)
-# The playable host was ct_field until 2026-10-17; the old name still selects it.
+# The old name ct_field still selects the playable host.
 TARGET_ALIASES = {"ct_field": "Belthasar"}
 
 
@@ -273,7 +266,7 @@ def main(argv):
         if want not in KNOWN_TARGETS:
             fail("unknown target '{}' (know: {})".format(want, ", ".join(KNOWN_TARGETS)), 2)
 
-    # ---- pre-flight: refuse to build over a RUNNING exe (the LNK1168 class).
+    # ---- pre-flight: refuse to build over a running exe (the LNK1168 class).
     procs = running_ct_processes() if os.name == "nt" else []
     # A single-target build links only that exe: another one running (the player's Belthasar while ct.exe is rebuilt) is
     # not in its way. `ct` also links ct_oracle (CMakeLists.txt: add_dependencies), so a running ct_oracle is in its way.
@@ -294,7 +287,7 @@ def main(argv):
     pre_hash = {n: sha1_file(p) for n, p in exe_path.items()}
     stamp = load_stamp()
 
-    # ---- toolchain + the exact same configure/build flow as before.
+    # ---- toolchain + the configure/build flow.
     if os.name == "nt":
         vs_root = find_vs()
         print("VS: {}".format(vs_root), flush=True)
@@ -307,11 +300,9 @@ def main(argv):
         if not cmake or not ninja:
             fail("cmake and ninja must be installed and available on PATH", 2)
 
-    # BUILD TYPE. The tree built Debug (/Od) for years, which is why a suite of emulator runs took
-    # minutes: every check is an oracle or engine run and none of it was optimised. RelWithDebInfo
-    # (/O2 /Zi) keeps full symbols and line info for a crash while letting the ROM/engine loops run at
-    # speed. CT_BUILD_TYPE overrides (Debug for a stepping session); the configure is re-run when the
-    # type changes, since the cache remembers it.
+    # Build type: RelWithDebInfo (/O2 /Zi) keeps full symbols and line info for a crash while the ROM/engine loops run
+    # at speed (every check is an oracle or engine run). CT_BUILD_TYPE overrides (Debug for a stepping session); the
+    # configure is re-run when the type changes, since the cache remembers it.
     btype = os.environ.get("CT_BUILD_TYPE", "RelWithDebInfo")
     # CT_DATAFREE=1: Belthasar without the generated tables compiled in; it loads them from the pack made from the
     # player's ROM (ct_tables.dat, docs/ROM.md). Passed both ways so the cache follows the environment.
@@ -376,7 +367,7 @@ def main(argv):
             previous_sources = stamp.get(n, {}).get("sources", {})
             if post == stamp.get(n, {}).get("exe") and any(p in previous_sources for p in files):
                 # An edit that changes no code (a comment, on lines that keep their numbers) leaves the exe byte for byte:
-                # that is not the skew trap when the re-run provably COMPILED every changed source -- its object is
+                # that is not the skew trap when the re-run provably compiled every changed source -- its object is
                 # newer than the bump. A source that is not compiled itself (a header) cannot be proven that way.
                 objs = [object_path(n, p) for p in files]
                 if all(o and os.path.getmtime(o) >= now - 1 for o in objs):
@@ -397,7 +388,7 @@ def main(argv):
                     "when": time.strftime("%Y-%m-%d %H:%M:%S")}
     save_stamp(stamp)
 
-    # ---- honest per-target banner.
+    # ---- per-target banner.
     print("", flush=True)
     print("--- build status " + "-" * 45, flush=True)
     ok = True

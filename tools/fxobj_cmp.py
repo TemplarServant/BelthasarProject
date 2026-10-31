@@ -14,6 +14,8 @@ port with CT_BATTLE_FXOBJTRACE. Each side is aligned on the first frame an objec
 first at or after a per-case frame), and the next <frames> frames are compared field by field. Prints
 
     fxobj-cmp: <case> oracle arm f<a> port arm f<b>: object field sequences <same>/<n> identical, matrix sequence identical, ...
+
+Regression checks: battle-fxobj-machine-cyclone-vs-oracle, -song-, -zombor-.
 """
 import os
 import re
@@ -116,8 +118,8 @@ def main():
     if not oa or not pa:
         sys.exit('fxobj-cmp: %s: no arm (oracle %s, port %s)' % (name, oa, pa))
     oi, pi = oa[0], pa[0]
-    # The cartridge runs the action loop -- and so CC/F278 and the script -- once per ITERATION, and an iteration
-    # sometimes spans two frames or more (the CPU clock; the port runs one every frame). So each OBJECT is compared on
+    # The cartridge runs the action loop -- and so CC/F278 and the script -- once per iteration, and an iteration
+    # sometimes spans two frames or more (the CPU clock; the port runs one every frame). So each object is compared on
     # its own sequence of distinct states (a state held over frames is one iteration on screen), and the matrix on
     # its own: both are independent of how the iterations fall on frames.
     def seq(rows, i, key):
@@ -129,7 +131,7 @@ def main():
         return out
     held = sum(1 for k in range(1, min(n, len(orows) - oi)) if orows[oi + k][1] == orows[oi + k - 1][1])
     # ...and field by field: when an iteration spans a frame boundary the cartridge's sample can fall between CC/F278 and
-    # the script, a state the port never shows -- but each FIELD is still written once per iteration, so each object's
+    # the script, a state the port never shows -- but each field is still written once per iteration, so each object's
     # sequence of distinct values per field is the same whatever the sampling.
     total = same = 0
     first = None

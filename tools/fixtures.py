@@ -24,11 +24,11 @@ memory, so they cannot ship; tools/fixtures/<domain>.json says how each one is m
             flags     the 512 story-flag bytes $7F0000-$7F01FF
             srm       the 8 KB battery RAM (the savestate's last block)
             peek      an oracle --peek dump: the 512x480 frame at `path` and its .wram/.vram/.oam sidecars
-            ctfs      the PORT's own CtScene state (Belthasar --loadstate; F5's format): Belthasar --scene <scene> seeded
+            ctfs      the port's own CtScene state (Belthasar --loadstate; F5's format): Belthasar --scene <scene> seeded
                       from the WRAM above (--loadwram), saved at frame <frames> (default 1) by CT_SAVESTATE_AT, after
                       the optional <walkscript>. A CTFS image is sizeof(CtScene)'s: remake it (--force) after a struct
-                      change, as the owner's F5 snapshots had to be re-taken
-`make` writes a fixture only when it is missing, unless --force: the owner's private fixtures stay in place until a
+                      change
+`make` writes a fixture only when it is missing, unless --force: private fixtures stay in place until a
 check has been moved onto its recipe-made twin (docs/ROADMAP.md 1.1). It builds the recipes the fixtures need side by
 side (tools/recipes.py make_many: a recipe starts once the ones it depends on are built), then the fixtures' own runs,
 --jobs at a time (default: the CPU count): a fresh clone's `make all` costs about its longest recipe chain, not the sum.

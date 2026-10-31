@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
-r"""A location's "where did the party come from" gate, port against cartridge.
+r"""A location's "previous location" gate, port against cartridge.
 
     python tools/arrival_gate_cmp.py
 
 Scene 65's obj0 fn0 is
 
-    49 05 01 7E 0B     loc[0B] = the WORD at $7E:0105 (op 0x49, C0/67C7 -- the previous location)
+    49 05 01 7E 0B     loc[0B] = the word at $7E:0105 (op 0x49, C0/67C7 -- the previous location)
     13 0B F0 01 00 07  if loc[0B] == $01F0 (op 0x13, C0/6313 `LDA $7F0200,X` in 16-bit mode) ...
     65 83 A3 / 66 84 A3      ... set $7F01A3 bit 3, clear bit 4
     13 0B F1 01 00 07  if loc[0B] == $01F1 ...
     65 84 A3 / 66 83 A3      ... set bit 4, clear bit 3
 
-(twelve locations open the same way: 65 97 99 334 335 355 357 401 411 417 418 449). Both halves live on one local
-word, so it grades the VM's local byte order (little-endian, as the 65816 stores it) AND op 0x49, which the event VM
-did not run at all before 2026-09-24.
+(twelve locations open the same way: 65 97 99 334 335 355 357 401 411 417 418 449). Both halves use one local word,
+so this grades the VM's local byte order (little-endian, as the 65816 stores it) and op 0x49.
 
-THE CARTRIDGE: saves/ow_w0.state (the 1000 A.D. overworld) with $0105 poked to the arrival, then `ct.exe --teleport 65
-... --method jmp` -- the ROM's own location load runs obj0's fn0. THE PORT: that post-load WRAM with the graded bytes
-cleared ($7F01A3 and the locals $7F0200-03FF), loaded as scene 65, then CT_CHANGELOC reloads location 65 on frame 3
-with $0105 still in the $7E page -- the port's own init pass has to derive them again. (`--loadwram` alone cannot:
-the init pass runs before the seed overlays $7E.) One line per arrival:
+Cartridge: saves/ow_w0.state (the 1000 A.D. overworld) with $0105 poked to the arrival, then `ct.exe --teleport 65
+... --method jmp`, so the ROM's own location load runs obj0's fn0. Port: that post-load WRAM with the graded bytes
+cleared ($7F01A3 and the locals $7F0200-03FF), loaded as scene 65; CT_CHANGELOC reloads location 65 on frame 3 with
+$0105 still in the $7E page, so the port's own init pass must derive them again (`--loadwram` alone cannot: the init
+pass runs before the seed overlays $7E). One line per arrival:
 
     arrival-gate: prev=01F0 oracle 01A3=08 loc0B=F001 port 01A3=08 loc0B=F001 -> MATCH
+
+Regression check: field-arrival-gate-vs-oracle.
 """
 import os
 import re

@@ -12,8 +12,8 @@ and `base()` refuses it: the walker has to price that access itself.
 `lin` steps instruction by instruction with the widths the CPU really had (the trace's M/X flags) and refuses a run
 that holds an instruction no trace executed, or a block move (MVN/MVP repeat per byte: price them explicitly).
 
-`lin_rom(a, b, m, x, d, db)` prices code NO trace executed (an arm the fixtures never took): it decodes the ROM and
-charges each instruction the cost of an EXECUTED one with the same key -- the opcode, the M/X widths, and the
+`lin_rom(a, b, m, x, d, db)` prices code no trace executed (an arm the fixtures never took): it decodes the ROM and
+charges each instruction the cost of an executed one with the same key -- the opcode, the M/X widths, and the
 region its operand lands in (LakeSnes's snes_getAccessTime depends on the address, never on the PC: every
 instruction of this engine runs from FastROM bank C0). A key no trace holds is refused.
 """
@@ -123,7 +123,7 @@ class CostTab:
             raise ValueError('%06X has %s: data-dependent, price it explicitly' % (pc, c))
         return c[0]
 
-    # A conditional branch in a FastROM bank: the opcode and its operand (6 + 6), plus one idle (6) when taken --
+    # A conditional branch in a FastROM bank: the opcode and its operand (6 + 6), plus one idle (6) when taken;
     # LakeSnes charges no page-crossing penalty in native mode. Checked against every trace that ran it.
     def _branch(self, pc):
         c = self.costs(pc)
@@ -169,10 +169,9 @@ class CostTab:
                                                              'LDA', 'LDX', 'LDY', 'BIT'):
                 # an immediate ALU op: its fetches only, 6 each from FastROM (LakeSnes cpu_readOpcode per byte)
                 return 6 * (1 + D.oplen(mode, m, x))
-            # the read-ALU group shares one addressing path per mode (LakeSnes cpu.c: cpu_adr* then one read):
-            # an executed member with the same mode, widths and region costs the same
-            # the read-modify-write group likewise (cpu_adr* then read, idle, write: INC/DEC/ASL/LSR/ROL/ROR, and
-            # TSB/TRB, whose idle is the same)
+            # The read-ALU group shares one addressing path per mode (LakeSnes cpu.c: cpu_adr* then one read), and
+            # so does the read-modify-write group (cpu_adr*, read, idle, write; TSB/TRB idle the same way): an
+            # executed member with the same mode, widths and region costs the same.
             for grp in (('LDA', 'ORA', 'AND', 'EOR', 'ADC', 'SBC', 'CMP'),
                         ('INC', 'DEC', 'ASL', 'LSR', 'ROL', 'ROR', 'TSB', 'TRB')):
                 if mnem not in grp:

@@ -64,8 +64,7 @@ def timeline(files, out, cell=4):
 
 def fb_bgrx_to_rgb(fb, w, h):
     # LakeSnes pixelOutputFormat = BGRX (=1) writes each pixel as bytes [pad, B, G, R]
-    # (snes/ppu.c:334-339: +1=B, +2=G, +3=R; byte +0 is NEVER written). Reading from byte 0
-    # drops the red channel and yellow-tints everything -- the old bug here.
+    # (snes/ppu.c:334-339: +1=B, +2=G, +3=R; byte +0 is never written).
     px = bytearray(w * h * 3)
     for i in range(w * h):
         px[i * 3 + 0] = fb[i * 4 + 3]  # R

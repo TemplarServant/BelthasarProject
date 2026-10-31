@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
-"""Bake the CT new-game ATB BATTLE-MODE selector screen (Active/Wait) into src/data/atbsel.h + verify vs oracle.
+"""Bake the new-game ATB battle-mode selector screen (Active/Wait) into src/data/atbsel.h + verify against the oracle.
 
-Derivation dossier: disasm/notes/battle_atbmode.md PART 1. The selector is menu "mode 3" screen 0x0D
-(handler C2/E1E3), shown at new-game start BEFORE the Crono naming step (both are the SAME mode-3
-screen 0x0D, sequenced: ATB-select -> naming, battle_atbmode.md S1.1). Two vertically-stacked options,
-cursor cell $0054 (0=ACTIVE default, 1=WAIT); A-confirm writes the persistent flag $2990 bit6
-(C2/E24C: TSB on row0/ACTIVE -> bit6=1, TRB on row1/WAIT -> bit6=0).
+disasm/notes/battle_atbmode.md PART 1. The selector is menu mode 3 screen 0x0D (handler C2/E1E3), shown at
+new-game start before the Crono naming step (the same mode-3 screen 0x0D, sequenced ATB-select -> naming,
+battle_atbmode.md S1.1). Two stacked options, cursor cell $0054 (0=ACTIVE default, 1=WAIT); A-confirm writes the
+persistent flag $2990 bit6 (C2/E24C: TSB on row0/ACTIVE -> bit6=1, TRB on row1/WAIT -> bit6=0).
 
-Unlike the naming screen (dynamic typed name -> font/tile composite), this screen has exactly TWO
-possible static states (cursor row 0 or 1), so it bakes as a literal indexed-color FULL-FRAME capture
--- guaranteed byte-exact because it IS the oracle's own composited framebuffer, no re-derivation risk.
+Unlike the naming screen (a typed name -> font/tile composite), this screen has two static states (cursor row 0
+or 1), so it bakes as an indexed-colour full-frame capture of the oracle's composited framebuffer.
 
-Captured from saves/battle_re/atb_vram.state (s9x source: 'aux crono decompile/
-active_time_battle_selector.state'; already $0A00=3 $0067=0x0D pre-confirm; WRAM+CPU logic-runnable --
-verified: Up AND Down both TOGGLE $0054 0<->1, the expected behaviour of a 2-item circular nav list
-where a single step in EITHER direction lands on the other item; C2:EA4A writer both ways). Two frames:
-  ROW0 (ACTIVE, default cursor, no input) -- deterministic (0-diff f8 vs f20).
-  ROW1 (WAIT, one Down press) -- the description-box text is a VWF reveal that settles at f30 (0-diff
-  f30 vs f40+); captured at f40 for margin.
-Measured: only 76 distinct RGB colours across both frames, and only the description-box text + hand
-cursor differ between them (a single bounding rect, ~2019 px) -- everything else (title/subtitle/
-ACTIVE/WAIT labels/window chrome) is pixel-identical. So ROW1 bakes as ROW0 + a small override PATCH
-over that rect: reconstruction is verified byte-exact below (0 mismatches).
+Captured from saves/battle_re/atb_vram.state ($0A00=3 $0067=0x0D, before the confirm; Up and Down both toggle
+$0054 0<->1, writer C2:EA4A). Two frames:
+  ROW0 (ACTIVE, default cursor, no input) -- stable from f8.
+  ROW1 (WAIT, one Down press) -- the description-box text is a VWF reveal that settles at f30; captured at f40.
+Only the description-box text and the hand cursor differ between them (one bounding rect); the title, subtitle,
+labels and window chrome are the same. So ROW1 bakes as ROW0 + an override patch over that rect.
 
 Run from repo root. Emits src/data/atbsel.h. With --verify, re-captures both frames fresh from the oracle
 and checks the ROW0+patch reconstruction against the real ROW1 capture pixel-for-pixel."""
-# The EMPTY box's line 0 between ACTIVE's first pen and WAIT's (x = 53, y149-154) comes from the ACTIVE reveal's first
-# frame (from power-on: the recipe attract_boot + POWERON_SCRIPT, tools/naming_cmp.py boot f301): BTNE's WAIT capture
-# holds its first glyph pair there. (It was a hand patch on the header until 2026-10-10; active_first() makes it.)
+# The empty box's line 0 between ACTIVE's first pen and WAIT's (x = 53, y149-154) comes from the ACTIVE reveal's first
+# frame (from power-on: the recipe attract_boot + POWERON_SCRIPT, tools/naming_cmp.py boot f301; active_first()):
+# BTNE's WAIT capture holds its first glyph pair there.
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '..')))
 from ctlib import rom as _romlib  # the ROM through ctlib.rom: SHA-1 verified, a copier header stripped
@@ -40,7 +33,7 @@ SP    = os.environ.get('CT_SCRATCH', 'build')
 OUT_H = 'src/data/atbsel.h'
 W, H  = 256, 224                          # engine fb dims (CAMW x CAMH)
 BTN0  = '0:8'                             # ACTIVE (row0, default cursor); stable from f8
-BTNE  = '0:6,20:2,0:1'                     # the reveal's FIRST frame: line0 has 2 glyphs, line1 is EMPTY
+BTNE  = '0:6,20:2,0:1'                     # the reveal's first frame: line0 has 2 glyphs, line1 is empty
 BTN1  = '0:6,20:2,0:40'                   # WAIT (Down -> row1); description VWF settles f30, +margin
 BTNA  = BTN1 + ',20:2,0:1'                 # back to ACTIVE: its reveal's first frame (line 0 empty right of pen 21)
 
@@ -54,8 +47,8 @@ def regen():
             peek(BTN1, os.path.join(SP, 'atbsel_row1.raw')),
             peek(BTNE, os.path.join(SP, 'atbsel_empty.raw')))
 
-# oracle --peek fb = 512x480, 2x pixel-doubled, [pad,B,G,R] per px (read R=+3, per ct-field-textbox
-# memory: "fb dumps [pad,B,G,R] (read R=+3!)"). Sample the true (non-doubled) 256x224 grid.
+# oracle --peek fb = 512x480, 2x pixel-doubled, [pad,B,G,R] per px (R at +3). Sample the true (non-doubled)
+# 256x224 grid.
 def load_fb(path):
     d = open(path, 'rb').read()
     px = [[None] * W for _ in range(H)]
@@ -121,16 +114,15 @@ def emit(fp, pal, idx0, patch, px0, py0, pw, ph):
 
 
 # ---------------------------------------------------------------------------------------------
-# TYPEWRITER: the description text is drawn 2 CHARACTERS PER FRAME, one frame per pair, on every row
+# Typewriter: the description text is drawn 2 characters per frame, one frame per pair, on every row
 # change (C2/E5D3 at C2/E239 stages it; $0DC9 = 2 is an immediate at C2/E5FB; the char loop C2/58B2
 # spends it with DEC $13 / BNE; the task yield C2/821E at C2/FAA5 is the one-frame pace).
 #
-# ⭐ THE REVEAL IS A CLEAN LEFT-OF-PEN PREFIX -- measured, and it is what lets a BAKED screen do this
-# exactly. Diffing every frame of a row change against the settled frame, the first differing pixel is
-# exactly 32+pen(N) on every frame and NOTHING left of the pen ever differs. So frame N = the settled
-# bitmap for x < 32+pen(N), and the empty box for x >= that.
+# The reveal is a clean left-of-pen prefix, which lets a baked screen reproduce it: against the settled
+# frame, the first differing pixel of every frame of a row change is 32+pen(N), and nothing left of the
+# pen differs. So frame N = the settled bitmap for x < 32+pen(N), and the empty box for x >= that.
 #
-# The pen is ROM data, not eyeballed: start at the $0DD2 = 8 left indent and add the per-char width
+# The pen comes from ROM data: start at the $0DD2 = 8 left indent and add the per-char width
 # from $C2:60E6 indexed by (code - 0xA0). Strings come from the $FF:CF3B table at index row+1; 0x05 is
 # the newline (a frame that draws nothing) and 0x00 terminates.
 STR_TBL   = 0xFFCF3B
@@ -150,7 +142,7 @@ def _long(a):
     return a - 0xC00000                      # HiROM long -> file offset
 
 def pen_rows(rom):
-    """[row][line] -> list of pen positions, one entry per DRAWN frame (2 chars each)."""
+    """[row][line] -> list of pen positions, one entry per drawn frame (2 chars each)."""
     tbl = _long(STR_TBL); wt = _long(WIDTH_TBL); out = []
     for row in (0, 1):
         off = rom[tbl + (row + 1) * 2] | (rom[tbl + (row + 1) * 2 + 1] << 8)
@@ -239,7 +231,7 @@ def main():
         with open(OUT_H, 'w') as fp:
             emit(fp, pal, idx0, patch, x0, y0, pw, ph)
             rom = _rom(); pens = pen_rows(rom)
-            # the EMPTY box comes from the reveal's frame 1: line 1 is untouched there, and line 0 is
+            # the empty box comes from the reveal's frame 1: line 1 is untouched there, and line 0 is
             # empty right of that frame's pen. Bake the whole patch rect from it and let the renderer
             # take the settled pixels only left of the pen.
             ew, eh = pw, ph

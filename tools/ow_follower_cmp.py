@@ -7,7 +7,7 @@ Crono and Lucca leave the 600 A.D. cathedral (saves/field_re/catedral_user.state
 door) and walk the overworld: down out of the door, then south, east, back west and north with pauses -- far
 enough that Lucca leaves her 16-px box and walks the trail (phases 2 and 3, the corners, the re-decisions). On world 1 the
 world's bootstrap puts the lead (class $3404) in block $0DF0 and the two follower blocks (class $3AE2, +24 = the
-party slot) in $0E30 / $0E70; Lucca is slot 1. The follower walks the lead's TRAIL ring ($1B5A / $1B5B / $1B7B,
+party slot) in $0E30 / $0E70; Lucca is slot 1. The follower walks the lead's trail ring ($1B5A / $1B5B / $1B7B,
 pushed by C2/3934 on every step arrival) one entry behind, re-deciding every 8 frames on a cell edge.
 
   cartridge  build/ct.exe --monitor (the rule: CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) from
@@ -101,7 +101,7 @@ def main():
                 return f
         return None
     # The field -> overworld entry itself is not this check's subject (the port's comes up 31 frames sooner than the
-    # cartridge's from this door): each side's walk starts the same number of frames after its OWN world init.
+    # cartridge's from this door): each side's walk starts the same number of frames after its own world init.
     c = run(DRIVE, False)
     ci = world_init(dense(parse(c, r'\s+f(\d+)\s')))
     p0 = run(DRIVE[:2], True)

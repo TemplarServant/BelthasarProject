@@ -1,17 +1,17 @@
 #!/usr/bin/env python
-"""Every dialogue box a location script can open, against the string the ROM's text engine would read for it.
+"""Check every dialogue box a location script can open against the string the ROM's text engine reads for it.
 
-THE ROM. A box op carries a string BYTE (0xBB/0xC1/0xC2 `op idx`, 0xC0/0xC3/0xC4 `op idx cfg`); C0/3592 stores it in
-$2A, op 0xB8 put the table in $2B-D (C0/3557), and C0/20F2 hands both to the text engine ($020C, $020D-F), whose entry
-C2/57E7 fetches the string with
+A box op carries a string byte (0xBB/0xC1/0xC2 `op idx`, 0xC0/0xC3/0xC4 `op idx cfg`); C0/3592 stores it in $2A, op
+0xB8 puts the table in $2B-D (C0/3557), and C0/20F2 hands both to the text engine ($020C, $020D-F), whose entry C2/57E7
+fetches the string with
     LDA $0C / AND #00FF / ASL / TAY / LDA [$0D],Y / STA $31     ; $33 = $0F
--- string idx = the u16 at table + 2*idx, in the table's own bank. No count, no bound.
+i.e. the u16 at table + 2*idx, in the table's own bank, with no count and no bound.
 
-THE CHECK. Walk each location's event script (scene header -> script id, assets/script.py's op lengths, from every fn
-pointer and on through internal RETURNs), pair each box op with the table its script's 0xB8 sets, and compare the
-ct_assets.dat dialogue entry (what Belthasar shows, CtAssetString) with that ROM read decoded exactly as the packer
-decodes it. A missing entry is the empty window that never types, so never reaches state 7 and never takes the press
-(loc 010's obj9 `BB 26`, the user's F5 capture 2026-09-30).
+The check walks each location's event script (scene header -> script id, assets/script.py's op lengths, from every fn
+pointer and on through internal RETURNs), pairs each box op with the table its script's 0xB8 sets, and compares the
+ct_assets.dat dialogue entry (what Belthasar shows, CtAssetString) with that ROM read, decoded as the packer decodes
+it. A missing entry is an empty window that never types, never reaches state 7 and never takes the press (e.g. loc
+010's obj9 `BB 26`). Regression check: assets-dialogue-every-script-box-reads-the-rom.
 
     python tools/dialogue_refs_check.py [ct_assets.dat] [rom]
 prints `dialogue-refs: N/N script boxes read the ROM's string (C2/57E7), T tables, M missing, D differ` twice: for

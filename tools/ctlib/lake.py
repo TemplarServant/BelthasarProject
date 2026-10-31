@@ -2,17 +2,17 @@
 
 Two on-disk formats:
 
-  CTLS (preferred, written by every new ct.exe save path):
+  CTLS (what ct.exe writes):
     magic[4]      = b'CTLS'
     version u32LE = 1
     length  u32LE = payload bytes
     crc32   u32LE = IEEE CRC-32 of the payload (zlib/binascii compatible)
     payload[...]  = raw snes_handleState stream
 
-  Legacy (all historical pinned .state files): bare handleState stream, no header.
+  Legacy (older .state files): bare handleState stream, no header.
     Detected by size + the 11 leading 0/1 bool bytes.
 
-Payload layout (snes_handleState — see snes/snes.c / snes/cpu.c):
+Payload layout (snes_handleState -- see snes/snes.c / snes/cpu.c):
 
   off 0            : snes_handleState header = 11 bools + 2 bytes +
                      12 LE words + 2 LE ints + 2 LE int64 + 1 double = 69 bytes
@@ -22,8 +22,8 @@ Payload layout (snes_handleState — see snes/snes.c / snes/cpu.c):
                      + 2 bytes (k, db) + 6 LE words (a x y sp pc dp) = 29 bytes
   ...              : dma/ppu/apu/input/cart state follows.
 
-NOTE: Belthasar F5/F9 states are a DIFFERENT format (the raw CtScene struct,
-handled in C) -- this module is only for the ct.exe (LakeSnes oracle) states.
+Note: Belthasar F5/F9 states are a different format (the raw CtScene struct,
+handled in C); this module is only for the ct.exe (LakeSnes oracle) states.
 """
 import binascii
 import os

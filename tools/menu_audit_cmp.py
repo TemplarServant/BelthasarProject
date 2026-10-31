@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-r"""The MENU against the cartridge, EVERY frame of a drive -- the audit instrument (user request 2026-09-24: "investigate
-the menu again, all of its screens and features").
+r"""The menu against the cartridge, every frame of a drive -- the audit instrument for all of the menu's screens and
+features.
 
     python tools/menu_audit_cmp.py <drive> [--peek F ...] [--window A B]
 
 Each drive presses the same buttons on both sides and both sides write a 128x112 thumbnail of every frame (the
 oracle's PEEK_THUMBS, the port's CT_SHOTS_THUMBS: the same records, docs/DEBUG_SURFACE.md), so a whole tour of the
-menu is two runs. The cartridge side is the LOGICAL oracle (CT_ORACLE_LOGICAL=1: the menu's heavy builds overrun the
-NMI on real time, CLAUDE.md's lag-frame rule). Alignment (tools/menu_shell_cmp.py measured it): the cartridge reads a
-press one frame after the button goes down (the pad latch C2/84D2), so the port presses at the oracle's frame + 1; the
-cartridge displays a frame's state during the NEXT frame, so port frame P = thumbnail P + 2 (SHIFT; memory
-ct-frame-alignment-p2). L/R go through CT_HOLDBTN
+menu is two runs. The cartridge side is the logical oracle (CT_ORACLE_LOGICAL=1: the menu's heavy builds overrun the
+NMI on real time, CLAUDE.md's lag-frame rule). Alignment (docs/TESTING.md): the cartridge reads a press one frame after
+the button goes down (the pad latch C2/84D2), so the port presses at the oracle's frame + 1; the cartridge displays a
+frame's state during the next frame, so port frame P = thumbnail P + 2 (SHIFT). L/R go through CT_HOLDBTN
 ($00F2 layout: L=20, R=10) on the frame the port's latch must see them.
 
 Prints the differing frames in runs, with the thumbnail's bounding box of the difference (screen pixels):
@@ -21,9 +20,11 @@ Prints the differing frames in runs, with the thumbnail's bounding box of the di
 `--peek F` compares the full-resolution frame F too and writes PNGs (build/_menuaudit/<drive>/o_F.png, p_F.png; with
 `--window A B` everything goes under build/_menuaudit/<drive>/wA-B/, so the suite's checks on one drive can run at once).
 `--ram ADDR:LEN,...` compares WRAM bytes at the drive's end (the oracle's --peek of `end` frames, the port's frame end-2).
-`--tbframe` adds, for each --peek frame, the FIELD dialogue box's frame alone (the bottom box, lines 131-210: its top
+`--tbframe` adds, for each --peek frame, the field dialogue box's frame alone (the bottom box, lines 131-210: its top
 ten and bottom eight lines and its edge columns 0-7 / 248-255 -- no text lands there): the window's tiles, palette and
 ramp, whatever the typewriter's timing.
+
+Regression checks: the menu-*-vs-oracle checks (menu-item-tour-vs-oracle and the others in tools/regress_checks.json).
 """
 import os
 import struct
@@ -39,7 +40,7 @@ FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
 REC = 6 + 128 * 112 * 3
 # LakeSnes serial masks: B=1 Y=2 Sel=4 St=8 Up=10 Down=20 Left=40 Right=80 A=100 X=200 L=400 R=800
 KEY = {0x100: 'a', 0x1: 'b', 0x10: 'u', 0x20: 'd', 0x40: 'l', 0x80: 'r', 0x200: 'm', 0x1100: 'a'}
-# 0x1100 = a FIELD A (a talk that opens a shop): the field reads it on its own frame on both sides, so it is not shifted
+# 0x1100 = a field A (a talk that opens a shop): the field reads it on its own frame on both sides, so it is not shifted
 # (the menu's presses are, a frame -- MENU_PRESS); the oracle gets A (0x100).
 HOLD = {0x400: 0x20, 0x800: 0x10}
 SHIFT = int(os.environ.get('MENUAUDIT_SHIFT', '2'))
@@ -64,12 +65,12 @@ DRIVES = {
                (0x80, 980), (0x100, 1010), (0x1, 1055),
                (0x1, 1090)),
              20, 1130, 1150),
-    # The gear panel of the SECOND and THIRD member: C2/A71E's push ($0D25 = (3 - $0412) * 8 steps, then the party
+    # The gear panel of the second and third member: C2/A71E's push ($0D25 = (3 - $0412) * 8 steps, then the party
     # column scrolls up with the new one), and the way back (C2/A85C) to the member select and the ribbon.
     'equip1': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                P((0x200, 4), (0x100, 60), (0x20, 90), (0x100, 120), (0x1, 170), (0x1, 220), (0x1, 250)),
                20, 280, 300),
-    # A Tonic used from the Item screen (the user's report: "when using a tonic ..."): three Tonics poked into the empty
+    # A Tonic used from the Item screen: three Tonics poked into the empty
     # bag slot 1 on both sides; Crono is at 25/96. X, R (Item), A, Down (the Tonic), A (pick), A (use -> target),
     # A (on Crono), then B out of every level and the close.
     'itemuse': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -77,19 +78,19 @@ DRIVES = {
                 P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 130), (0x100, 150), (0x100, 170),
                   (0x1, 270), (0x1, 295), (0x1, 320), (0x1, 345), (0x1, 370)),
                 20, 440, 460),
-    # The Item screen's MOVE: A on the Pendant (row 0), Down to the empty row, A (C2/AAE0's swap, C2/AAFF's yield),
+    # The Item screen's move: A on the Pendant (row 0), Down to the empty row, A (C2/AAE0's swap, C2/AAFF's yield),
     # Down, then B to the labels, the ribbon, the close.
     'itemmove': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                  P((0x200, 4), (0x80, 50), (0x100, 80), (0x100, 110), (0x20, 140), (0x100, 170), (0x20, 200),
                    (0x1, 230), (0x1, 260), (0x1, 290)),
                  20, 300, 400),
-    # The FORM exchange: R x4 to the Form tab, A (the picker opens on Lucca, C2/C649 skips the locked Crono), A (pick
+    # The Form exchange: R x4 to the Form tab, A (the picker opens on Lucca, C2/C649 skips the locked Crono), A (pick
     # her), Down (Frog), A (C2/C70C swaps them), B to the ribbon, B to close.
     'formswap': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                  P((0x200, 4), (0x80, 50), (0x80, 60), (0x80, 70), (0x80, 80), (0x100, 110), (0x100, 140),
                    (0x20, 170), (0x100, 200), (0x1, 240), (0x1, 270)),
                  20, 290, 400),
-    # CONFIG: R x3 to the Config tab, A (enter: cell 0, Stereo), A (the toggle: the value retypes), Down, Right (cell 6,
+    # Config: R x3 to the Config tab, A (enter: cell 0, Stereo), A (the toggle: the value retypes), Down, Right (cell 6,
     # Window Color), A (its edit: the cursor freezes), Down, Down (inert), Right, Right (colours 1 and 2: C2/C511 reloads
     # the window tiles and CGRAM row 0), B (the edit off), B (the pack, to the ribbon), B (close).
     'config': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
@@ -102,7 +103,7 @@ DRIVES = {
     'wincolour': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x2991: 0xA3},
                   P((0x200, 4), (0x80, 50), (0x80, 80), (0x80, 110), (0x80, 140), (0x80, 170), (0x1, 210)),
                   20, 230, 300),
-    # The colour changed INSIDE the menu, then the dim views, twice: R x3, A (Config), Down, Right (cell 6), A (edit),
+    # The colour changed inside the menu, then the dim views, twice: R x3, A (Config), Down, Right (cell 6), A (edit),
     # Right x3 (colour 3), B (edit off), B (the pack, tab 3), R (the Form tab: C2/CA27 halves the new colour into row 4),
     # A (Form), B, L (tab 3), A (Config), Down, Right, A, Right x2 (colour 5), B, B, L x3 (the Equip tab: C2/A0E2), A (the
     # member select: Lucca's and Frog's panels in row 4), B, B (close).
@@ -113,7 +114,7 @@ DRIVES = {
                      (0x80, 565), (0x80, 585), (0x1, 610), (0x1, 635), (0x40, 670), (0x40, 695), (0x40, 720),
                      (0x100, 750), (0x1, 790), (0x1, 820)),
                    20, 840, 900),
-    # Config's Window Color reaching the FIELD's dialogue box: the tent keeper; X, R x3, A (Config), Down, Right (cell 6),
+    # Config's Window Color reaching the field's dialogue box: the tent keeper; X, R x3, A (Config), Down, Right (cell 6),
     # A (edit), Right x3 (colour 3), B, B (the pack), B (close: the reload runs C0/6E5C / C0/70E9 / C0/29F7 on the new
     # $2991), A (talk: the box in colour 3).
     'tbcolour': ('saves/field_re/tent_keeper_lake.state', 'saves/field_re/tent_keeper.lakewram', 5, {},
@@ -121,22 +122,21 @@ DRIVES = {
                    (0x100, 180), (0x80, 205), (0x80, 225), (0x80, 245), (0x1, 270), (0x1, 295), (0x1, 330),
                    (0x100, 440)),
                  20, 400, 600),
-    # A TECH CAST from the menu: R x2 (the Tech tab), A (the member select), Down x2 (Frog), A (his list), A (Slurp: the
+    # A tech cast from the menu: R x2 (the Tech tab), A (the member select), Down x2 (Frog), A (his list), A (Slurp: the
     # target select), A (on Crono, 25/96), then B out of every level and the close.
     'techcast': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                  P((0x200, 4), (0x80, 50), (0x80, 60), (0x100, 90), (0x20, 120), (0x20, 140), (0x100, 170),
                    (0x100, 210), (0x100, 250), (0x1, 330), (0x1, 360), (0x1, 390), (0x1, 420)),
                  20, 440, 520),
-    # The DUAL list (saves/tech_double.state, the overworld: Crono + Marle know Aura Whirl): X at 80, R x2 (Tech), A,
+    # The Dual list (saves/tech_double.state, the overworld: Crono + Marle know Aura Whirl): X at 80, R x2 (Tech), A,
     # R (the Dual tab), A (the list: the participants' panels, each with its sprite), B, B (the ribbon: its preview keeps
     # the Dual tab, $0418), A (Tech again, still on Dual: no ribbon move reset it), B, B (the close).
-    # (The overworld open's NMI-off stash used to cross one more frame boundary here than on ow_w0 -- the real beam's phase;
-    # the logical oracle starts NMI-off work at phase 0 now, CLAUDE.md's exception, and the check grades from f100.)
+    # (The logical oracle starts the overworld open's NMI-off stash at phase 0, CLAUDE.md; the check grades from f100.)
     'techdual': ('saves/tech_double.state', 'saves/field_re/tech_double.lakewram', 1, {},
                  P((0x200, 80), (0x80, 130), (0x80, 140), (0x100, 180), (0x80, 210), (0x100, 240), (0x1, 300),
                    (0x1, 330), (0x100, 360), (0x1, 400), (0x1, 430)),
                  130, 450, 520),
-    # ...and the Dual tech CAST from the menu: A on Aura Whirl at 270 (both casters pay, everyone is healed), then B out.
+    # ...and the Dual tech cast from the menu: A on Aura Whirl at 270 (both casters pay, everyone is healed), then B out.
     'techdualcast': ('saves/tech_double.state', 'saves/field_re/tech_double.lakewram', 1, {},
                      P((0x200, 80), (0x80, 130), (0x80, 140), (0x100, 180), (0x80, 210), (0x100, 240), (0x100, 270),
                        (0x1, 400), (0x1, 430), (0x1, 460), (0x1, 490)),
@@ -147,47 +147,47 @@ DRIVES = {
                P((0x200, 4), (0x80, 50), (0x80, 60), (0x100, 90), (0x20, 120), (0x20, 140), (0x100, 170),
                  (0x100, 210), (0x1, 250), (0x1, 280), (0x1, 310), (0x1, 340)),
                20, 360, 420),
-    # The SAVE screen, on the overworld (its gate C2/CEDC lets it open there): X at 80 (the port's seed enters the world
+    # The Save screen, on the overworld (its gate C2/CEDC lets it open there): X at 80 (the port's seed enters the world
     # through a 44-frame load the cartridge's state is past), L (the ribbon wraps to Save), A, B, B.
     'owsave': ('saves/ow_w0.state', 'saves/field_re/ow_w0.lakewram', 1, {},
                P((0x200, 80), (0x40, 130), (0x100, 170), (0x1, 250), (0x1, 290)),
                100, 370, 400),
-    # A SAVE IN ANOTHER WINDOW COLOUR, on the overworld: X at 80, R x3 (Config), A, Down, Right (cell 6), A (edit), Right x3
+    # A save in another window colour, on the overworld: X at 80, R x3 (Config), A, Down, Right (cell 6), A (edit), Right x3
     # (colour 3), B, B (the pack), R x2 (the Save tab), A (the screen), A (slot 1: empty, saved at once), then B, B --
-    # the slot is drawn in ITS OWN colour (C2/D266 `$0D79` = the save's $2991 & 7; C2/D329 -> C2/ECDB).
+    # the slot is drawn in its own colour (C2/D266 `$0D79` = the save's $2991 & 7; C2/D329 -> C2/ECDB).
     'owsavecol': ('saves/ow_w0.state', 'saves/field_re/ow_w0.lakewram', 1, {},
                   P((0x200, 80), (0x80, 130), (0x80, 140), (0x80, 150), (0x100, 180), (0x20, 210), (0x80, 235),
                     (0x100, 260), (0x80, 285), (0x80, 305), (0x80, 325), (0x1, 350), (0x1, 375), (0x80, 410),
                     (0x80, 420), (0x100, 460), (0x100, 520), (0x1, 640), (0x1, 680)),
                   100, 690, 720),
-    # ...and the OVERWRITE: the same save at 520, then A on the now occupied slot at 560 (C2/D4BB's prompt), A on Yes at
+    # ...and the overwrite: the same save at 520, then A on the now occupied slot at 560 (C2/D4BB's prompt), A on Yes at
     # 600 (C2/CF7B: C2/CF37 in that frame, C2/D4D5 closes the prompt after its two yields), B, B.
     'owsave2': ('saves/ow_w0.state', 'saves/field_re/ow_w0.lakewram', 1, {},
                 P((0x200, 80), (0x80, 130), (0x80, 140), (0x80, 150), (0x100, 180), (0x20, 210), (0x80, 235),
                   (0x100, 260), (0x80, 285), (0x80, 305), (0x80, 325), (0x1, 350), (0x1, 375), (0x80, 410),
                   (0x80, 420), (0x100, 460), (0x100, 520), (0x100, 560), (0x100, 600), (0x1, 680), (0x1, 720)),
                 100, 730, 760),
-    # The Item screen's equipment INFO PANEL (substate 5, C2/AB2F -> C2/AE91): an Iron Blade poked into bag slot 3; X, R
+    # The Item screen's equipment info panel (substate 5, C2/AB2F -> C2/AE91): an Iron Blade poked into bag slot 3; X, R
     # (Item), A, Down x3 (its row), A (pick), A (the panel: "Can be used by" + "Attack"), A (dismissed: the list), B, B, B.
     'iteminfo': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                  {0x2403: 0x02, 0x2503: 0x01},
                  P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x20, 130), (0x20, 150), (0x100, 180),
                    (0x100, 210), (0x100, 260), (0x1, 300), (0x1, 330), (0x1, 360)),
                  20, 350, 440),
-    # A TAB used from the Item screen (C2/B228's loop): a Power Tab poked into the empty bag slot 1; X, R (Item), A, Down,
+    # A tab used from the Item screen (C2/B228's loop): a Power Tab poked into the empty bag slot 1; X, R (Item), A, Down,
     # A (pick), A (use: the target overlay), A (on Crono: Power + 1), then B out of every level and the close.
     'itemtab': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                 {0x2401: 0xCD, 0x2501: 0x01},
                 P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 140), (0x100, 170), (0x100, 210),
                   (0x1, 290), (0x1, 320), (0x1, 350), (0x1, 380)),
                 20, 370, 460),
-    # The Config's CONTROL PAD editor (cell 8, $0D87 -> substate 2): X, Right x3 (Config), A, Right (cell 5), Down x3 (cell 8),
+    # The Config's control pad editor (cell 8, $0D87 -> substate 2): X, Right x3 (Config), A, Right (cell 5), Down x3 (cell 8),
     # A (the editor), Down x2 (its rows), B (back to the grid), B, B.
     'cfgpad': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                P((0x200, 4), (0x80, 50), (0x80, 60), (0x80, 70), (0x100, 100), (0x80, 140), (0x20, 160), (0x20, 180),
                  (0x20, 200), (0x100, 230), (0x20, 270), (0x20, 290), (0x1, 320), (0x1, 350), (0x1, 380)),
                20, 400, 460),
-    # The Config's sub-editors WORKED: the pad editor (cell 8 -> Custom, substate 2) re-assigns the Menu row (Right x2:
+    # The Config's sub-editors worked: the pad editor (cell 8 -> Custom, substate 2) re-assigns the Menu row (Right x2:
     # C2/C1CC's cycle + C2/C20F's conflict passes), Down commits (C2/C1AC), Right again, Left leaves (C2/BF6D); Up to
     # cell 7, A (the 3-option row, substate 3), Right x2 (the value = the cell - 12, C2/BFAF), A back; B, B.
     'cfgpad2': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
@@ -196,7 +196,7 @@ DRIVES = {
                   (0x80, 395), (0x40, 420), (0x10, 450), (0x100, 480), (0x80, 510), (0x80, 535), (0x100, 560),
                   (0x1, 600), (0x1, 640)),
                 20, 690, 740),
-    # L/R in the Equip GEAR PANEL (C2/A00B: R = the next member, L = the previous, wrapping over $0085): X, A (Equip),
+    # L/R in the Equip gear panel (C2/A00B: R = the next member, L = the previous, wrapping over $0085): X, A (Equip),
     # A (Crono's gear), R x3, L, A (the weapon list), R, L (C2/93BF's page), B, B, B. An Iron Blade in bag slot 3 (the
     # equiplist poke) gives Crono a one-row list under the panel, so the frame C2/A45D rebuilds it after a switch shows.
     'equiplr': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -204,7 +204,7 @@ DRIVES = {
                 P((0x200, 4), (0x100, 60), (0x100, 100), (0x800, 140), (0x800, 170), (0x800, 200), (0x400, 230),
                   (0x100, 260), (0x800, 300), (0x400, 330), (0x1, 360), (0x1, 390), (0x1, 420)),
                 20, 470, 520),
-    # The Equip CANDIDATE LIST paged (C2/9F05 -> C2/93BF: L = a page on, R = a page back, clamped to the ends): twelve
+    # The Equip candidate list paged (C2/9F05 -> C2/93BF: L = a page on, R = a page back, clamped to the ends): twelve
     # weapons (ids 02-0D) poked into bag slots 3-14 on both sides; X, A (Equip), A (Crono), A (the weapon list), Down x2,
     # L, L, R, R, Down x9 (the one-row scroll C2/EB9B), Up, B, B, B.
     'equippage': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -222,7 +222,7 @@ DRIVES = {
                        + [(0x20, 200 + 12 * i) for i in range(10)] + [(0x10, 340 + 12 * i) for i in range(10)]
                        + [(0x1, 480), (0x1, 520), (0x1, 550)])),
                    20, 580, 640),
-    # The ITEM list scrolled (C2/AC3A): weapons 02-1D in bag slots 3-30 (1B-1D the ROM's blank names), with a Tonic, an
+    # The Item list scrolled (C2/AC3A): weapons 02-1D in bag slots 3-30 (1B-1D the ROM's blank names), with a Tonic, an
     # Ether and a Heal on slots 12 / 22 / 32 -- where the cursor lands after each page, so each page frame's description
     # (skipped by C2/AC4F's BRA) is graded; X, Right (Item), A (the
     # list), Down x12 (to row 9, then the one-row slide C2/AC6E twice), L, L (C2/93BF: 10 a page), R, R, Up x12, B x3.
@@ -235,7 +235,7 @@ DRIVES = {
                        + [(0x10, 410 + 12 * i) for i in range(12)]
                        + [(0x1, 570), (0x1, 600), (0x1, 630)])),
                    20, 660, 720),
-    # The Item slide with a PICKED item (the Move pin, C2/89E4's hand riding $0D9E through the slide): the same bag; X,
+    # The Item slide with a picked item (the Move pin, C2/89E4's hand riding $0D9E through the slide): the same bag; X,
     # Right, A, Down x9 (row 9), A (pick), Down x2 (two slides down with the pin), Up x12 (to row 0, then two slides
     # up), B (drop the pick), B, B, B.
     'itemscrollpick': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -246,7 +246,7 @@ DRIVES = {
                            + [(0x10, 330 + 12 * i) for i in range(12)]
                            + [(0x1, 490), (0x1, 520), (0x1, 550), (0x1, 580)])),
                        20, 610, 670),
-    # A SHOP's buy list scrolled: the fair merchant (loc 5) turned into shop $09 (16 items: its script byte $7F:2866 = 89,
+    # A shop's buy list scrolled: the fair merchant (loc 5) turned into shop $09 (16 items: its script byte $7F:2866 = 89,
     # shop_screen.md), the talk (a field A), Buy, Down x10 (the list's one-row slide C2/D84F), Up x10, L, R (C2/93BF),
     # B, B.
     'shopscroll': ('saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5, {0x12866: 0x89},
@@ -254,7 +254,7 @@ DRIVES = {
                        + [(0x20, 230 + 12 * i) for i in range(10)] + [(0x10, 360 + 12 * i) for i in range(10)]
                        + [(0x400, 490), (0x800, 520), (0x1, 550), (0x1, 580)])),
                    20, 610, 660),
-    # The SELL list scrolled: weapons 02-0F (14) poked into bag slots 1-14; the talk, Right (Sell), A, Down x10 (C2/D90E's
+    # The Sell list scrolled: weapons 02-0F (14) poked into bag slots 1-14; the talk, Right (Sell), A, Down x10 (C2/D90E's
     # slide), Up x10, L, R, B, B.
     'shopsell': ('saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5,
                  dict([(0x2401 + i, 0x02 + i) for i in range(14)] + [(0x2501 + i, 0x01) for i in range(14)]),
@@ -262,45 +262,45 @@ DRIVES = {
                      + [(0x20, 240 + 12 * i) for i in range(10)] + [(0x10, 370 + 12 * i) for i in range(10)]
                      + [(0x400, 500), (0x800, 530), (0x1, 560), (0x1, 590)])),
                  20, 620, 670),
-    # The WHOLE ROSTER in the member select: $7F:0000 poked to 49 (FF/F813: $85 = $75 = 4 once the storyline reaches 49
+    # The whole roster in the member select: $7F:0000 poked to 49 (FF/F813: $85 = $75 = 4 once the storyline reaches 49
     # with $7F:00BA bit0 clear) -- party3's reserve Marle joins the list, a 3-row window that scrolls (C2/9DAF); X, A
     # (Equip), Down x4 (to Marle, the scroll, the wrap), Up x2, A (the gear panel), R (C2/A00B over $85), B, B, B.
     'equiproster': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x10000: 0x49},
                     P((0x200, 4), (0x100, 60), (0x20, 110), (0x20, 140), (0x20, 170), (0x20, 200), (0x10, 230),
                       (0x10, 260), (0x100, 290), (0x800, 340), (0x1, 380), (0x1, 420), (0x1, 460)),
                     20, 500, 550),
-    # The member scroll BOTH ways (C2/9DAF, $0D22 +-4): the same poke; X, A, Down x3 (the window down a member), Up x3
+    # The member scroll both ways (C2/9DAF, $0D22 +-4): the same poke; X, A, Down x3 (the window down a member), Up x3
     # (row 0, then the window back up a member), Down (row 1), B, B.
     'equiproster2': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x10000: 0x49},
                      P((0x200, 4), (0x100, 60), (0x20, 100), (0x20, 125), (0x20, 150), (0x10, 190), (0x10, 215),
                        (0x10, 240), (0x20, 280), (0x1, 320), (0x1, 360)),
                      20, 400, 450),
-    # The TECH screen's member select over the whole roster ($0419 / $041A, C2/BA4F): the equiproster poke; X, Right x2
+    # The Tech screen's member select over the whole roster ($0419 / $041A, C2/BA4F): the equiproster poke; X, Right x2
     # (Tech), A, Down x4 (the window a member down: Marle), Up x3 (and back up), A (a member's list), B, B, B.
     'techroster': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x10000: 0x49},
                    P((0x200, 4), (0x80, 50), (0x80, 70), (0x100, 100), (0x20, 150), (0x20, 175), (0x20, 200),
                      (0x20, 225), (0x10, 260), (0x10, 285), (0x10, 310), (0x100, 340), (0x1, 380), (0x1, 420), (0x1, 460)),
                    20, 500, 550),
-    # A RESERVE caster's Tech list (C2/8820: $78 = FF when $71 >= $73): Marle (in reserve) scrolled in, A (her list: the
+    # A reserve caster's Tech list (C2/8820: $78 = FF when $71 >= $73): Marle (in reserve) scrolled in, A (her list: the
     # field-usable techs not in their bright colour, C2/BDCF), A on a tech (refused: C2/B3EB), B x3.
     'techreserve': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x10000: 0x49},
                     P((0x200, 4), (0x80, 50), (0x80, 70), (0x100, 100), (0x20, 150), (0x20, 175), (0x20, 200),
                       (0x100, 240), (0x100, 280), (0x1, 320), (0x1, 360), (0x1, 400)),
                     20, 440, 490),
-    # The same with Marle's first two singles LEARNED ($2838 = C0: group 1, FF/F813's $7F00 copy): Aura (usable outside
+    # The same with Marle's first two singles learned ($2838 = C0: group 1, FF/F813's $7F00 copy): Aura (usable outside
     # battle) drawn without its bright colour for a reserve caster (C2/BDCF BIT $78), and A on it refused (C2/B3EB).
     'techreserve2': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                      {0x10000: 0x49, 0x2838: 0xC0},
                      P((0x200, 4), (0x80, 50), (0x80, 70), (0x100, 100), (0x20, 150), (0x20, 175), (0x20, 200),
                        (0x100, 240), (0x100, 280), (0x1, 320), (0x1, 360), (0x1, 400)),
                      20, 440, 490),
-    # A RESERVE member's gear panel: Marle scrolled into the Equip column (the equiproster poke), A (C2/A71E's entry push
+    # A reserve member's gear panel: Marle scrolled into the Equip column (the equiproster poke), A (C2/A71E's entry push
     # from row 2 with the window scrolled), Down (Helmet), B (C2/A85C back to the window, C2/A2CD re-seeding its bar), B, B.
     'equipreserve': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {0x10000: 0x49},
                      P((0x200, 4), (0x100, 60), (0x20, 110), (0x20, 135), (0x20, 160), (0x100, 200), (0x20, 260),
                        (0x1, 300), (0x1, 350), (0x1, 390)),
                      20, 430, 480),
-    # The SHOP's equip sub-mode list scrolled (the shop's own C2/9F05 port, C2/EB9B's slide): twelve swords (02-0D) in bag
+    # The shop's equip sub-mode list scrolled (the shop's own C2/9F05 port, C2/EB9B's slide): twelve swords (02-0D) in bag
     # slots 1-12 of the fair merchant's seeds; the talk, Down (the party row), A (Crono's gear rows), A (the weapon list),
     # Down x10, Up x10, L, R, B x4.
     'shopeqscroll': ('saves/field_re/shop90_lake.state', 'saves/field_re/shop90.lakewram', 5,
@@ -309,7 +309,7 @@ DRIVES = {
                          + [(0x20, 210 + 12 * i) for i in range(10)] + [(0x10, 340 + 12 * i) for i in range(10)]
                          + [(0x400, 470), (0x800, 500), (0x1, 530), (0x1, 560), (0x1, 590), (0x1, 620)])),
                      20, 660, 710),
-    # EVERY Config cell worked: A on cells 0-4 (Stereo, Battle Mode, the three cursor memories), Right to cell 9 and A,
+    # Every Config cell worked: A on cells 0-4 (Stereo, Battle Mode, the three cursor memories), Right to cell 9 and A,
     # Up x4 to cell 5, A (the Battle Speed strip, cell 10), Right x2, Down (the Message Speed strip, cell 11), Left, A
     # (back), Down (cell 6), A (the colour edit), Right, A, B, B -- then the packed $2990-92 in RAM.
     'cfgall': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
@@ -319,40 +319,40 @@ DRIVES = {
                  (0x10, 465), (0x100, 490), (0x80, 515), (0x80, 535), (0x20, 560), (0x40, 585), (0x100, 610),
                  (0x20, 640), (0x100, 665), (0x80, 690), (0x100, 715), (0x1, 745), (0x1, 780)),
                20, 820, 880),
-    # The Config's CURSOR MEMORY ($0D88, cell 2): X, R x3 (Config), A, Down x2, A (on), B (packed: $2990 bit 5), B (the
+    # The Config's cursor memory ($0D88, cell 2): X, R x3 (Config), A, Down x2, A (on), B (packed: $2990 bit 5), B (the
     # menu closes on the Config tab), X at 340 (C2/99D9: the ribbon reopens on $0411 = 3), B.
     'cursormem': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                   P((0x200, 4), (0x80, 50), (0x80, 60), (0x80, 70), (0x100, 100), (0x20, 150), (0x20, 170),
                     (0x100, 200), (0x1, 240), (0x1, 270), (0x200, 340), (0x1, 400)),
                   20, 460, 500),
-    # An ALL-PARTY item: a Lapis (CA, $0DBD bit 3) poked into bag slot 1; X, R (Item), A, Down, A (pick), A (the overlay:
+    # An all-party item: a Lapis (CA, $0DBD bit 3) poked into bag slot 1; X, R (Item), A, Down, A (pick), A (the overlay:
     # C2/B19B `AND #08` -> C2/8AD5), A (used on everyone), then B out of every level.
     'itemall': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                 {0x2401: 0xCA, 0x2501: 0x01},
                 P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 140), (0x100, 170), (0x100, 210),
                   (0x1, 290), (0x1, 320), (0x1, 350), (0x1, 380)),
                 20, 370, 460),
-    # A on an EMPTY bag slot (C2/AA99 stores the cursor in $0F00 with no test of what it holds): X, R (Item), A (the list),
+    # A on an empty bag slot (C2/AA99 stores the cursor in $0F00 with no test of what it holds): X, R (Item), A (the list),
     # Down (slot 1, empty), A (picked), Down (slot 2), A (C2/AAD5: the swap moves slot 2's item into slot 1), B x3.
     'itemempty': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                   P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 140), (0x20, 170), (0x100, 200),
                     (0x1, 240), (0x1, 270), (0x1, 300)),
                   20, 340, 420),
-    # The same with a MAGIC Tab (CE: $0DBD = 6, FF:CF2B[6] = 03 -> +0x0E, C2:B315[6] = 05 -> +0x34) on the SECOND target:
+    # The same with a Magic Tab (CE: $0DBD = 6, FF:CF2B[6] = 03 -> +0x0E, C2:B315[6] = 05 -> +0x34) on the second target:
     # Down in the overlay at 190, A on the second member at 210 (party3 = Crono, Lucca, Frog: Lucca).
     'itemtab2': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                  {0x2401: 0xCE, 0x2501: 0x02},
                  P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 140), (0x100, 170), (0x20, 190),
                    (0x100, 210), (0x1, 290), (0x1, 320), (0x1, 350), (0x1, 380)),
                  20, 370, 460),
-    # A SPEED Tab (CF: $0DBD = 2, cap FF:CF32[2] = 0x10) on a Crono whose Speed (+0x0D) is poked to 0x10: C2/B275 leaves
+    # A Speed Tab (CF: $0DBD = 2, cap FF:CF32[2] = 0x10) on a Crono whose Speed (+0x0D) is poked to 0x10: C2/B275 leaves
     # `$0DBC` = 0, so the A at 210 buzzes (C2/B23D) and nothing is used; B at 250 leaves the overlay, then out.
     'itemtab3': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                  {0x2401: 0xCF, 0x2501: 0x01, 0x260D: 0x10},
                  P((0x200, 4), (0x80, 50), (0x100, 80), (0x20, 110), (0x100, 140), (0x100, 170), (0x100, 210),
                    (0x1, 250), (0x1, 290), (0x1, 320), (0x1, 350)),
                  20, 360, 440),
-    # The member panel's HP (string 06): a Gold Earring WORN by Crono (+0x2A = A1: the open's C2/9137 makes +0x3F = 144,
+    # The member panel's HP (string 06): a Gold Earring worn by Crono (+0x2A = A1: the open's C2/9137 makes +0x3F = 144,
     # C2/813C `$0D38` = 14) and his HP 5 -- the panel prints 5/144 with the 5 in C2/A1EF's palette 1 (red). X, A (Equip),
     # A (Crono), Down x3 (the accessory row), then B out.
     'hpacc': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -360,7 +360,7 @@ DRIVES = {
               P((0x200, 4), (0x100, 60), (0x100, 90), (0x20, 130), (0x20, 150), (0x20, 170), (0x1, 210), (0x1, 240),
                 (0x1, 270)),
               20, 290, 320),
-    # The Equip PREVIEW's max HP (string 09 `PAL $0D57 / NUM $9B25`): a Gold Earring in bag slot 3, previewed on Crono's
+    # The Equip preview's max HP (string 09 `PAL $0D57 / NUM $9B25`): a Gold Earring in bag slot 3, previewed on Crono's
     # accessory row -- 96 -> 144 in the raise colour; B out of the list and the screens.
     'hpprev': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
                {0x2403: 0xA1, 0x2503: 0x01},
@@ -375,7 +375,7 @@ DRIVES = {
                   P((0x200, 4), (0x100, 60), (0x100, 90), (0x20, 130), (0x10, 150), (0x100, 180), (0x20, 220),
                     (0x100, 250), (0x1, 300), (0x1, 340), (0x1, 370)),
                   20, 380, 460),
-    # The Equip candidate list with MORE THAN ONE of a candidate: the equiplist drive with three Iron Blades (bag slot 3,
+    # The Equip candidate list with more than one of a candidate: the equiplist drive with three Iron Blades (bag slot 3,
     # id 02) and twelve Steelsabers (slot 4, id 03) poked on both sides. C2/8953 copies each count to $0F62 but C2/A569
     # / C2/A59A draw the name only (disasm/notes/menu_equip_list_no_count.md): the rows carry no number.
     'equipcount': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130,
@@ -391,7 +391,7 @@ DRIVES = {
                             + [(0x20, 200 + 12 * i) for i in range(10)] + [(0x10, 340 + 12 * i) for i in range(10)]
                             + [(0x1, 480), (0x1, 520), (0x1, 550)])),
                         20, 580, 640),
-    # The FIELD the menu opens from, left alone: no button at all, so the seeds' own background runs -- the colour math
+    # The field the menu opens from, left alone: no button at all, so the seeds' own background runs -- the colour math
     # (the tent keeper's BG2 shadows half-added over BG3, party3's BG3 glow added over BG1/BG2), the map the seed carries
     # (party3's open door) and the ROM's animation machines (the tent flags, FD/E022; the torches, FD/E39C mode 1).
     # disasm/notes/field_bg_anim.md.
@@ -404,7 +404,7 @@ DRIVES = {
     'equip2': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
                P((0x200, 4), (0x100, 60), (0x20, 90), (0x20, 110), (0x100, 140), (0x1, 190), (0x1, 240), (0x1, 270)),
                20, 300, 320),
-    # The OPENED-DOOR LIST across a menu close: X, then B straight back out. party3's right-hand door is open in the seed
+    # The opened-door list across a menu close: X, then B straight back out. party3's right-hand door is open in the seed
     # (its tile index $2935 is the one entry of $7F:1CC8); the reload re-decompresses the map with the door closed
     # (C0/01A5 -> C0/A33B) and C0/286C's first JSR, C0/28E1, opens it again from the list (the $FA arm, C0/297D).
     'doorreload': ('saves/battle_re/party3_field.state', 'saves/battle_re/party3_field.lakewram', 130, {},
@@ -412,7 +412,7 @@ DRIVES = {
 }
 
 
-# a drive's extra environment for the PORT side (the oracle's own is the drive's pokes): the shop number the port's
+# a drive's extra environment for the port side (the oracle's own is the drive's pokes): the shop number the port's
 # test hook takes where the cartridge reads its script byte (shop_screen_cmp.py does the same)
 PORT_ENV = {'shopscroll': {'CT_SHOPNO': '09'}}
 
@@ -457,14 +457,13 @@ def run_port(d, outdir, thumbs, shots=(), dump_at=None, name=None):
             hold.append('%X@%d:1' % (HOLD[m], f + MENU_PRESS))
             continue
         pf = f + (1 if m in (0x1100, 0x200) else MENU_PRESS)   # the cartridge reads it a frame later (the menu: see
-        # MENU_PRESS); a field talk too, as every field key (ct-frame-alignment) -- until 2026-10-19 the talk took the
-        # cartridge's own frame, which the port's C8 fade, then a frame late, hid
+        # MENU_PRESS); a field talk too, as every field key (docs/TESTING.md, the alignment)
         if pf > t:
             walk.append('n:%d' % (pf - t))
         walk.append('%s:1' % KEY[m])
         t = pf + 1
     walk.append('n:%d' % max(1, end - t))
-    # the port's battery: an ERASED cart in the drive's own file (CT_SRAM_FRESH ignores what is on disk) -- a drive that
+    # the port's battery: an erased cart in the drive's own file (CT_SRAM_FRESH ignores what is on disk) -- a drive that
     # saves (owsavecol) must neither read nor overwrite the player's ct_sram.srm in the repo root, and must be repeatable
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS_THUMBS=thumbs, CT_SHOTS_THUMBS_EVERY='1', CT_HOLDBTN=','.join(hold),

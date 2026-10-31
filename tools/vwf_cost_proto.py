@@ -262,11 +262,11 @@ L_940D = 1018364                                        # 80EE REP .. 80F3: C2/9
 L_FILLS = 2072                                          # 80F3 .. 8124
 L_968D = 1977700                                        # 8124 JSR C2/968D .. 8127
 L_984A, L_8663, L_92F4, L_F3CA = 25242, 10464, 1418, 289874   # each with its JSR
-L_9875 = 831482                                         # C2/9875 -- NOT YET WALKED (party / bag: +-1,800)
+L_9875 = 831482                                         # C2/9875 -- not walked yet (party / bag: +-1,800)
 L_HP, L_806B = 2630, 236
 
 
-# the caller's code between C0/011B's RTS and the JSL, per C0/0CC7 / C0/1958 arm, WITH the JSL
+# the caller's code between C0/011B's RTS and the JSL, per C0/0CC7 / C0/1958 arm, with the JSL
 CALLER_POST = {'x': 12 + 18 + 54,                          # C0/195E LDA #01, C0/195F LDX, C0/1960 JSL C2:8000
                'c8hi': 12 + 18 + 20 + 12 + 18 + 18 + 18 + 12 + 18 + 20 + 4 * 12 + 54,   # op C8 $80+: 0D09 .. 0D16
                'c8odd': 12 + 18 + 20 + 12 + 12 + 12 + 18 + 12 + 18 + 54}               # op C8 odd: 0D00 LDA #00
