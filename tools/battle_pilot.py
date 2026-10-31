@@ -120,6 +120,16 @@ class Pilot:
             self.goal = (REVIVE, dead[0])
             self.pending[dead[0]] = 0                             # (another window does not revive the same PC)
             return 'revive->%d' % dead[0], press(walk(row, 2) + [0x100])
+        ef = os.environ.get('PILOT_ELEMFIRST')
+        if ef and lives and min(lives)[0] >= float(ef) / 100:
+            # PILOT_ELEMFIRST (percent): a seat of PILOT_TECHELEM whose element the target leaves open casts before any heal
+            # while nobody is under that ratio (Magus's barrier is open to one element at a time, for a few turns)
+            tgt = self.target(w)
+            k = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_TECHELEM', '').split(',') if d))
+            if tgt is not None and seat in self.techs and seat in k and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2 and \
+                    not (w[0x5E2D + tgt * 0x80 + 0x3F + k[seat]] & 0x80):
+                self.goal = ('tech', tgt, self.techrow.get(seat, 0))
+                return 'elem->%d' % tgt, press(walk(row, 1) + [0x100])
         if lives and w[0x2980 + seat] == FROG and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2:
             ratio, who = min(lives)
             if ratio < heal and who in order:
@@ -195,8 +205,12 @@ class Pilot:
                 return 'wait', [(0, 4)]
         self.waited = 0
         techon = [int(x, 16) for x in os.environ.get('PILOT_TECHON', '').split(',') if x]
+        # PILOT_TECHELEM (`seat:k`, comma-separated): the seat's tech only while the target's element defence k (its block
+        # +0x3F + k: 0 Lightning, 1 Shadow, 2 Water, 3 Fire) has bit 7 clear -- Magus's Barrier Change opens one element
+        techelem = dict((int(a), int(b)) for a, b in (d.split(':') for d in os.environ.get('PILOT_TECHELEM', '').split(',') if d))
         if tgt is not None and seat in self.techs and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2 and \
-                (not techon or w[0xAEFF + tgt] in techon):
+                (not techon or w[0xAEFF + tgt] in techon) and \
+                (seat not in techelem or not (w[0x5E2D + tgt * 0x80 + 0x3F + techelem[seat]] & 0x80)):
             # PILOT_TECH (seats): the seat's first tech on the chosen enemy -- row 1 (Tech), A; then (step) the list's row
             # 0 (or the row PILOT_TECHROW gives the seat, `seat:row`), A; the target select comes next, as an attack's
             self.goal = ('tech', tgt, self.techrow.get(seat, 0))
