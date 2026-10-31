@@ -745,7 +745,8 @@
         "vmdiff-withpos-bedslide",
         "vmdiff-wmask-party3",
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
-        "wide-race-curtain-crosses-the-whole-picture"
+        "wide-race-curtain-crosses-the-whole-picture",
+        "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge"
       ],
       "kind": "rom",
       "regenerable": false,
@@ -1516,7 +1517,8 @@
         "wide-box-is-the-vanilla-box-at-a-rooms-edge",
         "wide-race-curtain-crosses-the-whole-picture",
         "wram-lifetime-survives-load",
-        "options-fill-bottom-lines-window-rows-follow-the-picture"
+        "options-fill-bottom-lines-window-rows-follow-the-picture",
+        "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge"
       ],
       "kind": "assets",
       "regenerable": true,
@@ -3458,7 +3460,8 @@
         "battle-obj-priority-3-over-priority-tiles",
         "battle-slow-doubles-reload-and-cuts-damage",
         "battle-status-colour-cycle-ends-with-the-fight-vs-oracle",
-        "field-manoria-nuns-ignite"
+        "field-manoria-nuns-ignite",
+        "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge"
       ],
       "sha256": "8d63c3fbc073e142562055ae8f6575c1eba8daa878d810cd57d4c9609e86422d",
       "size": 131093,
@@ -3473,7 +3476,8 @@
         "battle-flame-toss-band-vs-rule-cartridge",
         "battle-naga-ettes-walk-as-the-cartridge-through-their-turns",
         "battle-status-colour-cycle-ends-with-the-fight-vs-oracle",
-        "vmdiff-manoria-nuns"
+        "vmdiff-manoria-nuns",
+        "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge"
       ],
       "sha256": "ff73a705ee654ae44a80173ef6bcd5f27be3bc5b4ae569026f1ee4e23a354be3",
       "size": 273125,
@@ -5314,6 +5318,18 @@
       "how": "tools/fixtures.py (recipe telepod_show): loc 008 with a two-member party (Crono leading, Marle following), control on",
       "sha256": "1907365744b18cda76b05cf883618959a7413e347bac50961feeb70a0710d009",
       "size": 273125,
+      "present_when_recorded": true
+    },
+    {
+      "path": "tools/cyclone_moved_target_cmp.py",
+      "used_by": [
+        "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge"
+      ],
+      "kind": "tool",
+      "regenerable": false,
+      "how": "Cyclone's victims when a Naga-ette walks between the select and the dispatch, port against the rule's cartridge.",
+      "sha256": "7a0611b9488d8729b26afe7615df07edab3a897e60ff537a958f5f93fca5c4f3",
+      "size": 6827,
       "present_when_recorded": true
     }
   ]

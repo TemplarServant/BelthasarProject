@@ -46624,6 +46624,51 @@
       ]
     },
     {
+      "name": "battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/cyclone_moved_target_cmp.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/m81_nuns_lake.state",
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "tools/cyclone_moved_target_cmp.py"
+      ],
+      "expect": [
+        "cyclone-moved: primary-cmb3 select cartridge 03 04 port 03 04",
+        "cyclone-moved: primary-cmb3 dispatch cartridge f584 03 06 port f584 03 06",
+        "cyclone-moved: primary-cmb3 cmb3 took damage cartridge yes port yes",
+        "cyclone-moved: primary-cmb3 cmb4 took damage cartridge no port no",
+        "cyclone-moved: primary-cmb3 cmb5 took damage cartridge no port no",
+        "cyclone-moved: primary-cmb3 cmb6 took damage cartridge yes port yes",
+        "cyclone-moved: primary-cmb4 select cartridge 04 03 port 04 03",
+        "cyclone-moved: primary-cmb4 dispatch cartridge f584 04 port f584 04",
+        "cyclone-moved: primary-cmb4 cmb3 took damage cartridge no port no",
+        "cyclone-moved: primary-cmb4 cmb4 took damage cartridge yes port yes",
+        "cyclone-moved: primary-cmb4 cmb5 took damage cartridge no port no",
+        "cyclone-moved: primary-cmb4 cmb6 took damage cartridge no port no",
+        "cyclone-moved: 12/12 identical"
+      ],
+      "pin": [
+        "^cyclone-moved: "
+      ],
+      "tier": "full",
+      "timeout_s": 150,
+      "note_pass": "Crono's Cyclone on the Manoria Naga-ettes: the select lights 03 04 (04 03), cmb3 steps a cell before the dispatch, and both sides hit 03 06 (04 alone) -- the victims are the area pass's at the dispatch",
+      "notes": "The user, 2026-10-31: 'against the Naga-ettes, confirming Cyclone with the cursor on 3 enemies, they moved before the attack and only 2 were hit' -- asked whether the cartridge does it. It does: the select (C1/1FF8[12] -> C1/2701) lights the enemies within radius^2 9 of the cursor's enemy on its own frame, the confirm records only the target, and the dispatch reruns the area pass (C1/C1DD -> C1/C586 area 03 = CC/2B1C `01 / 01 01 09` -> C1/C7A7: $9605 = $B2AE, $9607 = 09 -> C1/2701) on the feet of ITS frame; C1/C600 copies that $99C0 into $AD8E (battle_multitarget.md sec. 9 and 12). Measured on the rule's cartridge, saves/field_re/m81_nuns_lake.state (tools/recipes/fxr_m81_nuns.json): Crono ready f518, Down/A/A/[Up]/A from f520, the Naga-ette cmb3 steps from cell (9,5) to (9,6) at f583, the dispatch f584: primary cmb3 lit 03 04 -> hit 03 06; primary cmb4 lit 04 03 -> hit 04. A sweep of 80 confirm frames (f520-f1000) x 5 cursors: the port's lit set, dispatch list and damaged enemies equal the cartridge's in all 400. The playthrough never grades this: its fights are mashed A or tools/battle_pilot.py, and its legs compare $0100 / $7F0000 / $2980 chains and the end picture -- a different victim shows there only if it changes how the fight ends. HP printed as cyclone-moved-info, not graded.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (sq <= s[0x9607]) s[0x99C1 + y++] = (uint8_t)x;                  // 2797-27A4",
+          "replace": "    if (sq <= s[0x9607] + 1) s[0x99C1 + y++] = (uint8_t)x;  /* MUT */   // 2797-27A4",
+          "why": "The dispatch's radius scan C1/2701 one square wide (radius^2 10, not $9607 = 09): cmb4 at dx 3 dy 1 from the moved cmb3 joins the list -- 03 04 06 instead of the cartridge's 03 06."
+        }
+      ]
+    },
+    {
       "name": "battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge",
       "argv": [
         "python",
@@ -50216,7 +50261,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 628 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 629 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

@@ -2565,6 +2565,16 @@ set by the Imp's attack (C1/99C2) -- the PC tech arm clears it (C1/BB66). The HP
 f130) must read `ambush 10/10 regions identical` and Crono be ready on f271 on both sides: an ambush 4 frames early is
 op 0xDA without a follower not ending its visit (C0/3463 `INX / CLC`). disasm/notes/battle_multitarget.md sec. 9.
 
+### battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge (`python tools/cyclone_moved_target_cmp.py`)
+
+Crono's Cyclone on the four Manoria Naga-ettes (saves/field_re/m81_nuns_lake.state / .lakewram, recipe
+tools/recipes/fxr_m81_nuns.json), confirmed at f520 on cmb3 and (Up) on cmb4; the Naga-ette cmb3 steps from cell (9,5)
+to (9,6) one frame before the dispatch (f584). Graded per case: the set the select lit (`$A62D`: `03 04` / `04 03`),
+the dispatch's list (`$AD8D / $AD8E`: `03 06` / `04`) and which Naga-ettes took HP: `12/12 identical`. A dispatch that
+reads the lit set on the port is the area pass C1/C586 skipped at the dispatch (the select's set held). The cartridge
+hits a different set from the one it lit -- that is the ROM's behaviour, not a residual; re-pin only if the fixture's
+walk changes on both sides. HP values are `cyclone-moved-info`, not graded. disasm/notes/battle_multitarget.md sec. 12.
+
 ### battle-radius-tech-victims-rebuilt-at-dispatch-vs-rule-cartridge (`python tools/radius_dispatch_cmp.py`)
 
 gato_wait staged with Yakra (battle_sim's op 0x83), the party Crono / Lucca / Frog, ACTIVE mode: Crono's Fire Whirl

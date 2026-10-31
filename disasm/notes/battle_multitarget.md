@@ -444,3 +444,31 @@ page-3 frames are f740-743 / f748 against the cartridge's f741-744; the set and 
 multi-hand group's (Cyclone 12 too), not these groups'. (2) 7C / 7D (an empty pass for a dual / triple tech, e.g. 40 / 6A of
 group 13, centred on Robo) are derived, not measured. (3) `$93F0-$93F4` (the command record) is not kept by
 the port's select; it reads `$A62D[0]` at the confirm into its own queue.
+
+---
+
+## 12 — 2026-10-31: the enemies walk between the select and the dispatch (the Manoria Naga-ettes)
+
+The user: "against the Naga-ettes, confirming Cyclone with Crono with the cursor showing 3 enemies hit, they moved before
+the attack happened and only 2 were hit" -- does the cartridge do it?
+
+**Yes, by design.** Two radius scans, on two frames: the select's (C1/1FF8[12] -> C1/2701, centre the cursor's enemy)
+lights `$A62D` from the feet of the frame it builds on; the confirm records only the target (`$93F1`, then `$B2AE` at
+C1/BB85); the dispatch's area pass (C1/C1DD -> C1/C586, area 03 = CC/2B1C `01 / 01 01 09` -> C1/C7A7: `$9605 = $B2AE`,
+`$9607 = 09` -> C1/2701) scans again on the feet `$1D0C / $1D23 >> 4` of ITS frame, and C1/C600 copies that `$99C0` into
+`$AD8E` (sec. 9). Between the two, Active-mode enemies keep walking (the movement modes, C1/3714; the walkers CF/F978):
+a step across a 16-px cell line adds or drops a victim, or moves the circle's centre with the target.
+
+**Measured**, the rule's cartridge, saves/field_re/m81_nuns_lake.state, Crono ready f518, Down / A / A / [dir] / A from f520:
+the Naga-ette cmb3 steps from cell (9,5) to (9,6) at f583, the dispatch at f584. Primary cmb3: lit `03 04`, hit `03 06`
+(cmb4 at (6,5) is now dx 3 dy 1 = 10 > 9; cmb6 at (12,6) dx 3 dy 0 = 9). Primary cmb4 (Up): lit `04 03`, hit `04` alone --
+the user's case one size down. Primary cmb6 (Down / Left): lit `06`, the dispatch lists `06 03`. Swept, 80 confirm frames (f520-f1000,
+every 12) x 5 cursors (none, Up, Down, Left, Right): the port's lit set, dispatch frame and list and damaged enemies equal
+the cartridge's in all 400 (two late cases only looked different because the window ended before the dispatch; with a
+longer window both dispatch at f1524 with the same list). Check
+battle-cyclone-victims-follow-the-target-cell-at-dispatch-vs-rule-cartridge (tools/cyclone_moved_target_cmp.py).
+
+**Why the playthrough never saw it** (it would not have seen a divergence here either): leg 22 (the nuns) mashes A --
+Attack, never a tech -- and the pilot's fights (tools/battle_pilot.py) are graded by the leg's `$0100` / `$7F0000` /
+`$2980` chains and its end picture. A different victim shows there only if it changes how the fight ends (an extra
+turn, a death, the XP). Per-action victims are what the battle_sim / *_cmp checks grade.
