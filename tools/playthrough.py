@@ -130,6 +130,13 @@ def key_of(legs, i):
         h.update(btnscript(lg['pad']).encode() + b'|')
     st = os.stat(CT)
     h.update(('%d:%d' % (st.st_size, int(st.st_mtime))).encode())
+    # ...and the start state it was played from: a state made before its predecessor changed (a leg's pad edited without
+    # `play`, then the keys rewritten by hand) no longer matches, so the chain from power-on is always the route's.
+    # 2026-10-30: leg 83 gained 120 frames after its state was played; 84 was played from the short one and legs 85-94
+    # were authored on it, until a rebuild regenerated the chain and leg 86 no longer reached the Magic Cave.
+    if i > 0 and os.path.exists(state_of(legs[i - 1]['name'])):
+        with open(state_of(legs[i - 1]['name']), 'rb') as f:
+            h.update(hashlib.sha1(f.read()).digest())
     return h.hexdigest()
 
 
