@@ -10686,7 +10686,7 @@ int CtBattlePcFacing(const uint8_t* mem, const CtBattleHost* h, int seat) {
 static void battleMoveInit(CtBattleHost* h) {
   uint8_t* s = h->mem;
   for (int i = 0; i < 8; i++) {
-    BT_MVMODE(h, i) = 0xFF; BT_MVTARGET(h, i) = -1;   // $974A = FF at the boot (CC/E34E) until the walk's first commit BT_MVANGLE(h, i) = 0; BT_MVBASEX(h, i) = 0; BT_MVBASEY(h, i) = 0;
+    BT_MVMODE(h, i) = 0xFF; BT_MVTARGET(h, i) = -1;   // $974A = FF at the boot (CC/E34E) until the walk's first commit
     BT_MVSAVEMODE(h, i) = 0; BT_MVRECX(h, i) = 0; BT_MVRECY(h, i) = 0;   // the settle/re-acquire pair
     BT_MVPHASE(h, i) = 0; BT_MVACTIVE(h, i) = 0; BT_MVWALKING(h, i) = 0;
     BT_MVSEGPERIOD(h, i) = 4; BT_MVPHASESTEP(h, i) = 1;      // overwritten below from the E4/F609 record byte (CC/EBCC-EBE0)
@@ -10708,8 +10708,9 @@ static void battleMoveInit(CtBattleHost* h) {
   }
   h->mvPendAtk = -1; h->mvPendTgt = -1; h->mvPendTech = 0; h->mvPendDecoded = 0;
   BT_PCAIMLATCH(h) = 0;                                               // $A098 (the boot wipe)
-  // The other mover bytes ($99CF/$99D0, $9FF7, $A5CD, $A5F4, $A5FC/$A5FD, $A605..$A625, $9875) lie in CF/FB92's range
-  // and are zeroed by battleBootWipe before stageAll, the ROM's order: wipe, then the loaders.
+  // The other mover bytes ($9786, $98AF/$98B7, $99CF/$99D0, $9FF7, $A5CD, $A5F4, $A5FC/$A5FD, $A605..$A625, $9875) lie in
+  // CF/FB92's range and are zeroed by battleBootWipe before stageAll, the ROM's order: wipe, then the loaders. The boot
+  // never writes $9786/$98AF/$98B7 again; their first writer is a mode handler (C1/37B3-37D7).
   h->scanCur = 0; h->scanTotal = 0;                                // armed by battleCombatStart's boot block
   for (int i = 0; i < 8; i++) { BT_ENARRIVE(h, i) = 0; BT_MVREFX(h, i) = 0; BT_MVREFY(h, i) = 0; }
   // The arena collision grid (CC/E45E-E4B8, battle_ai_interp.md sec. 9): $7BFD[16x16] = the static border template
