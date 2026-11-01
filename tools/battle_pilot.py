@@ -192,6 +192,11 @@ class Pilot:
             # idles (the battle runs on, Active), at most 400 frames
             if seat != d[0]:
                 continue
+            dualon = [int(x, 16) for x in os.environ.get('PILOT_DUALON', '').split(',') if x]
+            if dualon and (tgt is None or w[0xAEFF + tgt] not in dualon):
+                # PILOT_DUALON (enemy ids, hex): the double tech only on those targets -- Slash's bare-handed opening
+                # (F0) is fought with attacks, the MP kept for him with the sword (9F)
+                continue
             b, drow, ma, mb = d[1], d[2], d[3], d[4]
             if b not in [s for _, s in lives] or rd16(w, 0x5E2D + seat * 0x80 + 7) < ma or rd16(w, 0x5E2D + b * 0x80 + 7) < mb:
                 continue
@@ -236,6 +241,11 @@ class Pilot:
 
     def step(self, w):
         """The pad for the next stretch of a fight (and a note when it decided something)."""
+        wf = [int(x, 16) for x in os.environ.get('PILOT_WAITFOR', '').split(',') if x]
+        if wf and not any(w[0xAEFF + c] in wf and rd16(w, 0x5E2D + c * 0x80 + 3) > 0 for c in range(3, 11)):
+            # PILOT_WAITFOR (enemy ids, hex): no command until one of them stands in the fight -- a boss's opening (Slash's
+            # talk before he draws) offers a window whose double tech spends the MP on no one
+            return [(0, 4)], None
         if os.environ.get('PILOT_RUN') and not (w[0x2989] & 0x80):
             # PILOT_RUN: hold L+R (the run away) and press nothing -- unless the fight forbids it ($2989 bit 7: a boss, a
             # scripted fight), which is then fought
@@ -250,7 +260,10 @@ class Pilot:
             ids = [w[0x1580 + i * 5] for i in range(0x40)]
             want = ids.index(self.goal[0]) if self.goal[0] in ids else 0
             self.stuck = 0
-            self.itemTries = getattr(self, 'itemTries', 0) + 1
+            # counted only while the cursor already sits on the item (an A it did not take); walking a long list to the
+            # row takes several steps and is not a refusal (2026-10-31: the Mid Tonics deep in the list were never used)
+            at = w[0x95E6] + w[0x95E5] == want
+            self.itemTries = getattr(self, 'itemTries', 0) + 1 if at else 0
             if self.itemTries > 6:
                 # an A the list does not take (a row it greys: an item the bag has run out of) -- the list stays open and,
                 # in Wait mode, the fight with it: back out and let the window decide again
