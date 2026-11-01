@@ -12419,6 +12419,80 @@ static int runPeek(const char* romPath, const char* statePath, int frames, uint1
   return 0;
 }
 
+// --serve <state>: the oracle kept in one process, driven by lines on stdin -- the authoring tools' session
+// (tools/ctlib/oracle_session.py). A state reloaded at a --peek end does not resume like the run that never stopped
+// (the rule's statics are not in the savestate: snes.c snes_ruleStateSave), so a pad played in pieces of separate
+// --peek runs parts from the one run `playthrough.py play` makes; here nothing is reloaded between pieces, and a
+// snapshot keeps the rule's statics with the machine. Each command answers one line, `ok ...` or `err ...`:
+//   run <btnscript>     the frames, as --peek plays them (the pad held for each token's frames) -> `ok <frames> <loc>`
+//   wram <path>         the 128 KB WRAM (banks 7E-7F) into the file
+//   fb <path>           the 512x480 [pad,B,G,R] framebuffer, and <path>.wram (as --peek's out)
+//   save <path>         the machine as a CTLS state (as PEEK_SAVE; the rule's statics are not in it)
+//   snap <name>         the machine and the rule's statics, kept in memory under that name
+//   restore <name>      back to that snapshot      drop <name>    forget it      quit
+#define CT_SERVE_SNAPS 64
+static int runServe(const char* romPath, const char* statePath) {
+  uint8_t* rom = NULL;
+  Snes* s = ctLoadStateOracle(romPath, statePath, &rom);
+  if (!s) { printf("err cannot load %s\n", statePath); fflush(stdout); return 2; }
+  struct { char name[64]; uint8_t* m; int mn; uint8_t* r; } snap[CT_SERVE_SNAPS];
+  memset(snap, 0, sizeof snap);
+  printf("ok serve %s\n", statePath); fflush(stdout);
+  static char line[1 << 20];
+  while (fgets(line, sizeof line, stdin)) {
+    size_t n = strlen(line);
+    while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+    char* arg = strchr(line, ' ');
+    if (arg) *arg++ = 0; else arg = line + n;
+    const uint8_t* r = s->ram;
+    if (!strcmp(line, "run")) {
+      CtBtnScript bs = { arg }; uint16_t b; int k, f = 0;
+      while (ctBtnNext(&bs, &b, &k))
+        for (int i = 0; i < k; i++, f++) { s->input1->currentState = b; CtOracleRunFrame(s); }
+      printf("ok %d %03X\n", f, (r[0x0100] | (r[0x0101] << 8)) & 0x1FF);
+    } else if (!strcmp(line, "wram") || !strcmp(line, "fb")) {
+      char path[1100]; FILE* fp;
+      if (!strcmp(line, "fb")) {
+        uint8_t* fb = (uint8_t*) malloc(512 * 480 * 4); snes_setPixels(s, fb);
+        fp = fopen(arg, "wb"); if (fp) { fwrite(fb, 512 * 480 * 4, 1, fp); fclose(fp); }
+        free(fb); snprintf(path, sizeof path, "%s.wram", arg);
+      } else snprintf(path, sizeof path, "%s", arg);
+      fp = fopen(path, "wb");
+      if (fp) { fwrite(s->ram, 0x20000, 1, fp); fclose(fp); printf("ok\n"); } else printf("err cannot write %s\n", path);
+    } else if (!strcmp(line, "save")) {
+      StateHandler* sh = sh_init(true, NULL, 0);
+      snes_handleState(s, sh);
+      printf(CtLakeStateSavePath(arg, sh->data, sh->offset) == 0 ? "ok\n" : "err cannot write\n");
+      sh_free(sh);
+    } else if (!strcmp(line, "snap") || !strcmp(line, "restore") || !strcmp(line, "drop")) {
+      int i, fr = -1;
+      for (i = 0; i < CT_SERVE_SNAPS; i++) {
+        if (snap[i].m && !strcmp(snap[i].name, arg)) break;
+        if (!snap[i].m && fr < 0) fr = i;
+      }
+      if (!strcmp(line, "snap")) {
+        if (i == CT_SERVE_SNAPS) i = fr;
+        if (i < 0) { printf("err no free snapshot\n"); fflush(stdout); continue; }
+        free(snap[i].m); free(snap[i].r);
+        snprintf(snap[i].name, sizeof snap[i].name, "%s", arg);
+        snap[i].mn = snes_saveState(s, NULL); snap[i].m = (uint8_t*) malloc(snap[i].mn); snes_saveState(s, snap[i].m);
+        snap[i].r = (uint8_t*) malloc(snes_ruleStateSize()); snes_ruleStateSave(snap[i].r);
+        printf("ok\n");
+      } else if (i == CT_SERVE_SNAPS) printf("err no snapshot %s\n", arg);
+      else if (!strcmp(line, "restore")) {
+        snes_loadState(s, snap[i].m, snap[i].mn);       // the machine, then the rule's statics over lfRestoredMarks'
+        snes_ruleStateLoad(snap[i].r);
+        printf("ok\n");
+      } else { free(snap[i].m); free(snap[i].r); snap[i].m = snap[i].r = NULL; printf("ok\n"); }
+    } else if (!strcmp(line, "quit")) { printf("ok\n"); fflush(stdout); break; }
+    else printf("err unknown command %s\n", line);
+    fflush(stdout);
+  }
+  for (int i = 0; i < CT_SERVE_SNAPS; i++) { free(snap[i].m); free(snap[i].r); }
+  CtOracleDestroy(s); free(rom);
+  return 0;
+}
+
 // --owwatch: load the overworld savestate, cycle the d-pad, and per CPU step report the writer PC of every
 // change to the BG scroll shadows $0020-$002B (BG1/2/3 H/V, copied to $210D-$2112 by the NMI at C2:01D8-0211).
 static int runOwWatch(const char* romPath, const char* statePath) {
@@ -15128,6 +15202,7 @@ int main(int argc, char** argv) {
   const char* cgramOut = NULL;
   const char* fbOut = NULL;
   const char* navFromState = NULL;
+  const char* serveState = NULL;   // --serve: the oracle session (runServe)
   const char* peekState = NULL;
   const char* peekOut = NULL;
   uint16_t peekBtn = 0;
@@ -15458,6 +15533,7 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--mash")) mashFlag = 1;
     else if (!strcmp(argv[i], "--script")) scriptFlag = 1;
     else if (!strcmp(argv[i], "--from") && i + 1 < argc) navFromState = argv[++i];
+    else if (!strcmp(argv[i], "--serve") && i + 1 < argc) serveState = argv[++i];
     else if (!strcmp(argv[i], "--peek") && i + 2 < argc) { peekState = argv[++i]; peekOut = argv[++i]; }
     else if (!strcmp(argv[i], "--btn") && i + 1 < argc) peekBtn = (uint16_t)strtol(argv[++i], NULL, 16);
     else if (!strcmp(argv[i], "--btn2") && i + 1 < argc) peekBtn2 = (uint16_t)strtol(argv[++i], NULL, 16);
@@ -15582,6 +15658,7 @@ int main(int argc, char** argv) {
   if (cgramOut) return CT_NOT_ORACLE(runDumpCgram(romPath, frames, cgramOut));
   if (fbOut) return runDumpFb(romPath, frames, scriptFlag, fbOut);
   if (vramOut) return CT_NOT_ORACLE(runDumpVram(romPath, frames, vramOut));
+  if (serveState) return runServe(romPath, serveState);
   if (peekState) return runPeek(romPath, peekState, frames, peekBtn, peekFrames2, peekBtn2, peekScript, peekOut);
   if (owWatchState) return CT_NOT_ORACLE(runOwWatch(romPath, owWatchState));
   if (textWatchState) return CT_NOT_ORACLE(runTextWatch(romPath, textWatchState));

@@ -307,6 +307,7 @@ static void lfStretchEnd(void) { lfStretchEndAt(NULL, 0); }
 // the last cut read the live WRAM (battle.c CtBattleFxLayerCompose; the port's own cuts, battle.c battleLineCut).
 #define LF_LINE_CUTS 4
 long g_ctLineHeld = 0; static int lfLineHold = 0, lfLine64 = -1;
+static long lineHeldNow = 0;                               // (the line hold's own count, snes_runCycle)
 uint8_t g_ctLineCutRam[LF_LINE_CUTS][0x10000];             // bank 7E at each cut of the NMI's service
 int g_ctLineCutAt[LF_LINE_CUTS], g_ctLineCutN = 0;         // the cuts' lines (V at the wait's exit), in order
 long g_ctLineCutSeq = 0;                                   // +1 per NMI whose service made a cut
@@ -497,7 +498,6 @@ static void snes_runCycle(Snes* snes) {
     lfIfastRun = 0; lfWaitingNow = 1; lfWaitLo = 0; lfWaitHi = 0xffffffffu;
   } else lfIfastRun = 0;
   if(lfLineHold) {                                         // the battle NMI's service after its line-64 wait: held
-    static long lineHeldNow = 0;
     if(lfIntDepth < lfLineHold) { lfLineHold = 0; lineHeldNow = 0; }   //   ...until that NMI has returned
     else if((lineHeldNow += 2) > LF_FRAME) {               // not the rule: the NMI's return was not seen -- released, loudly
       fprintf(stderr, "logical-frame: WARNING line-64 hold past a frame at %02X:%04X (depth %d of %d, SP %04X, saved %04X) -- released\n",
@@ -1007,4 +1007,35 @@ void snes_runCpuCycle(Snes* snes) {
 void snes_runSpcCycle(Snes* snes) {
   // TODO: apu catchup is not aware of this, SPC runs extra cycle(s)
   spc_runOpcode(snes->apu->spc);
+}
+
+// THE RULE'S STATICS, for an in-memory snapshot that resumes exactly. snes_saveState keeps the machine but not the
+// logical-frame rule's own state above (the wait detector, the infinitely fast CPU's run, the interrupt depth, the stretch
+// and line-cut marks, the drain's virtual beam), so a run reloaded from a state ends a few beam cycles off the one that
+// never stopped (measured 2026-11-01: hPos, cycles and apuCatchupCycles apart after 80 frames of 16-frame pieces, and the
+// SPC phase and WRAM after). The file format is left as it is -- every pinned state was made under it -- and these are
+// copied only by a snapshot that stays in one process (main.c's --serve: `snap` / `restore`).
+#define LF_RULE_VARS(X) X(lfApuNow) X(lfRing) X(lfPos) X(lfFill) X(lfWroteNow) X(lfHoldNow) X(lfSnapFrame) \
+  X(lfNoHoldFrame) X(lfRollbackPending) X(lfRingSnap) X(lfPosSnap) X(lfFillSnap) X(lfIfast) X(lfWaitingNow) X(lfWaitLo) \
+  X(lfWaitHi) X(g_ctIfastHeld) X(lfIfastRun) X(lfVbIfast) X(g_ctLogicalCrossed) X(lfIntDepth) X(lfIntSp) X(lfRdnmi) \
+  X(lfRdnmiMain) X(lfRdnmiArmed) X(lfAcctInit) X(lfAcctCycles) X(lfAcctRefresh) X(lfAcctHdma) X(lfStretch) X(lfCrossed) \
+  X(lfPrevPc) X(lfIntSerial) X(lfStretchOn) X(lfStretchPc) X(lfStretchFrame) X(g_ctLineHeld) X(lfLineHold) X(lfLine64) \
+  X(lineHeldNow) X(g_ctLineCutRam) X(g_ctLineCutAt) X(g_ctLineCutN) X(g_ctLineCutSeq) X(lfLineCutSerial) \
+  X(g_ctLogicalLoads) X(lfVbCycles) X(lfVbRefresh) X(lfPhaseHold) X(lfPhasePending) X(g_ctLogicalPhaseHolds) \
+  X(g_ctLogicalPhaseHeld) X(lfOffCycles) X(lfOffRefresh) X(g_ctDrainVbK) X(g_ctDrainVbHi) X(g_ctDrainVbV) X(g_cycTag) \
+  X(g_cycTagCycles) X(g_runFrameCalls) X(g_ctLogicalHeld) X(g_ctLogicalHolds) X(g_ctLogicalValves)
+#define LF_SIZE(v) + sizeof(v)
+int snes_ruleStateSize(void) { return (int) (0 LF_RULE_VARS(LF_SIZE)) + 4 + lfSnapSize; }
+void snes_ruleStateSave(uint8_t* buf) {
+#define LF_PUT(v) memcpy(buf, &(v), sizeof(v)); buf += sizeof(v);
+  LF_RULE_VARS(LF_PUT)
+  memcpy(buf, &lfSnapSize, 4); buf += 4;                   // the valve's own snapshot, when it holds one
+  if(lfSnap && lfSnapSize) memcpy(buf, lfSnap, lfSnapSize);
+}
+void snes_ruleStateLoad(const uint8_t* buf) {
+#define LF_GET(v) memcpy(&(v), buf, sizeof(v)); buf += sizeof(v);
+  LF_RULE_VARS(LF_GET)
+  int n; memcpy(&n, buf, 4); buf += 4;
+  if(n) { if(!lfSnap || n > lfSnapSize) { free(lfSnap); lfSnap = (uint8_t*) malloc(n + 4096); } memcpy(lfSnap, buf, n); }
+  lfSnapSize = n;
 }

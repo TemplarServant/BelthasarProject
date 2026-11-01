@@ -102,5 +102,9 @@ int snes_saveBattery(Snes* snes, uint8_t* data);
 bool snes_loadBattery(Snes* snes, uint8_t* data, int size);
 int snes_saveState(Snes* snes, uint8_t* data);
 bool snes_loadState(Snes* snes, uint8_t* data, int size);
+// the logical-frame rule's statics, for a snapshot kept in one process (snes.c, main.c --serve)
+int snes_ruleStateSize(void);
+void snes_ruleStateSave(uint8_t* buf);
+void snes_ruleStateLoad(const uint8_t* buf);
 
 #endif
