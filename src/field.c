@@ -2267,6 +2267,17 @@ static int fieldDumpAt(int frameNo) {
   if (g_wsEndAt < 0 || done) return -2;
   done = 1; return frameNo;                       // the first frame (field or world) once the script ran out
 }
+// C0/1943-1956 / C0/0CCE-0CE8, the menu entry's fade: `LDA $19 / BEQ / BMI -> the switch, else DEC $19` once a frame, so
+// it runs from the brightness the field has (a script that already faded to black opens the screen at once: leg 97's
+// exchange screen). menuT counts the fade as if from 15: its start is 15 - $0119. The world's fade is its own (0).
+// The brightness is the scene's (CtSceneBright: $0119's low nibble as the VM keeps it, the value the picture shows) --
+// a --scene seed may carry a stale $0119 byte under a lit field. --menutest (a battle capture opened straight into the
+// menu, never faded in) keeps the whole 15-step fade it was pinned with: vm = NULL.
+static int fieldMenuFadeT0(CtScene* vm, int inWorld) {
+  if (inWorld || !vm) return 0;
+  int b = CtSceneBright(vm);
+  return 15 - (b < 0 ? 0 : b > 15 ? 15 : b);
+}
 static uint8_t g_collRam[0x13000];
 static const Coll* g_fc;
 static const uint8_t* g_fcWram;   // the scene's $7E page for fieldTileFetch (NULL: the host's packed planes)
@@ -4479,16 +4490,50 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
 // bound at 256 and 1EE's left at 1024. Not ported: the Blackbird's passages (170 / 171) take m = 0 on two Steam state
 // bits ([0x81B4C4] + 0x1136C bit 7 or + 0x11374 & 0x11) not mapped to the SNES's RAM; clamped here. A room that wraps
 // (fieldWideMask: no edge) is not clamped. The ROM's camera is untouched: only the view moves in the picture.
-static int fieldWideViewX(const Field* f, int w, int camx) {
+// A camera a script moves is not held: see fieldWideCamStep. *wraps: 1 for a room with no edge (camx is returned).
+static int fieldWideClampX(const Field* f, int w, int camx, int* wraps) {
   const int m0 = (w - CAMW) / 2;
   int x0, x1; fieldWideMask(f, w, &x0, &x1);
-  if (x0 < -(1 << 29)) return m0;
+  *wraps = x0 < -(1 << 29);
+  if (*wraps) return camx;
   int m = m0;
   if (f->loc == 0x06C || f->loc == 0x106 || f->loc == 0x107 || f->loc == 0x15B) m = 0;
   if (f->loc == 0x1A7) x1 = 256;
   if (f->loc == 0x1EE) x0 = 1024;
   const int lo = x0 + m, hi = x1 - CAMW - m;
-  const int shown = lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
+  return lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
+}
+// The camera shown, frame by frame (a mod). The clamp holds the view inside the room so the player can walk to the wide
+// screen's edge; a script's camera is a framing of its own and moves on the wide screen as on the 256. The ROM moves the
+// camera past the player's request with op E6's BG1 delta ($1D24/$1D25), op E7's seek ($1D00) and the auto-scroll
+// ($01BC) -- they bypass the deadzone and the edges (field_camera_unification.md, PART B). Once one of them moves it,
+// the view takes the camera's steps 1:1 from where it stood (0E6's attract pan: $1D24 = 08 from x 0, held at x 71 by the
+// clamp for its first 140 frames); when the player has control again ($011F) it goes back to the clamp at the camera's
+// speed and one pixel more a frame. A new location starts clamped (its load is black). The battle keeps the field's.
+static struct { int on, loc, free, prev, shown; } g_wideCam;
+static void fieldWideCamStep(const Field* f, int w, int camx) {
+  int wraps, clamped = fieldWideClampX(f, w, camx, &wraps);
+  if (wraps || !f->vm) { g_wideCam.on = 0; return; }
+  const uint8_t* pg = CtSceneMem7E(f->vm);
+  const int scripted = pg[0x1D24] | pg[0x1D25] | pg[0x1D00] | pg[0x01BC], dcam = camx - g_wideCam.prev;
+  if (!g_wideCam.on || g_wideCam.loc != f->loc) {
+    g_wideCam.on = 1; g_wideCam.loc = f->loc; g_wideCam.free = 0; g_wideCam.shown = clamped; g_wideCam.prev = camx;
+    return;
+  }
+  if (scripted && dcam) g_wideCam.free = 1;
+  else if (g_wideCam.free && !scripted && pg[0x011F]) g_wideCam.free = 0;
+  if (g_wideCam.free) g_wideCam.shown += dcam;
+  else {
+    const int d = clamped - g_wideCam.shown, step = abs(dcam) + 1;
+    g_wideCam.shown += d > step ? step : d < -step ? -step : d;
+  }
+  g_wideCam.prev = camx;
+}
+static int fieldWideViewX(const Field* f, int w, int camx) {
+  const int m0 = (w - CAMW) / 2;
+  int wraps, shown = fieldWideClampX(f, w, camx, &wraps);
+  if (wraps) return m0;
+  if (g_wideCam.on && g_wideCam.loc == f->loc) shown = g_wideCam.shown;
   int vx = camx - shown + m0;
   return vx < 0 ? 0 : vx > w - CAMW ? w - CAMW : vx;
 }
@@ -12299,7 +12344,7 @@ int main(int argc, char** argv) {
       if (menuPhase == 0 && !battlePhase && (xFire || owEpochMenu) && !gameOver && menuFb
           && (modGate || owEpochMenu)
           && !fade && !pendKind) {                           // engine transfer boundary (see above)
-        menuPhase = 1; menuT = 0;
+        menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld);
         menuSaveHoverPanel = -1;
         // C2/99D9 `LDA $0D88 / BNE`: the Config's cursor memory ($0D88, bit 5 of the packed $2990 as C2/9350 packs it;
         // C2/8133 unpacks it at C+15, but the ribbon's option already sets the builder's yields at the switch). Off,
@@ -12351,7 +12396,7 @@ int main(int argc, char** argv) {
           && glb[0x0000] >= 0x49                             // C0/198E-1995
           && CtSceneExplore(f.vm) && s7[0x162] == 0 && s7[0x110] == 0   // C0/1998-19A5
           && !CtSceneOffMainLoop(f.vm)) {                    // C0/18D9 runs only inside C0/0097's loop
-        menuPhase = 1; menuT = 0; menuScreen = 0x07; menuExchOn = 1; menuExch68 = 0;
+        menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuScreen = 0x07; menuExchOn = 1; menuExch68 = 0;
         if (!coldResetHold && seqOpen <= 0 && gwPhase != 3 && !loadFadeEntry)
           CtMenuClockTick(s7);                               // the frame's head tick first (the X path's note)
         s7[0x407] = 0xFF;                                    // C0/19A7-19A9
@@ -12370,7 +12415,7 @@ int main(int argc, char** argv) {
       // The fade's first DEC is this frame's: the op parks in the event pass of frame N (C0/00C4), this host sees it at
       // the head of N+1, and C0/0C76 -> C0/0CCE runs at that same head (C0/00A4): `DEC $19` on N+1. The same C0/0CCE
       // serves the C8 screens below.
-      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0C; menuShopOn = 1;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuOpt = 0; menuScreen = 0x0C; menuShopOn = 1;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("shop: f%d op C8 %02X -> shop %02X (mode 2, screen $0C)\n",
                                          frameNo, CtSceneShop(f.vm), CtSceneShop(f.vm) & 0x3F);
@@ -12383,7 +12428,7 @@ int main(int argc, char** argv) {
     // (C2/9A98), substates 2/3 the Save screen's own C2/CF61 / C2/CF92.
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneSavePoint(f.vm) >= 0
         && !inLoadFade) {
-      menuPhase = 1; menuT = 0; menuOpt = 5; menuScreen = 0x0B; menuSavePtOn = 1;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuOpt = 5; menuScreen = 0x0B; menuSavePtOn = 1;   // (C0/0CCE is the next frame's)
       menuSaveCur = 0; menuSavePrompt = 0; menuSaveDoWrite = 0;                      // C2/D0E5: the cursor on slot 1
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("savepoint: f%d op C8 %02X -> mode 6, screen $0B\n", frameNo, CtSceneSavePoint(f.vm));
@@ -12393,7 +12438,7 @@ int main(int argc, char** argv) {
     // bit6` (C0/19EB-19F7) is the op's handshake. No `$0407 = FF` on this path (the Y path's is C0/19A7, before 19C7).
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneExchange(f.vm)
         && !inLoadFade) {
-      menuPhase = 1; menuT = 0; menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_SHOPTRACE")) printf("exchange: f%d op C8 00 -> mode 5, screen $07\n", frameNo);
     }
@@ -12402,7 +12447,7 @@ int main(int argc, char** argv) {
     // parks inside loc 0's C0/2848 ramp, and its fade starts when the ramp ends.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneLoader(f.vm) >= 0
         && !ldrDone && ldrRebootPend == -2 && !inLoadFade) {
-      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0E; menuLoaderOn = 1; ldrShot = -1;   // (C0/0CCE: next frame)
+      menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuOpt = 0; menuScreen = 0x0E; menuLoaderOn = 1; ldrShot = -1;   // (C0/0CCE: next frame)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_NAMETRACE")) printf("loader: f%d op C8 %02X -> mode 0, screen $0E\n", frameNo, CtSceneLoader(f.vm));
     }
@@ -12419,7 +12464,7 @@ int main(int argc, char** argv) {
     // handshake on the way back. (CT_NAMEAS under --selftest is the harness's bypass, further down.)
     if (menuPhase == 0 && !battlePhase && !inWorld && !gameOver && menuFb && f.vm && CtSceneNaming(f.vm) >= 0
         && !inLoadFade && !(selftest && dbg.nameAs && *dbg.nameAs)) {
-      menuPhase = 1; menuT = 0; menuOpt = 0; menuScreen = 0x0D; menuNameOn = 1;   // (C0/0CCE is the next frame's)
+      menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuOpt = 0; menuScreen = 0x0D; menuNameOn = 1;   // (C0/0CCE is the next frame's)
       menuNameId = CtSceneNaming(f.vm) & 0x3F; menuName68 = 0; menuNameOut = 0;
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
       if (getenv("CT_NAMETRACE")) printf("naming: f%d op C8 %02X -> mode 3, screen $0D, $0A01 = %02X\n",
@@ -17851,7 +17896,7 @@ int main(int argc, char** argv) {
     // box and the rest below. The battle's picture is its own (the arena's scroll, its layers): pillarboxed.
     int wideW = (!battlePhase && !battleTest) ? hostWideW() : CAMW, wideX = (wideW - CAMW) / 2;
     const int wideXc = wideX;                        // (the screen's middle: where the screen-fixed overlays go)
-    if (wideW > CAMW && f.vm) wideX = fieldWideViewX(&f, wideW, camx);   // (the widescreen's camera)
+    if (wideW > CAMW && f.vm) { fieldWideCamStep(&f, wideW, camx); wideX = fieldWideViewX(&f, wideW, camx); }   // (the widescreen's camera)
     // (the bake waits for the widescreen's camera: the still backdrop is held to the picture, fieldWideStill -- the field's,
     //  or in a fight the arena's, as wide as the host's)
     g_wideStill = 0; g_wideBg = 0;
