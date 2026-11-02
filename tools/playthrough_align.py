@@ -110,6 +110,19 @@ def chains(tl):
     return ch
 
 
+DARK_TOL = 240
+
+
+def dark(ch, f):
+    """Is frame f inside a black stretch ($0119 = 0) on that side (its `lit` chain)?"""
+    v = '1'
+    for g, x in ch.get('lit', []):
+        if g > f:
+            break
+        v = x
+    return v == '0'
+
+
 def deblip(ch, n=4):
     """A control chain without its runs shorter than n frames (a frame of control between two events that no player
     can act on: the cartridge's 25 hands it back for one frame at f467), the neighbours merged. Four, not three: a blip the
@@ -136,6 +149,11 @@ def first_mismatch(o, p, warps, end):
             c = co[i] if i < len(co) else None
             q = po[i] if i < len(po) else None
             if c and q and c[1] == q[1] and to_port(c[0], warps) == q[0]:
+                continue
+            # The same change made on a black screen on both sides is a load's inside (an NMI-off stretch: the
+            # cartridge's CPU time, which the port spends at once -- CLAUDE.md): equal, and no warp -- the load's end
+            # (the `lit` rise after it) is where the two meet again.
+            if c and q and c[1] == q[1] and dark(o, c[0]) and dark(p, q[0]) and abs(q[0] - to_port(c[0], warps)) <= DARK_TOL:
                 continue
             if c is None and q is not None and q[0] > to_port(end, warps):
                 break                                       # a change past the leg's (warped) end: not graded
