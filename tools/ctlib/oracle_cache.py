@@ -315,6 +315,8 @@ def run(argv, kwargs, real_run, cache=None):
         try:
             with open(meta, encoding='utf-8') as fh:
                 m = json.load(fh)
+            if m['rc'] != 0:
+                raise ValueError('a run that did not finish')  # stored before such runs were refused
             blobs = {}
             for role in m['roles']:
                 with open(os.path.join(ent, 'r_' + role.replace(':', '_')), 'rb') as fh:
@@ -356,6 +358,8 @@ def run(argv, kwargs, real_run, cache=None):
             whole = False
     if mode_of(argv)[1] is not None and 'out' not in roles:
         whole = False                                         # --peek / --fb wrote no dump: nothing to replay
+    if r.returncode != 0:
+        whole = False                                         # a run that did not finish (killed, crashed): never stored
     if not whole:
         return _finish(argv, kwargs, r.returncode, r.stdout, r.stderr)
     tmp = '%s.tmp%d_%d' % (ent, os.getpid(), int(t0 * 1e6) % 1000000)
