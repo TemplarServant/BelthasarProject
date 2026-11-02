@@ -39,7 +39,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
-FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
+FIELD = os.environ.get('PT_FIELD') or os.path.join(ROOT, 'build', 'Belthasar.exe')   # PT_FIELD: another build's port
 ROM = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
 ROUTE = os.path.join(ROOT, 'tools', 'playthrough', 'route.txt')
 STATES = os.path.join(ROOT, 'saves', 'playthrough')
@@ -123,13 +123,24 @@ def start_of(legs, i):
     return 'boot' if i == 0 else state_of(legs[i - 1]['name'])
 
 
+def _oracle_sha():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('_pt_oracle_cache', os.path.join(ROOT, 'tools', 'ctlib', 'oracle_cache.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    oracle = os.path.join(ROOT, 'build', 'ct_oracle.exe')
+    return m._exe_sha(oracle if os.path.exists(oracle) else CT)
+
+
 def key_of(legs, i):
     """What leg i's end state is made of: every pad from power-on through it, and the oracle that played them."""
     h = hashlib.sha1()
     for lg in legs[:i + 1]:
         h.update(btnscript(lg['pad']).encode() + b'|')
-    st = os.stat(CT)
-    h.update(('%d:%d' % (st.st_size, int(st.st_mtime))).encode())
+    # The oracle that played them: build/ct_oracle.exe (the oracle alone: main.c's modes, snes/*.c, the state loader), hashed
+    # without its link identity (tools/ctlib/oracle_cache.py _exe_sha) -- a port fix rebuilds ct.exe but leaves these
+    # states the cartridge's, so it no longer replays the chain from power-on (2 h for 96 legs).
+    h.update(_oracle_sha().encode())
     # ...and the start state it was played from: a state made before its predecessor changed (a leg's pad edited without
     # `play`, then the keys rewritten by hand) no longer matches, so the chain from power-on is always the route's.
     # 2026-10-30: leg 83 gained 120 frames after its state was played; 84 was played from the short one and legs 85-94
