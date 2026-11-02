@@ -919,6 +919,9 @@ static void stageAll(CtBattleHost* h) {
   // C1/F205) the results sequencer FD/AD8C reads.
   s[0xB2DB] = s[0xB2DC] = s[0xB2DD] = 0; s[0xB2AF] = 0;
   for (int k = 0; k < 6; k++) s[0xB2B0 + k] = 0;
+  // FD/B79C-B7B4 (A = 0): `$AEB2` and, for X = 0..7, the death bytes `$AEB3,X` and the killed list `$AE85,X`.
+  s[0xAEB2] = 0;
+  for (int k = 0; k < 8; k++) s[0xAEB3 + k] = s[0xAE85 + k] = 0;
   s[0x99D4] = s[0x99D5] = s[0x99D6] = s[0x99D7] = 0xFF; s[0x99D8] = 0;     // CC/E30F-E318 / CF/FB94
   // CC/E321, the same run of `STA` with A = FF: the bracket pulse's counter $A4EF, so the frame service's
   // first INC (CF/E5AA, on the band's arm frame) reads 00.
@@ -13933,8 +13936,17 @@ static void battleThinkTick(CtBattleHost* h) {
 // CF/FE2D-FE33, the scan's stores for each dying combatant it reaches with `$9FF7,X` clear, before the `$99B5` gate and its
 // routine: `INC $A0A8,X / STZ $AEB0,X / STZ $98A4,X` -- the last is the corpse's own segment flag ($98A7 + slot), so the
 // NMI's stepper (CF/F978) never moves it again and the corpse holds its foot through the dissolve.
+// C1/AC5E-AC73, the death scan's head (C1/881C): with `$AEB2` set, every enemy slot X = 0..7 whose death byte `$AEB3,X`
+// (= $AEB0 + combatant) is set gets `$AE85,X := 1` -- the battle's "killed" list that FD/AAB0 hands to the field at
+// the end. Idempotent: called before each store that clears a death byte (CF/FE30) and at the module's end (a death the
+// scan never routines -- $9FF7, a demo -- keeps its byte to there).
+static void battleKilledLatchAC5E(uint8_t* s) {
+  if (!s[0xAEB2]) return;                                        // AC5E LDA $AEB2 / BEQ AC81
+  for (int x = 0; x < 8; x++) if (s[0xAEB3 + x]) s[0xAE85 + x] = 1;   // AC63-AC73
+}
 static void battleDeathScanStores(CtBattleHost* h, int cmb) {
   uint8_t* s = h->mem;
+  battleKilledLatchAC5E(s);                                      // C1/AC5E ran before CF/FE20's loop
   if (s[0x9FF7 + cmb]) return;                                   // CF/FE28-FE2B -> FE7B
   // Not ported here: CF/FE2D `INC $A0A8,X`. The port's C1/2FBD store (battleStatusScanStore) already sets $A0A8 to 1 on
   // the death's frame, a scan earlier than the ROM, and the INC would leave 02. It belongs here once that store runs at
@@ -16584,8 +16596,41 @@ static void battleStatusClearEA9D(CtBattleHost* h) {
 //   all, the debug end too (C1/8443): `$29AD = $26` (the RNG cursor the next boot reads), block +$29 from
 //     $1C48.., FD/AAB0, then CF/FBE5 (the records, CtBattleStagerRecords) and the exit tail CD/03B4.
 // No wait in between: under the rule all of it lands on one frame.
-// Not modelled: the max-HP restore (no fight changes it), FD/AAB0's $7F01EE mask, FD/B201 ($B3BD: $B2A5 += $B28C).
+// Not modelled: the max-HP restore (no fight changes it), FD/B201 ($B3BD: $B2A5 += $B28C).
 static void battleModuleTail(CtBattleHost* h, int path);
+// C1/F908: the record's XP +$13 (three bytes) += the 16-bit award, then the cap: +$15 >= $98 -> +$15 = $98, and with
+// it the low word >= $9680 -> $967F (9,999,999 at most).
+static void battleXpAddF908(uint8_t* s, uint32_t b, int add) {
+  int lo = (s[b + 0x13] | (s[b + 0x14] << 8)) + (add & 0xFFFF);  // F90A-F911 (16-bit)
+  s[b + 0x13] = (uint8_t)lo; s[b + 0x14] = (uint8_t)(lo >> 8);
+  if (lo > 0xFFFF) s[b + 0x15]++;                                 // F914-F918
+  if (s[b + 0x15] >= 0x98) {                                      // F91E-F923
+    s[b + 0x15] = 0x98;
+    if ((s[b + 0x13] | (s[b + 0x14] << 8)) >= 0x9680) { s[b + 0x13] = 0x7F; s[b + 0x14] = 0x96; }   // F92A-F937
+  }
+}
+// C1/F9EB, after the tech pass (C1/F9E6): each recruited character ($29AF, bit 7 = character 0) who is not in the fight
+// (`$B1BE,X` bit 7) gets three quarters of the award on the sheet itself -- `$B28C * 15` (C1/C90B) `/ 20` (C1/C92A),
+// the quotient's low word -- through C1/F908 and ONE C1/F623 step (the seats re-call it while `$B28C` lasts; here a
+// level-up drops what is left over, as the ROM does).
+static void battleReserveRewardsF9EB(CtBattleHost* h, const uint8_t* rr, long rl) {
+  uint8_t* s = h->mem;
+  uint8_t m = s[0x29AF];                                          // F9F8-F9FB $AE79
+  for (int id = 0; id < 7; id++, m = (uint8_t)(m << 1)) {         // FA51-FA5E
+    if (!(m & 0x80) || !(s[0xB1BE + id] & 0x80)) continue;        // F9FE-FA08
+    uint32_t b = 0x2600 + (uint32_t)id * 0x50;                    // FA0A-FA1C (C1/C90B: id * $50)
+    s[0x28] = (uint8_t)h->rewXp; s[0x29] = (uint8_t)(h->rewXp >> 8); s[0x2A] = 0x0F; s[0x2B] = 0;   // FA22-FA2B
+    battleMul16(s, 0);                                            // FA2D
+    s[0x28] = s[0x2C]; s[0x29] = s[0x2D]; s[0x2A] = 0x14; s[0x2B] = 0;   // FA30-FA37
+    battleDiv32(s, 0);                                            // FA39
+    int xp = s[0x2C] | (s[0x2D] << 8);                            // FA3C-FA3E $B28C
+    battleXpAddF908(s, b, xp);                                    // FA44
+    if (rr && xp) {                                               // FA47 JSR C1/F623 -- one step
+      int next = s[b + 0x2B] | (s[b + 0x2C] << 8);
+      CtBattleLevelUp(s, rr, rl, b, id, xp >= next ? next : xp, 1);
+    }
+  }
+}
 void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
   uint8_t* s = h->mem;
   if (h->rewardsApplied) return;
@@ -16607,9 +16652,7 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
       if (id == 0xFF || id >= 8) continue;             // absent party slot
       uint32_t b = 0x5E2D + (uint32_t)seat * 0x80;
       if (s[b + 0x1D] & 0x80) continue;                // a dead PC gets no reward (block+0x1D bit 7, P3.3)
-      uint32_t xp = s[b+0x13] | (s[b+0x14]<<8) | ((uint32_t)s[b+0x15]<<16);   // XP block+0x13 (3B) += total (C1:F914)
-      xp += (uint32_t)h->rewXp; if ((xp >> 16) > 0x98) xp = 0x98FFFFu;         //   clamp block+0x15 <= 0x98
-      s[b+0x13]=(uint8_t)xp; s[b+0x14]=(uint8_t)(xp>>8); s[b+0x15]=(uint8_t)(xp>>16);
+      battleXpAddF908(s, b, h->rewXp);                 // XP block+0x13 (3B) += total (C1/F908)
       // XP level-up and stat growth on the block (battle_victory_rewards.md; C1/F623 -> F7B9/F871/F633), here so the
       // writeback carries the new level and stats to $2600. Reads CC/2632 (thresholds), CC/258A HP, CC/25C2 MP and
       // CC/25FA stat rates; a no-op while earned XP < NEXT.
@@ -16628,6 +16671,7 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
         for (int t = lc0[id]; t < s[0x2830 + id] && techLearnedN[seat] < 8; t++)
           techLearned[seat][techLearnedN[seat]++] = base + t;
       } }
+    battleReserveRewardsF9EB(h, rr, rl);                                       // C1/F9E6 JSR C1/F9EB
     uint32_t g = s[0x2C53] | (s[0x2C54]<<8) | ((uint32_t)s[0x2C55]<<16);       // gold $2C53 (24-bit) += total (C1:D0B6)
     g += (uint32_t)h->rewGp; if ((g >> 16) > 0x98) g = 0x98FFFFu;              //   clamp $2C55 <= 0x98
     s[0x2C53]=(uint8_t)g; s[0x2C54]=(uint8_t)(g>>8); s[0x2C55]=(uint8_t)(g>>16);
@@ -16733,6 +16777,14 @@ static void battleModuleTail(CtBattleHost* h, int path) {
   // (C1/800A). Nothing in bank C0 writes $29AD.
   s[0x29AD] = s[0x26];
   if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-rng-cursor handback $29AD=%02X (the final $26)\n", s[0x29AD]);
+  // C1/845A JSL FD/AAB0: `$7F01EE` := the mask of the eight enemy slots whose `$AE85,X` is set (bit X), the killed list
+  // the field keeps after the fight.
+  battleKilledLatchAC5E(s);
+  if (h->glb) {
+    uint8_t m = 0;
+    for (int x = 0; x < 8; x++) if (s[0xAE85 + x]) m |= (uint8_t)(1 << x);   // FD/AAB0-AACE
+    h->glb[0x1EE] = m;
+  }
   CtBattleStagerRecords(h);                                       // C1/845E -> CF/FBE5: CF/FC08-FC71
   if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-module-tail f%d path=%d\n", h->frames, path);
 }

@@ -57,7 +57,9 @@ late), not the tail's.
 
 ## Open questions
 
-- FD/B201 (the A9 accessory's XP-to-gold) and FD/AAB0 (`$7F01EE`) are not modelled.
+- FD/B201 (the A9 accessory's XP-to-gold) is not modelled. (FD/AAB0 is, since 2026-11-02: battleKilledLatchAC5E --
+  C1/AC5E's `$AE85,X := 1` for each death byte `$AEB3,X`, FD/B79C's boot clear -- and the mask at the module's end;
+  the playthrough's legs 20, 24, 33, 48, 51, 63, 83 ended with `$7F01EE` apart.)
 - C1/B3BB runs on the module's frames too (victory C1/8176, defeat 813A, flee 821B, debug 83A3); the port still runs it in
   fieldBattleFinish -- nothing reads `$29C6` in between, so it is not observable, but it is not the ROM's frame.
 - CF/FBE5's head (`$A46D`, `$2102 -> $2302`) is not modelled.
