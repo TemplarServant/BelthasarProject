@@ -28,7 +28,12 @@ the port keeps the 224 lines, so m is the port's own side (71 px at 16:9) and a 
 centred, while the ROM's camera moves the view across it. Steam's own exceptions are kept (location numbers only): no
 clamp (m = 0) at 06C, 106, 107 and 15B; the right bound at 256 in 1A7 and the left at 1024 in 1EE. The Blackbird's
 passages (170, 171) drop the clamp on two Steam state bits not yet mapped to the SNES's RAM: clamped here. A room that
-wraps is not clamped. The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
+wraps is not clamped. **A camera a script moves is not held** (the owner, 2026-11-02: the attract's robots in 0E6 pan
+from x 0 with op E6 while the clamp held the view at x 71, so the pan showed only 140 frames in): while the player has
+no control (`$011F` = 0), once op E6's BG1 delta (`$1D24`/`$1D25`), op E7's seek (`$1D00`) or the auto-scroll (`$01BC`)
+-- the movers that bypass the deadzone and the edges -- move the camera, the view takes its steps 1:1 from where it
+stood; with control back it returns to the clamp at the camera's speed plus a pixel a frame, and a new location starts
+clamped (`fieldWideCamStep`). The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
 phone heritage (its 192-line crop, its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and
 everything it decides are untouched; `fieldWideViewX` only places the view in the wider picture. (From 2026-10-23 to
 2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
@@ -46,9 +51,14 @@ What the sides show where the room ends, in order:
    The tiles the Steam release added (`cgext*` sheets, 25 locations) were painted with its own recoloured palette
    (`palette_bin/plt<id>.bin`), which the port never draws (the owner, 2026-10-28). `ct_wide.dat` keeps it as a key
    only: where it made two indices one colour that the ROM keeps apart, the index a sheet pixel stands for is read
-   where the art meets the room (at the room's edge columns, the room's index beside a sheet pixel of the same Steam
-   colour, by majority; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were 0x2A,
-   080808 on Steam like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000).
+   where the art meets the room (at the room's edge columns, the room's indices beside a sheet pixel of the same Steam
+   colour vote; of those voted for, the one whose ROM colour is nearest to the Steam colour wins, the votes breaking a
+   tie; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were 0x2A, 080808 on Steam
+   like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000) -- in the field's margins and in the
+   panorama's sides (sequence entry 3, `src/scene_art.c`, the same vote at the machine's edge columns). The courtroom
+   (01B, and 1B6): BG1's sheet 0x5A is 101008 on Steam, met at the edge by the ROM's navy 0x5A (181828) and 0x6A
+   (181818); it takes 0x6A, as BG2's plane does -- by the votes alone the floor kept the navy, a navy block in the dark
+   sides (the owner, 2026-11-02).
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the

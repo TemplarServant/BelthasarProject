@@ -25,6 +25,7 @@ static int tilePixel(const CtSeqPic* p, unsigned chr, uint16_t e, int x, int y) 
   return ((a >> col) & 1) | (((a >> (8 + col)) & 1) << 1) | (((b >> col) & 1) << 2) | (((b >> (8 + col)) & 1) << 3);
 }
 
+static void entry3WingMap(void);
 // Built again whenever the stage's BG1 map or tiles change (the setup uploads the map in the stage's first frames): the
 // machine, then the stamps over an empty art, then the new pixels (kE3Px's runs: count, value; 0 = none, a multiple of 16 =
 // see-through, else a CGRAM index).
@@ -58,6 +59,7 @@ static void entry3Build(const CtSeqPic* p) {
   for (size_t i = 0; i + 1 < sizeof kE3Px && n < sizeof g_e3Art; i += 2)
     for (int k = 0; k < kE3Px[i] && n < sizeof g_e3Art; k++, n++)
       if (kE3Px[i + 1]) ((uint8_t*)g_e3Art)[n] = (kE3Px[i + 1] & 15) ? kE3Px[i + 1] : 0;
+  entry3WingMap();
 }
 
 // The Steam release's art for it (the Steam margins, a mod: settings.h wideSteamMargins, from the player's ct_wide.dat):
@@ -69,6 +71,7 @@ static void entry3Build(const CtSeqPic* p) {
 static const CtWideExt* g_e3Steam;
 static CtWideExt g_e3SteamExt;
 static int g_e3Own = 1;                                               // the scene adjustments' own art
+static uint8_t g_e3WingMap[128];                                      // (the wings' sheet index -> the machine's, below)
 // The Steam sheet's CGRAM index at the room's pixel (x, y) of a plane, its cell's page moved on by dpage (| 0x80: the
 // sheet's tile row under the cell's): 0 = nothing there, -1 = not a sheet's cell (the room's own metatiles).
 static int steamPx(int plane, int x, int y, int dpage) {
@@ -80,6 +83,25 @@ static int steamPx(int plane, int x, int y, int dpage) {
   unsigned t = v - 1, page = (t >> 8) + (unsigned)(dpage & 0x7F), trow = ((t >> 4) & 15) + (dpage & 0x80 ? 1 : 0);
   if ((t >> 8) < 1 || page > 7 || !e->pageSheet[page] || trow > 15) return -1;
   return e->pageSheet[page][(trow * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
+}
+// The wings' sheet was painted in the Steam release's recoloured palette, which the port never draws: a sheet index takes
+// the machine's index beside it at the field's edge columns when both are one Steam colour, by majority -- the field's
+// margins' rule (scene.c extIndexMap; 06B plane 2: 0x2A, the ROM's navy sky, -> 0x6A, the body's 000000).
+static void entry3WingMap(void) {
+  for (int i = 0; i < 128; i++) g_e3WingMap[i] = (uint8_t)i;
+  const uint8_t* sp = g_e3Steam ? g_e3Steam->steamPal : NULL;
+  if (!sp) return;
+  static int votes[128][128]; memset(votes, 0, sizeof votes);
+  for (int y = 0; y < 256; y++)
+    for (int side = 0; side < 2; side++) {
+      const int a = steamPx(2, side ? 256 : -1, y, 0), b = g_e3Orig[y][side ? 255 : 0];
+      if (a > 0 && a < 128 && b && b < 128 && sp[2 * a] == sp[2 * b] && sp[2 * a + 1] == sp[2 * b + 1]) votes[a][b]++;
+    }
+  for (int i = 1; i < 128; i++) {
+    int best = i;
+    for (int j = 1; j < 128; j++) if (votes[i][j] > votes[i][best]) best = j;
+    g_e3WingMap[i] = (uint8_t)best;
+  }
 }
 // The art's band index at the room's pixel (x, y) of the glow's cells (0 = none): the band runs ~5 pixels past the glow's
 // cells (sky rows 3-4) into the sheet's next tile row, which no cell of the map names -- below the cells it is read on from
@@ -207,6 +229,7 @@ static void midGlowBottoms(const CtSeqPic* p) {
 void CtSceneArtEntry3Set(int steam, int own) {
   g_e3Steam = steam && CtWideExtGet(0x06B, &g_e3SteamExt) ? &g_e3SteamExt : NULL;
   g_e3Own = own;
+  g_e3Key = 0xFFFFFFFFu;                                             // (the machine and the wings' map built again)
   if (g_e3Steam) {
     const int ew = (g_e3Steam->w - 16) / 2 * 16;
     g_e3Clip[0] = -1; g_e3Clip[1] = 256;                             // (the columns whose glow ends inside the cells)
@@ -266,7 +289,7 @@ int CtSceneArtEntry3(const CtSeqPic* p, int layer, int* pmx, int my, int pri) {
   if (layer != 0 || (mx >= 8 && mx < 256)) return -1;                // (BG1 inside its own 256 columns: the ROM's)
   if (pri != E3_ART_PRI) return 0;                                   // (the machine's tiles are all of priority 0)
   int u = mx - 8, y = my & 255;                                      // u: the field's column (the machine's middle at 127.5)
-  if (g_e3Steam && (u < 0 || u >= 256)) { int v = steamPx(2, u, y, 0); if (v > 0) return v; }   // (the Steam release's wings)
+  if (g_e3Steam && (u < 0 || u >= 256)) { int v = steamPx(2, u, y, 0); if (v > 0) return v < 128 ? g_e3WingMap[v] : v; }   // (the Steam release's wings)
   if (u >= 128) u = 255 - u;                                         // the right side: the left's mirror
   if (u >= 0) return g_e3Orig[y][u];                                 // (the field's own columns past the display's wrap)
   int col = u + E3_ART_W;

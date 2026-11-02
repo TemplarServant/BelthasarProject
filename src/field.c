@@ -4507,9 +4507,10 @@ static int fieldWideClampX(const Field* f, int w, int camx, int* wraps) {
 // screen's edge; a script's camera is a framing of its own and moves on the wide screen as on the 256. The ROM moves the
 // camera past the player's request with op E6's BG1 delta ($1D24/$1D25), op E7's seek ($1D00) and the auto-scroll
 // ($01BC) -- they bypass the deadzone and the edges (field_camera_unification.md, PART B). Once one of them moves it,
-// the view takes the camera's steps 1:1 from where it stood (0E6's attract pan: $1D24 = 08 from x 0, held at x 71 by the
-// clamp for its first 140 frames); when the player has control again ($011F) it goes back to the clamp at the camera's
-// speed and one pixel more a frame. A new location starts clamped (its load is black). The battle keeps the field's.
+// while the player has no control ($011F = 0), the view takes the camera's steps 1:1 from where it stood (0E6's attract
+// pan: $1D24 = 08 from x 0, held at x 71 by the clamp for its first 140 frames); when the player has control again it
+// goes back to the clamp at the camera's speed and one pixel more a frame. A new location starts clamped (its load is
+// black). The battle keeps the field's.
 static struct { int on, loc, free, prev, shown; } g_wideCam;
 static void fieldWideCamStep(const Field* f, int w, int camx) {
   int wraps, clamped = fieldWideClampX(f, w, camx, &wraps);
@@ -4520,8 +4521,8 @@ static void fieldWideCamStep(const Field* f, int w, int camx) {
     g_wideCam.on = 1; g_wideCam.loc = f->loc; g_wideCam.free = 0; g_wideCam.shown = clamped; g_wideCam.prev = camx;
     return;
   }
-  if (scripted && dcam) g_wideCam.free = 1;
-  else if (g_wideCam.free && !scripted && pg[0x011F]) g_wideCam.free = 0;
+  if (pg[0x011F]) g_wideCam.free = 0;                // (the player's: clamped; a fight's $1D00 left behind counts not)
+  else if (scripted && dcam) g_wideCam.free = 1;
   if (g_wideCam.free) g_wideCam.shown += dcam;
   else {
     const int d = clamped - g_wideCam.shown, step = abs(dcam) + 1;
