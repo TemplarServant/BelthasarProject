@@ -4490,51 +4490,23 @@ static void fieldWideMask(const Field* f, int w, int* x0, int* x1) {
 // bound at 256 and 1EE's left at 1024. Not ported: the Blackbird's passages (170 / 171) take m = 0 on two Steam state
 // bits ([0x81B4C4] + 0x1136C bit 7 or + 0x11374 & 0x11) not mapped to the SNES's RAM; clamped here. A room that wraps
 // (fieldWideMask: no edge) is not clamped. The ROM's camera is untouched: only the view moves in the picture.
-// A camera a script moves is not held: see fieldWideCamStep. *wraps: 1 for a room with no edge (camx is returned).
-static int fieldWideClampX(const Field* f, int w, int camx, int* wraps) {
+// With the Steam margins drawn the room's extended sides are part of the room (the owner, 2026-11-02): the view is held
+// only where the wide screen's edge meets the margins' end, so a room begins with its margins shown and its camera
+// centred while they last (the attract's Dragon Tank, 01C: 96 px of margins a side, never held; 0E6's robots: 64, held
+// in the 7 px nearest each end). Without them it is held at the room's edge, as Steam's.
+static int fieldWideExtSpan(const Field* f, int* lo, int* hi);
+static int fieldWideViewX(const Field* f, int w, int camx) {
   const int m0 = (w - CAMW) / 2;
   int x0, x1; fieldWideMask(f, w, &x0, &x1);
-  *wraps = x0 < -(1 << 29);
-  if (*wraps) return camx;
+  if (x0 < -(1 << 29)) return m0;
+  int elo, ehi;
+  if (fieldWideExtSpan(f, &elo, &ehi)) { if (elo < x0) x0 = elo; if (ehi > x1) x1 = ehi; }
   int m = m0;
   if (f->loc == 0x06C || f->loc == 0x106 || f->loc == 0x107 || f->loc == 0x15B) m = 0;
   if (f->loc == 0x1A7) x1 = 256;
   if (f->loc == 0x1EE) x0 = 1024;
   const int lo = x0 + m, hi = x1 - CAMW - m;
-  return lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
-}
-// The camera shown, frame by frame (a mod). The clamp holds the view inside the room so the player can walk to the wide
-// screen's edge; a script's camera is a framing of its own and moves on the wide screen as on the 256. The ROM moves the
-// camera past the player's request with op E6's BG1 delta ($1D24/$1D25), op E7's seek ($1D00) and the auto-scroll
-// ($01BC) -- they bypass the deadzone and the edges (field_camera_unification.md, PART B). Once one of them moves it,
-// while the player has no control ($011F = 0), the view takes the camera's steps 1:1 from where it stood (0E6's attract
-// pan: $1D24 = 08 from x 0, held at x 71 by the clamp for its first 140 frames); when the player has control again it
-// goes back to the clamp at the camera's speed and one pixel more a frame. A new location starts clamped (its load is
-// black). The battle keeps the field's.
-static struct { int on, loc, free, prev, shown; } g_wideCam;
-static void fieldWideCamStep(const Field* f, int w, int camx) {
-  int wraps, clamped = fieldWideClampX(f, w, camx, &wraps);
-  if (wraps || !f->vm) { g_wideCam.on = 0; return; }
-  const uint8_t* pg = CtSceneMem7E(f->vm);
-  const int scripted = pg[0x1D24] | pg[0x1D25] | pg[0x1D00] | pg[0x01BC], dcam = camx - g_wideCam.prev;
-  if (!g_wideCam.on || g_wideCam.loc != f->loc) {
-    g_wideCam.on = 1; g_wideCam.loc = f->loc; g_wideCam.free = 0; g_wideCam.shown = clamped; g_wideCam.prev = camx;
-    return;
-  }
-  if (pg[0x011F]) g_wideCam.free = 0;                // (the player's: clamped; a fight's $1D00 left behind counts not)
-  else if (scripted && dcam) g_wideCam.free = 1;
-  if (g_wideCam.free) g_wideCam.shown += dcam;
-  else {
-    const int d = clamped - g_wideCam.shown, step = abs(dcam) + 1;
-    g_wideCam.shown += d > step ? step : d < -step ? -step : d;
-  }
-  g_wideCam.prev = camx;
-}
-static int fieldWideViewX(const Field* f, int w, int camx) {
-  const int m0 = (w - CAMW) / 2;
-  int wraps, shown = fieldWideClampX(f, w, camx, &wraps);
-  if (wraps) return m0;
-  if (g_wideCam.on && g_wideCam.loc == f->loc) shown = g_wideCam.shown;
+  const int shown = lo > hi ? (lo + hi) >> 1 : camx < lo ? lo : camx > hi ? hi : camx;
   int vx = camx - shown + m0;
   return vx < 0 ? 0 : vx > w - CAMW ? w - CAMW : vx;
 }
@@ -4650,6 +4622,13 @@ static void fieldWideExtCols(const FieldWideExtPic* p, int* lo, int* hi) {
 static int fieldWideExtInCols(const FieldWideExtPic* p, int mx) {
   int lo, hi; fieldWideExtCols(p, &lo, &hi);
   return mx >= lo && mx < hi;
+}
+// The map columns the room's margins reach, for the camera (fieldWideViewX): 0 = no margins drawn here.
+static int fieldWideExtSpan(const Field* f, int* lo, int* hi) {
+  const FieldWideExtPic* p = fieldWideExtPic(f);
+  if (!p) return 0;
+  fieldWideExtCols(p, lo, hi);
+  return 1;
 }
 // The margins' pixel at map pixel (mx, my) -- BG2's plane at (mx + o2x, my + o2y), under the rest, unless bg2 is 0.
 // Returns its layer (scene.c CtFieldSceneBakeExt: 1 under the sprites, 2 or 4 over them; 8 = BG2's plane, under them
@@ -17897,7 +17876,7 @@ int main(int argc, char** argv) {
     // box and the rest below. The battle's picture is its own (the arena's scroll, its layers): pillarboxed.
     int wideW = (!battlePhase && !battleTest) ? hostWideW() : CAMW, wideX = (wideW - CAMW) / 2;
     const int wideXc = wideX;                        // (the screen's middle: where the screen-fixed overlays go)
-    if (wideW > CAMW && f.vm) { fieldWideCamStep(&f, wideW, camx); wideX = fieldWideViewX(&f, wideW, camx); }   // (the widescreen's camera)
+    if (wideW > CAMW && f.vm) wideX = fieldWideViewX(&f, wideW, camx);   // (the widescreen's camera)
     // (the bake waits for the widescreen's camera: the still backdrop is held to the picture, fieldWideStill -- the field's,
     //  or in a fight the arena's, as wide as the host's)
     g_wideStill = 0; g_wideBg = 0;

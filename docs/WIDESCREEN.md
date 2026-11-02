@@ -28,12 +28,13 @@ the port keeps the 224 lines, so m is the port's own side (71 px at 16:9) and a 
 centred, while the ROM's camera moves the view across it. Steam's own exceptions are kept (location numbers only): no
 clamp (m = 0) at 06C, 106, 107 and 15B; the right bound at 256 in 1A7 and the left at 1024 in 1EE. The Blackbird's
 passages (170, 171) drop the clamp on two Steam state bits not yet mapped to the SNES's RAM: clamped here. A room that
-wraps is not clamped. **A camera a script moves is not held** (the owner, 2026-11-02: the attract's robots in 0E6 pan
-from x 0 with op E6 while the clamp held the view at x 71, so the pan showed only 140 frames in): while the player has
-no control (`$011F` = 0), once op E6's BG1 delta (`$1D24`/`$1D25`), op E7's seek (`$1D00`) or the auto-scroll (`$01BC`)
--- the movers that bypass the deadzone and the edges -- move the camera, the view takes its steps 1:1 from where it
-stood; with control back it returns to the clamp at the camera's speed plus a pixel a frame, and a new location starts
-clamped (`fieldWideCamStep`). The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
+wraps is not clamped. **With the Steam margins drawn, the clamp's room is the room with its margins** (the owner,
+2026-11-02: the scene stays centred on the ROM's camera, and the view is held only where the wide screen's edge meets
+the extended side's end): L * 16 and (R + 1) * 16 widen to the margins' first and last columns. The margins have 4 to 6
+columns a side (64-96 px), so with them the view is centred everywhere but in the 7 px nearest the end of a 64-px
+margin: the attract's Dragon Tank (01C, 96 px) and its robots (0E6, 64: a pan from x 0 that the room's clamp held at
+x 71 for 140 frames) are centred from their first frame, their left margins shown. Without the margins the room's edge
+is the bound, as above. The port keeps the SNES's 224 lines and the ROM's vertical camera: nothing of the Steam release's
 phone heritage (its 192-line crop, its own vertical camera) is ported (the owner, 2026-10-23). The ROM's camera and
 everything it decides are untouched; `fieldWideViewX` only places the view in the wider picture. (From 2026-10-23 to
 2026-10-28 the view stayed in the middle at every room's edge, from a misreading of the node's place.)
