@@ -7326,10 +7326,12 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
           // The drop (battle_drop_charm.md; FD/AC08-AC4B) is granted when:
           //  (a) rec+4 != 0, the enemy has a drop (FD/AC0C BEQ skip);
           //  (b) rec+4 != rec+5 (drop != charm), else the guaranteed arm below (FD/AC10-14);
-          //  (c) $AE5D[slot] bit 6, the "has drop" spawn flag, which equals (a), so no separate image is kept;
+          //  (c) $AE5D[slot] bit 6, the "has drop" flag (FD/AC16-AC1D `LDX $04 / LDA $AE5D,X / BIT #40 / BEQ`): the
+          //      boot sets it for the staged slots, and an enemy spawned mid-fight comes without it -- no roll, no drop
+          //      (leg 97: the 62 that joined a fight drew an RNG byte on the port and dropped a D0 the cartridge never had);
           //  (d) rand(0..99) < 0x5A, a flat 90% roll on the main $26 stream (FD/AC21 `LDA #64 / JSL C1/FDCB / CMP #5A`).
           // The ROM rolls (d) at each eligible death, before the dedup (FD/AC2D), and so does battleRollDrop.
-          if (rec[4] != 0 && rec[4] != rec[5])                // (a)+(b)+(c): has a drop, distinct from charm
+          if (rec[4] != 0 && rec[4] != rec[5] && (s[0xAE5D + ((tgt - 3) & 7)] & 0x40))   // (a)+(b)+(c)
             battleRollDrop(h, rec[4]);
           // Drop == charm (and nonzero): the guaranteed list. FD/AC10 `CMP $CC5E05,X / BEQ ->FD/AC4D`; FD/AC4D-AC6A
           // walks $B2AA[0..2] with a dedup and stores with no $AE5D gate and no roll. $B2AA is $B2A7+3: one 6-slot
