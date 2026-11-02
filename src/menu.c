@@ -4016,7 +4016,7 @@ CT_SAVE_RECS[8] = {
   { 0x2C7C, 0x7E, 0x001E },   // slot+0x0816  (total 0x0834 bytes)
 };
 
-// FF/FBE7. Raw bytes 08 8B C2 30 F4 30 30 AB AB A5 7B 85 00 A0 FE 09 A9 00 00 18 71 00 88 88 10 FA AB 28 60:
+// FF/FBE7:
 //     PHP / PHB / REP #30 / PEA $3030 / PLB / PLB      ; DB = $30
 //     LDA $7B / STA $00                                 ; the slot base
 //     LDY #09FE / LDA #0000
