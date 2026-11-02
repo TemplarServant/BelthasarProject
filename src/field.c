@@ -2257,6 +2257,16 @@ static int fieldNpcTileSolid(void* ctx, int tx, int ty) {
 // WRAM planes, or are rebuilt from the asset's packed planes; the dispatch, the eight directional feeler/slide
 // handlers and the 9C5C commit run on a scratch WRAM, and the clamped velocity moves the sub-pixel position. ----
 #define CT_NL "\n"      /* one place for the trace newline */
+// CT_DUMPWRAM_AT: a frame, or `end` -- the frame an event-anchored walkscript ran out (g_wsEndAt), the leg's end then.
+static int g_wsEndAt = -1;
+static int fieldDumpAt(int frameNo) {
+  static int done;
+  const char* a = getenv("CT_DUMPWRAM_AT");
+  if (!a) return -1;
+  if (strcmp(a, "end")) return atoi(a);
+  if (g_wsEndAt < 0 || done) return -2;
+  done = 1; return frameNo;                       // the first frame (field or world) once the script ran out
+}
 static uint8_t g_collRam[0x13000];
 static const Coll* g_fc;
 static const uint8_t* g_fcWram;   // the scene's $7E page for fieldTileFetch (NULL: the host's packed planes)
@@ -12126,6 +12136,56 @@ int main(int argc, char** argv) {
     // Scripted per-frame input: u/d/l/r walk, a = talk. Not gated on --selftest: a scripted walk is just input, and
     // the checks that walk into a scene's own battle trigger (the engine's full battle entry) run in the
     // interactive/probe path. Without --walkscript this block is inert.
+    // An event-anchored script (tools/playthrough_events.py): `W<addr>=<val>` / `W<addr>!<val>` (hex; a $7F byte as
+    // 1xxxx) holds the script until the byte reads (or no longer reads) the value -- the fight's WRAM in a battle, the
+    // scene's otherwise -- and the tokens after it run from that frame. A cartridge pad replayed so stays on the game's
+    // own moments (a command window, the control handed back) when the port reaches them a frame or two off. A script
+    // with no `W` keeps the absolute frames below.
+    static int wsEv = -1;
+    if (walkScript && wsEv < 0) wsEv = strchr(walkScript, 'W') != NULL;
+    if (walkScript && wsEv) {
+      static const char* wp; static int wleft, wfirst, wlast = -1; static char wc; static unsigned whm;
+      if (!wp) wp = walkScript;
+      if (frameNo != wlast) {
+        wlast = frameNo;
+        for (int guard = 0; guard < 64 && wleft == 0 && *wp; guard++) {
+          char c = *wp++;
+          if (c == 'W') {
+            const char* q = wp;
+            unsigned a = (unsigned)strtoul(q, (char**)&q, 16); char op = *q++; unsigned v = (unsigned)strtoul(q, (char**)&q, 16);
+            const uint8_t* m = battlePhase && liveHost.mem ? liveHost.mem : (f.vm ? CtSceneMem7E(f.vm) : NULL);
+            int ok = a == 0xFFFFF ? ((battlePhase != 0) == (v != 0)) == (op == '=')       // FFFFF: in a fight
+                   : m && a < (battlePhase && liveHost.mem ? 0x10000u : 0x20000u) && ((m[a] == (uint8_t)v) == (op == '='));
+            { static int dbg = -1; if (dbg < 0) dbg = getenv("CT_WSDBG") ? 1 : 0;
+              if (dbg && ok) printf("wsdbg f%d met W%05X%c%02X (fight %d)" CT_NL, frameNo, a, op, v, battlePhase); }
+            if (!ok) { wp--; break; }                     // not yet: hold here, no keys this frame
+            wp = q; if (*wp == ',') wp++;
+            continue;
+          }
+          whm = 0;
+          if (c == 'H') whm = (unsigned)strtoul(wp, (char**)&wp, 16);
+          if (*wp == ':') wp++;
+          wleft = (int)strtol(wp, (char**)&wp, 10); wc = c; wfirst = 1;
+          if (*wp == ',') wp++;
+        }
+        if (!*wp && wleft == 0 && g_wsEndAt < 0) {          // the script is spent: CT_DUMPWRAM_AT=end dumps here
+          g_wsEndAt = frameNo; printf("walkscript-end f%d" CT_NL, frameNo); }
+        if (wleft > 0) {
+          if (wc == 'H') {
+            wsMask = (uint16_t)whm;
+            if (whm & 0x080) wsDx = 1; else if (whm & 0x040) wsDx = -1;
+            if (whm & 0x020) wsDy = 1; else if (whm & 0x010) wsDy = -1;
+            if (wfirst) { if (whm & 0x010) upPressed = 1;   if (whm & 0x020) downPressed = 1;
+                          if (whm & 0x040) leftPressed = 1; if (whm & 0x080) rightPressed = 1; }
+            if (whm & 0x100) { wsAHeld = 1; if (wfirst) talkPressed = 1; }
+            if (wfirst && (whm & 0x001)) wsB = 1;
+            if (wfirst && (whm & 0x008)) wsStart = 1;
+            if (wfirst && (whm & 0x200)) wsMenu = 1;
+          }
+          wfirst = 0; wleft--;
+        }
+      }
+    } else
     if (walkScript) {
       const char* p = walkScript;
       int at = 0;
@@ -13142,6 +13202,11 @@ int main(int argc, char** argv) {
                     fwrite(wd.stm.tilemap, sizeof(wd.stm.tilemap[0][0]), sizeof(wd.stm.tilemap) / sizeof(wd.stm.tilemap[0][0]), df);
                     fwrite(cw, sizeof cw[0], 6, df); fclose(df);
                     printf("owdump: f%d -> %s (tilemap words %u)\n", frameNo, odPath, (unsigned)(sizeof(wd.stm.tilemap) / sizeof(wd.stm.tilemap[0][0]))); } } }
+      // CT_DUMPWRAM + CT_DUMPWRAM_AT on a world frame: the world's own 128 KB (the field's view has the world's
+      // tables at 0 and a stale story/bag), the image tools/playthrough_triage.py grades a leg's end by.
+      if (wd.wram && getenv("CT_DUMPWRAM") && getenv("CT_DUMPWRAM_AT") && frameNo == fieldDumpAt(frameNo)) {
+        FILE* wf = fopen(getenv("CT_DUMPWRAM"), "wb");
+        if (wf) { fwrite(wd.wram, 1, 0x20000, wf); fclose(wf); fprintf(stderr, "[dumpwram@f%d world] wrote\n", frameNo); } }
       { const uint8_t* shown = fb; int shownW = CAMW;
         if (owWideW > CAMW) {                        // the widescreen's sides around the finished view
           fieldWideAssemble(g_wide, g_wfb, fb, owWideW, owWideX, owWideX, owBri, 0, owMot);
@@ -17143,7 +17208,7 @@ int main(int argc, char** argv) {
     }
     // (needs CT_DUMPWRAM=<path> too: the flat 128 KB image, $7E then the whole of bank $7F. fopen(NULL) aborts the
     //  MSVC CRT with no output, so the path is required.)
-    if (f.vm && getenv("CT_DUMPWRAM") && getenv("CT_DUMPWRAM_AT") && frameNo==atoi(getenv("CT_DUMPWRAM_AT"))) {  // probe: dump 128KB WRAM at frame N
+    if (f.vm && getenv("CT_DUMPWRAM") && getenv("CT_DUMPWRAM_AT") && frameNo==fieldDumpAt(frameNo)) {  // probe: dump 128KB WRAM at frame N
       FILE* wf=fopen(getenv("CT_DUMPWRAM"),"wb"); if(wf){
         fwrite(CtSceneMem7E(f.vm),1,0x20000,wf); fclose(wf);
         fprintf(stderr,"[dumpwram@f%d scene %d] wrote\n",frameNo,scene); }

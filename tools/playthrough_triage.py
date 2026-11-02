@@ -55,8 +55,7 @@ def port_at(lg, start, tmp, f):
     """The port's WRAM at frame f of the leg (a flat 128 KB image), from the leg's start state; None if it never got there."""
     w = wram_of(start, tmp)
     lw = os.path.join(tmp, 'seed.lakewram')
-    if not os.path.exists(lw):
-        open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)
+    open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)       # always: the start state may have been replayed since
     loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
     dump = os.path.join(tmp, 'port_f%d.wram' % f)
     if os.path.exists(dump):
@@ -110,7 +109,9 @@ def diff(c, p):
         if d:
             rep.append('%s: %d byte(s) [first $%s%04X %02X/%02X]' % (name, len(d), '7F:' if d[0] >= 0x10000 else '',
                                                                     d[0] & 0xFFFF, c[d[0]], p[d[0]]))
-    if lead_tile(c) != lead_tile(p):
+    # The lead's tile is the field's object table; on the world map ($0100 >= 1F0) the port's image is the world's own,
+    # whose $1801/$1881 are not the field's, so the world's place is graded by the location alone.
+    if (c[0x100] | (c[0x101] << 8)) & 0x1FF < 0x1F0 and lead_tile(c) != lead_tile(p):
         rep.append('tile: %s/%s' % (lead_tile(c), lead_tile(p)))
     return rep
 

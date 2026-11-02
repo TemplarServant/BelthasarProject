@@ -71,8 +71,7 @@ def port_run(lg, start, tmp, pad, dump_at):
     """The port's chains for a pad (the cmp's monitors), and its WRAM at frame dump_at."""
     w = T.wram_of(start, tmp)
     lw = os.path.join(tmp, 'seed.lakewram')
-    if not os.path.exists(lw):
-        open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)
+    open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)       # always: the start state may have been replayed since
     loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
     dump = os.path.join(tmp, 'align_end.wram')
     if os.path.exists(dump):
@@ -93,12 +92,28 @@ def port_run(lg, start, tmp, pad, dump_at):
         kv = {k: v.rstrip('*') for k, v in re.findall(r'\b([0-9A-F]+)=([0-9A-F*]+)', m.group(2))}
         if all(p in kv for _, _, p, _ in P.MON):
             out.append((int(m.group(1)), {k: kv[p] for k, _, p, _ in P.MON}))
-    return P.chains(out), (open(dump, 'rb').read() if os.path.exists(dump) else None)
+    return chains(out), (open(dump, 'rb').read() if os.path.exists(dump) else None)
 
 
-def deblip(ch, n=3):
+def chains(tl):
+    """The cmp's chains, plus `lit`: the picture on or black ($0119 zero or not). A fade's start and end are where a
+    location load ends, and a load's length is the CPU's (CLAUDE.md, NMI-off loads): the port can land a frame or two
+    off it, every object's cadence with it, while the pad goes on at the cartridge's frames. `lit` lets the warp
+    re-anchor there; its value never differs on its own."""
+    ch = P.chains(tl)
+    lit = []
+    for f, kv in tl:
+        v = '0' if kv['bri'] == '00' else '1'
+        if not lit or lit[-1][1] != v:
+            lit.append((f, v))
+    ch['lit'] = lit
+    return ch
+
+
+def deblip(ch, n=4):
     """A control chain without its runs shorter than n frames (a frame of control between two events that no player
-    can act on: the cartridge's 25 hands it back for one frame at f467), the neighbours merged."""
+    can act on: the cartridge's 25 hands it back for one frame at f467), the neighbours merged. Four, not three: a blip the
+    cartridge holds two frames can last three on the port (51: f4334-4336 / f4331-4334), and one side's kept blip is no value."""
     out = []
     for i, (f, v) in enumerate(ch):
         nxt = ch[i + 1][0] if i + 1 < len(ch) else None
@@ -142,7 +157,7 @@ def align(legs, i):
     os.makedirs(tmp, exist_ok=True)
     fr = frames_of(lg['pad'])
     end = len(fr)
-    o = P.chains(P.oracle_timeline(start, lg['pad']))
+    o = chains(P.oracle_timeline(start, lg['pad']))
     cart_end = T.wram_of(P.state_of(lg['name']), tmp) if os.path.exists(P.state_of(lg['name'])) else None
     warps = []
     while True:
