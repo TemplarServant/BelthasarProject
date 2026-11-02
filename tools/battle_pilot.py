@@ -45,6 +45,7 @@ TONIC = 0xBD
 MIDTONIC = 0xBE
 REVIVE = 0xC7
 ETHER = 0xC0
+MIDETHER = 0xC1
 FROG = 4                                 # the character id at $2980 + seat
 USABLE = set(range(0xBD, 0xD0))           # the battle's item list: the consumables (Tonic BD .. ), not the Pendant D6
 
@@ -120,6 +121,20 @@ class Pilot:
             self.goal = (REVIVE, dead[0])
             self.pending[dead[0]] = 0                             # (another window does not revive the same PC)
             return 'revive->%d' % dead[0], press(walk(row, 2) + [0x100])
+        hd = [int(x) for x in os.environ.get('PILOT_HEALDUAL', '').split(':') if x]
+        if len(hd) == 4 and lives and seat == hd[0] and min(lives)[0] < hd[3] / 100:
+            # PILOT_HEALDUAL (`a:b:row:pct`): a party-wide double heal (Crono and Marle's Aura Whirl) from seat a's window
+            # while anyone is under pct -- seat b alive and ready (gauge 0, no command yet), the MPs 2 and 1: Tech, the
+            # list's top and `row` rows down, A, and A on the party-wide target; b still charging: the window idles
+            b = hd[1]
+            if b in [s for _, s in lives] and rd16(w, 0x5E2D + seat * 0x80 + 7) >= 2 and rd16(w, 0x5E2D + b * 0x80 + 7) >= 1:
+                if w[0xAFAB + b] == 0 and b not in self.busy:
+                    self.waited = 0
+                    return 'healdual', press(walk(row, 1) + [0x100]) + [(0, 6)] + \
+                        press([0x10] * 8 + [0x20] * hd[2] + [0x100]) + [(0, 6)] + press([0x100])
+                if self.waited < 400:
+                    self.waited += 4
+                    return 'wait', [(0, 4)]
         ef = os.environ.get('PILOT_ELEMFIRST')
         if ef and lives and min(lives)[0] >= float(ef) / 100:
             # PILOT_ELEMFIRST (percent): a seat of PILOT_TECHELEM whose element the target leaves open casts before any heal
@@ -161,14 +176,15 @@ class Pilot:
                 self.goal = (use, who)
                 self.pending[who] = rd16(w, 0x5E2D + who * 0x80 + 3)
                 return '%s->%d' % ('midtonic' if use == MIDTONIC else 'tonic', who), press(walk(row, 2) + [0x100])
-        if os.environ.get('PILOT_ETHER') and lives and self.spentEther < sum(n for iid, n in bag if iid == ETHER):
+        eid = MIDETHER if any(iid == MIDETHER for iid, _ in bag) else ETHER      # a Mid Ether when the bag has one
+        if os.environ.get('PILOT_ETHER') and lives and self.spentEther < sum(n for iid, n in bag if iid in (ETHER, MIDETHER)):
             # PILOT_ETHER (MP): an Ether on the living PC whose MP has fallen under it (the casters first: the lowest MP)
             low = sorted((rd16(w, 0x5E2D + s * 0x80 + 7), s) for _, s in lives if s not in self.pendingMp)
             if low and low[0][0] < int(os.environ['PILOT_ETHER']):
                 who = low[0][1]
                 self.spentEther += 1
                 self.pendingMp.add(who)
-                self.goal = (ETHER, who)
+                self.goal = (eid, who)
                 return 'ether->%d' % who, press(walk(row, 2) + [0x100])
         self.pendingMp = {s for s in self.pendingMp if rd16(w, 0x5E2D + s * 0x80 + 7) < int(os.environ.get('PILOT_ETHER') or 0)}
         tgt = self.target(w)

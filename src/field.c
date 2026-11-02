@@ -2450,6 +2450,7 @@ static uint8_t g_wide[FIELD_WMAX * CAMH * 3];    // the frame shown: the wide pi
 static uint8_t g_bwFb[FIELD_WMAX * CAMH * 3], g_bwPre[FIELD_WMAX * CAMH * 3];   // (Pre: before the brightness)
 static int g_bwW, g_bwX, g_bwXc;                  // (X: where the battle's 256 view stands in it; Xc: the middle)
 static uint8_t g_bWorld[CAMW * CAMH * 3];         // the battle's view before its screen-fixed boxes (the results, the HUD)
+static uint8_t g_bBoxRow[CAMH];                   // (the view's rows those boxes drew, whole: 256 columns each)
 static uint8_t g_bMotCanvas[CAMW * CAMH * 3];     // the battle's frames between: the arena before the combatants
 static uint8_t g_bwBand[CAMH];                    // (the rows whose wide arena borrows an arena row's scroll: the HUD band's)
 static int g_wideBeyond;                          // (this frame's fieldBeyondLayers past the room's edge, for the native drawer)
@@ -3316,6 +3317,7 @@ static int ctFieldWinRamp(int srcRow) {          // what is baked into CT_ASSET_
 // Rows: an 8/8/8 tile-row patch matching the oracle's band: box rows 0..15 come from bake rows 0..15 and box rows
 // 16..23 from bake rows 72..79 (two tile rows of head and one of foot, where the field box has two, four and one).
 static void drawCtMsgWindow24(uint8_t* fb, int top) {
+  for (int y = top + g_fillBoxDy; y < top + g_fillBoxDy + CT_BRESULT_H; y++) if (y >= 0 && y < CAMH) g_bBoxRow[y] = 1;
   if (!tbWinPx || tbWinH < 80) { drawCtWindow(fb, top, CT_BRESULT_H); return; }   // no bake -> the drawn box
   for (int y = 0; y < CT_BRESULT_H; y++) {
     int sy = (y < 16) ? y : (tbWinH - (CT_BRESULT_H - y));
@@ -6780,6 +6782,8 @@ void CtBattleHudRender(uint8_t* fb, const uint8_t* mem, const uint8_t* vram) {
   if (!ctBattleHudBand(mem, &top, &n) || n <= 0) return;  // no strip entry installed: the strip is not on screen
   int y0 = CT_BHUD_Y0 + ((mem[0x2989] & 0x02) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));   // same origin as the strip
   int r0 = top - y0, r1 = r0 + n - 1;                      // the band, in strip rows (the centred iris: [23-s, 24+s])
+  for (int r = r0 < 0 ? 0 : r0; r <= r1 && r < CT_BHUD_H; r++)   // (the rows it draws, for the widescreen's assembly)
+    if (y0 + r + g_fillBoxDy >= 0 && y0 + r + g_fillBoxDy < CAMH) g_bBoxRow[y0 + r + g_fillBoxDy] = 1;
   if (r0 <= 0 && r1 >= CT_BHUD_H - 1) { battleHudRenderStrip(fb, mem, vram); return; }   // whole strip
   static uint8_t keep[CT_BHUD_H][256 * 3];
   for (int r = 0; r < CT_BHUD_H; r++)
@@ -18804,6 +18808,7 @@ int main(int argc, char** argv) {
         }
       }
       memcpy(g_bWorld, fb, sizeof g_bWorld);           // (the widescreen: what the screen-fixed boxes below cover)
+      memset(g_bBoxRow, 0, sizeof g_bBoxRow);
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
         int fdy = defeatHold ? 0 : fillBoxBegin(fb, (bmem[0x2989] & 0x02) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM, CT_BRESULT_H);
         if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl);   // battle_results_window.md sec. V: victory results box (top)
@@ -19141,8 +19146,10 @@ int main(int argc, char** argv) {
             uint8_t e[3]; for (int c = 0; c < 3; c++) e[c] = (uint8_t)(bbr >= 15 ? wp[c] : bbr <= 0 ? 0 : wp[c] * bbr / 15);
             memcpy(g_wide + ((size_t)y * g_bwW + g_bwX + vx) * 3, e, 3);
           }
-          for (int vx = 0; vx < CAMW; vx++) {               // (the view's pixel that is its world's stays the world's above)
-            const uint8_t* wp = wv + vx * 3; int same = 1;
+          // (the view's pixel that is its world's stays the world's above -- but not in a row a box drew: by colour alone, a
+          //  box pixel equal to the arena under it would show the world there, moved to the camera's place)
+          for (int vx = 0; vx < CAMW; vx++) {
+            const uint8_t* wp = wv + vx * 3; int same = !g_bBoxRow[y];
             for (int c = 0; c < 3; c++) { int e = bbr >= 15 ? wp[c] : bbr <= 0 ? 0 : wp[c] * bbr / 15; if (e != v[vx * 3 + c]) same = 0; }
             if (!same) memcpy(g_wide + ((size_t)y * g_bwW + g_bwXc + vx) * 3, v + vx * 3, 3);
           }

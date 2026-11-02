@@ -83,6 +83,10 @@ def main():
         black = sum(1 for y, x in side if y < 211 and pw[(y * w + x) * 3:(y * w + x) * 3 + 3] == b'\0\0\0')
         print('widescreen: scene %s %dx%d: the middle %d %s the %d picture (%d px differ); sides %d px, %d black%s'
               % (sc, w, h, nw, '==' if diff == 0 else '!=', nw, diff, len(side), black, where))
+        if sc == 'forest':                         # the HUD strip (rows 160-207) stays at the middle whole, wherever the
+            hud = sum(1 for y in range(160, 208) for x in range(nw)   # camera stopped: none of the arena through it
+                      if pw[(y * w + x0 + x) * 3:(y * w + x0 + x) * 3 + 3] != pn[(y * nw + x) * 3:(y * nw + x) * 3 + 3])
+            print('widescreen: scene forest: the HUD rows 160-207 at the middle: %d px differ' % hud)
     return 0
 
 
