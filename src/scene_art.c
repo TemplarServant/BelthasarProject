@@ -85,8 +85,9 @@ static int steamPx(int plane, int x, int y, int dpage) {
   return e->pageSheet[page][(trow * 16 + (y & 15)) * 256 + (t & 15) * 16 + (x & 15)];
 }
 // The wings' sheet was painted in the Steam release's recoloured palette, which the port never draws: a sheet index takes
-// the machine's index beside it at the field's edge columns when both are one Steam colour, by majority -- the field's
-// margins' rule (scene.c extIndexMap; 06B plane 2: 0x2A, the ROM's navy sky, -> 0x6A, the body's 000000).
+// the machine's index beside it at the field's edge columns when both are one Steam colour -- its own when the machine
+// shows it there, else the majority: the field's margins' rule (scene.c extIndexMap; 06B plane 2: 0x2A, the ROM's navy
+// sky, -> 0x6A, the body's 000000).
 static void entry3WingMap(void) {
   for (int i = 0; i < 128; i++) g_e3WingMap[i] = (uint8_t)i;
   const uint8_t* sp = g_e3Steam ? g_e3Steam->steamPal : NULL;
@@ -99,7 +100,8 @@ static void entry3WingMap(void) {
     }
   for (int i = 1; i < 128; i++) {
     int best = i;
-    for (int j = 1; j < 128; j++) if (votes[i][j] > votes[i][best]) best = j;
+    if (!votes[i][i])
+      for (int j = 1; j < 128; j++) if (votes[i][j] > votes[i][best]) best = j;
     g_e3WingMap[i] = (uint8_t)best;
   }
 }

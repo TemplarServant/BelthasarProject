@@ -887,19 +887,14 @@ static void extIndexMap(const SceneData* sd, const uint16_t* pl, int w, int hgt,
       int a = sheetIndexAt(pl, w, hgt, pageSheet, mo + xo * 16, y), b = roomLayerIndex(sd, plane, mi, y);
       if (a && b && steamPal[2 * a] == steamPal[2 * b] && steamPal[2 * a + 1] == steamPal[2 * b + 1]) votes[a][b]++;
     }
-  // Of the room's indices voted for, the one whose ROM colour is nearest to the Steam colour (what the Steam release shows
-  // there); the votes break a tie, and an index with none keeps its own. 01B plane 2: 0x5A (101008 there) is met by 0x5A,
-  // the ROM's navy 181828 (125 votes), and 0x6A, 181818 (32): 0x6A, as plane 3's -- by the votes alone BG1's plane kept the
-  // navy and BG2's took 0x6A, a navy block in the dark sides. 06B plane 2: 0x2A (080808) by 0x6A, the body's 000000.
+  // An index the room itself shows beside the art keeps its own colour: there the art goes on with the room's pixel.
+  // Otherwise the majority. 01B: 0x5A (101008 on Steam) meets the room's own 0x5A, the floor's navy 181828, on both
+  // planes (and 0x6A, 181818, on BG2's more often) -- by the majority BG2's plane took 0x6A, a grey block beside the
+  // navy floor. 06B plane 2: 0x2A (080808), never beside itself, takes 0x6A, the body's 000000.
   for (int i = 1; i < 128; i++) {
-    const int sr = (steamPal[2 * i] & 31) << 3, sg = ((steamPal[2 * i] >> 5 | steamPal[2 * i + 1] << 3) & 31) << 3,
-              sb = ((steamPal[2 * i + 1] >> 2) & 31) << 3;
-    int best = i, bestD = 1 << 30;
-    for (int j = 1; j < 128; j++) {
-      if (!votes[i][j]) continue;
-      const int d = abs(sd->pal[j][0] - sr) + abs(sd->pal[j][1] - sg) + abs(sd->pal[j][2] - sb);
-      if (d < bestD || (d == bestD && votes[i][j] > votes[i][best])) { best = j; bestD = d; }
-    }
+    int best = i;
+    if (!votes[i][i])
+      for (int j = 1; j < 128; j++) if (votes[i][j] > votes[i][best]) best = j;
     map[i] = (uint8_t)best;
   }
 }

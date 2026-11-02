@@ -52,13 +52,13 @@ What the sides show where the room ends, in order:
    (`palette_bin/plt<id>.bin`), which the port never draws (the owner, 2026-10-28). `ct_wide.dat` keeps it as a key
    only: where it made two indices one colour that the ROM keeps apart, the index a sheet pixel stands for is read
    where the art meets the room (at the room's edge columns, the room's indices beside a sheet pixel of the same Steam
-   colour vote; of those voted for, the one whose ROM colour is nearest to the Steam colour wins, the votes breaking a
-   tie; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were 0x2A, 080808 on Steam
-   like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000) -- in the field's margins and in the
-   panorama's sides (sequence entry 3, `src/scene_art.c`, the same vote at the machine's edge columns). The courtroom
-   (01B, and 1B6): BG1's sheet 0x5A is 101008 on Steam, met at the edge by the ROM's navy 0x5A (181828) and 0x6A
-   (181818); it takes 0x6A, as BG2's plane does -- by the votes alone the floor kept the navy, a navy block in the dark
-   sides (the owner, 2026-11-02).
+   colour vote; an index the room itself shows there keeps its own colour -- the art goes on with the room's pixel --
+   else the majority wins; `CtFieldSceneBakeExt`). The Black Omen's exterior (06B): the wings past the machine were
+   0x2A, 080808 on Steam like the body's 0x5A but the ROM's navy sky; they take the body's 0x6A (000000) -- in the
+   field's margins and in the panorama's sides (sequence entry 3, `src/scene_art.c`, the same vote at the machine's edge
+   columns). The courtroom (01B): its sheet's 0x5A (101008 on Steam) meets the room's own 0x5A, the floor's navy
+   181828, on both planes; by the majority alone BG2's plane took 0x6A (181818), a grey block beside the navy floor
+   (the owner, 2026-11-02: the sides the middle's blue).
 2. **A background** -- a layer the ROM marks as detached from the camera or scrolling on its own (`$1D35` / `$1D36`,
    from the map header md[1..3]) -- goes on: the Blackbird's clouds (16E), Flea's stars (0AD), Death Peak's snow (104).
    A still backdrop (detached, no speed: the skywalk's 01C sky) is painted for 256 columns and is **mirrored** about the
