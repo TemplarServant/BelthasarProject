@@ -19814,7 +19814,9 @@ static int battleFxTeardown(CtBattleHost* h) {
   // CD/03B4's own CD/0453 (the exit, h->exitCd0c) is stepped by the exit machine (battleFleeStageTick), once a frame;
   // this is the main loop's CD/0009 (and CD/0043's and CD/0E05's own `JSL CD04AA`, which reach the same CD/04AA).
   // Stepping it here as well would run the exit's teardown two steps a frame.
-  if (h->exitCd0c) return 0;
+  // Nor inside CF/FBE5's waits (h->fbe5St): the module's exit is a blocking chain the main loop never leaves for its
+  // CD/0009, so an effect's sheets wait for CD/03B4's own CD/0453 (`LDA $CD0C / BEQ`).
+  if (h->exitCd0c || h->fbe5St) return 0;
   if (!h->fxTeardownT) {
     if (!battleFxTeardownDue(h)) return 0;
     // (No end-of-fight skip: the main loop's C1/8120 runs C1/0003 #03, the idle tick and its CD/0009, before C1/8130's
@@ -19932,7 +19934,7 @@ static int battleExitFbe5Tick(CtBattleHost* h) {
   if (!h->fbe5St || h->victoryHold) return -1;
   if (!battleFbe5Step(h)) return 0;
   h->handoffLeft = 0; h->defeatT = 0;
-  battleTrace(h, h->exitDemo ? "demo-handoff" : "defeat-handoff");
+  battleTrace(h, h->exitDemo ? "demo-handoff" : h->endReason == 2 ? "defeat-handoff" : "flee-handoff");
   h->fleeStage = 2; h->fleeExitT = 5; h->exitCd0c = 0;            // e == 5: CD/03B4's first frame (CF/FCCF's)
   return battleFleeStageTick(h);
 }
@@ -19981,6 +19983,10 @@ static int battleFleeStageTick(CtBattleHost* h) {
     // (CD/3E7D x2, then CD/028C-0291; C2/0009's render is NMI-on CPU work, free under the rule), its close at +78, the
     // run-off's C1/895B at +94 and `$A013` at +96 (disasm/notes/battle_flee.md sec. 7).
     if (t == 2)  { s[0xCCEC] = 0x10; s[0xCA24]++; battleFleeTrace(h, "ranaway-open"); }          // CD/028C-0291
+    // CD/01B3's waits from its third frame are CD/3E75 (`JSL C1/0012` -> C1/10E3): the menu pass on the frame service's
+    // `$993A`, whose `STZ $E5` stops the NMI's `$A4` steps the blocked main loop left running (battleLifelineMsgTick's
+    // rule; the cartridge's forest flee: the post f849, $A4 steps f850-f852, C1/10ED f852).
+    if (t >= 3 && t < 94 && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
     if (t == 78) { s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "ranaway-close"); }   // CD/01FD-0203
     if (t == 94) {
       battleStatusClearEA9D(h);                                        // C1/8207 JSR C1/EA9D
@@ -19997,8 +20003,12 @@ static int battleFleeStageTick(CtBattleHost* h) {
   }
   battleAdvanceAction(h);                                          // C1/40B0-40CE: the pose engine, the interpreter, the close
   if (h->fleeStage == 1 && t > 96 && !h->actActive) {
-    h->fleeStage = 2; h->fleeExitT = 0; battleFleeTrace(h, "run-off-end");
+    battleFleeTrace(h, "run-off-end");
     battleModuleTail(h, 3);                                        // C1/8212-821E -> C1/8423
+    // C1/845E -> CF/FBE5: the waits until the NMI has stepped $A4 to 3 (battleFbe5Step, as the defeat and the demo):
+    // as many frames as $A4's phase asks, not a fixed count. CD/03B4 follows from CF/FCCF's frame (fleeExitT 5).
+    h->fleeStage = 0; battleFbe5Begin(h);
+    return 0;
   }
   if (h->fleeStage == 2) {
     int e = h->fleeExitT++;
