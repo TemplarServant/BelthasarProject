@@ -2328,8 +2328,13 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
   }
   g_fc = c; g_fcWram = vm ? CtSceneMem7E(vm) : NULL;
   CtCollisionSetTileFetch(fieldTileFetch);
-  const int idx = 2;                                        // player at actor slot 2
-  ram[0x0197] = (uint8_t)idx; ram[0x0199] = 0xFE; ram[0x019B] = 0xFE;   // no party
+  // With a scene, C0/9923 reads the scene's own object tables: the count $7F2000, $0F00,X / $1100,X / $1B01,X, the
+  // party's $0197 / $0199 / $019B (its skips, and `CPX $019B`'s carry into the dy SBC) and the words $1800,X / $1880,X
+  // -- the VM's WRAM holds every one of them. The world map (no scene) keeps a lone player at slot 2.
+  const uint8_t* vsw = vm ? CtSceneMem7E(vm) : NULL;
+  const int idx = vsw ? vsw[0x0197] : 2;
+  ram[0x0197] = (uint8_t)idx;
+  ram[0x0199] = vsw ? vsw[0x0199] : 0xFE; ram[0x019B] = vsw ? vsw[0x019B] : 0xFE;
   // The plane is the scene's $0155, not a host copy. The ROM has three writers: the location load (C0/0C4C
   // `LDA #01 / STA $55`), the arrival-tile evaluation (C0/9DC3 -> 9DFE, the tile's plane or 1) and the step commit
   // (C0/9D54-9D5A, unless the tile is IGNORE_Z). The VM's WRAM carries all three, so the probe reads that byte; `*pz`
@@ -2348,6 +2353,15 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
   for (int i = 0; i <= 0x7E; i += 2) ram[0x0F00 + i] = 0;   // clear stale active flags
   ram[0x0F00 + idx] = 1;                                    // player active (self-skipped)
   int maxoff = idx, nact = vm ? CtSceneActorCount(vm) : 0;
+  if (vsw) {                                                // the scene's tables as they stand (C0/992D-9975)
+    for (int x = 0; x <= 0x7E; x += 2) {
+      ram[0x0F00 + x] = vsw[0x0F00 + x]; ram[0x1100 + x] = vsw[0x1100 + x]; ram[0x1B01 + x] = vsw[0x1B01 + x];
+      ram[0x1800 + x] = vsw[0x1800 + x]; ram[0x1801 + x] = vsw[0x1801 + x];
+      ram[0x1880 + x] = vsw[0x1880 + x]; ram[0x1881 + x] = vsw[0x1881 + x];
+    }
+    ram[0x12000] = vsw[0x12000];
+    nact = 0;                                               // (the synthetic list below is the world map's)
+  }
   for (int i = 0; i < nact; i++) {
     if (i == playerObj) continue;                           // the lead-PC object = the player itself (its
                                                             // own solid sprite must not block the feelers)
@@ -2373,7 +2387,7 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
     ram[0x1880 + off] = (uint8_t)ny; ram[0x1881 + off] = (uint8_t)(ny >> 8);
     if (off > maxoff) maxoff = off;
   }
-  ram[0x12000] = (uint8_t)(maxoff / 2 + 1);                 // $7F2000 actor count -> scan covers all slots
+  if (!vsw) ram[0x12000] = (uint8_t)(maxoff / 2 + 1);       // $7F2000 actor count -> scan covers all slots
   // The lead's own words: C0/8AB5.. load `$1800,X` / `$1880,X` into $62/$64, and C0/9C5E-9C85 build the step's
   // destination cell and the door cell ($70/$72, C0/9D35) from them, so the probe must see the word itself.
   // (px, py) is that word / 16, the storage this host shares with the VM (CtSceneSetActorPosF, the A810 commit,
@@ -2407,11 +2421,11 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
   // The touch, from the ROM's own scan: C0/9923 records the overlapped object in $01EB (0x80 = none) and the eight
   // directional callers in C0/8A6D-C0/90BF re-arm it on every entry, so this is the last probe's verdict, which op
   // 0xB0's lead branch (C0/3054 -> C0/3154) consumes. It runs before the `!vx && !vy` return below: pressing into a
-  // solid actor zeroes the velocity and must still fire the touch. The mirror remaps indices (off = 4 + i*2 above),
-  // so the object behind the latch is (slot - 4) / 2.
+  // solid actor zeroes the velocity and must still fire the touch. The scan runs on the scene's own indices (above),
+  // so the object behind the latch is X / 2.
   if (applyMove && vm) {
     int hit = ram[0x01EB];
-    CtSceneSetTouchHit(vm, (hit & 0x80) || hit < 4 ? -1 : (hit - 4) / 2);
+    CtSceneSetTouchHit(vm, (hit & 0x80) ? -1 : hit / 2);
   }
   if (outReqX) *outReqX = (int8_t)d[0x2E];                  // the camera scroll request (post-8A6D, pre-99DE);
   if (outReqY) *outReqY = (int8_t)d[0x30];                  //   nonzero at a map edge (9175 zeroes velocity, not
