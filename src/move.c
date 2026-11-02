@@ -1994,6 +1994,28 @@ int CtVmPartyGateFamily(uint8_t* r, const uint8_t* rom, int romLen,
         ctVmC2Gate(r, rom, romLen, 2, arg, gx, 0);                    // 39D7 TAY / 39D8 LDA #02
         out->ip = spill; out->carry = carry; out->ok = 1; return 1;               // 39DE LDX $C7 / RTS
       }
+      case 0xD6: {
+        // C0/3A07: a PC leaves the active party in place (no gate, no compaction -- the hole op 0xD4 never leaves):
+        // the first of $0197 / $0199 / $019B whose object ($1101,X) is the operand's char gets move mode 3, the slot
+        // byte 80 and its roster byte $2980 / $2981 / $2982 80. Length 2. The carry is the last `CMP $D9` (or the entry
+        // 0 with every slot empty): a match continues the visit. (Robo before the R-series, leg 54.)
+        int arg = script[(ip + 1) & 0xFFFF];
+        int spill = (ip + 2) & 0xFFFF;
+        r[0x01C7] = (uint8_t)spill; r[0x01C8] = (uint8_t)(spill >> 8);   // 3A0E STX $C7, 16-bit
+        r[0x01D9] = (uint8_t)arg;                                     // 3A10 STA $D9
+        int carry = 0;
+        static const int slotAt[3] = { 0x0197, 0x0199, 0x019B };
+        for (int k = 0; k < 3; k++) {                                 // 3A14 / 3A31 / 3A4C
+          int sl = r[slotAt[k]];
+          if (sl & 0x80) continue;                                    // BMI -> the next slot
+          carry = (r[0x1101 + sl] >= arg);                            // CMP $D9
+          if (r[0x1101 + sl] != arg) continue;                        // BNE -> the next slot
+          r[0x1100 + sl] = 0x03;                                      // LDA #03 / STA $1100,X
+          r[slotAt[k]] = 0x80; r[0x2980 + k] = 0x80;                  // LDA #80 / STA $97 / STA $7E2980 (+k)
+          break;                                                      // BRA ->3A65
+        }
+        out->ip = spill; out->carry = carry; out->ok = 1; return 1;   // 3A65 LDX $C7 / RTS
+      }
       case 0xF8: case 0xF9: case 0xFA: {
         // C0/3E5C / 3E6E / 3E75: heal the party. One byte each (INY / STY $C7, nothing read from the script). 0xF9
         // runs leaf 6 (max HP), 0xFA leaf 7 (refill MP), 0xF8 both, so its epilogue runs twice. X at the JSL is

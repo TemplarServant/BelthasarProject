@@ -1127,6 +1127,7 @@ static int battleReload(const uint8_t* rom, int speed, int bs) {
 static void battleDiv32(uint8_t* s, int carryIn);
 static int battleMul16(uint8_t* s, int c);           // fwd: C1/C90B, the multiply (defined beside the divide)
 static void battleStatusTimerStage(uint8_t* s);      // fwd: FD/B0D5 + FD/B4E7 + C1/B093 (the status timers' staging)
+static void battleBootB555(uint8_t* s);              // fwd: FD/B555 (the Hero Medal, the equipment status grants)
 static void battleStatusActClose(CtBattleHost* h);   // fwd: C1/AC85 -> C1/EC7F after a status timer's action 7F
 static void battleStatusActOpen(CtBattleHost* h);    // fwd: C1/40A6 for that action (with the run-off's opener)
 static void battleStatusResume(CtBattleHost* h);     // fwd: the rest of the C1/8324 dispatch after that action
@@ -10398,6 +10399,10 @@ static void battleLinkParts(CtBattleHost* h) {
 static void battleMoveStepper(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (s[0xA013] || s[0xA0FD]) return;                              // FEFAF-FEFB9
+  // The head the death scan returns into (battleDeathScanNext, the frame of the last corpse's `$96F5` clear) is main-loop
+  // work: its `STZ $A0FD` lands after this frame's NMI, which still read $A0FD set. The walkers step from the next NMI
+  // (leg 25: the cartridge's first step one frame after the clear, and C1/3714's handler reading that step's old mirror).
+  if (h->deathHeadF == (int)h->frames) return;
   // The $9897 cadence clock (writer C1:3727): every counter decrements on the ROM's 4-of-5 frame pattern (~1.25 real
   // f/count) from combat-live, free-running whatever the armed mode.
   // The mover runs before the handler pass within a frame. CF/F978 is the per-frame service path's loop (JMP from
@@ -10465,7 +10470,11 @@ static void battleModeMachine3714(CtBattleHost* h, int holdCmb) {   // holdCmb: 
     if (s[0x5E15 + x] != BT_MVTARGET(h, x)) BT_MVTARGET(h, x) = s[0x5E15 + x];   // 13742-1374A
     int mode = BT_MVMODE(h, x);
     if (mode & 0x80) continue;                                      // 1374D-13750 BMI
-    if (x + 3 == holdCmb) continue;                                 // (the port's think: see battleMoveTick)
+    if (x + 3 == holdCmb) {                                         // (the port's think: see battleMoveTick)
+      static int mv = -1; if (mv < 0) { const char* t = getenv("CT_BATTLE_MVTRACE"); mv = (t && *t) ? 1 : 0; }
+      if (mv) fprintf(stderr, "mvhold f%d slot%d mode%d (pending think)" CT_BATTLE_NL, h->frames, x, mode);
+      continue;
+    }
     s[0xA2B5] = (uint8_t)mode;                                      // 13752
     int cls = crom ? CtRomByte(crom, 0x400000L, (long)(ROM_MOVE_MODE_CLASS + mode)) : -1;         // 13755-1375C
     switch (cls) {
@@ -15432,6 +15441,7 @@ void CtBattleBegin(CtBattleHost* h) {
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.
   battleStatusTimerStage(h->mem);
+  battleBootB555(h->mem);                                        // C1/FD0A JSL FD/B555
   // ATB init. Every present combatant gets a speed reload $B158 (FD/B807); absent slots keep the 105 default. Turn
   // order $B163 = present combatants sorted by speed (block+0x38) descending, ties by ascending index (C1/808B).
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
@@ -15588,6 +15598,32 @@ static int battleSlotStaged(const uint8_t* s, int slot) {
 #define ROM_TIMER_FLAG_BASES 0x01B947u   /* C1/B947: the thirteen flag arrays' bases $AFB6 .. $B03A (C1/82C5) */
 static uint16_t battleW16(const uint8_t* s, int a) { return (uint16_t)(s[a & 0xFFFF] | (s[(a + 1) & 0xFFFF] << 8)); }
 static void battlePutW16(uint8_t* s, int a, int v) { s[a & 0xFFFF] = (uint8_t)v; s[(a + 1) & 0xFFFF] = (uint8_t)(v >> 8); }
+// FD/B555 (C1/FD0A, the staging tail after FD/B7EB): `$AEE6..$AEF6` and `$B19E..$B1BD` zeroed (the page FD/A982
+// already cleared; `$5E0D..$5E2C` too, which the port's own walk staging owns -- left to it); then, per seat, the Hero
+// Medal: an accessory ($B3BA,seat, FD/AE9F) of B3 runs FD/B3EB -- a weapon (block +0x29) of 3D or 42, the Masamune,
+// gets the crit rate +0x45 = 32 (leg 94: Frog's 50% crit, the cartridge's 09 slash where the port played the 08);
+// then each seat's two equipment status grants, armor +0x4A == 1 with the index +0x49 and helmet +0x72 == 1 with
+// +0x71: X = index * 3, block[CC/2A05[X]] |= CC/2A06[X] (FD/B598-B653, seat 0, 1, 2 for the armor, then the helmet).
+static void battleBootB555(uint8_t* s) {
+  for (int x = 0; x < 0x11; x++) s[0xAEE6 + x] = 0;                // B555-B55E
+  for (int x = 0; x < 0x20; x++) s[0xB19E + x] = 0;                // B560-B56C (and $5E0D,X: see above)
+  for (int seat = 0; seat < 3; seat++) {                           // B56E-B594
+    if (s[0xB3BA + seat] != 0xB3) continue;
+    unsigned b = 0x5E2D + (unsigned)seat * 0x80;
+    if (s[b + 0x29] == 0x3D || s[b + 0x29] == 0x42) s[b + 0x45] = 0x32;   // FD/B3EB-B3F8
+  }
+  const uint8_t* rom = CtBattleRom(NULL);
+  if (!rom) return;
+  static const int grant[2][2] = { { 0x4A, 0x49 }, { 0x72, 0x71 } };   // armor, then helmet
+  for (int g = 0; g < 2; g++)
+    for (int seat = 0; seat < 3; seat++) {
+      unsigned b = 0x5E2D + (unsigned)seat * 0x80;
+      if (s[b + grant[g][0]] != 0x01) continue;                    // `LDA $5E77 / CMP #01 / BNE`
+      int x = s[b + grant[g][1]] * 3;                              // `LDA $5E76 / ASL / ADC $5E76 / TAX` (8-bit)
+      int y = CtRomByte(rom, 0x400000L, (long)(0x0C2A05 + (x & 0xFF)));
+      s[(b + y) & 0xFFFF] |= CtRomByte(rom, 0x400000L, (long)(0x0C2A06 + (x & 0xFF)));   // `LDA $5E2D,Y / ORA / STA`
+    }
+}
 // ---- The staging, C1/FCFE-FD24: FD/B0D5's first two loops, FD/B4E7, and C1/B093 for the three seats ----
 //   FD/B0D5  TDC / TAX / STA $AFB6,X / INX / CPX #008F / BNE      every flag := 0 (arrays 0-12)
 //   FD/B0E0  LDA #0A / STA $B045,X / INX / CPX #008F / BCC       every count := 10
@@ -16496,6 +16532,18 @@ void CtBattleStagerRecords(CtBattleHost* h) {
     r[1] = (uint8_t)(ly >> 4); r[3] = (uint8_t)(ly & 0x0F);
     r[4] = (uint8_t)BT_IDLEPUB(h, x);                                  // FC63 LDA $990A,X
   }
+  // CF/FC74-FCB2: the cursor memory the next boot's CC/E8D2-E930 reads back. Per seat X = 2..0 with a character
+  // ($2980,X not FF), Y = id * 4: with $A0D4 (the Config's command memory) `$2C7C,Y = $9916,X`; with $A0D5 (the list
+  // memory) `$2C7D,Y = $A866,X / $2C7E,Y = $A863,X / $2C7F,Y = $A0D8,X`; then with $A0D5 the item list's
+  // `$2C98 = $95E6 / $2C99 = $95E5`. (Leg 93: a later fight opened the item list on the row the previous one left.)
+  for (int x = 2; x >= 0; x--) {
+    if (s[0x2980 + x] & 0x80) continue;                                // FC77 BMI
+    int y = (s[0x2980 + x] << 2) & 0xFF;                               // FC7C-FC7E ASL / ASL / TAY (8-bit)
+    if (s[0xA0D4]) s[0x2C7C + y] = s[0x9916 + x];                      // FC7F-FC87
+    if (!s[0xA0D5]) continue;                                          // FC8A-FC8D
+    s[0x2C7D + y] = s[0xA866 + x]; s[0x2C7E + y] = s[0xA863 + x]; s[0x2C7F + y] = s[0xA0D8 + x];   // FC8F-FC9E
+  }
+  if (s[0xA0D5]) { s[0x2C98] = s[0x95E6]; s[0x2C99] = s[0x95E5]; }    // FCA4-FCB2
 }
 // The RENDERWRAM sweep's entry points (battle.h): seed the walk from a WRAM image, step it one frame.
 void CtBattleIdleSeed(CtBattleHost* h, const uint8_t* w) {
@@ -20140,7 +20188,10 @@ int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
     // ...not once the fight is over: C1/8133's defeat and C1/817A's victory leave the loop for good (C1/8143 / C1/8186),
     // so no C1/8120 follows them. Note: one more head would flip the iteration parity ($0027) of every later fight, and
     // the turn scanner (C1/82A2) runs on odd iterations only.
-    if (!h->mem[0xA013] && h->demoDispatchAt < 0 && !r && !battleThinkPending(h) && !h->victoryHold && !h->defeatT)
+    // ...nor once the flee has triggered: C1/81F3 `LDA $99CD / BEQ` falls into the run-away chain C1/81F8-821E, which
+    // ends `JMP C1/8423` -- the loop is left there too (leg 62: one head too many per fled fight, $0027's parity flipped).
+    if (!h->mem[0xA013] && h->demoDispatchAt < 0 && !r && !battleThinkPending(h) && !h->victoryHold && !h->defeatT
+        && !h->fleeTriggered)
       battleIterHead(h);
   }
   { static int pt = -1; if (pt < 0) { const char* t = getenv("CT_BATTLE_POSTRACE"); pt = (t && *t) ? 1 : 0; }

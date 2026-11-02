@@ -1184,7 +1184,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
     else if (op == 0x89 || op == 0x8A) vmSpeedOp(mem, a, NULL, B, hdr, addr, obj);   // fn0 sets it then RETURNs (scene 13's kids `89 28`)
     else if (op == 0xB8) { w8(mem, 0x7E012B, B[addr + 1]); w8(mem, 0x7E012C, B[addr + 2]); w8(mem, 0x7E012D, B[addr + 3]); }   // C0/3557
     else if (op >= 0xC7 && op <= 0xCE && op != 0xC8) { int ni; CtVmItemFamily(mem->s, B - hdr, addr + hdr, &ni); nxt = ni - hdr; }
-    else if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD7 ||
+    else if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD6 || op == 0xD7 ||
              op == 0xF8 || op == 0xF9 || op == 0xFA) {
       CtHRet pg; pg.ip = addr + hdr; pg.carry = 1; pg.ok = 0;
       CtVmPartyGateFamily(mem->s, gRomImg, (int)gRomImgLen, B - hdr, addr + hdr, &pg);
@@ -2995,7 +2995,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     s->addr = cf.ip - sc->header;
     return cf.carry ? 0 : 1;
   }
-  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD7 ||
+  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD6 || op == 0xD7 ||
       op == 0xF8 || op == 0xF9 || op == 0xFA) {
     // ---- The $C2 party / roster family: C0/388D (0xCF has-character; jumps when the leaf returns nonzero),
     // C0/38BE (0xD0 add to the reserve roster), C0/38D3 (0xD1 remove from it), C0/3919 (0xD3 join), C0/394E (0xD4
