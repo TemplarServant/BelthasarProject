@@ -887,6 +887,7 @@ static void battleStageEnemyNames(CtBattleHost* h) {
     }
   }
 }
+static uint8_t gDeathScanPend[11];                              // a death with no routine whose CF/FE20 stores wait for C1/881C
 static void stageAll(CtBattleHost* h) {
   uint8_t* s = h->mem;
   // (0) FD/B2DE, the demo battle's character sheets -- the first call of the boot's staging (C1/FA8F
@@ -919,9 +920,14 @@ static void stageAll(CtBattleHost* h) {
   // C1/F205) the results sequencer FD/AD8C reads.
   s[0xB2DB] = s[0xB2DC] = s[0xB2DD] = 0; s[0xB2AF] = 0;
   for (int k = 0; k < 6; k++) s[0xB2B0 + k] = 0;
+  // FD/B732-B73F `STX $16 / $18 / $1A / $1C / $1E / $20` (X = 0, sixteen bits): the direct page $16..$21 the effect
+  // routines use as scratch. The field leaves its own values there; C1/E77B's `LDA $B1F6 / ADC $1A` reads $1B as the
+  // high byte, so a stale one sent Zombor's MP drain to $6036 (leg 63: 1 MP instead of Crono's 10).
+  memset(s + 0x16, 0, 0x0C);
   // FD/B79C-B7B4 (A = 0): `$AEB2` and, for X = 0..7, the death bytes `$AEB3,X` and the killed list `$AE85,X`.
   s[0xAEB2] = 0;
   for (int k = 0; k < 8; k++) s[0xAEB3 + k] = s[0xAE85 + k] = 0;
+  memset(gDeathScanPend, 0, sizeof gDeathScanPend);
   s[0x99D4] = s[0x99D5] = s[0x99D6] = s[0x99D7] = 0xFF; s[0x99D8] = 0;     // CC/E30F-E318 / CF/FB94
   // CC/E321, the same run of `STA` with A = FF: the bracket pulse's counter $A4EF, so the frame service's
   // first INC (CF/E5AA, on the band's arm frame) reads 00.
@@ -1137,6 +1143,7 @@ static int battleLifelineMsgTick(CtBattleHost* h, int aHeld);   // fwd: CD/01B3 
 static void battleDisabledSweep883D(CtBattleHost* h);          // fwd: C1/883D, a disabled PC's pending turn cancelled
 static int battleDisabledA8B0(const uint8_t* s, int seat);     // fwd: FD/A8B0, dead / berserk / stop-sleep-chaos
 static void battleTurnCancelEx(CtBattleHost* h, int k, int dequeue, int poppedItem);   // fwd: FD/A8CE / FD/A8FE
+static void battleCloseRecordsBCF8(CtBattleHost* h, int seat);                       // fwd: C1/BCF8
 #define battleTurnCancel(h, k, dq) battleTurnCancelEx((h), (k), (dq), 0)
 
 // C1/AF22, the battle RNG: returns a number in [X, A) with X the base, and leaves state behind; three of its
@@ -7354,7 +7361,10 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
         fprintf(stderr, "battledeath f%d slot=%d rec7=%02X 9FF7=%02X 99B5=%02X scan=%s sfx=%d\n", h->frames, dslot,
                 s[0x29C6 + dslot * 12], s[0x9FF7 + tgt], s[0x99B5 + tgt],
                 scanRuns ? "runs (CD/0024)" : scanStands ? "stands (FE7E)" : "cleared (FE7B)", h->deathSfxDue[dslot]);
-      if (tgt >= 3 && tgt < 11 && !scanRuns) battleDeathScanStores(h, tgt);   // CF/FE2D-FE33 (a routine's: at its start)
+      // CF/FE2D-FE33 for a death with no routine: CF/FE20 runs from C1/AC75, behind C1/881C, i.e. after the close's counter
+      // loop (C1/8686) -- whose condition 20 (C1/97AB, a fallen enemy's block 2) reads the death byte `$AEB3,slot` these
+      // stores clear. Masa & Mune's fallen counter 7F (leg 67) needs it still set. Run after that decode (below).
+      if (tgt >= 3 && tgt < 11 && !scanRuns) gDeathScanPend[tgt] = 1;   // (a routine's: at its start, battleDeathRoutineStart)
       if (!scanRuns && !scanStands) s[0x96F5 + tgt] = 0;   // FE7B STZ $96F5,X: the presence cleared -- no routine, no corpse
       else if (scanStands) {                  // FE7E: no routine -> the corpse stands undissolved (GATO, X5)
         h->deadStanding[tgt - 3] = 1;
@@ -7892,6 +7902,9 @@ static void battleDrainE77B(CtBattleHost* h, int v1A) {
     s[0xB202] = 0x80;
     int cur = battleW16(s, (0x5E30 + tbo) & 0xFFFF); if (cur < amt) amt = cur;
   }
+  if (getenv("CT_BATTLE_TRACE"))
+    fprintf(stderr, "drain f%d kind %d stat $%04X=%d x%d -> %d (tbo %04X $1B %02X)\n", h->frames, v1A,
+            (0x5E2F + a16) & 0xFFFF, mx, s[0x18], amt, tbo, s[0x1B]);
   s[0x00] = (uint8_t)amt; s[0x01] = (uint8_t)(amt >> 8);          // E7C9 STA $00
   s[0x10] = 0; s[0x11] = 0; s[0x10] = (uint8_t)(s[0xB18B] << 2);  // E806 JSR C1/E8C0: E8C0-E8C9
   s[0x28] = s[0xAD9B]; s[0x29] = 0; s[0x2A] = 0x2C; s[0x2B] = 0;  //   E8CB-E8D4
@@ -11040,6 +11053,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   // C1/B9B8-BA30, the executor's own check before it runs a PC command: the actor (and a dual/triple tech's co-actors, the
   // $93F3 nibbles) through FD/A8A5 -- any one berserk, or stop / sleep / chaos (+1E & 86) -> FD/A93C: FD/A8CE for each (the
   // ATB starts over, the command and its item go back) and C1/BD6B, no action. (A dead actor keeps the older path above.)
+  if (atk >= 0 && atk < 3) s[0xB3F4] = (uint8_t)atk;              // C1/B9C1 `LDA $B18B / STA $B3F4`
   if (atk >= 0 && atk < 3 && battleDisabledA8B0(s, atk)) {
     battleTurnCancelEx(h, atk, 0, itemId);                         // FD/A93C -> FD/A8CE (the popped entry's item goes back)
     battleTrace(h, "sched-cancel-disabled");
@@ -11061,6 +11075,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
       if ((g == 0x00 && fallen) || (g == 0x03 && !fallen)) {
         s[0xAF23] = 1;
         battleAtbLoad(s, atk); battleAtbRearm(s, atk);
+        battleCloseRecordsBCF8(h, atk);                          // C1/BB8B -> C1/BC5A -> C1/BCF8
         if (atk >= 0 && atk < 3) h->pcInTurn[atk] = 0;
         battleTrace(h, "sched-drop-target");
         return;
@@ -14368,6 +14383,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
       battleTechCoReloadBDB3(h, h->actDropTech);
       s[0xAF22] = 0;
     } else if (isPc && h->actTechId > 0) battleTechCoReloadBDB3(h, h->actTechId);
+    if (isPc && !wasCounter) battleCloseRecordsBCF8(h, atk);   // C1/BCE1 / C1/BC5A, both into C1/BCF8
     }
     if (isPc && atk >= 0 && atk < 3 && !statusFx) h->pcInTurn[atk] = 0;   // battle_atb_reload.md sec. D: clear the turn
                                                                //   latch at span end (C1:85D8, the C1:BCEB reload twin) ->
@@ -15995,6 +16011,27 @@ static void battleRefundItemB6D1(CtBattleHost* h, int itemId) {
   for (int slot = 0; slot < 0x100; slot++)                         // B6F0-B702: the first of the 256 records with the id
     if (s[0x1580 + slot * 5] == (uint8_t)itemId) { s[0x1583 + slot * 5]++; return; }   // B704-B708
 }
+// C1/BCF8-BD6B, the close of a PC's turn (C1/BCE1 after the reload, C1/BC5A after C1/BDB3): the decoded seat's ($B3F4,
+// C1/B9C1) command record FD/A849[seat] has its bytes +1 / +2 / +3 / +6 zeroed -- the flags with the item marker bit 6,
+// the target, the item id -- then each co-actor the +5 nibbles name (0F none) gets +1 = 0 and +5 = FF, the actor's own
+// +5 = FF, and `STZ $AF22`. Byte 0 stays. So an item used is no longer queued when the battle's end C1/B6D1 looks.
+static void battleCloseRecordsBCF8(CtBattleHost* h, int seat) {
+  uint8_t* s = h->mem;
+  if (seat < 0 || seat > 2) return;
+  const uint8_t* rr = CtBattleRom(NULL);
+  #define BCF8_REC(k) (rr ? (CtRomByte(rr, 0x400000L, (long)(ROM_CMD_REC_TBL + 2 * (k))) | \
+                             (CtRomByte(rr, 0x400000L, (long)(ROM_CMD_REC_TBL + 2 * (k) + 1)) << 8)) : 0x93EE + 7 * (k))
+  int r = BCF8_REC(seat);                                           // BCF9-BD09 (X = FD/A849[$B3F4 * 2])
+  s[r + 1] = s[r + 2] = s[r + 3] = s[r + 6] = 0;                    // BD0B-BD14
+  int co = s[r + 5];                                                // BD17 `LDA $0005,X / CMP #FF / BEQ`
+  if (co != 0xFF) {
+    if ((co & 0x0F) != 0x0F) { int c = BCF8_REC(co & 0x0F); s[c + 1] = 0; s[c + 5] = 0xFF; }          // BD1E-BD33
+    if (((co >> 4) & 0x0F) != 0x0F) { int c = BCF8_REC((co >> 4) & 0x0F); s[c + 1] = 0; s[c + 5] = 0xFF; }   // BD36-BD53
+  }
+  s[BCF8_REC(s[0xB18B] < 3 ? s[0xB18B] : seat) + 5] = 0xFF;          // BD56-BD68 ($B18B's record)
+  #undef BCF8_REC
+  s[0xAF22] = 0;                                                    // BD6B
+}
 // The pending turn's teardown shared by FD/A8CE (the executor's, C1/BA2C) and FD/A8FE (the sweep's, which first tests
 // `LDA $B188,X / BEQ`; the port's pending latch is pcInTurn): the item back (C1/FDCF), $93EE = $93EF = 0, $93F3 = FF,
 // the ATB from full ($AFAB = $99DD = $9F22 = $B158), $B188 = $B03A = 0; FD/A8FE alone then dequeues (C1/B961 ->
@@ -16758,6 +16795,25 @@ static void battleModuleTail(CtBattleHost* h, int path) {
       for (int rec = 0; rec < 8; rec++)                           // 1B6F0-1B6FC
         if (s[0x1580 + rec * 5] == iid) { s[0x1583 + rec * 5]++; break; }   // 1B704-1B708
       if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-itemrefund seat%d item%02X (C1/B6D1)\n", seat, iid);
+    }
+    // C1/B4FE-B574: the battle's item list goes back to the bag. Each of the 256 five-byte records $1580 + 5k with an id
+    // (+0) finds that id in $2400[0..FF]: its count $2500,X := the record's +3, the id cleared too when that is 0
+    // (B522-B52E); an id the bag lacks takes the bag's first empty slot (B533-B557), and a full bag ends the pass (B542).
+    for (int rec = 0; rec < 0x500; rec += 5) {
+      uint8_t iid = s[0x1580 + rec], cnt = s[0x1583 + rec];
+      if (!iid) continue;                                         // B509 BNE / B50B JMP B55A
+      int x = 0;
+      while (x < 0x100 && s[0x2400 + x] != iid) x++;              // B50E-B51A
+      if (x < 0x100) {
+        if (!cnt) s[0x2400 + x] = 0;                              // B525 BNE / B529 STA $2400,X (A = 0)
+        s[0x2500 + x] = cnt;                                      // B52E
+        continue;
+      }
+      x = 0;
+      while (x < 0x100 && s[0x2400 + x] != 0) x++;                // B533-B540
+      if (x >= 0x100) break;                                      // B542 BRA ->B570
+      s[0x2400 + x] = iid; s[0x2500 + x] = cnt;                   // B544-B557
+      if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-itemback f%d new id %02X x%d at bag %02X (rec %d)\n", h->frames, iid, cnt, x, rec / 5);
     }
   }
   if (path == 0) {
@@ -20571,7 +20627,11 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     h->stActKind = 0;
   }
   battleAdvanceAction(h);
-  if (!battleDeathHold(h)) battleReactiveCounterTick(h, 1);   // the close's counter loop, before C1/881C's scan (below)
+  if (!battleDeathHold(h)) {
+    battleReactiveCounterTick(h, 1);   // the close's counter loop, before C1/881C's scan (below)
+    for (int c = 3; c < 11; c++)       // C1/881C -> C1/AC75 -> CF/FE20: the deaths with no routine, after the loop
+      if (gDeathScanPend[c]) { gDeathScanPend[c] = 0; battleDeathScanStores(h, c); }
+  }
   battleAdvanceDissolves(h);   // battle_dissolve.md part 2: the dying enemy's corpse dither-clears (paced per render
                                 //   frame like the popups). Runs first of the simulation ticks because it owns the
                                 //   death freeze below.
