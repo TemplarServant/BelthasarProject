@@ -208,6 +208,7 @@ static LfState lfRingSnap[LF_N]; static int lfPosSnap = 0, lfFillSnap = 0;
 static bool lfInWaitLoop(Snes* snes);
 static bool lfWaitLoopRange(Snes* snes, uint32_t* lo, uint32_t* hi);
 static int lfIfast = -1, lfWaitingNow = 0;             // the infinitely fast CPU (below, lfIntHook)
+static int lfIfastReal = 0; static uint32_t lfRunLo = 0, lfRunHi = 0;   // a released loop's real time (snes_runCycle)
 static uint32_t lfWaitLo = 0, lfWaitHi = 0;
 long g_ctIfastHeld = 0; static long lfIfastRun = 0; static long lfVbIfast = 0;
 // NMI-ON WORK NEVER COSTS FRAMES (user decision 2026-09-30, FIXED -- CLAUDE.md; the zelda3 literal, completing the
@@ -356,7 +357,7 @@ static void lfOpHook(void* mem, uint32_t pc) {
     if(lfWaitingNow && (pc < lfWaitLo || pc > lfWaitHi)) lfWaitingNow = 0;   // out of the loop: working again
     if(!lfWaitingNow && (pc <= lfPrevPc || (pc >> 16) != (lfPrevPc >> 16))) {
       uint32_t lo, hi;
-      if(lfWaitLoopRange(snes, &lo, &hi)) { lfWaitingNow = 1; lfWaitLo = lo; lfWaitHi = hi; }
+      if(lfWaitLoopRange(snes, &lo, &hi)) { lfWaitingNow = 1; lfWaitLo = lo; lfWaitHi = hi; if(lfIntDepth == 0) lfIfastReal = 0; }
     }
   }
   // the main thread back at a state it has been in, with nothing written since: a wait -- the NMI-on stretch ends
@@ -488,13 +489,26 @@ static void lfRestoredMarks(Snes* snes) {
 // bank and is held like any other work.
 static void snes_runCycle(Snes* snes) {
   if(lfRollbackPending) { snes->cycles += 2; return; }     // the rest of the instruction the valve fell in: discarded
-  if(lfIfast > 0 && g_ctLogicalFrames && snes->nmiEnabled && !lfWaitingNow && !snes->cpu->waiting && snes->cpu->k != 0xC7) {
+  if(snes->cpu->waiting && lfIntDepth == 0) lfIfastReal = 0;
+  if(lfIfast > 0 && g_ctLogicalFrames && snes->nmiEnabled && !lfWaitingNow && !lfIfastReal && !snes->cpu->waiting &&
+     snes->cpu->k != 0xC7) {
+    uint32_t at = ((uint32_t)snes->cpu->k << 16) | snes->cpu->pc;   // the code the held stretch runs through
+    if(lfIfastRun == 0) lfRunLo = lfRunHi = at;
+    else if(at < lfRunLo) lfRunLo = at; else if(at > lfRunHi) lfRunHi = at;
     if((lfIfastRun += 2) <= LF_SAFETY) {                   // the CPU works: nothing else moves (the APU stands, the rule's)
       snes->cycles += 2; g_ctIfastHeld += 2;
       return;
     }
     fprintf(stderr, "logical-frame: WARNING the infinitely fast CPU worked %ld cycles with no wait at %02X:%04X (V=%d) -- "
-            "released (safety: a wait the detector does not see)\n", lfIfastRun, snes->cpu->k, snes->cpu->pc, snes->vPos);
+            "released (safety: a wait the detector does not see; the stretch ran %06X-%06X)\n", lfIfastRun, snes->cpu->k,
+            snes->cpu->pc, snes->vPos, lfRunLo, lfRunHi);
+    // A release lasts until the next write: a JOB longer than the safety walks on through its code and reaches its wait
+    // with the beam still held (leg 45's battle boot: the clear CF/FB92 of $2D00-$ACEB, C1, FD -- banks apart; NMI-on
+    // work costs no frames). A stretch whose whole safety period ran inside ONE bank is a LOOP that no write of
+    // its own ends -- only the beam or an interrupt can, and the held beam brings neither (the portal after Magus: the
+    // warp computed at 7E:7496-74DC in loc 10F, presented by the IRQ and the NMI): re-held at its next write, it crawled a
+    // line of beam per release (hours a frame). That one runs in real time until the main thread reaches a wait.
+    if((lfRunHi >> 16) == (lfRunLo >> 16)) lfIfastReal = 1;
     lfIfastRun = 0; lfWaitingNow = 1; lfWaitLo = 0; lfWaitHi = 0xffffffffu;
   } else lfIfastRun = 0;
   if(lfLineHold) {                                         // the battle NMI's service after its line-64 wait: held
@@ -1016,7 +1030,7 @@ void snes_runSpcCycle(Snes* snes) {
 // SPC phase and WRAM after). The file format is left as it is -- every pinned state was made under it -- and these are
 // copied only by a snapshot that stays in one process (main.c's --serve: `snap` / `restore`).
 #define LF_RULE_VARS(X) X(lfApuNow) X(lfRing) X(lfPos) X(lfFill) X(lfWroteNow) X(lfHoldNow) X(lfSnapFrame) \
-  X(lfNoHoldFrame) X(lfRollbackPending) X(lfRingSnap) X(lfPosSnap) X(lfFillSnap) X(lfIfast) X(lfWaitingNow) X(lfWaitLo) \
+  X(lfNoHoldFrame) X(lfRollbackPending) X(lfRingSnap) X(lfPosSnap) X(lfFillSnap) X(lfIfast) X(lfWaitingNow) X(lfIfastReal) X(lfRunLo) X(lfRunHi) X(lfWaitLo) \
   X(lfWaitHi) X(g_ctIfastHeld) X(lfIfastRun) X(lfVbIfast) X(g_ctLogicalCrossed) X(lfIntDepth) X(lfIntSp) X(lfRdnmi) \
   X(lfRdnmiMain) X(lfRdnmiArmed) X(lfAcctInit) X(lfAcctCycles) X(lfAcctRefresh) X(lfAcctHdma) X(lfStretch) X(lfCrossed) \
   X(lfPrevPc) X(lfIntSerial) X(lfStretchOn) X(lfStretchPc) X(lfStretchFrame) X(g_ctLineHeld) X(lfLineHold) X(lfLine64) \

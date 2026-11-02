@@ -14,6 +14,8 @@ in the same machine; its snapshots keep the rule's statics, so `restore` resumes
 import os
 import subprocess
 import tempfile
+import threading
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -46,10 +48,23 @@ class OracleSession:
             raise RuntimeError('oracle session ended')
         return line.strip()
 
-    def cmd(self, c):
-        self.p.stdin.write(c + '\n')
-        self.p.stdin.flush()
-        r = self._line()
+    def cmd(self, c, limit=120):
+        """One command; the oracle is killed (RuntimeError) if it has not answered in `limit` seconds -- a hung machine
+        fails the caller instead of holding it. CT_SERVE_LOG=<path> appends every command and its time."""
+        t0 = time.time()
+        dog = threading.Timer(limit, self.p.kill)
+        dog.start()
+        try:
+            self.p.stdin.write(c + '\n')
+            self.p.stdin.flush()
+            r = self._line()
+        except (RuntimeError, OSError):
+            raise RuntimeError('oracle session: no answer to %s in %d s (killed)' % (c[:80], limit))
+        finally:
+            dog.cancel()
+        if os.environ.get('CT_SERVE_LOG'):
+            with open(os.environ['CT_SERVE_LOG'], 'a') as f:
+                f.write('%.2f %s -> %s\n' % (time.time() - t0, c[:200], r))
         if r.startswith('err'):
             raise RuntimeError('oracle session: %s -> %s' % (c[:80], r))
         return r
@@ -59,7 +74,8 @@ class OracleSession:
         pad = [(b, n) for b, n in pad if n > 0]
         if not pad:
             return 0
-        return int(self.cmd('run ' + ','.join('%X:%d' % (b, n) for b, n in pad)).split()[1])
+        frames = sum(n for _, n in pad)
+        return int(self.cmd('run ' + ','.join('%X:%d' % (b, n) for b, n in pad), 60 + frames / 20).split()[1])
 
     def wram(self):
         path = os.path.join(self.tmp, 'w.bin')
