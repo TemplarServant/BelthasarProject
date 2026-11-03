@@ -376,9 +376,10 @@ def oracle_play(start, pad, out_state, png=None):
     return os.path.exists(out_state)
 
 
-def oracle_timeline(start, pad):
+def oracle_timeline(start, pad, mon=None):
+    mon = mon or MON
     frames = sum(n for _, n in pad)
-    r = subprocess.run([CT, ROM, '--monitor', ','.join('%s:%d' % (a, n) for _, a, _, n in MON), '--from', start,
+    r = subprocess.run([CT, ROM, '--monitor', ','.join('%s:%d' % (a, n) for _, a, _, n in mon), '--from', start,
                         '--input', btnscript(pad), '--frames', str(frames), '--diff'], cwd=ROOT, env=RULE,
                        capture_output=True, text=True, errors='replace')
     out = []
@@ -387,8 +388,8 @@ def oracle_timeline(start, pad):
         if not m or int(m.group(1)) > frames:
             continue
         kv = dict(re.findall(r'\b([0-9A-F]{6})=([0-9A-F]+)', m.group(2)))
-        if all(a in kv for _, a, _, _ in MON):
-            out.append((int(m.group(1)), {k: kv[a] for k, a, _, _ in MON}))
+        if all(a in kv for _, a, _, _ in mon):
+            out.append((int(m.group(1)), {k: kv[a] for k, a, _, _ in mon}))
     return out
 
 

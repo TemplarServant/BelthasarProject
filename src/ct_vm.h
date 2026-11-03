@@ -161,6 +161,7 @@ void CtSceneSetActorPosF(CtScene* sc, int obj, double x, double y);  // subpixel
 // on the ticket his op B0 armed this pass (C0/3040) if nothing dropped it (`STZ $1A01,X`); otherwise the tick takes it
 // back (LeadStepDropped = 1). A song upload that parks the pass keeps the ticket to the return frame.
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y);
+void CtSceneLeadStepFromLocked(CtScene* sc, double x, double y);   // the same, for the locked-control step (field.c)
 int  CtSceneLeadStepDropped(const CtScene* sc);
 void CtSceneLeadDeferStep(CtScene* sc, double x, double y);   // a busy lead's step, taken by his B0 if he reaches it
 int CtSceneLeadScriptPlaced(const CtScene* sc, int obj, double* x, double* y);  // right after create: 1 = the lead's
@@ -405,6 +406,7 @@ int  CtSceneActorPrio(const CtScene* sc, int i);   // the op 0x8E priority byte 
 int  CtSceneActorPalRot(const CtScene* sc, int obj, int* start, int* span, int* phase); // op 0x88 palette rotation
 int  CtSceneActorPalBlob(const CtScene* sc, int obj, int* start, uint16_t* bgr);  // op 0x88 blob palette overwrite; returns count
 int CtSceneActorAtB0(const CtScene* sc, int i);   // obj i's last op was 0xB0 (C0/3002 -> C0/9E84 for the lead)
+int CtSceneLeadInstalled(const CtScene* sc);      // a function was installed on the lead since his last op 0xB0 arm
 void CtIrisCircleImage(uint8_t* w128, uint8_t arg);   // C3/0077 (the iris window table) on a flat 128 KB image: ct.exe --sweepiris
 void CtPolyQuadImage(uint8_t* w128);                  // C3/0EFA (the quad window table) on a flat 128 KB image: ct.exe --sweeppoly
 int  CtSceneActorColorGated(const CtScene* sc, int obj);  // 1 = an op 0x88 colour-gated sprite: clip it to the iris

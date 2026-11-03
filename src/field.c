@@ -17000,9 +17000,17 @@ int main(int argc, char** argv) {
       { const uint8_t* lw = CtSceneMem7E(f.vm);
         px = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
         py = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0; }
-      int atB0 = CtSceneActorAtB0(f.vm, pObj);
+      // The step stands on the ticket the lead's op B0 arms (C0/3040), which A810 integrates (AB06 `LDA $1A01,X / BEQ`). A
+      // function another object installs on him (the blade's `CALLpc0 fn3` in 0A7: C0/6031-6034 `STZ $1A80,X / STZ
+      // $1A01,X`, X = the lead) drops the ticket armed earlier in that pass -- the tick takes the step back
+      // (CtSceneLeadStepFromLocked) -- and has his next visit run that function, not B0: no step that frame.
+      int atB0 = CtSceneActorAtB0(f.vm, pObj) && !CtSceneLeadInstalled(f.vm);
+      double stepFromX = px, stepFromY = py;
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, 0, 0, 0, atB0 ? 1 : 0, &camReqX, &camReqY);
-      if (atB0) CtSceneSetActorPosF(f.vm, pObj, px, py);
+      if (atB0) {
+        if (px != stepFromX || py != stepFromY) CtSceneLeadStepFromLocked(f.vm, stepFromX, stepFromY);
+        CtSceneSetActorPosF(f.vm, pObj, px, py);
+      }
     }
     if (f.vm) CtSceneCameraInput(f.vm, camReqX, camReqY, leadStartX, leadStartY, 1);   // hand the request + lead foot to the VM camera
     if (!battlePhase && f.vm && ctlLocked && CtSceneActorCount(f.vm) > 1) {   // the script drives Crono: follow

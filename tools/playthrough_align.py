@@ -78,7 +78,7 @@ def port_run(lg, start, tmp, pad, dump_at):
         os.remove(dump)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_AUDIO_SEEDSTATE=start, CT_WS_BATTLE_LEAD='1', CT_SRAM_FRESH='1', CT_SRAM=os.path.join(tmp, 'port.srm'),
-               CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in P.MON),
+               CT_FIELD_MEMMON=','.join('%s:%d' % (p, n) for _, _, p, n in AMON),
                CT_DUMPWRAM=dump, CT_DUMPWRAM_AT=str(dump_at),
                CT_SHOTS=os.path.join(tmp, 'p'), CT_SHOTS_AT=str(dump_at + 2), CT_SHOTS_EXIT='1')
     r = subprocess.run([P.FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
@@ -90,8 +90,8 @@ def port_run(lg, start, tmp, pad, dump_at):
         if not m:
             continue
         kv = {k: v.rstrip('*') for k, v in re.findall(r'\b([0-9A-F]+)=([0-9A-F*]+)', m.group(2))}
-        if all(p in kv for _, _, p, _ in P.MON):
-            out.append((int(m.group(1)), {k: kv[p] for k, _, p, _ in P.MON}))
+        if all(p in kv for _, _, p, _ in AMON):
+            out.append((int(m.group(1)), {k: kv[p] for k, _, p, _ in AMON}))
     return chains(out), (open(dump, 'rb').read() if os.path.exists(dump) else None)
 
 
@@ -107,7 +107,26 @@ def chains(tl):
         if not lit or lit[-1][1] != v:
             lit.append((f, v))
     ch['lit'] = lit
+    menu = []
+    for f, kv in tl:
+        v = kv.get('menu')
+        if v is None or kv['ctrl'] != '00':
+            continue
+        if v != 'FF' and (not menu or menu[-1][2] != v):
+            menu.append((f, v, v))
+        elif v == 'FF' and menu and menu[-1][2] != 'FF':
+            menu[-1] = menu[-1][:2] + ('FF',)
+    ch['menu'] = [(f, v) for f, v, _ in menu]
     return ch
+
+
+# A fight's command menu opening ($95D5: the seat whose menu is up, FF none -- C1's menu state): warp-only. The pad's
+# keys in a fight answer a menu; when the port's fight starts a frame or two off the cartridge's (its entry, the battle
+# boot: CPU work the rule prices at none on both sides, yet the field's frame before it can land elsewhere), every ATB
+# timer runs that much off the pad, and the leg parts at the first menu whose key lands before it opened. The opening
+# re-anchors the keys the way a player would answer it. It is never graded by itself: a seat that differs ends the
+# chain (the graded chains -- HP above all -- say whether the fight went another way).
+AMON = P.MON + [('menu', '7E95D5', '95D5', 1)]
 
 
 DARK_TOL = 240
@@ -150,6 +169,8 @@ def first_mismatch(o, p, warps, end):
             q = po[i] if i < len(po) else None
             if c and q and c[1] == q[1] and to_port(c[0], warps) == q[0]:
                 continue
+            if k == 'menu' and not (c and q and c[1] == q[1] and abs(q[0] - to_port(c[0], warps)) <= TOL):
+                break                                       # warp-only: a seat that differs ends the chain
             # The same change made on a black screen on both sides is a load's inside (an NMI-off stretch: the
             # cartridge's CPU time, which the port spends at once -- CLAUDE.md): equal, and no warp -- the load's end
             # (the `lit` rise after it) is where the two meet again.
@@ -175,7 +196,7 @@ def align(legs, i):
     os.makedirs(tmp, exist_ok=True)
     fr = frames_of(lg['pad'])
     end = len(fr)
-    o = chains(P.oracle_timeline(start, lg['pad']))
+    o = chains(P.oracle_timeline(start, lg['pad'], AMON))
     cart_end = T.wram_of(P.state_of(lg['name']), tmp) if os.path.exists(P.state_of(lg['name'])) else None
     warps = []
     while True:

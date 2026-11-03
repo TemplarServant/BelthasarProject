@@ -2405,13 +2405,22 @@ static int g_daRingPend = 0;
 static int g_leadDefer, g_leadDeferTick; static double g_leadDeferX, g_leadDeferY;   // a busy lead's step (below)
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
+// Every caller installs a function or program on the object (its IP moves). On the lead that also means his next visit
+// runs it, not his op B0, so no 3040 arm: until his B0 arms again the locked-control step has no ticket (CtSceneLeadInstalled).
+static int g_leadInstalled, g_leadFromLocked;
 static void vmTicketStop(CtScene* sc, int o) {   // `STZ $1A80,X / STZ $1A01,X` on another object's op
   sc->hasTask[o] = 0; sc->cycles[o] = 0;
   if (o == sc->playerObj && g_leadTk == 1) g_leadTk = 0;
+  if (o == sc->playerObj) g_leadInstalled = 1;
 }
+int CtSceneLeadInstalled(const CtScene* sc) { (void)sc; return g_leadInstalled; }
 void CtSceneLeadStepFrom(CtScene* sc, double x, double y) {
   (void)sc; g_leadFromOk = 1; g_leadFromTick = gVmTick; g_leadFromX = x; g_leadFromY = y;   // this frame's, the tick to come
+  g_leadFromLocked = 0;
 }
+// The same origin for the step C0/881E makes with $011F = 0 (field.c's locked path, the conveyor's momentum): its B0 visit is
+// read from the last pass (CtSceneActorAtB0, CtSceneLeadInstalled), and only a drop later in this pass takes it back.
+void CtSceneLeadStepFromLocked(CtScene* sc, double x, double y) { CtSceneLeadStepFrom(sc, x, y); g_leadFromLocked = 1; }
 // The busy lead's step. C0/881E runs every frame (C0/00A7) whatever the lead's script is doing; what moves him is his op
 // B0 (C0/3040 `STA $1A01,X` / 9E29), wherever in the pass his visit reaches it. A lead whose own function is running when
 // the frame starts (a call another object made on him) may return onto his B0 in this very pass and walk this frame.
@@ -2430,6 +2439,7 @@ int CtSceneLeadStepDropped(const CtScene* sc) { (void)sc; return g_leadTakenTick
 static void vmLeadStepAtA810(CtScene* sc, int dropped) {
   if (sc->playerObj < 0 || sc->playerObj >= sc->nobj) return;
   if (g_leadTk != (dropped ? 0 : -1) || !g_leadFromOk || g_leadFromTick != gVmTick - 1) return;
+  if (!dropped && g_leadFromLocked) return;        // the locked-control step: only an invoke's drop takes it back (below)
   CtSceneSetActorPosF(sc, sc->playerObj, g_leadFromX, g_leadFromY); g_leadTakenTick = gVmTick; g_leadFromOk = 0;
 }
 static void reqOp(CtScene* sc, int target, int function, int priority) {
@@ -2655,7 +2665,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       CtSceneSetActorPosF(sc, obj, g_leadDeferX, g_leadDeferY);
     }
     if (op != 0xB2 && r8(sc->mem, 0x7E0138) == 0 && CtSceneActorMode((const CtScene*)sc, obj) == 0 && obj == sc->playerObj)
-      g_leadTk = 1;                                          // 3040 LDA #01 / STA $1A01,X: the lead's step armed
+      g_leadTk = 1, g_leadInstalled = 0;                     // 3040 LDA #01 / STA $1A01,X: the lead's step armed
     if (op != 0xB2 && sc->touchHit >= 0 && sc->touchHit < sc->nobj
         && r8(sc->mem, 0x7E0138) == 0                      // C0/3002's $0138 early-out
         && CtSceneActorMode((const CtScene*)sc, obj) == 0) { // state 0 = the lead PC only
