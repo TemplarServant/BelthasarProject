@@ -16696,7 +16696,12 @@ int main(int argc, char** argv) {
       // 1ABD `INX / STX $34`: spent, and not gated on $0162 (C0/1AAC is a different routine from the cursor
       // arm's caller C0/1927). With $0162 == 2 state 7 never reads the latch (C0/20A4 RTL), but the byte is
       // the ROM's and is zeroed on the confirm frame too.
-      if (tbWaiting) { uint8_t* wx = CtSceneMem7E(f.vm); wx[0x0134] = 0; wx[0x0135] = 0; }
+      // The spend is not the box's: 1AB4 tests $0134 alone, so a latch a box left at FFFF when it closed without
+      // its press swallows the next A wherever it falls -- no object probe, no chest probe (1AC0 RTS). Leg 100's
+      // 12F lever: the cartridge's first A (f12394) is spent this way and only the second one pulls it.
+      // (Only from the field's main loop: in a fight the cartridge runs bank CD, not C0/0097, and the latch stands.)
+      int pressSpent = !battlePhase && bx && bx[0x0134] == 0xFF && bx[0x0135] == 0xFF;
+      if (pressSpent) { uint8_t* wx = CtSceneMem7E(f.vm); wx[0x0134] = 0; wx[0x0135] = 0; }
       if (decSt == 2) {
         // The cursor is live ($0162 == 2): CtSceneDecisionInput below takes this press as the confirm
         // (C0/1AF9 `LDA #03 / STA $62`) and state 7 closes on it (C0/20A0 -> 2058 -> 2081). Nothing else may
@@ -16715,7 +16720,7 @@ int main(int argc, char** argv) {
           uint8_t* cs7 = CtSceneMem7E(f.vm);                     // the same machine: 2081 `LDA #0D / STA $29`
           if (cs7) cs7[0x0129] = 0x0D;                           // -> tbMachineTick ramps it out and clears
         } else CtSceneAdvance(f.vm);                             // $0129/$0126/$0154.5 at the end (204D)
-      } else if (bx && bx[0x011F] != 0) {
+      } else if (bx && bx[0x011F] != 0 && !pressSpent) {
         // C0/1AC1 `LDA $1F / BNE ->1AC6 / RTS`: with $011F == 0 (op 0xE3 00, a cutscene's control lock) the
         // handler returns here, before the object probe and the treasure probe.
         // With $0134 == 0 the press was never the box's (1AB4/1AB8): the handler probes even with a box on
