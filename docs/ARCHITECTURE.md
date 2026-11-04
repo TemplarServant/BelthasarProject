@@ -79,6 +79,7 @@ ambient-object block layout).
 | `menu.c` | The X-menu screens, shops and the load screen; the save write and load (`FF/FA..`). |
 | `menu_cost.c` | What the menu's open costs, priced instruction by instruction. |
 | `title_intro.c` | The title sequence as the overlay's own machine (the `$C3` script interpreter and its NMI hooks), not a recording. |
+| `title_intro_mods.c` | The title sequence's picture at the host's options (wider, sharper, frames between: `CtTitleIntroRenderEx`). A mod, outside the ROM mandate; compiled as part of `title_intro.c`, whose static compositor it draws with. |
 | `audio.c` | The sound system: the bank `$C7` driver upload, the song loader, the command channel, and pricing of each transfer on SPC time. It drives the sound machine in C (`sound/`); `CT_AUDIO_SPC=ref` runs the vendored SPC700/DSP instead. |
 | `sound/*.c` | The sound processor in C: `driver.c` (the SPC700 program, routine by routine), `machine.c` (its clock, timers, ports and S-DSP), `mixer.c` (the S-DSP, sample-exact against `snes/dsp.c`), `timing.c` (the cost table's asset), `coro.c`; the references and tests `lockstep.c`, `fuzz.c`, `mixer_replay.c`, `mixer_dsp.c`, `timing_build.c`. |
 | `seq_stage.c`, `seq_stagelib.c` | The `$C3` stage machine every sequence stage shares (declared in `seq_race.h`): the script interpreter `C3/0AFF`, the overlay and common init, the stage NMI and its song check, the fades, the curtain `C3/01E4`; and the overlay's routines several entries call (the RNG `C3/02DD`, the stars, the mode-7 matrix). |
