@@ -373,11 +373,9 @@ int  CtScenePollTileCopy(CtScene* sc, int out[7]); // drain scripted 0xE4/0xE5 m
 // The $0117 bit 5 service, C0/1770: what kind of main-loop frame the coming one is. NORMAL runs every leg; ENTER is the
 // dispatch's frame (C0/0097, C0/18D9 and C0/0C76's fades, then C0/1770: 885A + C0/00BF, no 881E/1AAC/1F87/21E1); ALIGN a
 // further align-loop frame (885A + C0/00BF only); STYLE a frame of C0/179A's branch (C0/00DE only); RESUME the frame
-// the branch returns into (C0/00A7-00BA: 881E, 1AAC, 1F87, 21E1, 274D, 00BF). CtSceneXferBegin is declared to latch it
-// for a host whose legs run before CtSceneTick, but ct_vm.c does not define it.
+// the branch returns into (C0/00A7-00BA: 881E, 1AAC, 1F87, 21E1, 274D, 00BF).
 enum { CT_XF_NORMAL = 0, CT_XF_ENTER, CT_XF_ALIGN, CT_XF_STYLE, CT_XF_RESUME };
 int  CtSceneXferFrame(const CtScene* sc);          // the coming frame's kind (pure)
-int  CtSceneXferBegin(CtScene* sc);                // ...latched for this frame
 // C0/0C76's view of $0117 at C0/00A4, the frame's head: a host whose player controller (C0/881E, which stages positional
 // exits) runs before CtSceneTick latches the byte first, so the tick's C0/0C8A drain sees what the ROM's head saw.
 void CtSceneHeadLatch(CtScene* sc);

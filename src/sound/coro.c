@@ -47,7 +47,6 @@ void SndCoroResume(SndCoro* c) {
   SwitchToFiber(c->fiber);
 }
 void SndCoroYield(SndCoro* c) { SwitchToFiber(c->caller); }
-int SndCoroDone(const SndCoro* c) { return !c || c->done; }
 void SndCoroFree(SndCoro* c) { if (!c) return; DeleteFiber(c->fiber); free(c); }
 
 #elif defined(SND_CORO_SWITCH)
@@ -136,7 +135,6 @@ void SndCoroResume(SndCoro* c) {
   ct_snd_switch(&c->callerSp, c->sp);
 }
 void SndCoroYield(SndCoro* c) { ct_snd_switch(&c->sp, c->callerSp); }
-int SndCoroDone(const SndCoro* c) { return !c || c->done; }
 void SndCoroFree(SndCoro* c) { if (!c) return; free(c->stack); free(c); }   // (a program never left: its stack dropped)
 
 #elif !defined(__ANDROID__)
@@ -180,7 +178,6 @@ void SndCoroResume(SndCoro* c) {
   swapcontext(&c->caller, &c->ctx);
 }
 void SndCoroYield(SndCoro* c) { swapcontext(&c->ctx, &c->caller); }
-int SndCoroDone(const SndCoro* c) { return !c || c->done; }
 void SndCoroFree(SndCoro* c) { if (!c) return; free(c->stack); free(c); }   // (a program never left: its stack dropped)
 
 #else
@@ -254,7 +251,6 @@ void SndCoroYield(SndCoro* c) {
     pthread_exit(NULL);
   }
 }
-int SndCoroDone(const SndCoro* c) { return !c || c->done; }
 void SndCoroFree(SndCoro* c) {
   if (!c) return;
   if (!c->done) {   // abandoned mid-program: woken to leave

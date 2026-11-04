@@ -10,7 +10,6 @@ typedef struct SndCoro SndCoro;
 SndCoro* SndCoroNew(void (*fn)(void* arg), void* arg);   // created suspended at fn's start
 void     SndCoroResume(SndCoro* c);                     // run it until it yields or fn returns
 void     SndCoroYield(SndCoro* c);                      // (inside) back to the resumer
-int      SndCoroDone(const SndCoro* c);                 // fn returned
 void     SndCoroFree(SndCoro* c);                       // a coroutine not done is abandoned (its stack freed)
 
 #endif

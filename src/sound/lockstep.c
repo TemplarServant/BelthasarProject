@@ -538,4 +538,3 @@ void CtSndLockstepReport(void) {
 }
 long CtSndLockstepMismatches(void) { return g_mismatch; }
 int CtSndLockstepWanted(void) { const char* e = getenv("CT_AUDIO_SPC"); return e && !strcmp(e, "lockstep"); }
-long CtSndLockstepCompared(void) { return g_ops; }

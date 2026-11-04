@@ -356,7 +356,6 @@ typedef struct {
   CtShadowRegs in, out;
 } ShActive;
 
-static Snes* s_snes;
 static const uint8_t* s_rom; static long s_romLen;
 static const char* s_dump; static int s_dumped; static uint32_t s_dumpAddr; static long s_dumpCall;
 static ShStats s_stats[SH_MAX];

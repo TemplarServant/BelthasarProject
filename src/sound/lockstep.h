@@ -33,6 +33,5 @@ void CtSndLockstepRam(struct Apu* apu);             // the RAM, compared
 int  CtSndLockstepWanted(void);                    // CT_AUDIO_SPC=lockstep
 void CtSndLockstepReport(void);
 long CtSndLockstepMismatches(void);
-long CtSndLockstepCompared(void);                   // instructions compared
 
 #endif

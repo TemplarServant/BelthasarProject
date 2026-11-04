@@ -68,7 +68,6 @@ typedef struct SndDrv {
 void SndClockAt(SndDrv* d, uint16_t pc);
 
 void     SndDrvInit(SndDrv* d, const SndDrvHost* host);   // m, clk and entry are the caller's
-uint8_t* SndDrvMem(SndDrv* d);
 // The program, from d->entry (the IPL at clk.cyc, or the main loop's top at $0299 with the RAM a running driver's).
 // Never returns: run it in a coroutine (sound/coro.h) and let SndClock.boundary give the time back.
 void     SndDrvProgram(SndDrv* d);

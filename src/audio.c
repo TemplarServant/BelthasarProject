@@ -1776,7 +1776,6 @@ int CtAudioReady(const CtAudio* a) { return a && a->ready; }
 // even); a slice runs vblank to vblank, so it holds line 240 of the frame it starts in: its parity is used, then flipped.
 #define APU_CYCLES_PER_MASTER (APU_CYCLES_PER_SEC / (1364.0 * 262.0 * 60.0))
 static double apuFrameCycles(const CtAudio* a) { return APU_CYCLES_PER_FRAME - (a->evenFrame ? 0.0 : 4.0 * APU_CYCLES_PER_MASTER); }
-void CtAudioFrameSkip(CtAudio* a) { if (a) a->evenFrame ^= 1; }
 void CtAudioFrame(CtAudio* a) {
   if (!a) return;
   g_audFrameNo++;

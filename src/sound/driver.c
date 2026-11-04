@@ -2899,4 +2899,3 @@ void SndDrvProgram(SndDrv* d) {
 }
 
 void SndDrvInit(SndDrv* d, const SndDrvHost* host) { d->host = *host; }
-uint8_t* SndDrvMem(SndDrv* d) { return d->m; }
