@@ -7695,13 +7695,17 @@ static int runRaceStage(int argc, char** argv) {
   int frames = atoi(argv[4]);
   uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
   { int f = 0; const char* p = argv[5];
-    while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+    while (*p && f <= frames) { const char* p0 = p; unsigned m = (unsigned)strtoul(p, (char**)&p, 16);
+      if (p == p0) break;                            // malformed token: stop, never spin (as ctBtnNext)
+      if (*p == ':') p++;
       int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
       static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
       uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
       for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
   unsigned ra[64], rl[64]; int nr = 0;
-  { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+  { const char* p = argv[6]; while (*p && nr < 64) { const char* p0 = p; ra[nr] = (unsigned)strtoul(p, (char**)&p, 16);
+      if (p == p0) break;                            // malformed region: stop, no zero-filled slots
+      if (*p == ':') p++;
       rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
   if (CtRaceStageOpen(w, (uint8_t)strtoul(argv[3], NULL, 16), &io) < 0) { printf("racestage: open failed\n"); return 1; }
   static uint8_t last[0x20000]; int first = 1;
@@ -7745,13 +7749,17 @@ static int runSeqStage(int argc, char** argv) {
   uint8_t op = (uint8_t)strtoul(argv[3], NULL, 16);
   uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
   { int f = 0; const char* p = argv[5];
-    while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+    while (*p && f <= frames) { const char* p0 = p; unsigned m = (unsigned)strtoul(p, (char**)&p, 16);
+      if (p == p0) break;                            // malformed token: stop, never spin (as ctBtnNext)
+      if (*p == ':') p++;
       int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
       static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
       uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
       for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
   unsigned ra[64], rl[64]; int nr = 0;
-  { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+  { const char* p = argv[6]; while (*p && nr < 64) { const char* p0 = p; ra[nr] = (unsigned)strtoul(p, (char**)&p, 16);
+      if (p == p0) break;                            // malformed region: stop, no zero-filled slots
+      if (*p == ':') p++;
       rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
   int ending = CtEndingStageHas(op), e3 = CtEntry3StageHas(op), e4 = CtEntry4StageHas(op), e7 = CtEntry7StageHas(op), e6 = CtEntry6StageHas(op);
   if ((ending ? CtEndingStageOpen(w, op, &io) : e3 ? CtEntry3StageOpen(w, op, &io) : e4 ? CtEntry4StageOpen(w, op, &io)
