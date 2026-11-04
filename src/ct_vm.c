@@ -1217,6 +1217,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
       int pc = B[addr + 1], present = 0;                 // scan the 3 active-party char ids
       for (int k = 0; k < 3; k++) if (r8(mem, 0x7E2980 + k) == pc) { present = 1; break; }
       if (!present) nxt = addr + 2 + B[addr + 2];        // absent -> jump; present falls through (addr+3)
+      CtVmC2Epilogue(mem->s, gRomImg, (int)gRomImgLen);  // C2/834D after the leaf, as step()'s arm runs it
     }
     else if (op == 0x4F) w8(mem, LOC + B[addr + 2] * 2, B[addr + 1]);
     // The local INC/DEC/SET 0x71-0x77 (C0/6C69..6CF0) through move.c's CtVmLocalIncFamily, as step() does.
