@@ -19,6 +19,7 @@ static int battleTechGroup(int techId);
 static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, int cap);
 #include "player.h"      // CtJoypadHeldWord: the battle NMI's C2/84D2 (the pad latch CD/0340 reads $F8)
 #include "objslot.h"
+#include "move.h"        // ctVmC1Gate: C1/D005, the drops' AddItem
 void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field's HDMA table builder
 #include "lz.h"          // ct_lz_decompress: the CT LZ, used for the enemy sprite sheet (battle_sheet_decomp.md)
 #include "tables/battle_fx.h"   // action-feedback bake: CT_FX_RISE_N / CT_FX_LIFETIME (the popup aging bounds)
@@ -16865,15 +16866,10 @@ static void battleModuleTail(CtBattleHost* h, int path) {
   }
   if (path == 0) {
     // C1/8402-841F: the drops, after the writeback.
-    for (int d = 0; d < h->rewDropN; d++) {            // items: $2400 ids / $2500 counts (C1/D010, cap 99)
-      int iid = h->rewDrops[d], slot = -1, matched = -1;
-      for (int i = 0; i < 0xF2; i++) {                 // id-terminated inventory; find matching id else first empty
-        if (s[0x2400+i] == iid) { matched = i; break; }
-        if (s[0x2400+i] == 0x00 && slot < 0) slot = i;
-      }
-      int i = (matched >= 0) ? matched : slot;
-      if (i >= 0) { int cnt = (matched >= 0) ? s[0x2500+i] : 0; cnt++; if (cnt > 99) cnt = 99;
-                    s[0x2400+i] = (uint8_t)iid; s[0x2500+i] = (uint8_t)cnt; }
+    for (int d = 0; d < h->rewDropN; d++) {            // 8406 LDA $B2A7,X / BEQ: one per drop id
+      if (!h->rewDrops[d]) continue;
+      (void)ctVmC1Gate(s, 1, h->rewDrops[d]);          // 840D TAY / JSR C1/D005 (move.c's literal AddItem)
+      s[0xB2AF] |= 0x20;                               // 8411 LDA $B2AF / ORA #20 / STA $B2AF
     }
   }
   // C1/8443-8445 `LDA $26 / STA $29AD`: the epilogue hands the advanced cursor to the byte the next battle's boot reads

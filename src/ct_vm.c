@@ -489,8 +489,8 @@ int CtWramDoorListApply(CtWram* w) {
 // C0/0D4C: the five door handlers, their $7E:3000 half. `0D4C LDX $5B / LDA $7E3000,X` dispatches on the
 // metatile's value and each handler INCs a fixed block (H below). Every INC is 8-bit except the E6 handler's
 // second cell (0D7D-0D8E), a 16-bit increment of the word at (r-1,c) that carries into (r-1,c+1).
-// Returns 1 when a handler ran, 0 for any other id (C0/0D75 BRL ->16DC). The render's copy of the map is bumped
-// by CtFieldSceneDoorOpen (scene.c); this is the WRAM copy the ROM's readers see.
+// Returns 1 when a handler ran, 0 for any other id (C0/0D75 BRL ->16DC). This bumps the WRAM copy the ROM's readers
+// see; the render's copy takes the bumped cells from it (field.c, CtFieldSceneMapFromWramRect after the call).
 int CtWramDoorOpen(CtWram* w, int tileIndex) {
   Mem* m = (Mem*)w;
   if (!m) return 0;
@@ -1217,6 +1217,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
       int pc = B[addr + 1], present = 0;                 // scan the 3 active-party char ids
       for (int k = 0; k < 3; k++) if (r8(mem, 0x7E2980 + k) == pc) { present = 1; break; }
       if (!present) nxt = addr + 2 + B[addr + 2];        // absent -> jump; present falls through (addr+3)
+      CtVmC2Epilogue(mem->s, gRomImg, (int)gRomImgLen);  // C2/834D after the leaf, as step()'s arm runs it
     }
     else if (op == 0x4F) w8(mem, LOC + B[addr + 2] * 2, B[addr + 1]);
     // The local INC/DEC/SET 0x71-0x77 (C0/6C69..6CF0) through move.c's CtVmLocalIncFamily, as step() does.
