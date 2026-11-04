@@ -1035,6 +1035,91 @@ static int runSheetCheck(const char* romPath) {
   return (clean == 4 && gatoMatch == gatoN) ? 0 : 1;
 }
 
+#ifndef CT_ORACLE_ONLY   // modes main() dispatches only outside the oracle build (see main)
+// --lzpack <list> <out> [skipped]: the LZ streams at the listed file offsets (hex, one a line; tools/gen/lz_pack.py
+// makes the list from the ROM's pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
+// assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
+static int runLzPack(int argc, char** argv, int i) {
+  long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+  FILE* li = fopen(argv[i + 1], "r"); FILE* lo = fopen(argv[i + 2], "wb");
+  FILE* ls = (i + 3 < argc && argv[i + 3][0] != '-') ? fopen(argv[i + 3], "w") : NULL;   // the offsets that are not streams
+  if (!li || !lo) { printf("lzpack: cannot open the list or the output\n"); return 2; }
+  static uint8_t buf[0x40000];
+  uint32_t count = 0; long bytes = 0, skipped = 0; char line[64];
+  fwrite("CTLZ", 1, 4, lo); fwrite(&count, 4, 1, lo);
+  while (fgets(line, sizeof line, li)) {
+    if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+    uint32_t off = (uint32_t)strtoul(line, NULL, 16);
+    size_t n = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+    if (!n) { skipped++; if (ls) fprintf(ls, "%06X\n", off); continue; }
+    int32_t c0 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), c1 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+    uint32_t nn = (uint32_t)n;
+    fwrite(&off, 4, 1, lo); fwrite(&nn, 4, 1, lo); fwrite(&c0, 4, 1, lo); fwrite(&c1, 4, 1, lo); fwrite(buf, 1, n, lo);
+    count++; bytes += (long)n;
+  }
+  fseek(lo, 4, SEEK_SET); fwrite(&count, 4, 1, lo);
+  fclose(li); fclose(lo); if (ls) fclose(ls);
+  printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
+  return 0;
+}
+
+// --animoplen <out>: the battle anim interpreter's opcode lengths (CtBattleAnimOpLens), one signed byte per op 00-FF
+// (-1 = none) -- tools/gen/anim_oplen.py's saves/anim_oplen.bin, the anim scripts' closure walks with it.
+static int runAnimOpLen(int argc, char** argv, int i) {
+  if (!CtBattleLoadRom("Chrono_Trigger_USA_SNES.sfc")) { printf("animoplen: no ROM\n"); return 1; }
+  int len[256]; uint8_t b[256]; int n = 0; CtBattleAnimOpLens(len);
+  for (int k = 0; k < 256; k++) { b[k] = (uint8_t)(len[k] < 0 ? 0xFF : len[k]); if (len[k] > 0) n++; }
+  FILE* f = fopen(argv[i + 1], "wb"); if (!f) { printf("animoplen: cannot write %s\n", argv[i + 1]); return 1; }
+  fwrite(b, 1, 256, f); fclose(f);
+  printf("animoplen: %d opcodes sized\n", n);
+  return 0;
+}
+
+// --lzassets <ct_assets.dat>: every CT_ASSET_LZ entry against the ROM's own stream at its offset -- the bytes and
+// both costs. `lz-data: N streams identical (bytes and both costs)`, or the first that is not.
+static int runLzAssets(int argc, char** argv, int i) {
+  CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+  if (!CtAssetsOpen(&as, argv[i + 1])) { printf("lz-data: cannot open %s\n", argv[i + 1]); return 2; }
+  static uint8_t buf[0x40000];
+  long n = 0;
+  for (uint32_t k = 0; k < as.count; k++) {
+    const uint8_t* e = as.data + 12 + (size_t)k * 16;
+    uint32_t type = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
+    uint32_t off = (uint32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
+    if (type != CT_ASSET_LZ) continue;
+    ct_lz_use_assets(&as, NULL);                       // read the container's entry, not the ROM's
+    size_t an = 0; long a0 = 0, a1 = 0; const uint8_t* ab = ct_lz_asset(off, &an, &a0, &a1);
+    ct_lz_use_assets(NULL, NULL);
+    size_t rn = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
+    long r0 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), r1 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
+    if (!ab || an != rn || memcmp(ab, buf, rn) || a0 != r0 || a1 != r1) {
+      printf("lz-data: the stream at %06X differs: container %zu bytes / %ld / %ld, ROM %zu / %ld / %ld\n",
+             off, an, a0, a1, rn, r0, r1);
+      return 1;
+    }
+    n++;
+  }
+  printf("lz-data: %ld streams identical (bytes and both costs)\n", n);
+  return 0;
+}
+
+// --tabassets <ct_assets.dat>: every CT_ASSET_TABLE (the ROM's small tables, src/romview.h) byte for byte against
+// the ROM. `tab-data: N tables, M bytes identical`.
+static int runTabAssets(int argc, char** argv, int i) {
+  CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+  if (!CtAssetsOpen(&as, argv[i + 1])) { printf("tab-data: cannot open %s\n", argv[i + 1]); return 2; }
+  long nb = CtRomViewCompare(rimg, rl, &as);
+  if (nb < 0) return 1;
+  int nt = 0;
+  for (uint32_t k = 0; k < as.count; k++) {
+    const uint8_t* e = as.data + 12 + (size_t)k * 16;
+    if ((uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24) == CT_ASSET_TABLE) nt++;
+  }
+  printf("tab-data: %d tables, %ld bytes identical\n", nt, nb);
+  return 0;
+}
+#endif
+
 static void dumpWram(const Snes* s) {
   FILE* f = fopen("dump.bin", "wb");
   if (!f) { printf("    (could not open dump.bin)\n"); return; }
@@ -1559,6 +1644,57 @@ static int runSongLoad(const char* romPath, const char* songSpec, const char* st
   CtAudioFree(a); free(rom);
   return okAll ? 0 : 1;
 }
+
+#ifndef CT_ORACLE_ONLY   // modes main() dispatches only outside the oracle build (see main)
+// --mixreplay <capture>: the native mixer (src/sound/mixer.c) against the vendored S-DSP, sample for sample, over a
+// CT_MIXER_CAPTURE of a real run (src/sound/mixer_replay.c; tools/mixer_replay.py).
+static int runMixReplay(int argc, char** argv) {
+  extern int CtMixerReplayMain(const char* path); return CtMixerReplayMain(argv[2]);
+}
+
+// --mixfuzz <cases> [seed]: the same comparison over random state, RAM and writes from power-on (GAIN, saturation).
+static int runMixFuzz(int argc, char** argv) {
+  extern int CtMixerFuzzMain(int cases, uint32_t seed);
+  return CtMixerFuzzMain(atoi(argv[2]), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
+}
+
+// --snddrvfuzz <actions> [seed] (with CT_AUDIO_SPC=lockstep): the sound machine in C against the original on a
+// constructed command stream (src/sound/fuzz.c); the lockstep's report is the verdict.
+static int runSndDrvFuzz(int argc, char** argv) {
+  extern int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed);
+  long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+  return CtSndFuzz(rom, rl, strtol(argv[2], NULL, 0), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
+}
+
+// --snddrvsongs <cmd> <id|id+id...>... (with CT_AUDIO_SPC=lockstep): the game's song loader called directly on a fresh
+// CtAudio per argument, each load's ARAM against its ROM blocks and the driver playing it (src/sound/fuzz.c).
+static int runSndDrvSongs(int argc, char** argv) {
+  extern int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec);
+  long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+  return CtSndSongs(rom, rl, (uint8_t)strtol(argv[2], NULL, 16), argc - 3, argv + 3);
+}
+
+// --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
+// entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
+static int runSndAssets(int argc, char** argv, int i) {
+  CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+  if (!CtAssetsOpen(&as, argv[i + 1])) { printf("snd-data: cannot open %s\n", argv[i + 1]); return 2; }
+  long n = CtAudioDataCompare(rimg, rl, &as);
+  if (n < 0) { printf("snd-data: DIFFERS (stderr says where)\n"); return 1; }
+  printf("snd-data: %ld items identical (the ROM's and the container's)\n", n);
+  return 0;
+}
+
+// --sndtiming <out>: the sound machine's cost table from the ROM (CT_ASSET_SND_TIMING; src/sound/timing.h), the setup's
+// generator tools/gen/snd_timing.py -- the reachable instructions of block 0 and the boot ROM timed on the vendored SPC700.
+static int runSndTiming(int argc, char** argv, int i) {
+  long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
+  int n = CtAudioTimingExport(rimg, rl, argv[i + 1]);
+  if (!n) { printf("snd-timing: FAILED\n"); return 1; }
+  printf("snd-timing: %d bytes -> %s\n", n, argv[i + 1]);
+  return 0;
+}
+#endif
 
 // Boot N frames, then dump the rendered framebuffer (512x480, 4 B/px, byte layout [pad,B,G,R]: R=+3, G=+2,
 // B=+1) for assets/palettes.py to convert to PNG.
@@ -7413,6 +7549,242 @@ static int runXlatEntries(const char* romPath, const char* statePath, int frames
   CtOracleDestroy(s); free(rom);
   return 0;
 }
+
+#ifndef CT_ORACLE_ONLY   // modes main() dispatches only outside the oracle build (see main)
+// --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c) on a
+// 128 KB WRAM image and write the result, graded against the cartridge's WRAM before and after one call
+// (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the reference
+// translation (src/xlat/hdma_fd.c on the vendored core) instead.
+static int runHdmaBuild(int argc, char** argv) {
+  long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+  static uint8_t w[0x20000];
+  FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "hdmabuild: bad WRAM\n"); return 1; }
+  fclose(wf);
+  int xl = !strcmp(argv[1], "--hdmabuildxlat");
+  int r = xl ? CtXlatHdmaBuild(rom, rl, w) : CtHdmaBuildNative(w, rom, rl);
+  FILE* of = fopen(argv[3], "wb"); if (of) { fwrite(w, 1, sizeof w, of); fclose(of); }
+  printf("hdmabuild: FD/C2C1 (%s) -> %d ($0153 %02X)\n", xl ? "translation" : "native", r, w[0x0153]);
+  return r == 0 ? 0 : 1;
+}
+
+// --hdmabuildcmp <prefix> <n>: grade the native builder against the cartridge's calls <prefix>_<k>_in.wram ->
+// <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair, an interrupted call,
+// is skipped). Exact: all 128 KB equal outside the stack page $0600-$06FF. Written: the entry's tables and data
+// ($7F:0F80-$1E26) and DP $01D9-$01EF are poisoned with $5A and with $A5 and built again; a byte both builds agree
+// on is one the builder wrote, and it must match the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a
+// failing call and one `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` census line a call.
+static int runHdmaBuildCmp(int argc, char** argv) {
+  long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+  int n = atoi(argv[3]); long calls = 0, exact = 0, written = 0, bad = 0;
+  static uint8_t ci[0x20000], co[0x20000], nw[0x20000], p0[0x20000], p1[0x20000];
+  static const int pr[2][2] = { { 0x10F80, 0x11E27 }, { 0x01D9, 0x01F0 } };   // not $1DFB: the wave's step, read then stepped
+  for (int k = 0; k < n; k++) {
+    char fi[1024], fo[1024]; snprintf(fi, sizeof fi, "%s_%d_in.wram", argv[2], k); snprintf(fo, sizeof fo, "%s_%d_out.wram", argv[2], k);
+    FILE* a = fopen(fi, "rb"); FILE* b = fopen(fo, "rb");
+    int ok = a && b && fread(ci, 1, sizeof ci, a) == sizeof ci && fread(co, 1, sizeof co, b) == sizeof co;
+    if (a) fclose(a); if (b) fclose(b);
+    if (!ok) continue;
+    calls++;
+    memcpy(nw, ci, sizeof nw); memcpy(p0, ci, sizeof p0); memcpy(p1, ci, sizeof p1);
+    for (int q = 0; q < 2; q++) { memset(p0 + pr[q][0], 0x5A, pr[q][1] - pr[q][0]); memset(p1 + pr[q][0], 0xA5, pr[q][1] - pr[q][0]); }
+    if (CtHdmaBuildNative(nw, rom, rl) || CtHdmaBuildNative(p0, rom, rl) || CtHdmaBuildNative(p1, rom, rl)) {
+      bad++; printf("hdmabuildcmp: call %d: the builder refused ($0126 %02X $0153 %02X)\n", k, ci[0x0126], ci[0x0153]); continue; }
+    int d = -1, nd = 0;
+    for (int i = 0; i < 0x20000; i++) if ((i < 0x0600 || i >= 0x0700) && nw[i] != co[i]) { if (d < 0) d = i; nd++; }
+    int wd = -1, nwd = 0; long wr = 0;
+    for (int q = 0; q < 2; q++) for (int i = pr[q][0]; i < pr[q][1]; i++)
+      if (p0[i] == p1[i]) { wr++; if (p0[i] != co[i]) { if (wd < 0) wd = i; nwd++; } }
+    written += wr;
+    if (d < 0 && wd < 0) exact++;
+    else { bad++;
+      int at = d >= 0 ? d : wd; const uint8_t* got = d >= 0 ? nw : p0;
+      printf("hdmabuildcmp: call %d ($0126 %02X $0127 %02X $0153 %02X): %d byte(s) differ, %d written byte(s) wrong; first %s:%04X cartridge %02X native %02X\n",
+             k, ci[0x0126], ci[0x0127], ci[0x0153], nd, nwd, at < 0x10000 ? "7E" : "7F", at & 0xFFFF, co[at], got[at]); }
+    int setB = !(ci[0x0153] & 1) || ci[0x0126] >= 3, md = ci[0x0126] % 3;
+    if (md && !ci[0x0127]) md = 0;
+    printf("hdmabuildcmp: key %d %c %d %02X %d %d %d %d %d\n", k, setB ? 'B' : 'A', md, ci[0x0127], ci[0x1DFD] != 0, ci[0x1DF9] != 0,
+           (ci[0x1DF9] | ci[0x1DFA] | ci[0x1DFD] | ci[0x1DFE]) != 0, md == 0 && (ci[0x0153] & 0x80), ci[0x10351] & 1);
+  }
+  printf("hdmabuildcmp: %ld calls, %ld exact, %ld written bytes, %ld wrong\n", calls, exact, written, bad);
+  return bad ? 1 : 0;
+}
+
+// --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under
+// bit 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity,
+// the rest random) through the native builder and the translation; prints the first differing byte and a census.
+static int runHdmaFuzz(int argc, char** argv) {
+  long rl = 0; const uint8_t* rom = CtRomImage(&rl);
+  long n = strtol(argv[2], NULL, 0);
+  uint32_t rs = argc >= 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u;
+  static uint8_t base[0x20000], a[0x20000], b[0x20000];
+  int haveBase = 0;
+  if (argc == 5) { FILE* bf = fopen(argv[4], "rb"); haveBase = bf && fread(base, 1, sizeof base, bf) == sizeof base; if (bf) fclose(bf);
+                   if (!haveBase) { fprintf(stderr, "hdmafuzz: bad WRAM %s\n", argv[4]); return 1; } }
+#define HF_RND() (rs ^= rs << 13, rs ^= rs >> 17, rs ^= rs << 5, rs)
+  static long cen[2][3][128];   // [set B][the mode run][branch key: n = 0, n > $28, ch2 wave, ch3 wave, tail wave, $53 bit 7, $0351 odd]
+  long bad = 0, xfail = 0, nfail = 0;
+  for (long k = 0; k < n; k++) {
+    if (haveBase && (k & 1)) memcpy(a, base, sizeof a);
+    else for (int i = 0; i < 0x20000; i += 4) { uint32_t v = HF_RND(); memcpy(a + i, &v, 4); }
+    int setA = HF_RND() & 1;
+    a[0x0153] = (uint8_t)((a[0x0153] & 0xFE) | setA);
+    if (HF_RND() & 1) a[0x0153] &= 0x7F;
+    a[0x0126] = (uint8_t)(HF_RND() % (setA ? 6 : 3));
+    unsigned r = HF_RND() & 7;
+    a[0x0127] = (uint8_t)(r == 0 ? 0 : r < 5 ? HF_RND() % 0x29 : r == 5 ? 0x28 : HF_RND());
+    for (int q = 0; q < 2; q++) { unsigned z = HF_RND() & 3;   // $1DF9 / $1DFD: off, low byte only, high byte only, both
+      unsigned ad = q ? 0x1DFD : 0x1DF9; a[ad] = (z & 1) ? (uint8_t)(HF_RND() | 1) : 0; a[ad + 1] = (z & 2) ? (uint8_t)(HF_RND() | 1) : 0; }
+    memcpy(b, a, sizeof b);
+    int rx = CtXlatHdmaBuild(rom, rl, a);
+    int rn = CtHdmaBuildNative(b, rom, rl);
+    if (rx) { xfail++; continue; }
+    if (rn) { nfail++; continue; }
+    int d = -1; for (int i = 0; i < 0x20000; i++) if (a[i] != b[i]) { d = i; break; }
+    unsigned md = a[0x0126] % 3, nn = a[0x0127];
+    int setB = !setA || a[0x0126] >= 3;
+    int key = (nn == 0) | (nn > 0x28) << 1 | (a[0x1DFD] != 0) << 2 | (a[0x1DF9] != 0) << 3 |
+              ((a[0x1DF9] | a[0x1DFA] | a[0x1DFD] | a[0x1DFE]) != 0) << 4 | ((a[0x0153] >> 7) & 1) << 5 | (a[0x10351] & 1) << 6;
+    cen[setB][md][key]++;
+    if (d >= 0) { if (bad++ < 8) printf("hdmafuzz: image %ld ($0126 %02X $0127 %02X $0153 %02X) differs at %c:%04X: translation %02X native %02X\n",
+                                       k, a[0x0126], nn, a[0x0153], d < 0x10000 ? 'E' : 'F', d & 0xFFFF, a[d], b[d]); }
+  }
+#undef HF_RND
+  printf("hdmafuzz: %ld images, %ld differ, %ld translation stops, %ld native refusals\n", n, bad, xfail, nfail);
+  for (int sb = 0; sb < 2; sb++) for (int md = 0; md < 3; md++) {
+    int keys = 0; long imgs = 0;
+    for (int q = 0; q < 128; q++) if (cen[sb][md][q]) { keys++; imgs += cen[sb][md][q]; }
+    printf("hdmafuzz: set %c mode %d: %ld images, %d of the 128 branch keys\n", sb ? 'B' : 'A', md, imgs, keys);
+  }
+  return bad || xfail || nfail ? 1 : 0;
+}
+
+// --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB
+// WRAM image and print every byte it changed, graded against `--callrom 7E485D --writes` from the same frame's
+// state (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
+static int runRaceStep(int argc, char** argv) {
+  static uint8_t w0[0x20000], w[0x20000];
+  FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w0, 1, sizeof w0, wf) != sizeof w0) { fprintf(stderr, "racestep: bad WRAM\n"); return 1; }
+  fclose(wf);
+  memcpy(w, w0, sizeof w);
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  io.apu = racestepApu; io.sfx = racestepSfx; io.post = racestepPost; io.ctx = w;
+  static uint8_t rsRom[0x600000];
+  { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom, 1, sizeof rsRom, rf); fclose(rf); io.rom = rsRom; } }
+  unsigned task = argc == 4 ? (unsigned)strtoul(argv[3], NULL, 16) : 0x485D, t = task;
+  if (task == 0x485D) t = CtRaceStep485D(w, &io);
+  else if (task == 0x4339) CtRaceTask4339(w);
+  else if (task == 0x42BD) CtRaceTask42BD(w);
+  else if (task == 0x3749 || task == 0x3754) { if (CtRaceScript(w, task == 0x3749 ? 0x0A00 : 0x0B00, &io) < 0) return 1; }
+  else { fprintf(stderr, "racestep: task %04X is not ported\n", task); return 1; }
+  printf("racestep: task -> %04X\n", t);
+  for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
+  return 0;
+}
+
+// --racestage <in.wram> <operand> <frames> <btnscript> <ADDR:LEN,...>: the race's stage natively (src/seq_race.c)
+// from a field WRAM at the hand-off: CtRaceStageOpen, then one CtRaceStageFrame a frame with the btnscript's pad
+// (`hexbtn:frames`, LakeSnes order, converted to the $4218 word), printing the regions on change in --monitor's
+// format (`fN  7EAAAA=HH..`, frame 0 = the state after the setup). tools/race_stage_cmp.py grades it.
+static int runRaceStage(int argc, char** argv) {
+  static uint8_t w[0x20000], rsRom2[0x600000];
+  FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "racestage: bad WRAM\n"); return 1; }
+  fclose(wf);
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom2, 1, sizeof rsRom2, rf); fclose(rf); io.rom = rsRom2; } }
+  io.ctx = w; io.post = racestagePost;
+  int frames = atoi(argv[4]);
+  uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
+  { int f = 0; const char* p = argv[5];
+    while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+      int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
+      static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
+      uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
+      for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
+  unsigned ra[64], rl[64]; int nr = 0;
+  { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+      rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
+  if (CtRaceStageOpen(w, (uint8_t)strtoul(argv[3], NULL, 16), &io) < 0) { printf("racestage: open failed\n"); return 1; }
+  static uint8_t last[0x20000]; int first = 1;
+  for (int f = 0; f <= frames; f++) {
+    int st = f ? CtRaceStageFrame(w, pads[f], &io) : 0;
+    int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
+    if (ch) {
+      printf("  f%-6d", f);
+      for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
+      printf("\n");
+      for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
+      first = 0;
+    }
+    if (st == 1) { printf("racestage: END at frame %d\n", f); CtRaceStageClose(w, &io); break; }
+    if (st == 2) { printf("racestage: soft reset at frame %d\n", f); break; }
+  }
+  free(pads);
+  return 0;
+}
+
+// --seqstage <state> <operand> <frames> <btnscript> <ADDR:LEN,...> [hold]: a $C3 stage natively (the race,
+// src/seq_race.c, or the ending, src/seq_ending.c, by the operand) from an oracle state at the hand-off: its WRAM,
+// and its sound processor seeded into the port's CtAudio (the stage's posts go to it; a script's `F5` reads its
+// port 2). `hold` frames of SPC run before the first NMI (the setup's black frames); then one NMI and one frame of
+// SPC a frame, the regions printed on change in --monitor's format. tools/ending_stage_cmp.py grades it.
+static int runSeqStage(int argc, char** argv) {
+  static uint8_t w[0x20000];
+  uint8_t* srom = NULL;
+  Snes* ss = ctLoadStateOracle(DEFAULT_ROM, argv[2], &srom);
+  if (!ss) { printf("seqstage: cannot load %s\n", argv[2]); return 1; }
+  memcpy(w, ss->ram, sizeof w);
+  int rlv = 0; uint8_t* rimg = CtReadFile(DEFAULT_ROM, &rlv);
+  if (!rimg) { printf("seqstage: no ROM\n"); return 1; }
+  CtAudio* sa = CtAudioInit(rimg, rlv);
+  if (!sa) { printf("seqstage: CtAudioInit failed\n"); return 1; }
+  CtAudioSeedFromApu(sa, ss->apu);
+  CtRaceIo io; memset(&io, 0, sizeof io);
+  io.ctx = sa; io.rom = rimg; io.romLen = rlv;
+  io.post = seqstagePost; io.port = seqstagePort; io.field = seqstageField; io.postFrames = seqstagePostFrames; g_seqstageWram = w;
+  int frames = atoi(argv[4]), hold = argc == 8 ? atoi(argv[7]) : 0;
+  uint8_t op = (uint8_t)strtoul(argv[3], NULL, 16);
+  uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
+  { int f = 0; const char* p = argv[5];
+    while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+      int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
+      static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
+      uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
+      for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
+  unsigned ra[64], rl[64]; int nr = 0;
+  { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
+      rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
+  int ending = CtEndingStageHas(op), e3 = CtEntry3StageHas(op), e4 = CtEntry4StageHas(op), e7 = CtEntry7StageHas(op), e6 = CtEntry6StageHas(op);
+  if ((ending ? CtEndingStageOpen(w, op, &io) : e3 ? CtEntry3StageOpen(w, op, &io) : e4 ? CtEntry4StageOpen(w, op, &io)
+              : e7 ? CtEntry7StageOpen(w, op, &io) : e6 ? CtEntry6StageOpen(w, op, &io) : CtRaceStageOpen(w, op, &io)) < 0) {
+    printf("seqstage: open failed\n"); return 1; }
+  for (int k = 0; k < hold; k++) CtAudioFrame(sa);
+  g_seqstageField = (ss->ppu->evenFrame ? 1 : 0) ^ ((hold - 1) & 1);   // the frames started from the hand-off to frame 0
+  static uint8_t last[0x20000]; int first = 1;
+  for (int f = 0; f <= frames; f++) {
+    int st = 0;
+    if (f) { g_seqstageField ^= 1;
+             st = ending ? CtEndingStageFrame(w, pads[f], &io) : e3 ? CtEntry3StageFrame(w, pads[f], &io)
+                : e4 ? CtEntry4StageFrame(w, pads[f], &io)
+                : e7 ? CtEntry7StageFrame(w, pads[f], &io) : e6 ? CtEntry6StageFrame(w, pads[f], &io)
+                : CtRaceStageFrame(w, pads[f], &io);
+             CtAudioFrame(sa); }
+    int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
+    if (ch) {
+      printf("  f%-6d", f);
+      for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
+      printf("\n");
+      for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
+      first = 0;
+    }
+    if (st == 1) { printf("seqstage: END at frame %d\n", f);
+                   if (ending) CtEndingStageClose(w, &io); else if (e3) CtEntry3StageClose(w, &io);
+                   else if (e4) CtEntry4StageClose(w, &io); else if (e6) CtEntry6StageClose(w, &io); else CtRaceStageClose(w, &io); break; }
+    if (st == 2) { printf("seqstage: soft reset at frame %d\n", f); if (e7) CtEntry7StageClose(w, &io); break; }
+  }
+  free(pads);
+  return 0;
+}
+#endif
 
 // C2/62ED, the overworld's per-cell region nibble (the player's position -> music zone, `$1B9B,X` -> song, C2/2F25),
 // micro-executed against CtWorldRegion. The grid is seeded so each byte's two nibbles differ: on world 0's own data
@@ -14924,260 +15296,20 @@ static int ctOracleOnlyRefuse(void) {
 #endif
 
 int main(int argc, char** argv) {
-  // --hdmabuild <in.wram> <out.wram>: run the field's HDMA table builder FD/C2C1 (native, src/hdma_table.c) on a
-  // 128 KB WRAM image and write the result, graded against the cartridge's WRAM before and after one call
-  // (tools/hdma_build_cmp.py: --hookpc FDC2C1 / the RTL with CT_HOOK_DUMPWRAM). --hdmabuildxlat runs the reference
-  // translation (src/xlat/hdma_fd.c on the vendored core) instead.
-  // --hdmafuzz <N> [seed] [base.wram]: N random WRAM images (every mode of both sets, every branch: `$0126` 0..5 under
-  // bit 0 set / 0..2 clear, `$0127` 0..FF, the wave's `$1DF9` / `$1DFD` / `$1DFB`, `$53` bit 7, `$7F:0351`'s parity,
-  // the rest random) through the native builder and the translation; prints the first differing byte and a census.
 #ifndef CT_ORACLE_ONLY   // the translated stages and the native sequences: not the cartridge's modes
-  // --mixreplay <capture>: the native mixer (src/sound/mixer.c) against the vendored S-DSP, sample for sample, over a
-  // CT_MIXER_CAPTURE of a real run (src/sound/mixer_replay.c; tools/mixer_replay.py).
-  if (argc == 3 && !strcmp(argv[1], "--mixreplay")) { extern int CtMixerReplayMain(const char* path); return CtMixerReplayMain(argv[2]); }
-  // --mixfuzz <cases> [seed]: the same comparison over random state, RAM and writes from power-on (GAIN, saturation).
-  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--mixfuzz")) {
-    extern int CtMixerFuzzMain(int cases, uint32_t seed);
-    return CtMixerFuzzMain(atoi(argv[2]), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
-  }
-  if (argc == 4 && (!strcmp(argv[1], "--hdmabuild") || !strcmp(argv[1], "--hdmabuildxlat"))) {
-    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
-    static uint8_t w[0x20000];
-    FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "hdmabuild: bad WRAM\n"); return 1; }
-    fclose(wf);
-    int xl = !strcmp(argv[1], "--hdmabuildxlat");
-    int r = xl ? CtXlatHdmaBuild(rom, rl, w) : CtHdmaBuildNative(w, rom, rl);
-    FILE* of = fopen(argv[3], "wb"); if (of) { fwrite(w, 1, sizeof w, of); fclose(of); }
-    printf("hdmabuild: FD/C2C1 (%s) -> %d ($0153 %02X)\n", xl ? "translation" : "native", r, w[0x0153]);
-    return r == 0 ? 0 : 1;
-  }
-  // --hdmabuildcmp <prefix> <n>: grade the native builder against the cartridge's calls <prefix>_<k>_in.wram ->
-  // <prefix>_<k>_out.wram, k < n (ct.exe --hookpc FDC2C1 with CT_HOOK_DUMPCALLS; a missing pair, an interrupted call,
-  // is skipped). Exact: all 128 KB equal outside the stack page $0600-$06FF. Written: the entry's tables and data
-  // ($7F:0F80-$1E26) and DP $01D9-$01EF are poisoned with $5A and with $A5 and built again; a byte both builds agree
-  // on is one the builder wrote, and it must match the cartridge's. Prints `hdmabuildcmp: call <k> ...` for a
-  // failing call and one `hdmabuildcmp: key <k> <set> <mode> <n> <dfd> <df9> <tail> <b7> <odd>` census line a call.
-  if (argc == 4 && !strcmp(argv[1], "--hdmabuildcmp")) {
-    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
-    int n = atoi(argv[3]); long calls = 0, exact = 0, written = 0, bad = 0;
-    static uint8_t ci[0x20000], co[0x20000], nw[0x20000], p0[0x20000], p1[0x20000];
-    static const int pr[2][2] = { { 0x10F80, 0x11E27 }, { 0x01D9, 0x01F0 } };   // not $1DFB: the wave's step, read then stepped
-    for (int k = 0; k < n; k++) {
-      char fi[1024], fo[1024]; snprintf(fi, sizeof fi, "%s_%d_in.wram", argv[2], k); snprintf(fo, sizeof fo, "%s_%d_out.wram", argv[2], k);
-      FILE* a = fopen(fi, "rb"); FILE* b = fopen(fo, "rb");
-      int ok = a && b && fread(ci, 1, sizeof ci, a) == sizeof ci && fread(co, 1, sizeof co, b) == sizeof co;
-      if (a) fclose(a); if (b) fclose(b);
-      if (!ok) continue;
-      calls++;
-      memcpy(nw, ci, sizeof nw); memcpy(p0, ci, sizeof p0); memcpy(p1, ci, sizeof p1);
-      for (int q = 0; q < 2; q++) { memset(p0 + pr[q][0], 0x5A, pr[q][1] - pr[q][0]); memset(p1 + pr[q][0], 0xA5, pr[q][1] - pr[q][0]); }
-      if (CtHdmaBuildNative(nw, rom, rl) || CtHdmaBuildNative(p0, rom, rl) || CtHdmaBuildNative(p1, rom, rl)) {
-        bad++; printf("hdmabuildcmp: call %d: the builder refused ($0126 %02X $0153 %02X)\n", k, ci[0x0126], ci[0x0153]); continue; }
-      int d = -1, nd = 0;
-      for (int i = 0; i < 0x20000; i++) if ((i < 0x0600 || i >= 0x0700) && nw[i] != co[i]) { if (d < 0) d = i; nd++; }
-      int wd = -1, nwd = 0; long wr = 0;
-      for (int q = 0; q < 2; q++) for (int i = pr[q][0]; i < pr[q][1]; i++)
-        if (p0[i] == p1[i]) { wr++; if (p0[i] != co[i]) { if (wd < 0) wd = i; nwd++; } }
-      written += wr;
-      if (d < 0 && wd < 0) exact++;
-      else { bad++;
-        int at = d >= 0 ? d : wd; const uint8_t* got = d >= 0 ? nw : p0;
-        printf("hdmabuildcmp: call %d ($0126 %02X $0127 %02X $0153 %02X): %d byte(s) differ, %d written byte(s) wrong; first %s:%04X cartridge %02X native %02X\n",
-               k, ci[0x0126], ci[0x0127], ci[0x0153], nd, nwd, at < 0x10000 ? "7E" : "7F", at & 0xFFFF, co[at], got[at]); }
-      int setB = !(ci[0x0153] & 1) || ci[0x0126] >= 3, md = ci[0x0126] % 3;
-      if (md && !ci[0x0127]) md = 0;
-      printf("hdmabuildcmp: key %d %c %d %02X %d %d %d %d %d\n", k, setB ? 'B' : 'A', md, ci[0x0127], ci[0x1DFD] != 0, ci[0x1DF9] != 0,
-             (ci[0x1DF9] | ci[0x1DFA] | ci[0x1DFD] | ci[0x1DFE]) != 0, md == 0 && (ci[0x0153] & 0x80), ci[0x10351] & 1);
-    }
-    printf("hdmabuildcmp: %ld calls, %ld exact, %ld written bytes, %ld wrong\n", calls, exact, written, bad);
-    return bad ? 1 : 0;
-  }
-  // --snddrvfuzz <actions> [seed] (with CT_AUDIO_SPC=lockstep): the sound machine in C against the original on a
-  // constructed command stream (src/sound/fuzz.c); the lockstep's report is the verdict.
-  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--snddrvfuzz")) {
-    extern int CtSndFuzz(const uint8_t* rom, long romLen, long actions, uint32_t seed);
-    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
-    return CtSndFuzz(rom, rl, strtol(argv[2], NULL, 0), argc == 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u);
-  }
-  // --snddrvsongs <cmd> <id|id+id...>... (with CT_AUDIO_SPC=lockstep): the game's song loader called directly on a fresh
-  // CtAudio per argument, each load's ARAM against its ROM blocks and the driver playing it (src/sound/fuzz.c).
-  if (argc >= 4 && !strcmp(argv[1], "--snddrvsongs")) {
-    extern int CtSndSongs(const uint8_t* rom, long romLen, uint8_t cmd, int nspec, char** spec);
-    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
-    return CtSndSongs(rom, rl, (uint8_t)strtol(argv[2], NULL, 16), argc - 3, argv + 3);
-  }
-  if ((argc >= 3 && argc <= 5) && !strcmp(argv[1], "--hdmafuzz")) {
-    long rl = 0; const uint8_t* rom = CtRomImage(&rl);
-    long n = strtol(argv[2], NULL, 0);
-    uint32_t rs = argc >= 4 ? (uint32_t)strtoul(argv[3], NULL, 0) : 1u;
-    static uint8_t base[0x20000], a[0x20000], b[0x20000];
-    int haveBase = 0;
-    if (argc == 5) { FILE* bf = fopen(argv[4], "rb"); haveBase = bf && fread(base, 1, sizeof base, bf) == sizeof base; if (bf) fclose(bf);
-                     if (!haveBase) { fprintf(stderr, "hdmafuzz: bad WRAM %s\n", argv[4]); return 1; } }
-#define HF_RND() (rs ^= rs << 13, rs ^= rs >> 17, rs ^= rs << 5, rs)
-    static long cen[2][3][128];   // [set B][the mode run][branch key: n = 0, n > $28, ch2 wave, ch3 wave, tail wave, $53 bit 7, $0351 odd]
-    long bad = 0, xfail = 0, nfail = 0;
-    for (long k = 0; k < n; k++) {
-      if (haveBase && (k & 1)) memcpy(a, base, sizeof a);
-      else for (int i = 0; i < 0x20000; i += 4) { uint32_t v = HF_RND(); memcpy(a + i, &v, 4); }
-      int setA = HF_RND() & 1;
-      a[0x0153] = (uint8_t)((a[0x0153] & 0xFE) | setA);
-      if (HF_RND() & 1) a[0x0153] &= 0x7F;
-      a[0x0126] = (uint8_t)(HF_RND() % (setA ? 6 : 3));
-      unsigned r = HF_RND() & 7;
-      a[0x0127] = (uint8_t)(r == 0 ? 0 : r < 5 ? HF_RND() % 0x29 : r == 5 ? 0x28 : HF_RND());
-      for (int q = 0; q < 2; q++) { unsigned z = HF_RND() & 3;   // $1DF9 / $1DFD: off, low byte only, high byte only, both
-        unsigned ad = q ? 0x1DFD : 0x1DF9; a[ad] = (z & 1) ? (uint8_t)(HF_RND() | 1) : 0; a[ad + 1] = (z & 2) ? (uint8_t)(HF_RND() | 1) : 0; }
-      memcpy(b, a, sizeof b);
-      int rx = CtXlatHdmaBuild(rom, rl, a);
-      int rn = CtHdmaBuildNative(b, rom, rl);
-      if (rx) { xfail++; continue; }
-      if (rn) { nfail++; continue; }
-      int d = -1; for (int i = 0; i < 0x20000; i++) if (a[i] != b[i]) { d = i; break; }
-      unsigned md = a[0x0126] % 3, nn = a[0x0127];
-      int setB = !setA || a[0x0126] >= 3;
-      int key = (nn == 0) | (nn > 0x28) << 1 | (a[0x1DFD] != 0) << 2 | (a[0x1DF9] != 0) << 3 |
-                ((a[0x1DF9] | a[0x1DFA] | a[0x1DFD] | a[0x1DFE]) != 0) << 4 | ((a[0x0153] >> 7) & 1) << 5 | (a[0x10351] & 1) << 6;
-      cen[setB][md][key]++;
-      if (d >= 0) { if (bad++ < 8) printf("hdmafuzz: image %ld ($0126 %02X $0127 %02X $0153 %02X) differs at %c:%04X: translation %02X native %02X\n",
-                                         k, a[0x0126], nn, a[0x0153], d < 0x10000 ? 'E' : 'F', d & 0xFFFF, a[d], b[d]); }
-    }
-#undef HF_RND
-    printf("hdmafuzz: %ld images, %ld differ, %ld translation stops, %ld native refusals\n", n, bad, xfail, nfail);
-    for (int sb = 0; sb < 2; sb++) for (int md = 0; md < 3; md++) {
-      int keys = 0; long imgs = 0;
-      for (int q = 0; q < 128; q++) if (cen[sb][md][q]) { keys++; imgs += cen[sb][md][q]; }
-      printf("hdmafuzz: set %c mode %d: %ld images, %d of the 128 branch keys\n", sb ? 'B' : 'A', md, imgs, keys);
-    }
-    return bad || xfail || nfail ? 1 : 0;
-  }
-  // --racestep <in.wram>: run the race's per-frame task $7E:485D (src/seq_race.c, CtRaceStep485D) once over a 128 KB
-  // WRAM image and print every byte it changed, graded against `--callrom 7E485D --writes` from the same frame's
-  // state (tools/race_step_cmp.py). The sound callbacks print what the ROM would post.
-  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--racestep")) {
-    static uint8_t w0[0x20000], w[0x20000];
-    FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w0, 1, sizeof w0, wf) != sizeof w0) { fprintf(stderr, "racestep: bad WRAM\n"); return 1; }
-    fclose(wf);
-    memcpy(w, w0, sizeof w);
-    CtRaceIo io; memset(&io, 0, sizeof io);
-    io.apu = racestepApu; io.sfx = racestepSfx; io.post = racestepPost; io.ctx = w;
-    static uint8_t rsRom[0x600000];
-    { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom, 1, sizeof rsRom, rf); fclose(rf); io.rom = rsRom; } }
-    unsigned task = argc == 4 ? (unsigned)strtoul(argv[3], NULL, 16) : 0x485D, t = task;
-    if (task == 0x485D) t = CtRaceStep485D(w, &io);
-    else if (task == 0x4339) CtRaceTask4339(w);
-    else if (task == 0x42BD) CtRaceTask42BD(w);
-    else if (task == 0x3749 || task == 0x3754) { if (CtRaceScript(w, task == 0x3749 ? 0x0A00 : 0x0B00, &io) < 0) return 1; }
-    else { fprintf(stderr, "racestep: task %04X is not ported\n", task); return 1; }
-    printf("racestep: task -> %04X\n", t);
-    for (int a = 0; a < 0x20000; a++) if (w[a] != w0[a]) printf("  w %06X = %02X\n", a < 0x10000 ? 0x7E0000 + a : 0x7F0000 + (a - 0x10000), w[a]);
-    return 0;
-  }
-  // --racestage <in.wram> <operand> <frames> <btnscript> <ADDR:LEN,...>: the race's stage natively (src/seq_race.c)
-  // from a field WRAM at the hand-off: CtRaceStageOpen, then one CtRaceStageFrame a frame with the btnscript's pad
-  // (`hexbtn:frames`, LakeSnes order, converted to the $4218 word), printing the regions on change in --monitor's
-  // format (`fN  7EAAAA=HH..`, frame 0 = the state after the setup). tools/race_stage_cmp.py grades it.
-  if (argc == 7 && !strcmp(argv[1], "--racestage")) {
-    static uint8_t w[0x20000], rsRom2[0x600000];
-    FILE* wf = fopen(argv[2], "rb"); if (!wf || fread(w, 1, sizeof w, wf) != sizeof w) { fprintf(stderr, "racestage: bad WRAM\n"); return 1; }
-    fclose(wf);
-    CtRaceIo io; memset(&io, 0, sizeof io);
-    { FILE* rf = fopen(DEFAULT_ROM, "rb"); if (rf) { io.romLen = (long)fread(rsRom2, 1, sizeof rsRom2, rf); fclose(rf); io.rom = rsRom2; } }
-    io.ctx = w; io.post = racestagePost;
-    int frames = atoi(argv[4]);
-    uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
-    { int f = 0; const char* p = argv[5];
-      while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
-        int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
-        static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
-        uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
-        for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
-    unsigned ra[64], rl[64]; int nr = 0;
-    { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
-        rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
-    if (CtRaceStageOpen(w, (uint8_t)strtoul(argv[3], NULL, 16), &io) < 0) { printf("racestage: open failed\n"); return 1; }
-    static uint8_t last[0x20000]; int first = 1;
-    for (int f = 0; f <= frames; f++) {
-      int st = f ? CtRaceStageFrame(w, pads[f], &io) : 0;
-      int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
-      if (ch) {
-        printf("  f%-6d", f);
-        for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
-        printf("\n");
-        for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
-        first = 0;
-      }
-      if (st == 1) { printf("racestage: END at frame %d\n", f); CtRaceStageClose(w, &io); break; }
-      if (st == 2) { printf("racestage: soft reset at frame %d\n", f); break; }
-    }
-    free(pads);
-    return 0;
-  }
-  // --seqstage <state> <operand> <frames> <btnscript> <ADDR:LEN,...> [hold]: a $C3 stage natively (the race,
-  // src/seq_race.c, or the ending, src/seq_ending.c, by the operand) from an oracle state at the hand-off: its WRAM,
-  // and its sound processor seeded into the port's CtAudio (the stage's posts go to it; a script's `F5` reads its
-  // port 2). `hold` frames of SPC run before the first NMI (the setup's black frames); then one NMI and one frame of
-  // SPC a frame, the regions printed on change in --monitor's format. tools/ending_stage_cmp.py grades it.
-  if ((argc == 7 || argc == 8) && !strcmp(argv[1], "--seqstage")) {
-    static uint8_t w[0x20000];
-    uint8_t* srom = NULL;
-    Snes* ss = ctLoadStateOracle(DEFAULT_ROM, argv[2], &srom);
-    if (!ss) { printf("seqstage: cannot load %s\n", argv[2]); return 1; }
-    memcpy(w, ss->ram, sizeof w);
-    int rlv = 0; uint8_t* rimg = CtReadFile(DEFAULT_ROM, &rlv);
-    if (!rimg) { printf("seqstage: no ROM\n"); return 1; }
-    CtAudio* sa = CtAudioInit(rimg, rlv);
-    if (!sa) { printf("seqstage: CtAudioInit failed\n"); return 1; }
-    CtAudioSeedFromApu(sa, ss->apu);
-    CtRaceIo io; memset(&io, 0, sizeof io);
-    io.ctx = sa; io.rom = rimg; io.romLen = rlv;
-    io.post = seqstagePost; io.port = seqstagePort; io.field = seqstageField; io.postFrames = seqstagePostFrames; g_seqstageWram = w;
-    int frames = atoi(argv[4]), hold = argc == 8 ? atoi(argv[7]) : 0;
-    uint8_t op = (uint8_t)strtoul(argv[3], NULL, 16);
-    uint16_t* pads = (uint16_t*)calloc((size_t)frames + 2, sizeof *pads);
-    { int f = 0; const char* p = argv[5];
-      while (*p && f <= frames) { unsigned m = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
-        int n = (int)strtol(p, (char**)&p, 10); if (*p == ',') p++;
-        static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100, 0x0080, 0x0040, 0x0020, 0x0010 };
-        uint16_t j = 0; for (int b = 0; b < 12; b++) if (m & (1u << b)) j |= map[b];
-        for (int k = 0; k < n && f <= frames; k++) pads[f++] = j; } }
-    unsigned ra[64], rl[64]; int nr = 0;
-    { const char* p = argv[6]; while (*p && nr < 64) { ra[nr] = (unsigned)strtoul(p, (char**)&p, 16); if (*p == ':') p++;
-        rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
-    int ending = CtEndingStageHas(op), e3 = CtEntry3StageHas(op), e4 = CtEntry4StageHas(op), e7 = CtEntry7StageHas(op), e6 = CtEntry6StageHas(op);
-    if ((ending ? CtEndingStageOpen(w, op, &io) : e3 ? CtEntry3StageOpen(w, op, &io) : e4 ? CtEntry4StageOpen(w, op, &io)
-                : e7 ? CtEntry7StageOpen(w, op, &io) : e6 ? CtEntry6StageOpen(w, op, &io) : CtRaceStageOpen(w, op, &io)) < 0) {
-      printf("seqstage: open failed\n"); return 1; }
-    for (int k = 0; k < hold; k++) CtAudioFrame(sa);
-    g_seqstageField = (ss->ppu->evenFrame ? 1 : 0) ^ ((hold - 1) & 1);   // the frames started from the hand-off to frame 0
-    static uint8_t last[0x20000]; int first = 1;
-    for (int f = 0; f <= frames; f++) {
-      int st = 0;
-      if (f) { g_seqstageField ^= 1;
-               st = ending ? CtEndingStageFrame(w, pads[f], &io) : e3 ? CtEntry3StageFrame(w, pads[f], &io)
-                  : e4 ? CtEntry4StageFrame(w, pads[f], &io)
-                  : e7 ? CtEntry7StageFrame(w, pads[f], &io) : e6 ? CtEntry6StageFrame(w, pads[f], &io)
-                  : CtRaceStageFrame(w, pads[f], &io);
-               CtAudioFrame(sa); }
-      int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
-      if (ch) {
-        printf("  f%-6d", f);
-        for (int k = 0; k < nr; k++) { printf("  7E%04X=", ra[k] & 0xFFFF); for (unsigned b = 0; b < rl[k]; b++) printf("%02X", w[(ra[k] + b) & 0x1FFFF]); }
-        printf("\n");
-        for (int k = 0; k < nr; k++) for (unsigned b = 0; b < rl[k]; b++) last[(ra[k] + b) & 0x1FFFF] = w[(ra[k] + b) & 0x1FFFF];
-        first = 0;
-      }
-      if (st == 1) { printf("seqstage: END at frame %d\n", f);
-                     if (ending) CtEndingStageClose(w, &io); else if (e3) CtEntry3StageClose(w, &io);
-                     else if (e4) CtEntry4StageClose(w, &io); else if (e6) CtEntry6StageClose(w, &io); else CtRaceStageClose(w, &io); break; }
-      if (st == 2) { printf("seqstage: soft reset at frame %d\n", f); if (e7) CtEntry7StageClose(w, &io); break; }
-    }
-    free(pads);
-    return 0;
-  }
+  if (argc == 3 && !strcmp(argv[1], "--mixreplay")) return runMixReplay(argc, argv);
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--mixfuzz")) return runMixFuzz(argc, argv);
+  if (argc == 4 && (!strcmp(argv[1], "--hdmabuild") || !strcmp(argv[1], "--hdmabuildxlat"))) return runHdmaBuild(argc, argv);
+  if (argc == 4 && !strcmp(argv[1], "--hdmabuildcmp")) return runHdmaBuildCmp(argc, argv);
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--snddrvfuzz")) return runSndDrvFuzz(argc, argv);
+  if (argc >= 4 && !strcmp(argv[1], "--snddrvsongs")) return runSndDrvSongs(argc, argv);
+  if ((argc >= 3 && argc <= 5) && !strcmp(argv[1], "--hdmafuzz")) return runHdmaFuzz(argc, argv);
+  if ((argc == 3 || argc == 4) && !strcmp(argv[1], "--racestep")) return runRaceStep(argc, argv);
+  if (argc == 7 && !strcmp(argv[1], "--racestage")) return runRaceStage(argc, argv);
+  if ((argc == 7 || argc == 8) && !strcmp(argv[1], "--seqstage")) return runSeqStage(argc, argv);
+#endif
   // CT_ORACLE_VIRTUAL_BEAM (on by default under CT_ORACLE_LOGICAL; 0 turns it off): C3/02DD reads the virtual beam
   // (snes.c g_ctVirtualBeam = 2), the oracle side of every field-wipe / world-window comparison (CLAUDE.md, zelda3 model).
-#endif
   { const char* vb = getenv("CT_ORACLE_VIRTUAL_BEAM"), *lg = getenv("CT_ORACLE_LOGICAL");   // the rule's oracle = the
     if (vb ? *vb != '0' : (lg && *lg)) g_ctVirtualBeam = 2; }                             //   logical mode + this
   // CT_ORACLE_LOGICAL=1: run by logical frames (snes.c snes_setLogicalFrames; CLAUDE.md, zelda3 model): vblank waits
@@ -15299,105 +15431,13 @@ int main(int argc, char** argv) {
     if (!strcmp(argv[i], "--aram")) { doAram = 1; continue; }
     if (!strcmp(argv[i], "--audiotest")) { doAudioTest = 1; continue; }
     if (!strcmp(argv[i], "--songdirs")) { doSongDirs = 1; continue; }
-    // --sndassets <ct_assets.dat>: every datum the sound loader takes, from the ROM and from the container's CT_ASSET_SND_*
-    // entries side by side (src/audio.c CtAudioDataCompare) -- `snd-data: N items identical`, or the first difference.
 #ifndef CT_ORACLE_ONLY      // (the slim oracle links neither the assets nor the audio)
-    // --lzpack <list> <out> [skipped]: the LZ streams at the listed file offsets (hex, one a line; tools/gen/lz_pack.py
-    // makes the list from the ROM's pointer tables) decompressed by src/lz.c with both of C3/0557's costs, for
-    // assets/extract_assets.py (CT_ASSET_LZ). `lzpack: N streams (M bytes), K skipped`.
-    if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) {
-      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
-      FILE* li = fopen(argv[i + 1], "r"); FILE* lo = fopen(argv[i + 2], "wb");
-      FILE* ls = (i + 3 < argc && argv[i + 3][0] != '-') ? fopen(argv[i + 3], "w") : NULL;   // the offsets that are not streams
-      if (!li || !lo) { printf("lzpack: cannot open the list or the output\n"); return 2; }
-      static uint8_t buf[0x40000];
-      uint32_t count = 0; long bytes = 0, skipped = 0; char line[64];
-      fwrite("CTLZ", 1, 4, lo); fwrite(&count, 4, 1, lo);
-      while (fgets(line, sizeof line, li)) {
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
-        uint32_t off = (uint32_t)strtoul(line, NULL, 16);
-        size_t n = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
-        if (!n) { skipped++; if (ls) fprintf(ls, "%06X\n", off); continue; }
-        int32_t c0 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), c1 = (int32_t)ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
-        uint32_t nn = (uint32_t)n;
-        fwrite(&off, 4, 1, lo); fwrite(&nn, 4, 1, lo); fwrite(&c0, 4, 1, lo); fwrite(&c1, 4, 1, lo); fwrite(buf, 1, n, lo);
-        count++; bytes += (long)n;
-      }
-      fseek(lo, 4, SEEK_SET); fwrite(&count, 4, 1, lo);
-      fclose(li); fclose(lo); if (ls) fclose(ls);
-      printf("lzpack: %u streams (%ld bytes), %ld skipped (not a stream)\n", count, bytes, skipped);
-      return 0;
-    }
-    // --animoplen <out>: the battle anim interpreter's opcode lengths (CtBattleAnimOpLens), one signed byte per op 00-FF
-    // (-1 = none) -- tools/gen/anim_oplen.py's saves/anim_oplen.bin, the anim scripts' closure walks with it.
-    if (!strcmp(argv[i], "--animoplen") && i + 1 < argc) {
-      if (!CtBattleLoadRom("Chrono_Trigger_USA_SNES.sfc")) { printf("animoplen: no ROM\n"); return 1; }
-      int len[256]; uint8_t b[256]; int n = 0; CtBattleAnimOpLens(len);
-      for (int k = 0; k < 256; k++) { b[k] = (uint8_t)(len[k] < 0 ? 0xFF : len[k]); if (len[k] > 0) n++; }
-      FILE* f = fopen(argv[i + 1], "wb"); if (!f) { printf("animoplen: cannot write %s\n", argv[i + 1]); return 1; }
-      fwrite(b, 1, 256, f); fclose(f);
-      printf("animoplen: %d opcodes sized\n", n);
-      return 0;
-    }
-    // --lzassets <ct_assets.dat>: every CT_ASSET_LZ entry against the ROM's own stream at its offset -- the bytes and
-    // both costs. `lz-data: N streams identical (bytes and both costs)`, or the first that is not.
-    if (!strcmp(argv[i], "--lzassets") && i + 1 < argc) {
-      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
-      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("lz-data: cannot open %s\n", argv[i + 1]); return 2; }
-      static uint8_t buf[0x40000];
-      long n = 0;
-      for (uint32_t k = 0; k < as.count; k++) {
-        const uint8_t* e = as.data + 12 + (size_t)k * 16;
-        uint32_t type = (uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24);
-        uint32_t off = (uint32_t)(e[4] | e[5] << 8 | e[6] << 16 | (uint32_t)e[7] << 24);
-        if (type != CT_ASSET_LZ) continue;
-        ct_lz_use_assets(&as, NULL);                       // read the container's entry, not the ROM's
-        size_t an = 0; long a0 = 0, a1 = 0; const uint8_t* ab = ct_lz_asset(off, &an, &a0, &a1);
-        ct_lz_use_assets(NULL, NULL);
-        size_t rn = ct_lz_decompress_bounded(rimg, (size_t)rl, buf, sizeof buf, off);
-        long r0 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 0), r1 = ct_lz_rom_cycles(rimg, (size_t)rl, off, 1);
-        if (!ab || an != rn || memcmp(ab, buf, rn) || a0 != r0 || a1 != r1) {
-          printf("lz-data: the stream at %06X differs: container %zu bytes / %ld / %ld, ROM %zu / %ld / %ld\n",
-                 off, an, a0, a1, rn, r0, r1);
-          return 1;
-        }
-        n++;
-      }
-      printf("lz-data: %ld streams identical (bytes and both costs)\n", n);
-      return 0;
-    }
-    // --tabassets <ct_assets.dat>: every CT_ASSET_TABLE (the ROM's small tables, src/romview.h) byte for byte against
-    // the ROM. `tab-data: N tables, M bytes identical`.
-    if (!strcmp(argv[i], "--tabassets") && i + 1 < argc) {
-      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
-      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("tab-data: cannot open %s\n", argv[i + 1]); return 2; }
-      long nb = CtRomViewCompare(rimg, rl, &as);
-      if (nb < 0) return 1;
-      int nt = 0;
-      for (uint32_t k = 0; k < as.count; k++) {
-        const uint8_t* e = as.data + 12 + (size_t)k * 16;
-        if ((uint32_t)(e[0] | e[1] << 8 | e[2] << 16 | (uint32_t)e[3] << 24) == CT_ASSET_TABLE) nt++;
-      }
-      printf("tab-data: %d tables, %ld bytes identical\n", nt, nb);
-      return 0;
-    }
-    if (!strcmp(argv[i], "--sndassets") && i + 1 < argc) {
-      CtAssets as; long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
-      if (!CtAssetsOpen(&as, argv[i + 1])) { printf("snd-data: cannot open %s\n", argv[i + 1]); return 2; }
-      long n = CtAudioDataCompare(rimg, rl, &as);
-      if (n < 0) { printf("snd-data: DIFFERS (stderr says where)\n"); return 1; }
-      printf("snd-data: %ld items identical (the ROM's and the container's)\n", n);
-      return 0;
-    }
-    // --sndtiming <out>: the sound machine's cost table from the ROM (CT_ASSET_SND_TIMING; src/sound/timing.h), the setup's
-    // generator tools/gen/snd_timing.py -- the reachable instructions of block 0 and the boot ROM timed on the vendored SPC700.
-    if (!strcmp(argv[i], "--sndtiming") && i + 1 < argc) {
-      long rl = 0; const uint8_t* rimg = CtRomImage(&rl);
-      int n = CtAudioTimingExport(rimg, rl, argv[i + 1]);
-      if (!n) { printf("snd-timing: FAILED\n"); return 1; }
-      printf("snd-timing: %d bytes -> %s\n", n, argv[i + 1]);
-      return 0;
-    }
+    if (!strcmp(argv[i], "--lzpack") && i + 2 < argc) return runLzPack(argc, argv, i);
+    if (!strcmp(argv[i], "--animoplen") && i + 1 < argc) return runAnimOpLen(argc, argv, i);
+    if (!strcmp(argv[i], "--lzassets") && i + 1 < argc) return runLzAssets(argc, argv, i);
+    if (!strcmp(argv[i], "--tabassets") && i + 1 < argc) return runTabAssets(argc, argv, i);
+    if (!strcmp(argv[i], "--sndassets") && i + 1 < argc) return runSndAssets(argc, argv, i);
+    if (!strcmp(argv[i], "--sndtiming") && i + 1 < argc) return runSndTiming(argc, argv, i);
 #endif
     if (!strcmp(argv[i], "--songload") && i + 1 < argc) { songLoadSpec = argv[++i]; continue; }
     if (!strcmp(argv[i], "--at") && i + 1 < argc) { aramAt = argv[++i]; continue; }
