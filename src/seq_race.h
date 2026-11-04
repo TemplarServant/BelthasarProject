@@ -1,4 +1,6 @@
-// seq_race.h -- the motorcycle race's logic (sequence entry 0), native. See seq_race.c.
+// seq_race.h -- the motorcycle race's logic (sequence entry 0), native (seq_race.c), and the $C3 stage machine every entry
+// shares: CtRaceIo and the CtSeq* declarations below (seq_stage.c; the overlay's shared routines are in seq_entry4.h,
+// seq_stagelib.c). Every entry's header includes this one.
 #ifndef CT_SEQ_RACE_H
 #define CT_SEQ_RACE_H
 #include <stdint.h>
@@ -30,6 +32,7 @@ typedef struct {
 } CtRaceIo;
 
 // ---- The $C3 stage's shared machine (every entry: the overlay, the common init, the interpreter, the NMI, the fades) ----
+// Their bodies are seq_stage.c.
 
 // A script's `F0` (C3/0C51: `$7E:00F0` = the target, JSL $7E:37F3) -- the entry's own inline routine. Returns 0, or -1 for a
 // target the entry does not port. The interpreter adds the two bytes of the target to the IP afterwards (0BB1 / 0BB5).
@@ -83,7 +86,7 @@ void CtSeqMul31BF(uint8_t* w, unsigned d);
 
 // C3/01E4 (C3/000E), the curtain: one call of the window effect over `$0350-$0357` (D = $0300) with the caller's X (the data
 // bank $00: a stage's task). Writes the state and the output half at `$54`:`$52`, `$0386` through C3/02DD (the rule's virtual
-// beam). seq_race.c.
+// beam). seq_stage.c.
 void CtSeqCurtain01E4(uint8_t* w, unsigned x, const CtRaceIo* io);
 // $7E:424D / $4283 -- the attract's button task and its count to the END (CtSeqTaskFn's return).
 unsigned CtSeqTaskAbort(uint8_t* w, unsigned task, const CtRaceIo* io);

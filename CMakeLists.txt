@@ -36,11 +36,11 @@ endif()
 # THE PLAYABLE HOST'S SOURCES (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake), by subsystem.
 # Plain lists, not OBJECT libraries: each target's own defines (CT_DATAFREE, CT_XLAT_NO_GWARP, CT_AUDIO_SPC_DEFAULT)
 # change how the shared files preprocess, so every target compiles them itself.
-# The sequence stages, native (disasm/notes/sequence_table.md): the race, the ending, entries 3 / 4 / 6 / 7, the gate
-# warp, and the compositor that draws their pictures.
-set(CT_SRC_SEQ src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c
-               src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c
-               src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c)
+# The sequence stages, native (disasm/notes/sequence_table.md): the $C3 stage machine they share, the race, the ending,
+# entries 3 / 4 / 6 / 7, the gate warp, and the compositor that draws their pictures.
+set(CT_SRC_SEQ src/seq_stage.c src/seq_stagelib.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c
+               src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c
+               src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c)
 # The engine: the scene renderer and its data, the field VM, the overworld, the battle, the menus.
 set(CT_SRC_ENGINE src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c
                   src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c)
@@ -125,6 +125,7 @@ add_executable(ct
   src/tileanim.c # FD/DE98 + FD/E022, the field's animated BG tiles (--sweepbganim)
   src/hdma_table.c # FD/C2C1, the field's HDMA table builder, native (--hdmabuild); src/xlat/hdma_fd.c stays here as its reference (--hdmafuzz)
   src/seq_xlat.c src/xlat/seq_c3.c src/xlat/wipe_c3.c src/xlat/hdma_fd.c src/xlat/owwin_c6.c src/xlat/gwarp_fd.c  # --xlatcmp: the race's program translated from the ROM, lockstepped per instruction
+  src/seq_stage.c src/seq_stagelib.c # the $C3 stage machine every entry shares (seq_race.h: CtRaceIo, CtSeq*)
   src/seq_race.c src/seq_racepic.c # --racestep: the race's tasks, native (sequence_table.md sec. 12)
   src/seq_ending.c src/seq_endingpic.c # --seqstage: the ending's stage, native (sequence_table.md sec. 13)
   src/seq_entry3.c src/seq_entry3pic.c # --seqstage: entry 3 from the story (FF 23), native (sequence_table.md sec. 14)

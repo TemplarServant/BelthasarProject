@@ -81,7 +81,8 @@ ambient-object block layout).
 | `title_intro.c` | The title sequence as the overlay's own machine (the `$C3` script interpreter and its NMI hooks), not a recording. |
 | `audio.c` | The sound system: the bank `$C7` driver upload, the song loader, the command channel, and pricing of each transfer on SPC time. It drives the sound machine in C (`sound/`); `CT_AUDIO_SPC=ref` runs the vendored SPC700/DSP instead. |
 | `sound/*.c` | The sound processor in C: `driver.c` (the SPC700 program, routine by routine), `machine.c` (its clock, timers, ports and S-DSP), `mixer.c` (the S-DSP, sample-exact against `snes/dsp.c`), `timing.c` (the cost table's asset), `coro.c`; the references and tests `lockstep.c`, `fuzz.c`, `mixer_replay.c`, `mixer_dsp.c`, `timing_build.c`. |
-| `seq_race.c`, `seq_ending.c`, `seq_entry3.c`, `seq_entry4.c`, `seq_entry6.c`, `seq_entry7.c` | The `$C3` sequence stages, native: the motorcycle race, the ending, and entries 3, 4, 6 and 7. |
+| `seq_stage.c`, `seq_stagelib.c` | The `$C3` stage machine every sequence stage shares (declared in `seq_race.h`): the script interpreter `C3/0AFF`, the overlay and common init, the stage NMI and its song check, the fades, the curtain `C3/01E4`; and the overlay's routines several entries call (the RNG `C3/02DD`, the stars, the mode-7 matrix). |
+| `seq_race.c`, `seq_ending.c`, `seq_entry3.c`, `seq_entry4.c`, `seq_entry6.c`, `seq_entry7.c` | The `$C3` sequence stages, native: the motorcycle race, the ending, and entries 3, 4, 6 and 7, each one's setup and tasks on that machine. |
 | `seq_racepic.c`, `seq_endingpic.c`, `seq_entry*pic.c`, `seq_pic.c` | Those stages' pictures, native, over a stage picture of their own (`seq_pic.c`). |
 | `seq_gwarp.c` | The gate warp (bank `$FD`, ops `FF 80`-`8F`), native: logic and picture. |
 | `wipe.c` | The window wipe `C3/01E4` with its seed `C3/02DD`, and the overworld's window object `C6/E241` / `E27E`, native. |

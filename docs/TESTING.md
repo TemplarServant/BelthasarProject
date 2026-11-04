@@ -1017,7 +1017,7 @@ graded by ending-ff2b-story-picture-in-the-port-vs-oracle and ending-ff2e-story-
 
 ### ending-stage-logic-vs-oracle (`tools/ending_stage_cmp.py`)
 
-The ending's $C3 stage, its LOGIC native (src/seq_ending.c on seq_race.c's shared machine; entries 10/11/14/15 are one
+The ending's $C3 stage, its LOGIC native (src/seq_ending.c on seq_stage.c's shared machine; entries 10/11/14/15 are one
 setup, $7E:8538): the overlay, the common init, the setup's script pages and shadows, page A inside the setup, then one
 NMI a frame -- the vblank hooks' logic, the two scripts with their `F5` waits on the song's marker (the SPC's port 2), the
 fades $347A/$3495/$34E3 (the last one ENDs), the tasks whose work the logic reads ($90C1, the orbit $992A, $997D, the
