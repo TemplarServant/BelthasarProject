@@ -229,7 +229,7 @@ Attempts that did NOT work, recorded so they are not retried: walking back in fr
 - ⭐ **`--censustele`'s own poke shows up as `DMA?`.** The harness writes `$0100-$0104` straight into
   `s->ram`, which is not a CPU write, so 5 of the teleport run's `DMA?` bytes are *my hand*, not the
   ROM's. The natural door has no poke and reports `DMA? = 0`. Read the bucket, do not just count it.
-- ⭐ **`dis.py` desyncs on `A2 00 02` at default widths** — read as x=1 it is `LDX #$00` plus a stray
+- ⭐ **`romdis.py` desyncs on `A2 00 02` at default widths** — read as x=1 it is `LDX #$00` plus a stray
   `02` (`COP`), and every byte after is garbage. `C0/5709`'s clear setup decoded as `COP #86 / LSR
   $00A2` until re-read with `x=0`. Third time this exact trap has cost time; pass `m x` always.
 - The log holds 1M entries and the mode **says so when it saturates** rather than truncating quietly.
@@ -319,7 +319,7 @@ models the load's `STZ $17` (C0/0B96)"* — and there are about seventy. With th
 op-0xE0 pending-change latch `$0117` survived into the next scene and re-fired the change immediately;
 the scene-120 run ended up back in scene 0.
 
-`C0/0B86-0C75` is now ported verbatim (`memLoadInit0B86`). It was read with `dis.py 0B86 <len> 1 0`
+`C0/0B86-0C75` is now ported verbatim (`memLoadInit0B86`). It was read with `romdis.py 0B86 <len> 1 0`
 and then **confirmed against the oracle**, 19 of 19 spot checks matching value *and* writer PC:
 
 | addr | value | census writer | store |

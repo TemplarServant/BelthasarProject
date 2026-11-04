@@ -33,12 +33,12 @@ build/ct.exe --monitor "7E011F+1,7E0100+2,7E01EB+2" --from saves/wake.state --bt
 
 ### 0a. The `1AB4` guard in the dossier is a **desynced disassembly**
 
-The dossier prints `1AB4 LDX $34 / BEQ ->1AC1 ... STX $34 / RTS`. `tools/dis.py` defaults to 8-bit
+The dossier prints `1AB4 LDX $34 / BEQ ->1AC1 ... STX $34 / RTS`. `tools/romdis.py` defaults to 8-bit
 X and desyncs on the `CPX #FFFF` immediate. `X is 16-bit here`; with `x=0` it parses cleanly and
 lands exactly on `1AC1`:
 
 ```
-python tools/dis.py 1AB4 0x14 1 0
+python tools/romdis.py 1AB4 0x14 1 0
   1AB4: LDX  $34
   1AB6: BEQ  ->1AC1
   1AB8: CPX  #FFFF
@@ -55,7 +55,7 @@ raw bytes (`A6 34 F0 09 E0 FF FF D0 04 E8 86 34 60`). **Only `$0134 == $FFFF` bl
 `C0/8820` stores the "no target" sentinel to the **absolute** address `$01EB` before it swaps DP:
 
 ```
-python tools/dis.py 881E 0x18 1 0
+python tools/romdis.py 881E 0x18 1 0
   881E: LDA  #80
   8820: STA  $01EB
   8823: PHD
@@ -94,7 +94,7 @@ build/ct.exe --monitor "7E011F+1,7E0134+2,7E01EB+2" --from saves/wake.state \
 * `C0:21D8` is the post-PC of `21D6 STX $34`, inside the **menu-exit dispatcher**:
 
 ```
-python tools/dis.py 2160 0x64 1 0
+python tools/romdis.py 2160 0x64 1 0
   216A: JSR  C0/20B2
   216D: LDA  #01 / 216F: STA $0213      ; open the menu
   2172: JSL  C20009                     ; THE MENU (bank C2)
@@ -124,7 +124,7 @@ saves/menu_open.state` → `FFFF` — because the menu is open in that capture.)
 build/ct.exe --monitor "7E011F:1,7E0134:2" --from saves/wake.state --btnscript "<50x '0:8,100:6'>" --diff --writer
   f681    7E011F=01*(C0:3C0D)  7E0134=0000
 
-python tools/dis.py 3C05 0x14 1 1
+python tools/romdis.py 3C05 0x14 1 1
   3C05: INY / 3C06: TYX
   3C07: LDA  $7F2001,X
   3C0B: STA  $1F            ; post-PC C0/3C0D = the reported writer
@@ -194,7 +194,7 @@ build/ct.exe --followvm --from <scratch>/s439.state --frames 1 | grep "^  f0 "
 ### What `$1100 == 7` *is*, from the per-frame object pass `C0/A810` (`JSR A810 from 0000D3`)
 
 ```
-python tools/dis.py A810 0x80 1 1
+python tools/romdis.py A810 0x80 1 1
   A810: LDA $7F2000 / ASL A / STA $BD ; A817: LDX #00 / A819: STX $6D
   A81B: LDA  $1100,X
   A81E: CMP  #03  / A820: BCC ->A870        ; <3  -> AAFD + A88D
@@ -326,7 +326,7 @@ build/ct.exe --monitor "...,7E0F14:1,..." --from <scratch>/s2_ctl.state --btnscr
 `C0:A983` is the post-PC of `A980 STA $0F00,X`, inside the window test that `A947` falls into:
 
 ```
-python tools/dis.py A947 0x1C 1 1  +  python tools/dis.py A960 0x40 1 1
+python tools/romdis.py A947 0x1C 1 1  +  python tools/romdis.py A960 0x40 1 1
   A947: LDA $1D0A / SEC / SBC #04 / STA $C3
   A94F: LDA $1D0C / CLC / ADC #04 / STA $C4
   A957: LDA $1D0E /               STA $C5
@@ -382,7 +382,7 @@ Scene 439's obj0 reads `$0F00 = 0x12`, and the probe's test is `BNE`, so it pass
 build/ct.exe --monitor "7E0F00:1,7E0F04:1,7E0F02:1,7E0F12:1,7E0F24:1" --from <scratch>/s439.state --btnscript "0:40" --writer
   f0      7E0F00=12*(C0:A9C1)  7E0F04=00*(C0:A988)  7E0F02=80*  7E0F12=80*  7E0F24=80*
 ```
-`C0:A9C1` is the post-PC of `A9BE STA $0E80,Y` (`python tools/dis.py A98A 0x44 1 1`) — `$0E80 + 0x80
+`C0:A9C1` is the post-PC of `A9BE STA $0E80,Y` (`python tools/romdis.py A98A 0x44 1 1`) — `$0E80 + 0x80
 == $0F00`. So an out-of-range `Y` in the `$0E80` linked-list code **spills into `$0F00`**, and the
 probe's `BNE` then treats obj0 as live. Harmless in that state (obj0 sits at `(4080,4080)`, far
 outside the box) but it is a real ROM behaviour that only survives a port over a **flat WRAM plane**;

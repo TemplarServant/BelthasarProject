@@ -1,7 +1,7 @@
 # The RETURN op keeps the visit going: C0/5F74 and Lucca's first descent
 
 Derived 2026-09-03 from the ROM + the oracle only (defect #13 of the 2026-09-02 list: "Lucca does not trigger
-when leaving the castle staircase in 600AD, I need to go back up"). Every claim cites `tools/dis.py`
+when leaving the castle staircase in 600AD, I need to go back up"). Every claim cites `tools/romdis.py`
 (bank C0 = the file offset) or an oracle measurement on the fixture below.
 
 ## 1. The fixture and the ROM's timeline

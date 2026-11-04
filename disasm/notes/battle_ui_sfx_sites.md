@@ -3,7 +3,7 @@
 Derives the complete battle command-menu / HUD sound surface. User report (translated from Portuguese): *"the battle hud's sound does not
 play"* (the battle HUD/command-menu sound never plays).
 
-Every claim is anchored to a ROM address (`python tools/dis.py <fileoffset>`, fileoffset =
+Every claim is anchored to a ROM address (`python tools/romdis.py <fileoffset>`, fileoffset =
 `(bank-0xC0)<<16 | addr`) **and/or** an oracle observation. Claims pinned by only one are labelled
 **HYPOTHESIS**. Writer PCs from `--writer` are the PC **after** the store retires. States used:
 `saves/battle_re/forest_battle_3hetake.state`, `forest_holdleft_pre.state`, `bat3marle.state`.
@@ -57,7 +57,7 @@ Probe: a copy of `build/ct.exe`.
 
 ## PART 1 — THE TWO POSTERS (ROM_DERIVED, re-disassembled for this dossier)
 
-`python tools/dis.py 11B19 0x50 1 0`:
+`python tools/romdis.py 11B19 0x50 1 0`:
 ```
 11B19: LDA $A1 / 11B1B: TAX
 11B1C: LDA $A6D9,X / 11B1F: BPL ->11B54        <- BAIL if the seat is ALREADY enqueued (no chime)
@@ -89,7 +89,7 @@ the tail of the enqueue.
 
 ### 1.1 The chime's ONE call path
 ```
-python tools/dis.py 18540 0x40 1 0:
+python tools/romdis.py 18540 0x40 1 0:
 18546: LDA $14 / ASL A / ASL A / ASL A / SEC / SBC $14 / 1854E: TAX      (X = pc*7)
 1854F: LDA $93EE,X / 18552: BNE ->18570                                 <- THE RISING-EDGE GATE
 18555: LDA $2989 / 18558: BIT #20 / 1855A: BEQ ->18562
@@ -364,10 +364,10 @@ probe.
 **TRAP 3 — `--aram` IGNORES `--btnscript`** (it advances on `--frames` with no input), so it cannot drive
 to an event. Use `PEEK_SAVE` + `--peek` to capture the frame, then `--aram --from <that state> --frames 0`.
 
-**TRAP 4 — a mis-aligned `dis.py` start address silently produces garbage GATE conditions.**
-`dis.py 11B30 60` prints `11B30: STA $AA,X` and drops the real `11B2E: LDA $95DA / 11B31: TAX`; the same
+**TRAP 4 — a mis-aligned `romdis.py` start address silently produces garbage GATE conditions.**
+`romdis.py 11B30 60` prints `11B30: STA $AA,X` and drops the real `11B2E: LDA $95DA / 11B31: TAX`; the same
 misalignment turned `C1/1443`'s gate into `INC $8029 / BEQ` and `C1/1574`'s into `ORA ($96,S),Y`.
-Disassemble from the routine HEAD (`dis.py 11B19`, `dis.py 1142C`, `dis.py 11561`). The site addresses
+Disassemble from the routine HEAD (`romdis.py 11B19`, `romdis.py 1142C`, `romdis.py 11561`). The site addresses
 survived (they were cross-checked by `ct.py refs` and a raw `20 55 1B` scan) but the conditions did not.
 
 **TRAP 5 — a fabricated frame citation.** One derivation cited "at f141 A was pressed on an empty tech

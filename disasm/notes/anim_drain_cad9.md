@@ -322,7 +322,7 @@ Mutating that one asymmetry alone moves `--sweepcad9` by 288.
 
 A raw scan for `60` (RTS) in the pass bodies reports exits at `CFC1` and `D399` that **do not
 exist**: both are the operand byte of `STA $0960,X` (`9D 60 09`), the same false positive as `CCA1`
-in class 0. Pass 2 has **no early exit**. `dis.py` desyncs in that stretch, so it was read from raw
+in class 0. Pass 2 has **no early exit**. `romdis.py` desyncs in that stretch, so it was read from raw
 bytes.
 
 ### Acceptance
@@ -376,7 +376,7 @@ geometries (`D520`/`D52D`/`D539`):
 | 2 | `D7E5` | `DA69` | `DA62` / `DD21` | CLC |
 
 The two phase-0 bodies are **byte-identical** through the entire frame half
-(`[25 ROM bytes at 0xD546: python tools/dis.py 0xD546 25] …`), so the `$68` split
+(`[25 ROM bytes at 0xD546: python tools/romdis.py 0xD546 25] …`), so the `$68` split
 never touches the frame decision — it only changes the staging offset (`$0100`/`$0200` for phase 1,
 `$0400`/`$0300` for phase 2). `JSR CB3A` appears only at `D546`/`D608` and `JSR E9AA` only at
 `D555`/`D617`, so the lookup, the guard, the allocation and the commit **all live in phase 0**;

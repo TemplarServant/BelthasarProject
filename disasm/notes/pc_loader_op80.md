@@ -2,7 +2,7 @@
 
 Status: **PORTED AND GRADED** (`--sweepops` 80:60, all six arms reached, ten mutations red).
 Originally landed as derivation-only; this file is the reference for the implementation in `move.c`. Every address, constant and branch below was read from the
-ROM with `tools/dis.py` or from raw bytes; nothing here is inferred from a sibling routine. The
+ROM with `tools/romdis.py` or from raw bytes; nothing here is inferred from a sibling routine. The
 byte-diff in §3 is the load-bearing evidence and was measured, not asserted.
 
 Ranked **1062 static fn-reachable sites** (`python tools/ophist.py`), the top self-contained

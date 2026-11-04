@@ -1,6 +1,6 @@
 # BATTLE — the battle_sim census: every catalogued enemy and pack, port vs the rule's cartridge (2026-10-15)
 
-Read-only triage: no engine code changed. Every claim cites a ROM address (`tools/dis.py`), an oracle observation
+Read-only triage: no engine code changed. Every claim cites a ROM address (`tools/romdis.py`), an oracle observation
 (`build/ct.exe` under the rule, `CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`) or a port line. The per-fight result,
 all 809 fights, is in [battle_sim_census_fights.tsv](battle_sim_census_fights.tsv).
 
@@ -121,7 +121,7 @@ still traced from that pass's wave minus one; the port broke on the dry frontier
 off the arena for 600 frames. Now the whole WRAM sequence is the cartridge's; check
 battle-sim-walk-path-dry-last-wave-vs-rule-cartridge).
 
-ROM, C1/8694-86C6 (`dis.py 18640 0x1E0 1 0`): in the counter loop, a victim enemy whose `$AEFF,X` = FF (fallen) is
+ROM, C1/8694-86C6 (`romdis.py 18640 0x1E0 1 0`): in the counter loop, a victim enemy whose `$AEFF,X` = FF (fallen) is
 taken anyway when its AI block 2 opens with condition `20` (C1/86A5 `LDA $AF0A,X / JSR C1/B488`, C1/86B4 `CMP #20`): its
 `$AF02,X := $AF0D,X` (C1/86BC-86C3) and its block 2 runs. The only gate after it is C1/86FF `LDA $5E4B,X / BIT #8F`
 (+1E: stop, lock, chaos, sleep, blind) — **no dead-flag test**. Condition 20 (C1/97AB) commits when `$AEB3,X` is set.
@@ -149,7 +149,7 @@ sequence. Left: Ozzie's second death 8 frames early (A6 and its packs; -8 x10, t
 f0A9_11 and f1D3_17 keep their earlier timing residuals (the same before this fix); f05E_7's first death 63 frames late
 (also before).
 
-ROM: CD/0043, the corpse's death routine (`dis.py D0043 0x90 1 0`): after the `$CCEA` wait, `$99D2` = 0 → D0083:
+ROM: CD/0043, the corpse's death routine (`romdis.py D0043 0x90 1 0`): after the `$CCEA` wait, `$99D2` = 0 → D0083:
 `LDA $A01D,X / AND #01 / BEQ D0093` else **`LDA #38 / JMP CD/0E05`** — no #95 post, no CD/00A5 fade record. `$A01D,X`
 for an enemy is written once at the boot by **FD/B121-B13E**: `$A020,Y := $5E47,X & 03` for the eight enemy blocks
 (block +0x1A = the stat record CC/4700 + id·23 + 21, FD/B438). 25 catalogued ids have bit 0 (04, 25, 8F, 90, 99, 9B, 9C,

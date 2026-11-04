@@ -19,7 +19,7 @@ ADDENDUM 8), verified fresh against OAM in BOTH fights; the FOOT (`16·rel+fine`
 op-0xE7 pan is folded into `rel` at staging. The remaining Crono handoff residue is **1 px** (field-sim mover
 endpoint); the FOLLOWER (Marle) is ~39 px off (the op-0xD9 party-move follower degeneracy).
 
-Method: `ct_probe.exe` (oracle copy) `--monitor … --diff --writer` / `--peek` / `--read`; `tools/dis.py`
+Method: `ct_probe.exe` (oracle copy) `--monitor … --diff --writer` / `--peek` / `--read`; `tools/romdis.py`
 (fileoffset = (bank−0xC0)<<16 | addr; camera/event DP context below); OAM decode `t1detail.py` off the
 `$7E0700` shadow in the `.wram`. States: repo `gato_press_action.state` (A-boot ≈ f222),
 `saves/battle_re/forest_holdleft_pre.state` (hold LEFT 0x40 → D8 f168), `saves/battle_re/forest_battle_3hetake.state`
@@ -57,7 +57,7 @@ fights run **style 0** (`$0145`=00 the whole entry, monitored) → no intro came
 
 ### A.2 The pan = op-0xE7 (C0/3E30), a blocking SEEK to a per-encounter scripted target
 
-`dis.py 3E30`, DP=$1D00:
+`romdis.py 3E30`, DP=$1D00:
 ```
 3E30 LDA $1D00 / BEQ 3E41      ; $1D00==0 -> ARM the seek (3E41); else it's in progress
 3E41 …  STA $1D02  (op1<<1)    ; target camX  (8px units)  [store retires C0:3E4B]
@@ -66,7 +66,7 @@ fights run **style 0** (`$0145`=00 the whole entry, monitored) → no intro came
 3E35 DEC A / BEQ 3E59          ; re-entry while $1D00==1: CLC RTS  = OP BLOCKS (script waits)
 3E38 STZ $1D00 (retires 3E3B)  ; re-entry when seek set $1D00==2: clear + SEC RTS (advance script)
 ```
-The seek itself, `C0/91AC` (DP=$1D00, `dis.py 91AC`):
+The seek itself, `C0/91AC` (DP=$1D00, `romdis.py 91AC`):
 ```
 91AC LDA $1D00 / BEQ 91F8              ; no seek -> normal camera follow
 91B0 LDA $1D02 / CMP $1D0A             ; target camX vs live camX
@@ -190,7 +190,7 @@ non-GATO PC *pose* (the forest compact stance) is a separate stance-bake item (`
 ## PART C — the field→battle WALK-END handoff (the GATO "teleports a few pixels")
 
 The pre-battle event op-0xD9 (`D9 08 0B 8B 08 85 88`, handler `C0/326C`) **walks each party member to a distinct
-battle spot** — `dis.py 32C8`: for the lead (`LDX $97`) it writes a move-script `$1180,X = #171F`, zeros
+battle spot** — `romdis.py 32C8`: for the lead (`LDX $97`) it writes a move-script `$1180,X = #171F`, zeros
 velocity `$1A01,X`/cadence `$1001,X`, then consumes the per-PC target operands (`330F+`). It is a scripted WALK,
 not a snap. The oracle endpoints (from the staged records above): Crono → tile (8,11) fine (6,0); Marle → tile
 (11,8) fine (0,15) — two distinct spots (lower-left + upper-right, the GATO formation).

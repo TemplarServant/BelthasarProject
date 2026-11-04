@@ -33,7 +33,7 @@ and both are recorded here rather than papered over:
 
 ### 1.1 The press
 
-Screen $06 sub-state 1 is the slot list. `python tools/dis.py 2CED4 0x50 1 0`:
+Screen $06 sub-state 1 is the slot list. `python tools/romdis.py 2CED4 0x50 1 0`:
 
 ```
   2CEFD: JSR  C2/E984          ; the shared action decoder -> $0D1D (bit7 = A, bit6 = B)
@@ -57,8 +57,8 @@ occupancy branch on `$0D49,X`.
 
 ### 1.2 C2/CF37 — the jingle IS the save's first instruction
 
-`python tools/dis.py 2CF37 0x30 1 0`, raw `d[0x2CF37:0x2CF5E]` =
-`[39 ROM bytes at 0x2CF37: python tools/dis.py 0x2CF37 39]`:
+`python tools/romdis.py 2CF37 0x30 1 0`, raw `d[0x2CF37:0x2CF5E]` =
+`[39 ROM bytes at 0x2CF37: python tools/romdis.py 0x2CF37 39]`:
 
 ```
   2CF37: LDA  #19 / STA $1E00      ; cmd  = $19
@@ -101,7 +101,7 @@ byte, so only `$1E01`/`$1E02`/`$1E03` survive to the next frame boundary.
 
 ### 1.3 FF/F9FB — the writer
 
-`python tools/dis.py 3FF9FB 0x90 1 0`:
+`python tools/romdis.py 3FF9FB 0x90 1 0`:
 
 ```
   3FF9FB: PHP / SEP #20
@@ -212,7 +212,7 @@ stride **`$0A00`**.
 ### 1.6 ⭐ FF/FBE7 — the checksum, and the correction that matters
 
 Raw `d[0x3FFBE7:0x3FFC04]` =
-`[29 ROM bytes at 0x3FFBE7: python tools/dis.py 0x3FFBE7 29]`:
+`[29 ROM bytes at 0x3FFBE7: python tools/romdis.py 0x3FFBE7 29]`:
 
 ```
   3FFBE7: PHP / PHB / REP #30 / PEA $3030 / PLB / PLB   ; DB = $30
@@ -319,7 +319,7 @@ The SNES header is at flat **`0xFFC0`** (`$C0:FFC0`; CT is a 4 MB HiROM, so bank
 0). Raw `d[0xFFC0:0xFFE0]`:
 
 ```
-[32 ROM bytes at 0xFFC0: python tools/dis.py 0xFFC0 32]
+[32 ROM bytes at 0xFFC0: python tools/romdis.py 0xFFC0 32]
 "C  H  R  O  N  O     T  R  I  G  G  E  R                    "  ^  ^  ^  ^
                                                      $FFD5 = 31 (HiROM + FastROM)
                                                         $FFD6 = 02 (ROM+RAM+Battery)
@@ -370,7 +370,7 @@ static const unsigned CT_SAVE_SLOT_BASE[CT_MENU_SAVE_SLOTS] = { 0x0000u, 0x0A00u
 
 ### 2.4 What the writer must produce for the reader to see USED
 
-`python tools/dis.py 3FF9C4 0x38 1 0`:
+`python tools/romdis.py 3FF9C4 0x38 1 0`:
 
 ```
   3FF9C4: PHX / PHB / PHP / REP #30 / PEA $3030 / PLB / PLB   ; DB = $30
@@ -398,7 +398,7 @@ agree by construction, not by the ROM's rule.
 
 ### 3.1 The dispatcher
 
-`python tools/dis.py 28260 0x35 1 0` — a two-level indexed dispatch, `$67` = screen, `$68` = sub-state:
+`python tools/romdis.py 28260 0x35 1 0` — a two-level indexed dispatch, `$67` = screen, `$68` = sub-state:
 
 ```
   2826C: JSR C2/821E          ; coroutine yield -- ONE FRAME per dispatch
@@ -414,7 +414,7 @@ agree by construction, not by the ROM's rule.
 Screen table `$C2:8292`, entry 6 = `$CED4`. `d[0x2CED4:0x2CEDC]` = `dc ce fd ce 61 cf 92 cf` — four
 sub-state handlers: **`$CEDC`(0), `$CEFD`(1), `$CF61`(2), `$CF92`(3)**.
 
-⚠ `dis.py` mis-decodes `2CED4` as instructions (`JML [$FDCE]`) — it is **data**. The raw bytes are
+⚠ `romdis.py` mis-decodes `2CED4` as instructions (`JML [$FDCE]`) — it is **data**. The raw bytes are
 authoritative.
 
 ⚠ This sub-table is **shared with screen `$0B`** (`d[0x2D4F0:0x2D4F8]` = `f8 d4 06 d5 61 cf 92 cf`) —
@@ -473,7 +473,7 @@ transition.
 
 ### 3.4 Sub-state 2 — the overwrite prompt
 
-`python tools/dis.py 2CF61 0x40 1 0`:
+`python tools/romdis.py 2CF61 0x40 1 0`:
 
 ```
   2CF61: JSR C2/E984 / BIT $0D1D
@@ -543,7 +543,7 @@ are still unidentified. Likewise the reader's `if (leader & 0x80) return 0;` is 
 suppresses that member's *line* in `C2/D19F`).
 
 **4.6 `$299E`'s high byte.** ⭐ The *mechanism* IS derived, contrary to the note currently in
-`src/menu.c`. `python tools/dis.py 2E640 0x60 1 0` shows the new-game path:
+`src/menu.c`. `python tools/romdis.py 2E640 0x60 1 0` shows the new-game path:
 
 ```
   2E660: LDA #01 / STA $7F0061        ; the new-game flag

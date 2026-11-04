@@ -4,7 +4,7 @@ Derives the exact frame budget between the killing blow and the first reward gly
 show/hide cadence of the results box. User report (translated from Portuguese): *"after the battle ends, the message with the rewards
 takes long to appear"*.
 
-Every claim below is anchored to a ROM address (`python tools/dis.py <fileoffset>`, fileoffset =
+Every claim below is anchored to a ROM address (`python tools/romdis.py <fileoffset>`, fileoffset =
 `(bank-0xC0)<<16 | addr`) **and/or** an oracle observation. Claims pinned by only one of the two are
 labelled **HYPOTHESIS** explicitly. Writer PCs from `--writer` are the PC **after** the store retires.
 Base state: `saves/battle_re/forest_battle_3hetake.state` (3x Hetake, the NORMATIVE normal fight;
@@ -52,7 +52,7 @@ XP 9 / TP 3 / 48G / one Tonic drop). Probe: a copy of `build/ct.exe` (never `bui
 ## PART 1 — THE ROM CHAIN (ROM_DERIVED; every listing re-run for this dossier)
 
 ### 1.1 Victory scan -> dispatch (`C1/8167`)
-`python tools/dis.py 18167 0x30 1 0`:
+`python tools/romdis.py 18167 0x30 1 0`:
 ```
 18167: TDC / 18168: TAX / 18169: LDA $AF02,X / 1816C: CMP #FF / 1816E: BNE ->1818E
 18170: INX / 18171: CPX #0008 / 18174: BCC ->18169
@@ -64,7 +64,7 @@ XP 9 / TP 3 / 48G / one Tonic drop). Probe: a copy of `build/ct.exe` (never `bui
 entry [9] = `$354D` (defeat).
 
 ### 1.2 The stager `C1/356D` — the ONLY blocking hold: 3 + 64 frames
-`python tools/dis.py 1356D 0x140 1 0` (full span, not abridged):
+`python tools/romdis.py 1356D 0x140 1 0` (full span, not abridged):
 ```
 1356D: JSL CD0009 / 13571: INC $A0FE
 13574: LDX #0007 / 13577: STZ $98A7,X / 1357A: DEX / 1357B: BPL ->13577
@@ -84,7 +84,7 @@ entry [9] = `$354D` (defeat).
 13686: JSR C1/007E / 13689: JSL CD0009 / 1368D: JSR C1/369A / 13690: DEC $5DC9 / 13693: BNE ->13686
 13695: STZ $E5 / 13697: STZ $A4 / 13699: RTS
 ```
-`C1/007E` = ONE real frame: `python tools/dis.py 1007E 0x10 1 0` -> `INC $9E / JSL CD0036 / LDA $9E /
+`C1/007E` = ONE real frame: `python tools/romdis.py 1007E 0x10 1 0` -> `INC $9E / JSL CD0036 / LDA $9E /
 BNE ->10080 / RTS`. **There is no input test anywhere in `C1/356D`** — a byte scan of the whole
 `C1/356D..C1/3699` span for direct-page reads of `$F0/$F2/$F4/$F6/$F8/$FA` returns zero hits, and a scan
 for `20 7E 00` (`JSR C1/007E`) returns exactly FOUR sites: `C1/358E`, `C1/3596`, `C1/359E`, `C1/3686`.
@@ -92,7 +92,7 @@ So the 3 + 64 = **67 frames are not skippable**. Oracle confirms: with A held co
 counts `40 -> 00` one per frame.
 
 ### 1.3 Reward application + the message sequence (`C1/83BB` -> `FD/AD17`)
-`python tools/dis.py 183BB 0x120 1 0`:
+`python tools/romdis.py 183BB 0x120 1 0`:
 ```
 183D2: LDA $2989 / 183D5: BIT #20 / 183D7: BNE ->18423       (rewards-free variant; see Open Q1)
 183E4: LDY $B2A5 / 183E7: JSR C1/D0A2                        (gold)
@@ -102,7 +102,7 @@ counts `40 -> 00` one per frame.
 18406..1841F: item loop over $B2A7,X -> JSR C1/D005
 18443: LDA $26 / 18445: STA $29AD / 1845A: JSL FDAAB0 / 1845E: JMP C1/0006  (module exit)
 ```
-`FD/AD17` (`python tools/dis.py 3DAD17 0x160 1 0`) is straight-line, up to 8 message ids, each issued
+`FD/AD17` (`python tools/romdis.py 3DAD17 0x160 1 0`) is straight-line, up to 8 message ids, each issued
 with `JSL CD/0021`, gated on the `$B2AF` mask **and** on the value being non-zero:
 - b7 -> id 0, `3DAD21 LDX $B28C / 3DAD24 BEQ ->3DAD32` then `STX $0200` (XP)
 - b4 -> id 1, `$B2DB` / `$B2DD` (TP)
@@ -122,7 +122,7 @@ value-is-zero branches mean the LINE COUNT is data-driven — a fight with no go
 FD/AE3F`. `22 1E 00 CD` -> **zero hits**.
 
 ### 1.4 The message machine `CD/01B3` — 16 + DWELL + 16, per line
-`python tools/dis.py 0D019D 0x80 1 0`:
+`python tools/romdis.py 0D019D 0x80 1 0`:
 ```
 D01A5: LDA $2991 / D01A8-AA: LSR A x3 / D01AB: AND #07 / D01AD: TAX / D01AE: LDA $CD019D,X / D01B2: RTS
 D01B3: PHA/PHA/PHA
@@ -143,7 +143,7 @@ D0206: JSR CD/020A                                          <- 16 more frames, b
 D0209: RTL
 D020A: LDA #10 / D020C: PHA / D020D: JSR CD/3E75 / D0210: PLA / D0211: DEC A / D0212: BNE ->D020C / RTS
 ```
-`CD/3E75` = one real frame: `python tools/dis.py 0D3E75 0x40 1 0` -> `JSR CD/3E7D / JSL C10012 / RTS`,
+`CD/3E75` = one real frame: `python tools/romdis.py 0D3E75 0x40 1 0` -> `JSR CD/3E7D / JSL C10012 / RTS`,
 `CD/3E7D` = `INC $CA20 / JSR CD/3E44 / LDA $CA20 / BNE` (spin until the NMI clears it). So `CD/020A`'s
 `LDA #10` is genuinely **16 FRAMES**, not 16 cheap iterations.
 
@@ -153,7 +153,7 @@ Index = `($2991 >> 3) & 7`. On the normative save `$2991 = 0xA0` -> index 4 -> *
 Independently confirmed with `--callrom CD/01A5 --m8 --x16` -> `ret ops=8 a=00A0 x=0004`. `C2/9327`
 unpacks the same field into `$0D90` (`LDA $2991 / LSR x3 / AND #07 / STA $0D90`), which is what makes it
 the config menu's **Message Speed** slider.
-Independent decode check that does NOT trust any dossier: `python tools/dis.py 0D019D 0x10 1 0`
+Independent decode check that does NOT trust any dossier: `python tools/romdis.py 0D019D 0x10 1 0`
 disassembles the TABLE as code — `JSR CD/6040` (`20 40 60`) / `BRA ->D0142` (`80 A0`) /
 `CPY #FFE0` (`C0 E0 FF`) — i.e. exactly those eight bytes.
 
@@ -344,7 +344,7 @@ and mis-measures the onset.
 **TRAP 8 — a raw `$A0FE` operand scan yields 9 hits, only 3 real.**
 `FE A0` after any absolute opcode matches at `C1/3551 INC`, `C1/3571 INC`, `C7/8FC3 INC`, `CF/EDC5 LDA`,
 `D3/1EE7 INC,X`, `E1/105B JSR`, `E7/805C TRB`, `EB/FD48 DEC,X`, `FD/4B10 JSR`. Disassembling the extras
-(`python tools/dis.py 078FB0 / 3D4B00 / 27804C`) shows each sits in a data/compressed region and decodes
+(`python tools/romdis.py 078FB0 / 3D4B00 / 27804C`) shows each sits in a data/compressed region and decodes
 as garbage. Real: **two `INC` sites (`C1/3551` defeat, `C1/3571` victory) and one reader (`CF/EDC5`,
 where with `$A013` it gates the OBJ/anim update away from `CF/EE2C`)**. State it as "two real INC sites
 plus data-region false positives", never "exactly two INC sites in the image".

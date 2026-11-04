@@ -9,7 +9,7 @@ Following the battle past the staging showed the three defects below.
 
 ## 1. The band animator's mode is cleared at the boot (D1/F2AC)
 
-`python tools/dis.py 11F1D0 0x100 1 0`: D1/F2A4-F2B8 = `LDA #FF / STA $CA1D / STA $CD46 / STZ $CA1E / STZ $CA20 / STZ $CA26 /
+`python tools/romdis.py 11F1D0 0x100 1 0`: D1/F2A4-F2B8 = `LDA #FF / STA $CA1D / STA $CD46 / STZ $CA1E / STZ $CA20 / STZ $CA26 /
 STZ $5D9B`. The port took `$CD46` from that run and skipped the rest. A seed captured after an earlier fight carries that
 fight's band mode: `forest_wait_ambush_active.state` has `$CA1E = 81` (a close), `gato_t0.raw.wram` has `6B`. Oracle
 (forest): `$CA1E = 00 (D1:F2AF)` at f284, the open `FF (CD:0512)` at f348. The port kept the 81 and its animator ran close

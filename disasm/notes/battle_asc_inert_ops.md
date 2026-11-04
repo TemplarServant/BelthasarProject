@@ -27,7 +27,7 @@ compared by **rel = frame - `$A013` rise**.
 | `$A0DC`'s clear | CC/F097 | missing: the flag stayed set for the whole fight | **ported** |
 | the item's close on its op 01 | C1/40CE, C1/4CF7 | ported (d45cff6), equivalent | unchanged |
 
-## 1. Ops 27 / 28 -- the always-front flag (`python tools/dis.py 15806 0x3E 1 1`)
+## 1. Ops 27 / 28 -- the always-front flag (`python tools/romdis.py 15806 0x3E 1 1`)
 
 ```
 C1/5806 (27)  LDA #01 / STA $8E           C1/5840 (28)  STZ $8E / BRA C1/580A
@@ -70,7 +70,7 @@ Ported: `CtBattleHost.frontCmp[11]`, taken in battleTickBody beside `objPalCmp` 
 the loaders' `$A5CD` at CtBattleBegin; field.c battleObjOrder reads it on a live host (`mvInited`), the seed's byte
 otherwise.
 
-## 2. Op 43 -- store a point at an offset (`python tools/dis.py 15A0C 0x32 1 1`)
+## 2. Op 43 -- store a point at an offset (`python tools/romdis.py 15A0C 0x32 1 1`)
 
 `43 tt dx dy`: `$80 = tt`, `$5D9E = dx`, `$5D9F = dy`, `JSR C1/762E` (the resolver: `$A2B0/$A2B2`), then
 `$5D9E = $A2B0 + dx`, `$5D9F = $A2B2 + dy` (8-bit ADCs, CLC before each: they wrap), `INC $A00F` (free), advance 4. It is
@@ -86,7 +86,7 @@ rels, the same six positions from f460 (rel 76). Revive's `43 03 00 F4`: `(B0,63
 drifts down with two A8s (`$A250` 63 rel 24, 72 rel 56, 7D rel 116); the port's `m4` trace: the same store at rel 24 and
 193 / 193 frames of `$A240/$A250` identical to the close wipe. Added: the `STORE-OFFSET` trace line (CT_BATTLE_ASCTRACE).
 
-## 3. Ops C0 / C2 -- the orbits around a resolved point (`python tools/dis.py 16CF3 0x20 1 1`, `16D10 0x250 1 1`)
+## 3. Ops C0 / C2 -- the orbits around a resolved point (`python tools/romdis.py 16CF3 0x20 1 1`, `16D10 0x250 1 1`)
 
 | op | operands | centre | `$8E` (advance) | `$8F` (mover mode) |
 |---|---|---|---|---|
@@ -106,7 +106,7 @@ with `$A240`, `$A250` and `$AAA5` identical; the arms, releases and depth flips 
 traces were extended (CT_BATTLE_ORBTRACE now also prints while a mode-5 slot alone is live; the ASCTRACE `ORBIT` line
 names the op and the mode it armed).
 
-## 4. Ops 50-55 -- ShowDamage, and the popup animator behind it (`python tools/dis.py 15ADB 0x216 1 0`, `0FE781 0x56 1 0`)
+## 4. Ops 50-55 -- ShowDamage, and the popup animator behind it (`python tools/romdis.py 15ADB 0x216 1 0`, `0FE781 0x56 1 0`)
 
 The jump table C1/7A6B sends 50, 51, 52, 53, 54 and 55 to C1/5ADB. The handler is a three-visit machine on `$A3D1`:
 

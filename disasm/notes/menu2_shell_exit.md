@@ -5,7 +5,7 @@ Scope = the three recorded holes of the menu shell:
 2. the MENU-EXIT party reconcile (the bank-D1 rebuild) — we restore the frozen field verbatim;
 3. `$7E0068` is "coroutine-virtualized (reads 0 on resume)" and the coroutine was never modelled.
 
-Everything below carries either a ROM address I disassembled in this pass (`python tools/dis.py <hexoff>`)
+Everything below carries either a ROM address I disassembled in this pass (`python tools/romdis.py <hexoff>`)
 or an oracle command I ran (pasted verbatim in §4). Where I could not derive something it is in §6.
 
 > **Two corrections to `disasm/notes/menu_entry.md` established here, both by disassembly + measurement:**
@@ -53,7 +53,7 @@ also re-run the epilogue it already owns (`ctVmC2Epilogue` in `src/move.c`, = RO
 
 ## 2. ROM TRACE
 
-### 2.1 Entry: `JSL C2/8000` (`python tools/dis.py 28000 0x100`)
+### 2.1 Entry: `JSL C2/8000` (`python tools/romdis.py 28000 0x100`)
 
 ```
 28000: BRA ->2800E      ; +0 = the MENU PROGRAM (A = mode, X = aux)
@@ -148,7 +148,7 @@ and the inverse **C2/934F** re-packs `$0D86..` back into `$2990/91/92`. Its ONE 
 C2/BF67 JSR C2/934F / C2/BF6A JMP C2/9A98`. So `$0D86..$0D91` are **derived scratch**, not persistent —
 `$7E:2990-2992` is the durable config.
 
-`C2/9875` [I] — raw (`python tools/dis.py 29875 0xB0 1 0`):
+`C2/9875` [I] — raw (`python tools/romdis.py 29875 0xB0 1 0`):
 ```
 29878: JSR C2/9988        ; ** INVENTORY SANITISER ** for X=0..255: if $2500,X==0, or $2400,X==0,
                           ;   or id in {$5A,$7B,$94}, or id >= $F2  ->  STZ $2400,X / STZ $2500,X
@@ -172,7 +172,7 @@ C2/BF67 JSR C2/934F / C2/BF6A JMP C2/9A98`. So `$0D86..$0D91` are **derived scra
 2997A: $9D96/$9D98 <- $2C53/$2C55   ; the GOLD display cache
 ```
 
-`FF/F813` (`python tools/dis.py 3FF813 0x60`):
+`FF/F813` (`python tools/romdis.py 3FF813 0x60`):
 ```
 3FF816: LDX $73                      ; the char-select list length = the ACTIVE count ...
 3FF818: LDA $7F0000 / CMP #49 / BCC +
@@ -189,7 +189,7 @@ Measured `$0085 = 2` in `or_opt0.wram` with a 2-member party. `$0D38..$0D44 = 00
 exactly (70/10, 65/10, 75/10, 235/10, 128/10, 335/10, 650/10). `$0D32 = $0D34 = $0D36 = FFFF` on a field
 state with no save point, matching the C2/9875 gate arithmetic.
 
-### 2.3 The SCHEDULER `C2/8190-8268` (`python tools/dis.py 28190 0x130`)
+### 2.3 The SCHEDULER `C2/8190-8268` (`python tools/romdis.py 28190 0x130`)
 
 ```
 28190: REP #30
@@ -276,7 +276,7 @@ blank). Fade-IN: writes 2,4,6,8,A,C,E with a yield after each (**7 frames**) the
 Fade-OUT: writes D,B,9,7,5,3,1 (7 yields) then a final yield with the nibble cleared (**8 frames total**).
 Both measured exactly (§4.1, §4.2).
 
-### 2.6 The EXIT `C2/82B2` (`python tools/dis.py 282B4 0xC0`, entry is 2 bytes earlier)
+### 2.6 The EXIT `C2/82B2` (`python tools/romdis.py 282B4 0xC0`, entry is 2 bytes earlier)
 
 ```
 282B2: REP #10 / SEP #20
@@ -396,7 +396,7 @@ why the reconcile must run **after** `C0/01A5` has re-decompressed the script.
 28466: PLP/PLD/PLA / LDX $1DFE / TXS / PLP/PLY/PLX/PLB / RTI
 ```
 
-`C2/85D6` (the transfer engine, `dis.py 285D6 0x60 1 0`):
+`C2/85D6` (the transfer engine, `romdis.py 285D6 0x60 1 0`):
 ```
 285D6: LDX #0D04 / STX $2181 / LDA #00 / STA $2183     ; WRAM read port -> $7E:0D04
 285E1: LDX #210D

@@ -313,7 +313,7 @@ script walks the follower to the lead and its `E3 01` tail restores `$011F`; the
 by a battle-epilogue dead-mark (`$1000,obj |= 0x80`) keyed on the battle staging alive byte.** No scene
 object performs the restore; obj41 fn1 (the only `E3 01` in the SCENE script) is the post-ambush NPC's talk
 handler and never runs at the return. Everything below is from `ct_probe.exe` (HEAD b60dfa9 oracle) driven
-from the FIELD-SIDE state `saves/battle_re/forest_holdleft_pre.state` + `tools/dis.py` + the ROM bytes.
+from the FIELD-SIDE state `saves/battle_re/forest_holdleft_pre.state` + `tools/romdis.py` + the ROM bytes.
 
 ## AD.0 — Folded prior-round notes (were scratch-only: repin_ledger STEP 4/5)
 
@@ -536,7 +536,7 @@ ROM's own no-follower branch), no unconditional enemy hiding.
   pre-battle), `pref167.png` (pre-D8 same-camera baseline for the 0-diff tilemap proof), `cleanret.png`
   (single-A dismissal), `postret_walkR/walkU.png` (the streamer heal + Marle following), `iso0/1/2.png`
   (PEEK_ISOBG layer isolation).
-- Disasm: `tools/dis.py 5B20 0x90` (helper; NB the true entry is 5B1F — dis.py from 5B20 misaligns by 1),
+- Disasm: `tools/romdis.py 5B20 0x90` (helper; NB the true entry is 5B1F — romdis.py from 5B20 misaligns by 1),
   `0330 0x70`, `07C0 0x170`, `A8C0 0xB0`; C0/5CEC hand-decoded from raw bytes (MVN sequence); ROM template
   bytes read at file offsets 0x5D37/0x5D50/0x5D68.
 

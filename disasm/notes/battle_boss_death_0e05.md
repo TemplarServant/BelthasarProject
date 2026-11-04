@@ -1,11 +1,11 @@
 # BATTLE — the boss death: CD/0043's arms into CD/0E05, and the staging bytes they read (2026-10-16)
 
-Census family 5 (battle_sim_census.md sec. 6). Every claim cites a ROM address (`tools/dis.py`) or the rule's cartridge
+Census family 5 (battle_sim_census.md sec. 6). Every claim cites a ROM address (`tools/romdis.py`) or the rule's cartridge
 (`build/ct.exe`, `CT_ORACLE_LOGICAL=1`, through `tools/battle_sim.py fight <id> hp=1` from `saves/battle_re/gato_wait.state`).
 Port: src/battle.c `battleDeathFxFrame`, `battleDissolvePackets`, `battleDeathSfxTick`, `battleAdvanceDissolves`, the
 FD/B121 store in `stageAll`, the CC/EBA4 and CC/EC63 stores in `battleMoveInit`, program op 80 sub-ops 0F and 11.
 
-## 1. CD/0043 after its `$CCEA` wait (dis.py 0D0043 0x90 1 0)
+## 1. CD/0043 after its `$CCEA` wait (romdis.py 0D0043 0x90 1 0)
 
 ```
 D0052  LDA $99D2 / BEQ D0083 / CMP #02 / BEQ D0083     ; no arena (0) or arena kind 2 -> D0083
@@ -34,7 +34,7 @@ The port read the arms but `$A01D`, `$A08C` and `$99D2` were never staged (all 0
   the 16-bit `STA $99D2` (CC/EC90). Then `$A0A7 |= $80`, `$A113 = $82`. The table: D4 6001, BC 5902, BD 6002, D1 7001,
   CB/CC/CD 6001, 5F/80/43 kind 3. Cartridge: `$99D2 = 01` f271 (CC:EC93) for Lavos CC, Giga Gaia, the Guardian.
 
-## 3. CD/0E05 (dis.py 0D0E05 0x1E 1 0)
+## 3. CD/0E05 (romdis.py 0D0E05 0x1E 1 0)
 
 ```
 CD/0E05  PHA / JSR CD/0DFA     ; `LDA $5D9B / BEQ`, else a frame: an action's program still running is waited out

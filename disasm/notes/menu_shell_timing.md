@@ -2,7 +2,7 @@
 
 Scope: every frame between "the player asks for the menu" and "the field/overworld runs again", for the
 X menu (mode 1, field and overworld), the shop (mode 2, op `C8 90`) and the load screen (mode 0).
-Sources: ROM disassembly (`python tools/dis.py <fileoff> <len> <m> <x>`) and the oracle (`build/ct.exe`,
+Sources: ROM disassembly (`python tools/romdis.py <fileoff> <len> <m> <x>`) and the oracle (`build/ct.exe`,
 copied to scratch so a parallel build could not swap it mid-run). Logs: `%TEMP%\claude\...\scratchpad\shell_re\`.
 Mechanism notes already derived elsewhere are cited, not repeated: `menu2_shell_exit.md` (scheduler, fade code,
 exit, NMI), `menu_entry.md` (field X path), `shop_screen.md`, `menu2_overworld_entry.md`, `field_load_cost.md`,

@@ -208,7 +208,7 @@ Section 8 above listed the treasure plane as not wired into collision, on the as
 tiles are already solid from their own props. That assumption is FALSE for 89 of the 256 shipped records,
 and it is the whole of defect #3.
 
-The two prop-fetch entries differ in exactly one test (`python tools/dis.py 9A80 0x60 0 0`):
+The two prop-fetch entries differ in exactly one test (`python tools/romdis.py 9A80 0x60 0 0`):
 
 ```
 9AA1  REP #10 / REP #20 / AND $1E / SEP #20 / TAX

@@ -6,7 +6,7 @@ the combatant SPRITE poses — GATO's idle claw-swap, his four facings, the atta
 and `battle_pc_approach_facing.md` §2.5 flagged as the `$96DE`-keyed directional layout. This is the
 **pose/assembly engine, DISTINCT from Part 1's tile streamer** (`battle_animeng_objslot.md`): the CD/5FF0
 action scripts' `03/06 aa` "play-anim" ops (`battle_interp_verify.md` T2) resolve into THESE. **Zero
-invention** — every field byte-cited (`tools/dis.py`, flat = `(bank−0xC0)<<16|addr`) and cross-checked on
+invention** — every field byte-cited (`tools/romdis.py`, flat = `(bank−0xC0)<<16|addr`) and cross-checked on
 `gato_press_action.state` (`ct_slot.exe = build/ct.exe`, HOLD driver `100:8,0:N`).
 
 > **Where the two levels meet.** `battle_interp_verify.md` T2 decoded the HIGH-level ACTION script
@@ -34,7 +34,7 @@ invention** — every field byte-cited (`tools/dis.py`, flat = `(bank−0xC0)<<1
 
 ## 2 — animId `$8E` → the pose-script pointers (bank E4)
 
-**The loader `CC/EB0A`** (`tools/dis.py 0x0CEB00`, 16-bit):
+**The loader `CC/EB0A`** (`tools/romdis.py 0x0CEB00`, 16-bit):
 ```
 CC/EB0A  LDA $8E / ASL A / TAX          ; X = animId*2
 CC/EB0E  LDA $E42600,X / STA $1CA2,Y    ; ptrA lo/hi  (table E4/2600)
@@ -58,7 +58,7 @@ little-endian bytes; the 24-bit VALUES are `$E4BF09`/`$E472C0`, both bank **E4**
 
 ## 3 — The per-frame POSE TICK (enemy engine `C1/3360` → `C1/33xx`) and the FACING dispatch
 
-`tools/dis.py 0x013360`. Runs per-frame per enemy slot (it `DEC`s the per-slot frame timer `$9694`):
+`tools/romdis.py 0x013360`. Runs per-frame per enemy slot (it `DEC`s the per-slot frame timer `$9694`):
 ```
 C1/3364  LDA $5E0D,X / STA $974A,X       ; mode  <- request  (mode machine, battle_enemy_move_target A.4)
 C1/336A  LDA $96DE,X / STA $96E9,X       ; latch facing
@@ -105,7 +105,7 @@ anim, not this `$969C` cursor loop (its cursor stayed 0 while GATO's stepped). T
 ## 4 — How CD/5FF0 "play-anim" ops resolve into the pose (the linkage — spans EMERGE)
 
 The high-level action script (`CD/5FF0[$9877]`, `battle_interp_verify.md` T2) runs its tracks via the
-executor `C1/5Bxx-5Fxx`. The **play-anim op handler** (`tools/dis.py 0x015FD0`):
+executor `C1/5Bxx-5Fxx`. The **play-anim op handler** (`tools/romdis.py 0x015FD0`):
 ```
 C1/5FDE  INY / LDA [$E6],Y / STA $8E     ; ** animId $8E = the script's operand byte 'aa' **   ([$E6],Y = CD cursor)
 C1/5FE3  … draw the assembly for $8E …
@@ -166,7 +166,7 @@ constant. `$9694` timer units are 1-2 (CC/FBCE-mapped), stepped at the battle an
 `battle_pc_approach_facing.md` §2 observed GATO's `$96DE` cycling **0(up)/1(down)/2(left)/3(right)** as he
 walks. Two independent facing controls compose:
 1. **Which POSE SCRIPT** — the mode/approach handler sets `$8E` from the walk BEARING:
-   `C1/38F6: ADC #40 / JSR C1/01F9 / STA $8E` (`tools/dis.py 0x0138EF`) — a bearing→animId map — and
+   `C1/38F6: ADC #40 / JSR C1/01F9 / STA $8E` (`tools/romdis.py 0x0138EF`) — a bearing→animId map — and
    simultaneously `$96DE = C0/F700[bearing]` (`C1/3900`, the `ctBattleFaceTab` of `battle_trig.h`). So the
    walk direction picks the animId (hence the ptrA) for that gait.
 2. **Which WINDOW of it** — `$82 = $86 + facing × $9671[slot]` (§3) offsets into that ptrA; group A vs B
@@ -227,7 +227,7 @@ Dir: `%TEMP%/claude/C--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/e5608d
 - Monitors: pose pointers (`--monitor "1CA2:33,1CC3:33,96DE:8,008E:2"`), cursor/timer (`969C:8,9694:8`),
   animId+ptr during attack (`008E:1,1CAB:3,9877:1,A013:1 --writer` = the CD→$8E proof),
   buffers (`97D9:8,9799:8,9671:8`), idle cursor timing (`969F:1,9697:1`).
-- Disasm: loader `tools/dis.py 0x0CEB00` + `0x0CEAE0`; pose tick `0x013360`/`0x013410`; play-anim op
+- Disasm: loader `tools/romdis.py 0x0CEB00` + `0x0CEAE0`; pose tick `0x013360`/`0x013410`; play-anim op
   `0x015FD0`; bearing→animId `0x0138EF`; helpers `0x010112`/`0x0100A7`/`0x0101F9`; tables `CC/F82F`,
   `CC/FBCE`, `CC/FB91`; pose scripts ROM `$E472C0`(ptrA)/`$E4BF09`(ptrB), tables `E4/2600`,`E4/2800`,`E4/F601`.
 - Key ROM addresses: animId loader **CC/EB0A**; initial-pose table **E4/F601-F603** (CC/EAE0); pose tick

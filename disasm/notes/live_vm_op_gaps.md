@@ -110,7 +110,7 @@ the walk would dispatch them forever, so no fn0 has one before its 00; AF = `JSR
 
 `runFunc()` stopped on B1 as if it were a park and left the rest of fn0 to the runner, whose RETURN at priority 7
 (C0/5F74 `CMP #07 / BEQ 5FB3`: `TYX / CLC`) parks on the 00 for good -- the code after it never ran. Loc 0DF's obj0 fn0
-opens with a B1 and ends at its first 00, 24 bytes on (read it with `tools/dis.py` from the location's script; the
+opens with a B1 and ends at its first 00, 24 bytes on (read it with `tools/romdis.py` from the location's script; the
 bytes are not copied here); its idle code after that 00 tests `$7F0154` bit 1. After Johnny's race (the playthrough's
 47_race) the cartridge's load writes `$1180` = 0208 (C0:591E, 45 frames into the load), the runner tests `$7F0154`
 bit 1 (set by 10F's script), clears it (C0:6BCE) and takes control for Johnny's lines. The port's obj0 parked at the

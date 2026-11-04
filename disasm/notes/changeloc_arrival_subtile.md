@@ -321,11 +321,11 @@ CT_EXITDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 4 --loadflags 
   --at 120 207 --selftest "$S/o3.raw" --frames 200 --walkscript "u:190,."
 
 # ROM
-python tools/dis.py 42B8 0x58      # the arrival placement
-python tools/dis.py 3B1B 0x30      # op-0xDD  -> $0104
-python tools/dis.py 3AB7 0x40      # op-0xE0  -> $0116
-python tools/dis.py 9CF5 0x38      # positional exit -> $0116
-python tools/dis.py 0C9A 0x28      # the commit $0116 -> $0104
+python tools/romdis.py 42B8 0x58      # the arrival placement
+python tools/romdis.py 3B1B 0x30      # op-0xDD  -> $0104
+python tools/romdis.py 3AB7 0x40      # op-0xE0  -> $0116
+python tools/romdis.py 9CF5 0x38      # positional exit -> $0116
+python tools/romdis.py 0C9A 0x28      # the commit $0116 -> $0104
 ```
 
 ---
@@ -340,7 +340,7 @@ defects.
 
 ## A. Re-verified: every ROM citation is byte-correct
 
-`python tools/dis.py 42B8 0x60` reproduces the section-1 listing instruction for instruction,
+`python tools/romdis.py 42B8 0x60` reproduces the section-1 listing instruction for instruction,
 including both `BIT` arms and the `TYX / SEC / RTS` tails at `4305` and `430D`. Also
 re-disassembled and confirmed verbatim: `C0/9CF5-9D29` (`LSR / AND #0F / STA $0116`,
 `AND #80 / TSB $0116`), `C0/3AD4-3ADF` (into `$16`), `C0/3B34-3B3F` (into `$04`),

@@ -32,7 +32,7 @@ Never guess, never approximate, never invent.
 | Frame screenshot + dumps | `ct_probe --peek S.state out.raw --btnscript "100:8,0:592"` → writes fb + .wram/.vram/.oam |
 | View a screenshot | `python tools/ct.py fb2png out.raw out.png` (then Read the png) |
 | Save a mid-scenario state | env `PEEK_SAVE=path.state` during --peek |
-| Disassemble ROM | `python tools/dis.py <bankaddr-hex> <len-hex> [m] [x]` e.g. `dis.py C05A93 40` |
+| Disassemble ROM | `python tools/romdis.py <bankaddr-hex> <len-hex> [m] [x]` e.g. `romdis.py C05A93 40` |
 | Decode an event script | `python tools/ct.py script <sceneNo>` (any scene; fn table + annotated ops) |
 | Find callers/writers of an addr | `python tools/ct.py refs <addr> [--rom PATH]` (heuristic byte scan) |
 | Object array from a state | `python tools/ct.py objs <state-or-wram>` (tile/foot/solid/draw/mode/IP/anim...) |
@@ -49,7 +49,7 @@ Down=0x20 Left=0x40 Right=0x80 A=0x100 X=0x200. Input script = `"hexbtn:frames,.
    --monitor/--followvm/--peek. Record the FRAME TIMELINE (f-numbers of each event).
 2. **Find the RAM.** Wide --monitor windows with --diff to find what flips; narrow
    down; then --writer to get the writer PC.
-3. **Disassemble the writer** with dis.py. Follow the routine until you can state,
+3. **Disassemble the writer** with romdis.py. Follow the routine until you can state,
    in bytes, what it reads and writes. The event-op jump table is C0/5D6E
    (handler = table[op*2]); the event/field code runs with D=$0100, so DP $17 in a
    disasm = WRAM $0117.
@@ -67,7 +67,7 @@ Down=0x20 Left=0x40 Right=0x80 A=0x100 X=0x200. Input script = `"hexbtn:frames,.
   false negative. Confirm the state exercises the feature; report "couldn't
   reproduce under X", never "absent".
 - **Dossier tables can be wrong.** Before "fixing" code to match a dossier table,
-  re-verify the table with fresh dis.py at the cited address (an op-0x16 cmp table
+  re-verify the table with fresh romdis.py at the cited address (an op-0x16 cmp table
   in a dossier had entries 3/4 swapped; the code was right).
 - **--vmdiff button injection forwards only A** to the oracle; other buttons are
   asymmetric. Use --peek/--monitor for multi-button scenarios.

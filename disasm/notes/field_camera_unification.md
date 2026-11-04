@@ -7,7 +7,7 @@ pipeline, scene-entry init, the D8 align machine, every scripted mover, the clos
 validation corpus, and the migration spec — so the engine can retire its second (player-follow render)
 camera. ROM + oracle only, zero invention. HEAD e50593c.
 
-Method: `tools/dis.py` (fileoffset=(bank−0xC0)<<16|addr; ⚠ the linear decoder desyncs across data — the
+Method: `tools/romdis.py` (fileoffset=(bank−0xC0)<<16|addr; ⚠ the linear decoder desyncs across data — the
 event-op cluster and `7506` needed explicit `m=1`; absolute-store claims were closed with a raw byte-scan
 of the whole ROM for `8D/9C/EE/CE/9D/8E/8C xx 1D`). Oracle: `ct.exe --read/--monitor --diff --writer`
 (⚠ `--monitor "ADDR:2"` prints bytes in ADDRESS order; writer PC = the retire PC, usually store+2/+3).

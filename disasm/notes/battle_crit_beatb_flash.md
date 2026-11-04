@@ -33,7 +33,7 @@ CE/D428 (BEAT B)   72 0A | 69 00 | 20 02 | 06 05 | 20 02 | 6A | 03 05 | 06 03 | 
 Both blocks run on the **role-3 (primary victim) track**; beat B is entered off the `23 01` sync to role 0's
 second `03 32` play-anim. `69` = flash ON, `6A` = restore.
 
-`op 0x69` handler `C1/5DD3` (`python tools/dis.py 15DD3 0xC0 1 0`) — the ONLY branch in it is the enemy-CGRAM
+`op 0x69` handler `C1/5DD3` (`python tools/romdis.py 15DD3 0xC0 1 0`) — the ONLY branch in it is the enemy-CGRAM
 half (`$99D2` / `$A08C,X`); there is **no HP test, no `block+0x1D` test, no alive-list test**:
 
 ```
@@ -166,7 +166,7 @@ carries `+0x1D` = `01 / 43 / 07` on slots 0/1/2 (bit7 clear by luck, not by cons
 
 ### 3.2 Why the ROM never has this state — `C1/B279` re-derives the flag from curHP
 
-`python tools/dis.py 1B279 0x40 1 0` (called per combatant from the 11-slot refresh sweep — `C1/B234
+`python tools/romdis.py 1B279 0x40 1 0` (called per combatant from the 11-slot refresh sweep — `C1/B234
 JSR C1/B279` inside the `INC $B2D3 / CMP #0B / BCC` loop at `C1/B25D-B265`):
 
 ```
@@ -368,7 +368,7 @@ badly understates the defect, and its fix ORDERING is the CLAUDE.md spot-fix sha
 
 | claim | my re-measurement | status |
 |---|---|---|
-| `C1/5DD3` op-0x69 stores `#08` into `$993C,X` with no aliveness branch | `python tools/dis.py 15DD3 0xC0 1 0` -> `15DFA LDA #08 / 15DFC STA $993C,X`; the only branches are `$A010 CMP #04 BCS` (the role-LIST arm, which also stores `#08` per listed combatant at `15E15/15E17`) and the `$99D2`/`$A08C,X` CGRAM half | CONFIRMED |
+| `C1/5DD3` op-0x69 stores `#08` into `$993C,X` with no aliveness branch | `python tools/romdis.py 15DD3 0xC0 1 0` -> `15DFA LDA #08 / 15DFC STA $993C,X`; the only branches are `$A010 CMP #04 BCS` (the role-LIST arm, which also stores `#08` per listed combatant at `15E15/15E17`) and the `$99D2`/`$A08C,X` CGRAM half | CONFIRMED |
 | `C1/5E87` op-0x6A restores from `$9888,X` | `15EA0 LDA $9888,X / 15EA3 STA $993C,X` (and the `<4` twin at `15EA8`) | CONFIRMED |
 | `CE/D428` = `72 0A 69 00 20 02 06 05 20 02 6A 03 05 06 03 50 1F` | ROM file offset `0x0ED428` = `72 0a 69 00 20 02 06 05 20 02 6a 03 05 06 03 50 1f` | CONFIRMED byte-for-byte |
 | `CE/D47D` = the same minus `72 0A` and `50` | `0x0ED47D` = `69 00 20 02 06 05 20 02 6a 03 05 06 03 1f` | CONFIRMED byte-for-byte |

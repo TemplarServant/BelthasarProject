@@ -5,7 +5,7 @@ commit/animate split, and the GATO walk are all SHIPPED since the old `battle_lo
 the residual gaps the caller flagged. Method = LakeSnes oracle (`ct.exe`→`ct_probe.exe`) `--monitor` (RAM
 timelines, `--writer` = PC after the store retires) on `gato_press_action.state`, vs our engine
 (`Belthasar.exe --battletest` + `CT_BATTLE_TRACE`/`CT_BATTLE_MASHA`) on `saves/battle_re/gato_t0.raw.wram`.
-Every claim is anchored to a ROM address (`tools/dis.py <fileoffset>`, fileoffset=(bank−0xC0)<<16|addr) or an
+Every claim is anchored to a ROM address (`tools/romdis.py <fileoffset>`, fileoffset=(bank−0xC0)<<16|addr) or an
 oracle monitor row. **⚠ `--peek` ≠ `--monitor` timelines — ALL frame work here is `--monitor`.** Mandate: nothing
 invented; where the exact rule is the bank-CC AI interpreter it is marked BOUNDARY, never guessed.
 
@@ -314,6 +314,6 @@ ct_probe --monitor "A013:1,9877:1,1D29:1,9750:1,AFB1:1,95D5:1" --from gato_press
 CT_BATTLE_MASHA=1 CT_BATTLE_TRACE=1 CT_ROM=<ROM> ct_field_probe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 CT_BATTLE_SCRIPT=<('a:1,n:29')x60> CT_BATTLE_TRACE=1 CT_ROM=<ROM> ct_field_probe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram
 # ROM sites:
-python tools/dis.py 18260 0x40 1 0   # ATB dec + ready (C1:826B)   ;  python tools/dis.py 14090 0x140 0 0  # action exec (C1/40A6 INC $A013)
-python tools/dis.py 184DB 0x10 0 0   # enemy reload $AFB1<-$B158 (C1:84E1, at SPAN-END not first-turn)
+python tools/romdis.py 18260 0x40 1 0   # ATB dec + ready (C1:826B)   ;  python tools/romdis.py 14090 0x140 0 0  # action exec (C1/40A6 INC $A013)
+python tools/romdis.py 184DB 0x10 0 0   # enemy reload $AFB1<-$B158 (C1:84E1, at SPAN-END not first-turn)
 ```

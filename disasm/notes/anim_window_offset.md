@@ -7,7 +7,7 @@ combatant's pose/dwell pointer pair.** Nothing here is implemented; this is the 
 
 ## 1. The handler — `C1/4D04` (op 0x02, play-loop)
 
-`python tools/dis.py 14D04 0x50 1 0`:
+`python tools/romdis.py 14D04 0x50 1 0`:
 
 ```
   14D04: LDA #02 / STA $8E              ; $8E = the MODE (2 = loop)

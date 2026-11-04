@@ -401,8 +401,8 @@ python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); print(' '.join('%0
 #   72 37 9A 37 BF 38 59 39 3D 3A C2 3B 33 3E 5A 3F
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); p=0x0C8B08+0x5E*2; b=0x0C0000|(d[p]|(d[p+1]<<8)); print(hex(b)); print(' '.join('%02X'%x for x in d[b:b+48]))"
 #   0xc9e36 : 17 10 00 00 FE | 00 00 06 04 FE | 00 00 00 00 FE | 01 01 05 00 01 01 06 0E FE | ...
-python tools/dis.py 13BC2 0xA0 0 0     # class-5 handler C1/3BC2 (dis desyncs on the M/X flips -- hand-decode)
-python tools/dis.py 13A3D 0x50 0 0     # class-4 handler C1/3A3D for the diff
+python tools/romdis.py 13BC2 0xA0 0 0     # class-5 handler C1/3BC2 (dis desyncs on the M/X flips -- hand-decode)
+python tools/romdis.py 13A3D 0x50 0 0     # class-4 handler C1/3A3D for the diff
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); print(' '.join('%02X'%b for b in d[0x1847E:0x184F0]))"   # ready scanner
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read(); print(' '.join('%02X'%b for b in d[0x182C0:0x18320]))"   # the $B185 increment loop
 
@@ -485,7 +485,7 @@ case. Do not implement §F as written.**
 ## R1 — REFUTED: `$A2B5` is NOT a scenario constant. It is the mode being dispatched.
 
 The dossier's §A.3 transcription of `C1/373B` **omits the decisive instruction**. Full hand-decode
-of `0x1373B` (raw `[27 ROM bytes at 0x1373B: python tools/dis.py 0x1373B 27]
+of `0x1373B` (raw `[27 ROM bytes at 0x1373B: python tools/romdis.py 0x1373B 27]
 BF AB FB CC 0A AA FC 60 37 60`):
 
 ```
@@ -779,8 +779,8 @@ mkdir -p "$TMP/ctwf3/idle-adv"
 cp build/ct.exe "$TMP/ctwf3/idle-adv/ct_probe.exe"; cp build/Belthasar.exe "$TMP/ctwf3/idle-adv/"; cp build/SDL2.dll "$TMP/ctwf3/idle-adv/"
 
 # --- ROM
-python tools/dis.py 13714 0x60 0 0       # the mode machine + C1/373B  (note the STA $A2B5 the dossier drops)
-python tools/dis.py 1847E 0x50 1 1       # the ready scanner
+python tools/romdis.py 13714 0x60 0 0       # the mode machine + C1/373B  (note the STA $A2B5 the dossier drops)
+python tools/romdis.py 1847E 0x50 1 1       # the ready scanner
 python -c "import re;d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print([hex(m.start()) for m in re.finditer(re.escape(b'\x8d\xb5\xa2'),d)])"
 #   ['0x13752']  -- the ONLY writer of $A2B5 in the ROM
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print(' '.join('%02X'%b for b in d[0x0CFBAB:0x0CFBAB+0x20]))"
@@ -830,7 +830,7 @@ CT_BATTLE_TRACE=1     ...                    --battletest saves/battle_re/ambush
 Third independent lane, read-only on `src/`. Binaries snapshotted to a scratch dir before any probe
 (`build/ct.exe` -> `ct_probe.exe`, `build/Belthasar.exe`, `SDL2.dll`); nothing was built, no suite was
 run, no `src/` file was touched. Every ROM address below was re-disassembled in THIS lane with
-`tools/dis.py <off> <len> 1 0` (**8-bit A / 16-bit X** — with the default `0 0` the disassembler
+`tools/romdis.py <off> <len> 1 0` (**8-bit A / 16-bit X** — with the default `0 0` the disassembler
 desyncs on this whole family and prints garbage; that is why session 1 had to "hand-decode"), and
 every oracle number was re-measured on a state this lane loaded itself. Default verdict: not proven.
 
@@ -873,7 +873,7 @@ not a filter at all but the cadence freeze of §S2.2. Do not fold them together.
 
 ### S2.1 `C1/3714` (per-frame mode machine) and `C1/373B` (dispatch)
 
-Raw `0x13714`: `[39 ROM bytes at 0x13714: python tools/dis.py 0x13714 39]`
+Raw `0x13714`: `[39 ROM bytes at 0x13714: python tools/romdis.py 0x13714 39]`
 
 ```
 13714 AD E0 99   LDA $99E0
@@ -1049,7 +1049,7 @@ implementation that stops at R9 step 3 (approach + settle) would arm one segment
 
 ## S4 — CLASS 6 (`C1/3E33`; modes `0A`/`0B`/`0C`) — derived in full (R9's step-4 gap)
 
-`python tools/dis.py 13E33 0x130 1 0` disassembles cleanly. It is an **ellipse orbit about a fixed
+`python tools/romdis.py 13E33 0x130 1 0` disassembles cleanly. It is an **ellipse orbit about a fixed
 centre captured on first entry**, not a target-relative dance:
 
 ```
@@ -1376,16 +1376,16 @@ cp build/ct.exe "$TMP/ctwf4/movers/ct_probe.exe"; cp build/Belthasar.exe "$TMP/c
 
 # --- ROM (note the trailing "1 0" = 8-bit A / 16-bit X; with "0 0" this whole family
 #     disassembles to garbage -- that is the trap session 1 hit)
-python tools/dis.py 13714 0x60  1 0    # the mode machine + C1/373B (the BEQ freeze + STA $A2B5)
-python tools/dis.py 13BC2 0xC0  1 0    # class 5 fresh pass
-python tools/dis.py 13C81 0xD0  1 0    # class-5 tail + the 0x0D arm + the 3D40 branch
-python tools/dis.py 13D40 0xA0  1 0    # the ORBIT branch
-python tools/dis.py 13DDE 0x60  1 0    # its tail (the $A5F4 flip at 13E1D)
-python tools/dis.py 13E33 0x100 1 0    # CLASS 6
-python tools/dis.py 13F29 0x90  1 0    # class-6 tail + class 7 (C1/3F5A) head
-python tools/dis.py 13A3D 0x60  1 0 ; python tools/dis.py 13AF7 0x90 1 0 ; python tools/dis.py 13B84 0x40 1 0
-python tools/dis.py 12AD0 0xE0  1 0    # the eight 2Bxx threshold stubs + CMP $9893 + the $9872 verdict
-python tools/dis.py 10222 0x60  1 0 ; python tools/dis.py 101F9 0x30 1 0   # atan2 sign law + trig
+python tools/romdis.py 13714 0x60  1 0    # the mode machine + C1/373B (the BEQ freeze + STA $A2B5)
+python tools/romdis.py 13BC2 0xC0  1 0    # class 5 fresh pass
+python tools/romdis.py 13C81 0xD0  1 0    # class-5 tail + the 0x0D arm + the 3D40 branch
+python tools/romdis.py 13D40 0xA0  1 0    # the ORBIT branch
+python tools/romdis.py 13DDE 0x60  1 0    # its tail (the $A5F4 flip at 13E1D)
+python tools/romdis.py 13E33 0x100 1 0    # CLASS 6
+python tools/romdis.py 13F29 0x90  1 0    # class-6 tail + class 7 (C1/3F5A) head
+python tools/romdis.py 13A3D 0x60  1 0 ; python tools/romdis.py 13AF7 0x90 1 0 ; python tools/romdis.py 13B84 0x40 1 0
+python tools/romdis.py 12AD0 0xE0  1 0    # the eight 2Bxx threshold stubs + CMP $9893 + the $9872 verdict
+python tools/romdis.py 10222 0x60  1 0 ; python tools/romdis.py 101F9 0x30 1 0   # atan2 sign law + trig
 python -c "import re;d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print([hex(m.start()) for m in re.finditer(re.escape(b'\x8d\xb5\xa2'),d)])"   # ['0x13752'] -- the only writer
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print(' '.join('%02X'%b for b in d[0x0CFBAB:0x0CFBAB+0x20]))"
 python -c "d=open('Chrono_Trigger_USA_SNES.sfc','rb').read();print(' '.join('%02X'%b for b in d[0xF300:0xF400]));print(' '.join('%02X'%b for b in d[0xF700:0xF800]))"
@@ -1435,16 +1435,16 @@ measured on our engine at all** (V13, demonstrated, not argued).
 
 | claim | this lane's byte / measurement |
 |---|---|
-| `C1/3714` mode machine | raw `0x13714` = `[39 ROM bytes at 0x13714: python tools/dis.py 0x13714 39]`. `F0 0E` (BEQ) at `0x13722` sits **before** `DE 97 98` (DEC) at `0x13724`. CONFIRMED. |
+| `C1/3714` mode machine | raw `0x13714` = `[39 ROM bytes at 0x13714: python tools/romdis.py 0x13714 39]`. `F0 0E` (BEQ) at `0x13722` sits **before** `DE 97 98` (DEC) at `0x13724`. CONFIRMED. |
 | `$A2B5` single writer | `8D B5 A2` occurs **once** in the 4 MB image, `0x13752`. `9C B5 A2` = 0, `8F B5 A2 xx` = 0. The 19 `AD B5 A2` readers: `13813 13870 13881 1396E 139EC 13A71 13B1D 13B84 13BF7 13CC8 13CF1 13D02 13E00 13E11 13E79 13EFD 13F0E 13F1E 13F6C` — all inside the class handlers. CONFIRMED. |
 | every fixture holds `$A2B5 = 0x80` | `ambush_pre`, `gato_t0`, `batalha_nao_comeca`, `forest_pre` .raw.wram: all `80`. CONFIRMED. |
-| `CC/FBAB[0x00..0x1F]` | `[32 ROM bytes at 0xCFBAB: python tools/dis.py 0xCFBAB 32]`. CONFIRMED. |
+| `CC/FBAB[0x00..0x1F]` | `[32 ROM bytes at 0xCFBAB: python tools/romdis.py 0xCFBAB 32]`. CONFIRMED. |
 | `C1/3760` 9 entries | `72 37 9A 37 BF 38 59 39 3D 3A C2 3B 33 3E 5A 3F 21 40`. CONFIRMED. |
 | radius `0x40` iff mode `0x0E` | `0x13BF2 LDA #20 / STA $A5FC / LDA $A2B5 / CMP #0E / BNE / ASL $A5FC / LDA $A5FC / STA $AE`. Oracle `--monitor "A5FC:1"`: `00` until f460, **`40` from f461**. CONFIRMED TWICE. |
 | settle `0x0100` (C1/2B1F) vs `0x0010` (C1/2B13) | `0x12B13: A9 10 ... A9 00` -> `$9893/94 = 10 00`; `0x12B1F: A9 00 ... A9 01` -> `00 01`. Single compare `0x12BA5 CMP $9893`; `0x12BAF LDA #FF / STA $9872` vs `0x12BB8 STA $9872` (A=0 after `TDC` at `0x12BB5`). CONFIRMED. |
 | `C1/3D40` orbit | `0x13D40-0x13E32` re-disassembled; `$A5F4,X` step `+0x10`/`-0x10` at `0x13D69-0x13D77`, EOR flip at `0x13E1F-0x13E24`. CONFIRMED. |
 | `C1/3E33` class 6 | `0x13E33-0x13F59` re-disassembled; centre `(selfX, selfY+0x10)` at `0x13E49/0x13E52`, angle `0xC0` at `0x13E58`, `rY = 0x20` (`LSR` for mode `0x0A` at `0x13E80`), `rX = rY + 0x20` at `0x13E99`, kick `0x58`/`0x30` at `0x13F1A/0x13F25`. CONFIRMED, byte for byte. |
-| id `0x19` arms class 6 | `CC/8B08 + 0x19*2 -> 0x9255`; `0x0C9255` = `[27 ROM bytes at 0xC9255: python tools/dis.py 0xC9255 27] ...` — `06 0F` and `06 0A` present (and `06 00`, `06 0E` twice later). CONFIRMED. |
+| id `0x19` arms class 6 | `CC/8B08 + 0x19*2 -> 0x9255`; `0x0C9255` = `[27 ROM bytes at 0xC9255: python tools/romdis.py 0xC9255 27] ...` — `06 0F` and `06 0A` present (and `06 00`, `06 0E` twice later). CONFIRMED. |
 | oracle mode/arm timeline | `--monitor "A2B5:1,974A:8,98A7:8,96F8:8,A5FC:1"` on `forest_battle_3hetake.state`: `$A2B5` `04` -> **`0E` at f461**; `$974A` slot0 `00->0E` f231, slot1 `00->0E` f455, slot2 `04->00` f244; `$96F8 = 01 01 01 00 00 00 00 00` FLAT. CONFIRMED. |
 | the mode-0 cadence freeze | `--monitor "9897:8"`: f0 `16 17 06 04 04 04 04 04` -> f1 `16 17 05 03 03 03 03 03` -> ... slots 0/1 (mode `00`) pinned at `16/17`, everything else ticks. CONFIRMED. `$989F = 20 20 20 20 20 20 20 20` (the reload). |
 | the `$9752 <- $5E15` refresh | `--monitor "5E15:3,9752:3"`: `$9752 = FF FF 01` at f0; `$5E15 = 00 01 00` from f452; `$9752` -> `00 FF 01` at **f461** and `00 01 01` at **f483**. CONFIRMED — and slot 1's target really is combatant 1, `$1D0C/$1D23[1] = 7F/90`, an empty PC seat in this solo fight. |
@@ -1513,7 +1513,7 @@ live branch, and do not repurpose its address for mode `0x10`.)
 
 ## V2 — REFUTED: "class 0 -> nothing (`C1/3772`)". Class 0 is the RE-ACQUIRE half of class 4's settle
 
-`python tools/dis.py 13772 0x30 1 0`:
+`python tools/romdis.py 13772 0x30 1 0`:
 
 ```
 13772 LDX $9C
@@ -2102,15 +2102,15 @@ anything grades it. Do not read the green suite as validation of it.
 
 ```
 mkdir -p "$TMP/ctwf4/movers-adv"; cp build/ct.exe .../ct_probe.exe; cp build/Belthasar.exe ...; cp build/SDL2.dll ...
-python tools/dis.py 13714 0x60 1 0     # dispatcher (BEQ 13722, STA 13752, LDA $CCFBAB)
-python tools/dis.py 1379A 0x70 1 0     # class 1 head (operand order)
-python tools/dis.py 13A3D 0x60 1 0 ; python tools/dis.py 13AF7 0xA0 1 0 ; python tools/dis.py 13B90 0x40 1 0
-python tools/dis.py 13BC2 0xC0 1 0 ; python tools/dis.py 13C81 0xC0 1 0 ; python tools/dis.py 13D40 0x100 1 0
-python tools/dis.py 13E33 0x110 1 0
-python tools/dis.py 13772 0x30 1 0 ; python tools/dis.py 138BF 0x20 1 0 ; python tools/dis.py 13959 0x20 1 0
-python tools/dis.py 13F5A 0x20 1 0 ; python tools/dis.py 14021 0x20 1 0
-python tools/dis.py 12AE3 0xD0 1 0 ; python tools/dis.py 12B80 0x40 1 0
-python tools/dis.py 10222 0x80 1 0 ; python tools/dis.py 101F9 0x30 1 0 ; python tools/dis.py 100A7 0x30 1 0
+python tools/romdis.py 13714 0x60 1 0     # dispatcher (BEQ 13722, STA 13752, LDA $CCFBAB)
+python tools/romdis.py 1379A 0x70 1 0     # class 1 head (operand order)
+python tools/romdis.py 13A3D 0x60 1 0 ; python tools/romdis.py 13AF7 0xA0 1 0 ; python tools/romdis.py 13B90 0x40 1 0
+python tools/romdis.py 13BC2 0xC0 1 0 ; python tools/romdis.py 13C81 0xC0 1 0 ; python tools/romdis.py 13D40 0x100 1 0
+python tools/romdis.py 13E33 0x110 1 0
+python tools/romdis.py 13772 0x30 1 0 ; python tools/romdis.py 138BF 0x20 1 0 ; python tools/romdis.py 13959 0x20 1 0
+python tools/romdis.py 13F5A 0x20 1 0 ; python tools/romdis.py 14021 0x20 1 0
+python tools/romdis.py 12AE3 0xD0 1 0 ; python tools/romdis.py 12B80 0x40 1 0
+python tools/romdis.py 10222 0x80 1 0 ; python tools/romdis.py 101F9 0x30 1 0 ; python tools/romdis.py 100A7 0x30 1 0
 python -c "...re.finditer(8D B5 A2)..."                 # STA $A2B5 -> ['0x13752'] only
 python -c "...STZ/STA/INC of A5FD,X A5F4,X A615,X..."   # the six clearers (V3)
 python -c "...CC/FBAB[0x00:0x80], C0/F300, C0/F700, C0/F900..."   # tables + the scratch geometry model (V0.1)
@@ -2299,7 +2299,7 @@ so mode `0x18` reaches it.
 `CC/FBAB[0x00..0x1F]`:
 
 ```
-[32 ROM bytes at 0xCFBAB: python tools/dis.py 0xCFBAB 32]
+[32 ROM bytes at 0xCFBAB: python tools/romdis.py 0xCFBAB 32]
 ```
 
 → class 0: `00/04/1A` · 1: `01/02/03/05/1C/1D` · 2: `07/1B/1E/1F` · 3: `08/09` · 4: `06/10`

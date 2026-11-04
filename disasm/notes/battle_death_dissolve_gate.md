@@ -9,7 +9,7 @@ Closes two user reports and re-scopes a rule our engine over-generalized:
    red/orange **+ white + pink** palette, and it is **DYNAMIC (faded at death), not a boot constant**.
 
 Method: **`--peek` is authoritative for the RENDERED death** (per every prior battle dossier — `--monitor`
-fast-forwards the `$A013`-paced post-kill phase); `--monitor --writer` for RAM sequencing/writer PCs; `dis.py`
+fast-forwards the `$A013`-paced post-kill phase); `--monitor --writer` for RAM sequencing/writer PCs; `romdis.py`
 for ROM. OBJ 16×16 4bpp, CGRAM `128+pal*16+v`, `(v<<3)|(v>>2)`, OBJ px at OAM (x,y) → fb (x,y+8).
 CGRAM word = **2-byte BGR555 LE stride** (`cg[i*2]|cg[i*2+1]<<8`) — the single-byte read is the recurring
 bug (see §2.4). States: `saves/battle_re/forest_battle_3hetake.state` (in-battle, 3 Hetakes),
@@ -52,15 +52,15 @@ GATO's 12 cells persist byte-static through the whole victory (matches `battle_g
 
 ## §1.3 The death PATH is IDENTICAL for both (so the gate is downstream, in the anim engine)
 
-Enemy-death code path (`dis.py`), same for GATO and Hetake:
+Enemy-death code path (`romdis.py`), same for GATO and Hetake:
 - **Clamp-death** (`C1/ECC7`, `battle_hp_timing.md §b`): dead-flag block+0x1D bit7; **enemy → `JSL FD/ABA2`**.
-- **`FD/ABA2`** (`dis.py 3DABA2`) = **reward bookkeeping ONLY** — `$B28C += CC5E00,X` (XP), `$B2A5 +=
+- **`FD/ABA2`** (`romdis.py 3DABA2`) = **reward bookkeeping ONLY** — `$B28C += CC5E00,X` (XP), `$B2A5 +=
   CC5E02,X`, `$B2DB += CC5E06,X` (item) + a steal roll. **No OBJ/VRAM/CGRAM write.** (Confirms
   `battle_dissolve.md S1`.) Not the visual gate.
-- **Enemy-death routine `C1/B2B1`** (`dis.py 1B2B1`): set dead-flag `$5E4A,X=#80`; **clear alive-list
+- **Enemy-death routine `C1/B2B1`** (`romdis.py 1B2B1`): set dead-flag `$5E4A,X=#80`; **clear alive-list
   `$AEFF,Y=#FF`** (@`C1/B2C0`, writer **`C1:B2C3`**, `$AEFF+slot`=`$AF02+slot`); clear status; then
   **`CPY #0003` → `BCC` PC(idx<3) / else JMP `C1/B3A0`** (enemy path).
-- **`C1/B3A0`** (`dis.py 1B3A0`): sets the **death-notify `$AEB0,Y=1`** (+global `$AEB2=1`), **gated**:
+- **`C1/B3A0`** (`romdis.py 1B3A0`): sets the **death-notify `$AEB0,Y=1`** (+global `$AEB2=1`), **gated**:
   `LDA $AE82,Y / BNE skip` and `LDA $AF12,Y / BIT #80 / BNE skip`.
 
 **Oracle check of that gate (`.wram` at the death frame, GATO vs Hetake):** `$AE82`, `$AF12`, `$AEB0` are
@@ -145,7 +145,7 @@ present from START, constant"). It is produced at death.
 `--monitor --writer` on the OBJ palette shadow during the Hetake deaths pins it:
 - **WRAM palette buffers:** SOURCE/target `$7E2000` (pal4 at `$7E2180`, pal1 at `$7E2120`), **LIVE CGRAM
   shadow `$7E2200`** (pal4 at **`$7E2380`**, pal1 at `$7E2320`; DMA'd to CGRAM each frame).
-- **Fade engine `FD/E962`** (`dis.py 3DE962`; per-channel variants E962/E98F/E9CA): reads `$7E2000,X`,
+- **Fade engine `FD/E962`** (`romdis.py 3DE962`; per-channel variants E962/E98F/E9CA): reads `$7E2000,X`,
   interpolates with the **hardware multiplier** (`STA $4203` / `ADC $4217`), **`STA $7E2200,X`** (store
   retires as monitor writer **`FD:E989`** @`3DE985`).
 - **On enemy death** the engine ramps pal4 (`$7E2380`) from the **live pal1 (green)** toward the **red
@@ -228,7 +228,7 @@ A NEW check that screenshots a mid-dissolve would capture the fix — pin only a
 
 The "deeper writer" and the fade law of PART 4 are two ROM routines and an objslot record the port already ran:
 
-- **CF/FE20** (C1/AC75 -> C1/0045 entry 6 = C1/006D `JSL CF/FE20`, the post-action death scan; dis.py `0FFE20 70 1 0`).
+- **CF/FE20** (C1/AC75 -> C1/0045 entry 6 = C1/006D `JSL CF/FE20`, the post-action death scan; romdis.py `0FFE20 70 1 0`).
   For X = 10 down to 3 with `$AEB0,X` set: `$9FF7,X` set -> only `STZ $96F5,X`; else `INC $A0A8,X`, `STZ $AEB0,X`,
   `STZ $98A4,X`; `$99B5,X` == 0 -> `STZ $96F5,X`; the record's byte +7 (`$29C6 + (X-3)*12`) bit 6 -> skip; else
   `Y = $993C,X * 16`, **`$993C,X := 08`** (OBJ palette 4), **24 bytes `$2302,Y` -> `$2382` and `$2182`** (colours 1-12

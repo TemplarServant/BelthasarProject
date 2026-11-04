@@ -21,7 +21,7 @@ The oracle can:
 | `--cputrace`, `--hookpc` | Trace the CPU, with the beam position and cycle counts (`CPUTRACE_BEAM=1`). |
 | `--callrom` | Run one ROM routine on given inputs and report what it wrote. |
 
-The disassembler `tools/dis.py <hexaddr> <len> [m] [x]` decodes the ROM. Always pass the M and X register widths:
+The disassembler `tools/romdis.py <hexaddr> <len> [m] [x]` decodes the ROM. Always pass the M and X register widths:
 a linear decoder that guesses them garbles 16-bit code. `tools/ct.py refs <addr>` and `tools/refscan.py` find
 callers and writers. Every mode and environment variable is listed in [DEBUG_SURFACE.md](DEBUG_SURFACE.md).
 

@@ -206,7 +206,7 @@ prints them; `field-scene8-gate-warp-flow` pins the three lines and two more mut
 
 **The tables, read out of the ROM** (all verified against the addresses the routines index):
 
-* `$FD:DD96` (32) `[32 ROM bytes at 0x3DDD96: python tools/dis.py 0x3DDD96 32]`
+* `$FD:DD96` (32) `[32 ROM bytes at 0x3DDD96: python tools/romdis.py 0x3DDD96 32]`
 * `$FD:DDF5` (32) the `FF 83` brightness pulse `0F 0E 0C 0A 08 06 04 02 01 01 02 ... 0F`
 * `$FD:F181` FD/F123's amplitude: **32 WORDS = 64 bytes** (every high byte 0), not 32 bytes -- the
   loop reads the LOW byte at `F181+X` for X = 0,2,..,3E, so it is a symmetric triangle
@@ -235,9 +235,9 @@ CODE on this path.** At 3DDD1B there is an unconditional `BRA ->3DDD65` that jum
 3DDD65  A6 08      LDX $08           <-- the tail that DOES run
 ```
 
-How the error happened, and the trap worth remembering: `tools/dis.py` is a **linear** decoder, so with
+How the error happened, and the trap worth remembering: `tools/romdis.py` is a **linear** decoder, so with
 `m` still 8-bit it read `A9 00` as `LDA #00` and desynced by one byte -- which turned the `BRA` into
-part of a bogus instruction and made a dead block look live. Re-running it as `dis.py 3DDD16 0x18 0 0`
+part of a bogus instruction and made a dead block look live. Re-running it as `romdis.py 3DDD16 0x18 0 0`
 shows the branch immediately. What CAUGHT it was not re-reading the listing but the data: two oracle
 frames one apart (`--peek` at f2700 and f2701, counters 226 and 227) differ in **sixteen bytes total**,
 and none of them is in `$7E2002..$7E207C`. A four-word rotation would have moved most of that buffer.

@@ -1,7 +1,7 @@
 # The TECH screen (screen 3, `C2/B353`): the THREE TABS = Single / Double / Triple
 
 > Derived 2026-08-30. Every claim below carries a ROM address I disassembled in this pass
-> (`python tools/dis.py <hexoff> <len>`) or an oracle command I ran (pasted verbatim in §4).
+> (`python tools/romdis.py <hexoff> <len>`) or an oracle command I ran (pasted verbatim in §4).
 > Anything I could not derive is in §6.
 
 ## 1. VERDICT
@@ -176,7 +176,7 @@ a `C2/B5C8` scroll animation, and the mirror at `C2/B599` increments it. The lis
 | 2 | `$16` | 15 | 22..36 = the 15 character TRIPLES | **"Triple Tech"** |
 
 **`$C2:BD40` (38 bytes, raw
-`[38 ROM bytes at 0x2BD40: python tools/dis.py 0x2BD40 38]`)**
+`[38 ROM bytes at 0x2BD40: python tools/romdis.py 0x2BD40 38]`)**
 — group *g* owns tech ids `BD40[g] .. BD40[g+1]-1`. Groups 0-6 = 8 ids each, 7-21 = 3 each,
 22-36 = 1 each (group 36's end reads `BD40[37] = $00`, and the do/while `INC $03 / CMP $02 / BCC`
 therefore emits exactly the one id `$74`). **116 techs, ids `$01..$74`.**
@@ -191,7 +191,7 @@ therefore emits exactly the one id `$74`). **116 techs, ids `$01..$74`.**
 
 `$7E:2837` is the **real, persistent, 37-byte learned-tech bitfield** (byte *g* = group *g*, bit
 `$80>>k` = the group's *k*-th id). `$7E:7F00` is the **menu copy** built once per menu-open inside
-`C2/9875` -> `JSL FF/F813` (`python tools/dis.py 3FF813 0xB0`):
+`C2/9875` -> `JSL FF/F813` (`python tools/romdis.py 3FF813 0xB0`):
 
 ```
 3FF816: LDX $73 ; if $7F0000 (storyline) >= $49 and $7F00BA bit0 clear -> LDX $75
@@ -448,8 +448,8 @@ Per frame (`C2/B48E -> C2/B823`): `C2/B83E` walks `$54` inside `[$0DBB, $0DBB+$7
 (`$5A` bit3 = UP -> wrap to the last member, else wrap to the first); then the caster's sheet is
 re-read and `STZ $0DBC` if his MP has fallen below `$0F4F`. **B** (`C2/B49C`) blips, restores
 `$54 = $0F48`, `DEC $68` back to the list, sets `$0D75 = 02`, `INC $D0`, kills slot 6 (`#40`).
-**A** (`C2/B4DE`, raw `[27 ROM bytes at 0x2B4DE: python tools/dis.py 0x2B4DE 27]
-[32 ROM bytes at 0x2B4F9: python tools/dis.py 0x2B4F9 32]`):
+**A** (`C2/B4DE`, raw `[27 ROM bytes at 0x2B4DE: python tools/romdis.py 0x2B4DE 27]
+[32 ROM bytes at 0x2B4F9: python tools/romdis.py 0x2B4F9 32]`):
 ```
 LDA $0DBC / BNE + / JMP C2/EACC          ; (buzz) MP no longer sufficient
 LDA #90 / STA $19D1
@@ -520,7 +520,7 @@ per-site, not individually derived here").
 
 ### 2.16 `C2/B979` — the one-shot screen BUILD (substate 0's `JMP`), raw-decoded
 
-`python tools/dis.py` desyncs here (X is 16-bit on entry from the dispatcher `C2/828C SEP #20`).
+`python tools/romdis.py` desyncs here (X is 16-bit on entry from the dispatcher `C2/828C SEP #20`).
 Raw `d[0x2B979:0x2B9E1]` decoded by hand:
 ```
 08 E2 20            PHP / SEP #20
@@ -591,7 +591,7 @@ ROM tables (all read out of the ROM in this pass, none guessed):
 
 | ROM address | contents |
 |---|---|
-| `$C2:BD40` (38 B) | cumulative tech-id boundary per GROUP (`[38 ROM bytes at 0x2BD40: python tools/dis.py 0x2BD40 38]`) |
+| `$C2:BD40` (38 B) | cumulative tech-id boundary per GROUP (`[38 ROM bytes at 0x2BD40: python tools/romdis.py 0x2BD40 38]`) |
 | `$C2:BD65` (6 B) | the TAB window `(firstGroup, count)` (`00 07 07 0F 16 0F`) |
 | `$CC:2963` (37 B) | per-group participant MASK (`$80>>charId` OR'd) |
 | `$CC:2953` (15 B) | the 3 prerequisite tech ids per ROCK triple |
@@ -951,7 +951,7 @@ int techMp(charId, techId, tab, accessoryId) {
 ## ADVERSARIAL VERIFICATION (independent pass, 2026-08-30)
 
 > A second agent re-derived the load-bearing claims from the ROM and the oracle **without trusting the
-> citations above**: every ROM address in this section was re-disassembled (`tools/dis.py`) or dumped raw
+> citations above**: every ROM address in this section was re-disassembled (`tools/romdis.py`) or dumped raw
 > in this pass, and every oracle line was re-run with `scratchpad/menu/ct_probe.exe`. Scratch scripts:
 > `scratchpad/menu/adv_mpidx.py` (the `$7E:1607` replay) and `scratchpad/menu/adv_scan04a4.py` (the
 > `$04A4` opcode scan).
@@ -973,7 +973,7 @@ int techMp(charId, techId, tab, accessoryId) {
 
 ### AV.1 `$7E:7700` really is one array - proven twice
 
-`python tools/dis.py 298A0 0x60 1 1` re-reads the item pass verbatim:
+`python tools/romdis.py 298A0 0x60 1 1` re-reads the item pass verbatim:
 
 ```
   298B7: SEP  #20
@@ -988,7 +988,7 @@ int techMp(charId, techId, tab, accessoryId) {
 ```
 
 and - the ordering the whole `$7E:7700` story depends on, which the dossier asserted but never showed -
-`python tools/dis.py 29944 0x60 1 0` proves the tech pass runs **after** it, in the same routine:
+`python tools/romdis.py 29944 0x60 1 0` proves the tech pass runs **after** it, in the same routine:
 
 ```
   29969: LDA  $0D34 / BEQ / LDA #02 / TRB $77C8
@@ -1014,7 +1014,7 @@ ids with bit6/bit7 set: 02:40 09:40 0C:80 0F:80 11:40 19:40 1A:80 1D:80 21:80 22
   stale-on-absent `$7F00[3] = 80` while `$2837[3] = C0` (Robo) and `$7F00[6] = 00` while `$2837[6] = E0`
   (Magus, cap 0).
 
-`python tools/dis.py 3FF813 0xB0 1 1` reproduces FF/F813 instruction-for-instruction as printed in §2.5,
+`python tools/romdis.py 3FF813 0xB0 1 1` reproduces FF/F813 instruction-for-instruction as printed in §2.5,
 including the nine `TSB $77xx`, the `LDX #24` group loop, the `CMP $FFF951,X` cap and `AND #1E / ORA #40`.
 Traced by hand, the prefix-count loop `LDA #08 / STA $00 / LSR A / BCS / DEC $00 / BNE` yields
 `$00` = 1 for `$80`, 2 for `$C0`, 0 for `$00`, 8 for `$FF` (then `FFF9BB[8] = 0` stops it) - §5.2's
@@ -1025,7 +1025,7 @@ count loop is equivalent. `$7F01E0 = 00` measured in `cjA.wram`, so the override
 The chain re-read this pass, all four steps:
 
 * `C2/BDFA` raw = `A2 26 C0 20 31 ED 60` = `LDX #C026 / JSR C2/ED31 / RTS` (the 8-bit dis desyncs here).
-* `$FF:C026` raw = `08 00 2E 06 21 00 05 09 00 FF`. `C2/ED31` (`python tools/dis.py 2ED31 0x40 1 1`)
+* `$FF:C026` raw = `08 00 2E 06 21 00 05 09 00 FF`. `C2/ED31` (`python tools/romdis.py 2ED31 0x40 1 1`)
   reads the command byte, takes its **byte count from `$FF:BD18 + cmd`** (a BYTE table:
   `03 00 05 00 05 00 04 00 01 00 ...`), `MVN`s count+1 operand bytes to `$7E:005B`, and dispatches
   `JSR ($ED59,X)` with `X = cmd` - **so the command bytes are pre-doubled**. `C2/ED59` raw =
@@ -1055,8 +1055,8 @@ An 8-bit read would print "144" for Magus. **A byte-wide port is measurably wron
 
 ### AV.3 The triple half of the `$7E:1607` build - fully decoded, no reconstruction left
 
-Raw `FF/F914..F950` = `[26 ROM bytes at 0x3FF914: python tools/dis.py 0x3FF914 26]
-[35 ROM bytes at 0x3FF92E: python tools/dis.py 0x3FF92E 35]`,
+Raw `FF/F914..F950` = `[26 ROM bytes at 0x3FF914: python tools/romdis.py 0x3FF914 26]
+[35 ROM bytes at 0x3FF92E: python tools/romdis.py 0x3FF92E 35]`,
 which decodes exactly (the `28 6B` = `PLP/RTL` in the middle is the routine's exit; `B0 10` jumps *past*
 it to the per-participant tail, and `80 D5` at `F94F` branches back to `F926`):
 
@@ -1123,7 +1123,7 @@ $ scratchpad/menu/ct_probe.exe Chrono_Trigger_USA_SNES.sfc \
 -> `TDC` leaves `C = 0`, `LDA #04` (M=1) leaves `C = $0004`, and the `MVN` copies **5 bytes**. Confirmed
 by execution rather than by inference.
 
-`C2/82E1` (the `JSR` immediately before; `python tools/dis.py 282E1 0x50 0 0`) also re-reads exactly as
+`C2/82E1` (the `JSR` immediately before; `python tools/romdis.py 282E1 0x50 0 0`) also re-reads exactly as
 §2.6 states: `STZ $2857` + an `MVN` fill clears the 5 bytes, then 7 sheets at stride `$50` up to `$2830`,
 accessory ids `$AE..$B2`, `LDA $03F6,Y / BEQ skip`, `LDA #80 / STA $27A9,Y`.
 
@@ -1140,7 +1140,7 @@ more nearby - all decode false positives.** Each was re-aligned by hand:
 * `C2/EC23` "`ORA $04A2`" is really `8D A9 0D` (`STA $0DA9`) + `A2 04 00` (`LDX #0004`).
 
 Only `C1/DAC6` and `C1/DB51` survive - the dossier's two, both in battle. `FF/F958`'s DP is confirmed
-(`PEA $0400 / PLD`, `python tools/dis.py 3FF958 0x60 1 1`), and it does read the REAL bitfield
+(`PEA $0400 / PLD`, `python tools/romdis.py 3FF958 0x60 1 1`), and it does read the REAL bitfield
 (`AND $2837,Y`), not the menu copy.
 
 **Caveat (recorded, not refuted):** a byte scan over 4 MB cannot see (a) a DP-relative read if some
@@ -1306,7 +1306,7 @@ anything", which is what the rest of the paragraph then relies on.
 ### AV.9 One of the dossier's OPEN items is now CLOSED
 
 **OPEN #2 - the list-scroll bottom clamp `$57`.** `C2/BB6D` calls `C2/EA81` with `$00 = 8` and
-`Y = $0F49`; `python tools/dis.py 2EA81 0x40 1 1`:
+`Y = $0F49`; `python tools/romdis.py 2EA81 0x40 1 1`:
 
 ```
   2EA84: LDA $00 / STA $0DD8            ; window = 8

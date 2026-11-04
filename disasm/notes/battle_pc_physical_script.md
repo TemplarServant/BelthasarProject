@@ -7,7 +7,7 @@ weapon sound, crit washes, strike and span at measured offsets. Now the script r
 (`battleAscTick`). Graded against the LOGICAL-FRAME oracle (CLAUDE.md's one exception;
 [oracle_logical_frames.md](oracle_logical_frames.md)) by `tools/pc_physical_logical_cmp.py`.
 
-## 1. The ROM path (`python tools/dis.py 1432C 0xD8 1 1`)
+## 1. The ROM path (`python tools/romdis.py 1432C 0xD8 1 1`)
 
 C1/4310 (the action dispatcher) clears `$9877..`, sets `$987C = FF` and jumps through `$7A63` on `$AE92`. The
 physical branch C1/432C:

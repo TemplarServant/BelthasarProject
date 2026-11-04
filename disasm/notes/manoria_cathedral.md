@@ -151,6 +151,6 @@ CLEAN; **OAM built from our image vs the oracle's: 1407 main + 0 high byte misma
 - `VMDIFF_OAM=1` prints its summary only alongside `VMDIFF_WMASK=1` (the block sits inside the mask report).
 - `tools/regress.py --pin` needs a `pin` regex list on the check; the runner's "actual nearby output" is empty
   when the mismatch is a changed selftest line, so run the check by hand to see it.
-- `tools/dis.py <off> <len>` parses `<len>` with `int(x, 0)`: `0x60` is hex, `60` is decimal; 16-bit-A regions
+- `tools/romdis.py <off> <len>` parses `<len>` with `int(x, 0)`: `0x60` is hex, `60` is decimal; 16-bit-A regions
   need `m=0` (e.g. `004A35 12 0 0`).
 - The `.oam` sidecar's CGRAM block is at byte 1056, not 544.

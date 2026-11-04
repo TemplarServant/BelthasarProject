@@ -3,7 +3,7 @@
 Derives, from the ROM disasm + LakeSnes oracle **only**, (1) the full decode of the target-group byte `$960D`
 (who is selectable and how many are hit), and (2) the AoE multi-hit LAW for group **0x12** (Crono's Cyclone):
 which enemies take damage, the per-victim damage/rand, deaths, and the dispatch loop. **Zero invention** —
-every field is byte-cited (`tools/dis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) and every value
+every field is byte-cited (`tools/romdis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) and every value
 is oracle-measured (`ct_probe.exe` = `build/ct.exe`, `--monitor ADDR:LEN --from STATE --btnscript ...`; ⚠ LEN
 is DECIMAL). This CLOSES the tech-slice open **T1** (`battle_tech_slice.md §7`).
 
@@ -423,7 +423,7 @@ the hand's positions (the cartridge's shown OAM entries against CT_BATTLE_HANDTR
 
 **The pass that finds nobody, ported 2026-10-15 (b).** C1/BB85 `STA $B2AE`, C1/BB88 JSR C1/C1DD, C1/BB8B `LDA $AF23 / BNE
 ->BC5A` -- before C1/BB9A-BBD4 (`$AE91-$AE93`, the victims into `$AECC`, C1/BF79: the MP, C1/D74F, the effect). C1/C659-C6A6
-(dis.py 1C659 0x52 1 0): `$3A != 4` and the 16-bit `$99C0` = FFFF -> `LDA $B18B / CMP #03 / BCS ->C6A6` (an enemy: C1/C72B
+(romdis.py 1C659 0x52 1 0): `$3A != 4` and the 16-bit `$99C0` = FFFF -> `LDA $B18B / CMP #03 / BCS ->C6A6` (an enemy: C1/C72B
 at once); a PC: `$AE91 = $B18B`, `$AE92 = 02`, `STZ $AE94 / $AE95`, `$AE96 = 10`, `$AE93 = 7D` when `$B2EC` bit 7 is clear,
 else `7C` when `$B2EB != FF`, else `7B`, **JSR C1/AC57** -- the action plays (CD/45A6[7B] = `7B 61 00 01 00 00 FF`, the shape
 of the status timers' 7F; 7C / 7D the same with their ids) -- then C1/C72B `$AF23 = 1` and C1/BC5A = JSR C1/BDB3 (the

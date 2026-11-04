@@ -69,7 +69,7 @@ The damage pipeline (`battle_loop.md §S3` + `ADDENDUM §A`, re-confirmed by fre
 - **op-50 `ShowDamage`** (anim main-track, handler `C1/5ADB`; `battle_interp_verify.md T2.B`): fires LATE in the
   script (`span_end−~62`) = spawns the rising damage-number OBJ (tiles 0x190+d). **Not** the HP write. The action loop
   `C1/4090` then waits (via `$9876`) for that FX to finish its ~57-frame life.
-- **APPLY + CLAMP + STORE** (at anim-COMPLETION / span-end — the actual curHP write). Fresh disasm `tools/dis.py 1EC90
+- **APPLY + CLAMP + STORE** (at anim-COMPLETION / span-end — the actual curHP write). Fresh disasm `tools/romdis.py 1EC90
   0xA0 0 0` (16-bit A/X):
 
   ```

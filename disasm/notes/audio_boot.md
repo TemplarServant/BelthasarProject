@@ -2,7 +2,7 @@
 
 Supersedes / corrects `disasm/notes/apu_upload.md` (that note was right in outline, wrong or
 silent on four load-bearing points — see §0). Everything below is either **disassembled**
-(`python tools/dis.py <fileoffset> <len> [m] [x]`, HiROM flat offsets: bank $C7 = file
+(`python tools/romdis.py <fileoffset> <len> [m] [x]`, HiROM flat offsets: bank $C7 = file
 `0x70000 + addr`) or **observed in the oracle** (`build/ct.exe`, savestate payloads).
 
 ROM: `Chrono_Trigger_USA_SNES.sfc`, 0x400000 bytes, headerless (verified: `len%1024 == 0`,
@@ -29,15 +29,15 @@ Disassembled, and then **observed** with `build/ct.exe --trace 40000` (first 400
 
 ```
 $00:FFFC (file 0xFFFC)  reset vector = $FF00          [raw bytes, HiROM bank $00 = $C0]
-  FF00: SEI / CLC / XCE / JML $FD:C000                (tools/dis.py FF00 0x20)
-$FD:C000 (file 0x3DC000)  hardware init               (tools/dis.py 3DC000 0xE0)
+  FF00: SEI / CLC / XCE / JML $FD:C000                (tools/romdis.py FF00 0x20)
+$FD:C000 (file 0x3DC000)  hardware init               (tools/romdis.py 3DC000 0xE0)
   C000: REP #$10 / SEP #$20 / LDX #$06FF / TXS        stack = $06FF
   C00E: LDA #$4200 / TCD                              D = $4200
   C014: LDA #$01 / STA $0D                            -> $420D = 1  **FastROM ON**
   C01A: STA $00 ($4200=0), $420B/$420C = 0            NMI/IRQ/HDMA off
   C038: LDA #$2100 / TCD  ... full PPU register init ...
   C0D3: JML $C0:000E
-$C0:000E (file 0x000E)  WRAM/system init              (tools/dis.py 0 0x80)
+$C0:000E (file 0x000E)  WRAM/system init              (tools/romdis.py 0 0x80)
   0012: JSR $C0:0B64      install JML stub at $00:0500 -> $C0:EA63   (NMI trampoline)
   0015: JSR $C0:0B75      install JML stub at $00:0504 -> $C0:ECCC   (IRQ trampoline)
   001A: LDA #$0100 / TCD  D = $0100
@@ -134,7 +134,7 @@ $C7:000C  JMP $037B   parameter-block push to ARAM $1E80
   6BE9/80B2/80C5/80CE/80E1/80EA/C033/CBF3/CC09/CF46/E6A1/EB1A`, `$C3:09D1/0BE9/1647`,
   `$CD:03AB/0D70/0D81/3B7D/3E54/3E70`, `$FF:FC82/FC97/FF24/FF39`. **This is the whole sound API
   of the game — front 2's entry point.**
-  Structure (`tools/dis.py 70140 0x60`): DBR=0, `D=$1E00`, then
+  Structure (`tools/romdis.py 70140 0x60`): DBR=0, `D=$1E00`, then
   ```
   $0157: LDA $05 / BPL $0192        ; $00:1E05 bit7 = "driver present" latch (set ONLY by the upload)
   $015B: LDA $00 / BEQ $0192        ; $00:1E00 = pending command byte, 0 = nothing to do
@@ -149,14 +149,14 @@ $C7:000C  JMP $037B   parameter-block push to ARAM $1E80
   $0192: SEP #$20 / STZ $00 ; restore ; RTL          ; clears the command byte on the way out
   ```
   `$C7:061C` is the raw mailbox flush: `$1E03→$2143, $1E02→$2142, $1E01→$2141, $1E00→$2140`
-  (`tools/dis.py 7061C 0x18`). Confirmed live at frames 23/24: WRAM `$1E00..$1E03 = 10 00 FF 05`
+  (`tools/romdis.py 7061C 0x18`). Confirmed live at frames 23/24: WRAM `$1E00..$1E03 = 10 00 FF 05`
   and `apu->inPorts[0..3] = 10 00 FF 05` — byte-identical mirror.
 - **`$C7:0008` / `$C7:000C` are never JSL'd** (`22 08 00 C7` / `22 0C 00 C7`: **zero** occurrences
   in 4 MB). Their bodies are reached only by internal jumps: `JMP $C7:0326` at `$C7:0257`, and
   `JMP $C7:037B` at `$C7:0214`. The 3-byte stubs are vestigial.
-  - `$C7:0326` (`tools/dis.py 70326 0x58 1 0`): compacts the `$1E20/$1F20/$1E60/$1E40` 16-word
+  - `$C7:0326` (`tools/romdis.py 70326 0x58 1 0`): compacts the `$1E20/$1F20/$1E60/$1E40` 16-word
     slot arrays and calls `$C7:0655`; ends `LDA #$E0 / STA $84`.
-  - `$C7:037B` (`tools/dis.py 7037B 0x70 1 0`): builds a word list at `$00:1F80` from `$1F00`,
+  - `$C7:037B` (`tools/romdis.py 7037B 0x70 1 0`): builds a word list at `$00:1F80` from `$1F00`,
     `$1E20`, `$1E60` and the ROM table `$C7:0BA4,X`; then
     `$2143=$1E, $2142=$80, $2141=$02` (i.e. ARAM parameter address `$1E80`, driver command `$02`),
     then the rotating-token handshake `$C7:09DA`.
@@ -200,7 +200,7 @@ Three rules fall out, and the CT uploader obeys all three:
    (`$FFDA/$FFE9/$FFEB`); the CPU may not send index 0 as the boundary token, because rule 2
    would then consume it.
 
-### 4b. The 65816 side — `$C7:0038` transcribed (`tools/dis.py 70038 0x108`)
+### 4b. The 65816 side — `$C7:0038` transcribed (`tools/romdis.py 70038 0x108`)
 ```
 0038  PHB/PHD/PHP, REP #$20, REP #$10, PHA/PHX/PHY
 0042  SEP #$20 ; LDA #$00 / PHA / PLB           DBR = $00

@@ -4,7 +4,7 @@ Gap: *"the CONFIG screen is read-only — no setting can be changed."*
 Scope: the cell→handler dispatch, every setting's arithmetic, the cursor/nav graph, the APU side
 effects, persistence, and the gameplay readers.
 
-Everything below is either a ROM address I disassembled (`tools/dis.py`) or an oracle measurement I
+Everything below is either a ROM address I disassembled (`tools/romdis.py`) or an oracle measurement I
 ran (command + real output pasted in §4). Anything I could not pin is in §6.
 
 ---
@@ -1126,7 +1126,7 @@ throttle `$0D76`. No buzz exists on this screen.
 ## ADVERSARIAL VERIFICATION (independent pass, 2026-08-30)
 
 Method: every ROM address the dossier cites was re-disassembled from scratch
-(`python tools/dis.py`, plus a raw byte dumper `scratchpad/menu/_av_cfg_dump.py`) and the
+(`python tools/romdis.py`, plus a raw byte dumper `scratchpad/menu/_av_cfg_dump.py`) and the
 load-bearing oracle claims were re-run with `scratchpad/menu/ct_probe.exe`. Findings are marked
 **CONFIRMED** / **DEFECT** / **GAP**. Nothing below is taken from the original author's text.
 
@@ -1139,7 +1139,7 @@ Every one of the following was re-read byte-for-byte and matches the dossier exa
 | screen 4 handler array = `C2/BF35` (`3D BF 45 BF 6D BF 9F BF`) | `C2/826F` does `LDA $C28292,X`, X=`$67`*2; `C2/8292`+8 = `35 BF` | CONFIRMED |
 | `C2/BF45` idle loop, B-gate on `$0F0E|$0F0F`, pack at `BF67`, `JMP C2/9A98` | `2BF45` | CONFIRMED |
 | `C2/BFD4` dispatcher (`$0417`, `JSR ($BFFF,X)`, `$7F`, `C4BC`/`C3E4`/`8385`, blip on any A) | `2BFD4` | CONFIRMED |
-| cell table `C2/BFFF` = `[24 ROM bytes at 0x2BFFF: python tools/dis.py 0x2BFFF 24]` | raw dump | CONFIRMED |
+| cell table `C2/BFFF` = `[24 ROM bytes at 0x2BFFF: python tools/romdis.py 0x2BFFF 24]` | raw dump | CONFIRMED |
 | the six `INC A / AND #01` toggles + APU `$F3` on cell 0 only | `2C017..2C0A6` | CONFIRMED |
 | cell 5 header (`$54=10`, `$0F0E=1`), cells 10/11 (`AND #$C0` -> back to 5) | `2C0A7..2C0E8` | CONFIRMED |
 | `C2/C164` cycle (`$5A&3`, RIGHT=+1 LEFT=-1, `AND #07`) | `2C164` | CONFIRMED |
@@ -1170,7 +1170,7 @@ Every one of the following was re-read byte-for-byte and matches the dossier exa
 | `C2/C4BC` bottom bar `$0DCE=$0417`, `$0DCF=$0D86[C4F9[$0417]] + C505[$0417]` | `2C4BC` | CONFIRMED |
 | `C2/C4F9` = `00 03 02 07 08 0B 06 04 01 09 05 0A`; `C2/C505` = `28 18 0C 1C 0C 1E 0E 1F 16 1A 20 2A` | raw dump | CONFIRMED |
 | `FF/FA7B` save-record table, all 8 records | raw dump `3FFA7B` | CONFIRMED |
-| new-game seed: 12 bytes `C2/FCA6`->`$2990`, 9 bytes `C2/FCA9`->`$0408` | `C2/95D6..960A` (raw; `dis.py` desyncs on the `MVN`s) | CONFIRMED |
+| new-game seed: 12 bytes `C2/FCA6`->`$2990`, 9 bytes `C2/FCA9`->`$0408` | `C2/95D6..960A` (raw; `romdis.py` desyncs on the `MVN`s) | CONFIRMED |
 | `C2/FCA6` = `84 A0 01 80 08 40 08 02 04 10 20 40` and the decoded default settings | raw + the unpack | CONFIRMED |
 | battle readers `CC/E387 / E391 / E39C / E3A4 / E3AC` | `CE387..CE3B3` | CONFIRMED |
 | ATB rate `FD/B814` and `FD/B88C` (`LDA $2990 / AND #07 / TAX / STX $28`) | `3DB814`, `3DB88C` | CONFIRMED |
@@ -1540,7 +1540,7 @@ confirming the button working copy is seeded only on entry to the editor (2.6), 
 re-derived from the `LSR/ROR` and `ASL/ROL` chains; they match. Independently, the live
 `$2990/$2991/$2992` was recomputed from `$0D86..$0D90` in three different runs (`C4 A0 01`,
 `24 60 01`, `D4 E0 01`) and matched the ROM's own value every time. The new-game seed
-(`C2/95D6..960A`, which `dis.py` mis-decodes because of the `MVN`s) really is `12 bytes C2/FCA6 ->
+(`C2/95D6..960A`, which `romdis.py` mis-decodes because of the `MVN`s) really is `12 bytes C2/FCA6 ->
 $2990` and `9 bytes C2/FCA9 -> $0408`, and running `C2/FCA6 = 84 A0 01` through the unpack gives
 exactly the eleven defaults 2.10 lists.
 

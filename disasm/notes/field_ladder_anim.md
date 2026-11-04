@@ -1,6 +1,6 @@
 # The LADDER climb — collision shape 30 → `$1D34` bit2 → player anim mode `$1B`
 
-Derived 2026-08-29 from the ROM (`tools/dis.py`) and MEASURED on the oracle. User report:
+Derived 2026-08-29 from the ROM (`tools/romdis.py`) and MEASURED on the oracle. User report:
 *"in scene 112, when moving on the ladder, crono should change animation"*.
 
 ## 1. Shape 30 is the LADDER, and the shape decode announces it

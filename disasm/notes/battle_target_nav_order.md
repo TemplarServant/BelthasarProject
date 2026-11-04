@@ -5,7 +5,7 @@ The order the target hand visits the enemies on Up / Down / Left / Right is not 
 with Down walking BACKWARDS. The port walked every group with C1/15F9's mapping. Fixed in src/battle.c
 (battleEnemyGroupStep / battleEnemyTargetPass / battleEnemyTargetWalk); graded by tools/target_nav_order_cmp.py.
 
-## 1. The pass (C1/1561, dis.py 11561 0x60 1 0 / 115E8 0x30 1 0)
+## 1. The pass (C1/1561, romdis.py 11561 0x60 1 0 / 115E8 0x30 1 0)
 
 ```
 1561  JSR C1/1F79                 ; the group handler, with this pass's $EE / $EF
@@ -18,10 +18,10 @@ with Down walking BACKWARDS. The port walked every group with C1/15F9's mapping.
 1617  JMP C1/179C                 ; STZ $EE / $EF
 ```
 
-$EF = Up 08, Down 04, Left 02, Right 01 (battle_ui_sfx_sites.md 2.4). C1/176C / C1/1786 (dis.py 1176C 0x35 1 0):
+$EF = Up 08, Down 04, Left 02, Right 01 (battle_ui_sfx_sites.md 2.4). C1/176C / C1/1786 (romdis.py 1176C 0x35 1 0):
 `INC / DEC $9614`, wrap 0B -> 0 / FF -> 0A, until `$99C0,X` is not negative, then `STA $A62D`.
 
-## 2. The handlers' own pads (C1/1FF8, dis.py 12169 0xE2 1 0, 1225F 0x45 1 0, 122F5 0x34 1 0)
+## 2. The handlers' own pads (C1/1FF8, romdis.py 12169 0xE2 1 0, 1225F 0x45 1 0, 122F5 0x34 1 0)
 
 C1/1F79 first: `$960F = $95D5`, `STZ $9613 / $960C / $960A / $A64F / $A6D8`, `$99C0` and `$A62D` FF (C1/1F8F-1F9B).
 
@@ -35,12 +35,12 @@ C1/1F79 first: `$960F = $95D5`, `STZ $9613 / $960C / $960A / $A64F / $A6D8`, `$9
 | 0F | C1/22F5 | C1/20A9 | as 12 | `$9604 = 0`, `$9605 = $99C0[$9614]`, C1/2332 the row, C1/27E8 |
 
 Each pad arm is `JSR C1/1B55` (the blip: sites C1/217A 2188, 21C0 21CE, 2214 2222, 226B 2279, 2301 230F) and the step.
-C1/27FA / C1/2814 (dis.py 127FA 0x43 1 0) are C1/176C / C1/1786's walk behind C1/282D, which scans `$99C0` for any
+C1/27FA / C1/2814 (romdis.py 127FA 0x43 1 0) are C1/176C / C1/1786's walk behind C1/282D, which scans `$99C0` for any
 entry that is not FF (none: no step), and they do not write `$A62D` -- the handler's C1/27E8 does (`$960C = 80`,
-`$A62D := $99C0[0..0A]`, dis.py 127E8 0x12 1 0). With `$960C = 80` C1/15F4 skips the pass's walk, so for these groups the
-handler's mapping is the only one. C1/2045 (dis.py 12045 0x55 1 0): X from the caller's start to `$80` (C1/20A9 / 20B6: 03..0A), present ($96F5,X),
+`$A62D := $99C0[0..0A]`, romdis.py 127E8 0x12 1 0). With `$960C = 80` C1/15F4 skips the pass's walk, so for these groups the
+handler's mapping is the only one. C1/2045 (romdis.py 12045 0x55 1 0): X from the caller's start to `$80` (C1/20A9 / 20B6: 03..0A), present ($96F5,X),
 `$9FF7,X` bit 7 clear, `$A0A8,X` clear (except group 04), `$A09B,X` clear; the caster $960F into `$99C0`, the rest into
-`$99C1,Y`; C1/27C5 shifts the list down when `$99C0` stayed FF. C1/2332 (dis.py 12332 0x72 1 0): the centre $9605's
+`$99C1,Y`; C1/27C5 shifts the list down when `$99C0` stayed FF. C1/2332 (romdis.py 12332 0x72 1 0): the centre $9605's
 `$1D23` +- 20 (clamped 00 / FF), every OTHER enemy passing the same four gates whose `$1D23` is inside, in X order into
 `$99C1,Y`, the centre into `$99C0`.
 
@@ -72,7 +72,7 @@ C1/12B0, a tech's C1/1379) and first on every pass of the Att's and the tech's s
 
 ## 5. `$9614` is an index into `$99C0`, not an enemy slot (2026-10-15, second pass)
 
-C1/20A9 (`$80 = 0B`, X = 3, `INC $960A`) -> C1/2045 (dis.py 12045 0x55 1 0):
+C1/20A9 (`$80 = 0B`, X = 3, `INC $960A`) -> C1/2045 (romdis.py 12045 0x55 1 0):
 
 ```
 2047  LDA $96F5,X / BEQ skip        ; present

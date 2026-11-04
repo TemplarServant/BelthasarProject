@@ -12,7 +12,7 @@ the `$FF` skip) — that agreement is itself a cross-check. What is new here: th
 the 512-record range histogram, the loader-chain vs. menu-reload asymmetry, the whole **overworld** selection
 path, the **callers** of the battle thunks, and live `--monitor` captures of the battle-in/battle-out cues.
 
-Every claim below is either (a) a ROM address disassembled with `python tools/dis.py <flatoffset> <len> [m] [x]`
+Every claim below is either (a) a ROM address disassembled with `python tools/romdis.py <flatoffset> <len> [m] [x]`
 (ROM = `Chrono_Trigger_USA_SNES.sfc`, HiROM: flat offset == the bank-C0 CPU offset; bank $XX = flat
 `(XX-0xC0)<<16 | addr`), or (b) an **observed oracle value** (`build/ct.exe --read / --monitor / --teleport`).
 Observed values are marked ⟦OBS⟧ with the exact command.
@@ -62,7 +62,7 @@ Every sound request in the game is written into the fixed WRAM block and then di
 | `$1E05` | **driver-busy mutex**, idle value **`$E0`** |
 | `$1E10`/`$1E11` | driver *mode* (0/1), set by command `$70` |
 
-`tools/dis.py 0x70140 0x120` — dispatcher (D=`$1E00`, DB=`$00`):
+`tools/romdis.py 0x70140 0x120` — dispatcher (D=`$1E00`, DB=`$00`):
 ```
 70157  LDA $05 / BPL ->70192      ; $1E05 < $80 (a load in progress) -> DROP the command
 7015B  LDA $00 / BEQ ->70192      ; no command
@@ -143,7 +143,7 @@ each matches the live `$1E02/$1E03` after the corresponding play
   (`C0/0966 CMP #FF / BNE ->096B / RTS` for the tileset).
 
 ## B.2 The issuer `C0/1B53` — the ONLY field music trigger on a scene load
-`tools/dis.py 0x1B53 0x40`:
+`tools/romdis.py 0x1B53 0x40`:
 ```
 1B53  LDA $7F01ED
 1B57  BEQ ->1B5F
@@ -161,7 +161,7 @@ each matches the live `$1E02/$1E03` after the corresponding play
 1B86  LDA #10 / STA $1E00 / JSL C70004      ; play
 1B8F  RTS
 ```
-Call chain (`tools/dis.py 0x66`, `0xF4`; byte-search `20 53 1B` → **exactly one** caller, `C0/00F7`):
+Call chain (`tools/romdis.py 0x66`, `0xF4`; byte-search `20 53 1B` → **exactly one** caller, `C0/00F7`):
 ```
 C0/0066  LDX $0100 / CPX #01F0 / BMI ->0072 / JML C20000   ; loc >= $1F0 = OVERWORLD, leaves bank C0
 0072     CPX #01FF / BMI ->007D
@@ -170,7 +170,7 @@ C0/00F4  JSR C0/092B   (loc*14)
 00F7     JSR C0/1B53   ★ MUSIC
 00FA     JSR C0/0960 (ts12) / 6DCF (ts3) / 7084 (pal) / 7F7E / A33B (map) / 09DD / 0A14 / 56D4 (script) ...
 ```
-**`C0/01A5`, the post-menu reload chain, begins at `JSR C0/0960`** (`tools/dis.py 0x1A5`) — it contains
+**`C0/01A5`, the post-menu reload chain, begins at `JSR C0/0960`** (`tools/romdis.py 0x1A5`) — it contains
 neither `092B` nor `1B53`, which is the ROM's own reason the menu never restarts the song.
 
 **`loc >= $1F0` never reaches `C0/1B53`** (the `JML C2/0000` at `C0/006E`) ⇒ **byte +0 of the overworld
@@ -229,7 +229,7 @@ The **last writer of `$7E29AE` is `C0/3C39`** = the instruction after `C0/3C35 S
 Op-dispatch table base **`C0/5D6E`** (entry = `base + op*2`; anchored on the three ops already in the
 memory index: op `$DD`→`C0/3B1B` @`5F28`, op `$E0`→`C0/3AB7` @`5F2E`, op `$E3`→`C0/3C05` @`5F34`).
 
-| op | handler | length | semantics (disassembled `tools/dis.py 0x3C11 0xC0`) |
+| op | handler | length | semantics (disassembled `tools/romdis.py 0x3C11 0xC0`) |
 |---|---|---|---|
 | `$E8 nn` | `C0/3C11` | 2 | **SOUND EFFECT**: `$1E01=nn`, `$1E02=$80`, cmd `$18` |
 | `$E9` | `C0/5F6E` | 1 | unused stub |
@@ -251,7 +251,7 @@ visit — "(audio)" — which is the ROM's `CLC/RTS` tail.
 The overworld leg never runs `C0/1B53` (§B.2). Its music comes from a **16-entry RAM table `$7E1B9B`**
 indexed by a **per-tile nibble map**:
 
-`C2/62ED` (`tools/dis.py 0x262ED 0x40`) — returns the region nibble for map cell (`$00`,`$01`):
+`C2/62ED` (`tools/romdis.py 0x262ED 0x40`) — returns the region nibble for map cell (`$00`,`$01`):
 ```
 262EF LDA #7E / STA $12
 262F3 LDA $01 / STA $4202 / LDA #30 / STA $4203       ; row * 0x30
@@ -261,7 +261,7 @@ indexed by a **per-tile nibble map**:
 26313 LSR $00 / BCS ->2631C ; LSR x4 / RTS  |  2631C AND #0F / RTS
 ```
 
-**Entry issuer `C2/2F0F`** (`tools/dis.py 0x22F00 0x60`):
+**Entry issuer `C2/2F0F`** (`tools/romdis.py 0x22F00 0x60`):
 ```
 22F0F LDA $7F01ED / BNE ->22F30
 22F15 LDA $0102 / LSR / STA $00     ; arrival cell / 2
@@ -322,7 +322,7 @@ C0/1BAB  PHB/PHD ; D=$0100 ; DB=$01
 1BC9     LDA #14 / STA $1E00 / JSL C70004        ; cmd $14
 1BD5     (bit6 set) LDA #01 / STA $1E01 ; LDA #70 / STA $1E00 / JSL C70004
 ```
-**`$01FA` is a constant**, poked once by the field init at `C0/0C50-0C5B` (`tools/dis.py 0xC48 0x20`)
+**`$01FA` is a constant**, poked once by the field init at `C0/0C50-0C5B` (`tools/romdis.py 0xC48 0x20`)
 (`0C50 LDA #53 / 0C52 STA $FC ; 0C54 LDA #65 / 0C56 STA $FB ; 0C58 LDA #45 / 0C5A STA $FA`, D=`$0100`):
 `$01FA = $45` (the battle song), `$01FB = $65`, `$01FC = $53` (two SFX ids used by `C0/1B90`/`C0/1BA7`
 with cmd `$19`). ⟦OBS⟧ `$7E01FA = $45` in every state read (`truce_market`, `base_loc6`,
@@ -414,7 +414,7 @@ Command `$70` itself is idempotent in the driver (`C7/08ED CMP $11 / BEQ`).
 * `FF/FEFF` (`cmd $10`, `$1E01 = $0F0A`) and `C2/C02A`/`C2/E696` (`cmd $F3`) exist but were not traced.
 
 **Correction to an older note:** `battle_boot.md` line 9 and `battle_menu_synthesis.md` §1.2 label the
-`JSL C0/2C41` at `C0/1895` a *"music cue"*. It is **not**: `tools/dis.py 0x2C41 0x80` shows a
+`JSL C0/2C41` at `C0/1895` a *"music cue"*. It is **not**: `tools/romdis.py 0x2C41 0x80` shows a
 `$7F3415`-gated integrator over `$7F3417/3418` into the `$7F341D/341E` accumulators and `$7F346B`
 (`$7E2C74`) — a scroll/parallax accumulator tick, no `$1E00` write anywhere. The real battle-music
 thunk one slot earlier in the same vector page is `C0/0008 → C0/1BAB`.
@@ -502,15 +502,15 @@ Jingle `0x3A` only when `$7E2A21 & 0x11` selects it (§J.2 — leave it unimplem
 ## Repro commands (all short, all used above)
 
 ```
-python tools/dis.py 0x1B53 0x40          # the field music issuer
-python tools/dis.py 0xF4 0x30            # the loader chain C0/00F4
-python tools/dis.py 0x1A5 0x28           # the menu-return reload (no 092B/1B53)
-python tools/dis.py 0x92B 0x40           # loc*14
-python tools/dis.py 0x3C11 0xC0          # VM ops E8/EA/EB/EC/ED/EE
-python tools/dis.py 0x1BAB 0x40          # battle start ; 0x1BE6 0x80 = battle restore ; 0x1C90 = game over
-python tools/dis.py 0xD039E 0x30 ; 0xD03B4 0x38 ; 0xD0D40 0xA0   # battle fade / gate / jingle
-python tools/dis.py 0x22F00 0x60 ; 0x22FF0 0x60 ; 0x262ED 0x40   # overworld
-python tools/dis.py 0x70140 0x120 ; 0x70734 0x50 ; 0x708E3 0x30  # the C7 dispatcher
+python tools/romdis.py 0x1B53 0x40          # the field music issuer
+python tools/romdis.py 0xF4 0x30            # the loader chain C0/00F4
+python tools/romdis.py 0x1A5 0x28           # the menu-return reload (no 092B/1B53)
+python tools/romdis.py 0x92B 0x40           # loc*14
+python tools/romdis.py 0x3C11 0xC0          # VM ops E8/EA/EB/EC/ED/EE
+python tools/romdis.py 0x1BAB 0x40          # battle start ; 0x1BE6 0x80 = battle restore ; 0x1C90 = game over
+python tools/romdis.py 0xD039E 0x30 ; 0xD03B4 0x38 ; 0xD0D40 0xA0   # battle fade / gate / jingle
+python tools/romdis.py 0x22F00 0x60 ; 0x22FF0 0x60 ; 0x262ED 0x40   # overworld
+python tools/romdis.py 0x70140 0x120 ; 0x70734 0x50 ; 0x708E3 0x30  # the C7 dispatcher
 
 build/ct.exe --read "loc,wram:7E29AE+1,wram:7E02AE+1,wram:001E00+8" --from saves/truce_market.state
 build/ct.exe --teleport 439 8 8 0 --from saves/truce_market.state --frames 180 --out tp.state

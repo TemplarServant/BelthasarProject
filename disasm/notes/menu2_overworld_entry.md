@@ -2,7 +2,7 @@
 
 Scope: the gap "the menu does not open on the OVERWORLD in our engine" (`src/field.c` gates the whole
 X-menu entry behind `if (f.vm && !inWorld)`). Everything below is either a ROM address I disassembled
-with `python tools/dis.py` or an oracle measurement I ran with `scratchpad/menu/ct_probe.exe`; the exact
+with `python tools/romdis.py` or an oracle measurement I ran with `scratchpad/menu/ct_probe.exe`; the exact
 commands and their real output are in §4. Anything I could not pin is in §6.
 
 Companion dossiers (READ, not repeated here): `menu_entry.md` (the FIELD path C0/18D9→C2/8000 and the
@@ -46,14 +46,14 @@ from the state variable, not from an edge).
 
 ## 2. ROM TRACE
 
-All disassembly below was produced with `python tools/dis.py <fileoff> <len> <m> <x>`; HiROM file offset
+All disassembly below was produced with `python tools/romdis.py <fileoff> <len> <m> <x>`; HiROM file offset
 == `(bank-0xC0)<<16 + addr`. The overworld module runs **A 8-bit / X,Y 16-bit** for most of this code, so
 the correct invocation is `... 1 0`; several blocks below were hand-decoded from the raw bytes because a
 linear decoder desyncs across the `REP/SEP` pairs (noted where it matters).
 
 ### 2.1 The field handler is NOT reached — proof by execution hook
 
-`C0/1920` (`python tools/dis.py 1920 60`) is the field's X test:
+`C0/1920` (`python tools/romdis.py 1920 60`) is the field's X test:
 
 ```
   1920: LDA  $00F6          ; DP=$0100 -> $00F6, the REMAPPED EDGE byte
@@ -108,7 +108,7 @@ DMA and the whole `$2105-$2131` register upload, and **ends with the game tick**
 (`C2/031F-0323`). That is why a `--monitor 7E0119` across the overworld menu open reports *no change at
 all* (§4.2) — a false negative that would read as "the ROM does nothing here".
 
-The main loop (`python tools/dis.py 223A0 70 1 0` + hand decode of the table):
+The main loop (`python tools/romdis.py 223A0 70 1 0` + hand decode of the table):
 
 ```
   C2/23CF: JSR  C2/046E        ; -> C2/0346: LDA $4B / CMP $4B / BEQ -3  == WAIT FOR NMI
@@ -273,7 +273,7 @@ run here` and `case 0x29: adv = 2; break; // (set child draw param; visual only)
 SCREEN FADE-OUT and `C2/2105` is the SCREEN FADE-IN. The comments are wrong; correcting them is part of
 this gap's implementation.
 
-**Fade-OUT, `C2/20A2`** (`python tools/dis.py 220C0 80 1 0` + the head at `0x220A2`):
+**Fade-OUT, `C2/20A2`** (`python tools/romdis.py 220C0 80 1 0` + the head at `0x220A2`):
 
 ```
   C2/20A2: TDC / LDA $0002,X / ASL / TAX / JMP ($20AB,X)     ; table: 0 -> 20AF, 1 -> 20DF
@@ -408,7 +408,7 @@ Form is refused on `ow_w0` purely because the party has one free member (`menu_o
   C2/D27E: DEX / CMP $FFD024,X / BCC ->D27E     ; largest X with storyline >= FF/D024[X]
   C2/D285: STX $020C / JSR C2/D296              ; string table FF/D03E, bank FF
 ```
-`FF/D024` = `[26 ROM bytes at 0x3FD024: python tools/dis.py 0x3FD024 26]`;
+`FF/D024` = `[26 ROM bytes at 0x3FD024: python tools/romdis.py 0x3FD024 26]`;
 `FF/D03E[0..0x1A]` = "The Millennial Fair", "The Queen Returns", "The Queen is Gone", … , "No data".
 Verified against two captures (§4.7): storyline 03 → "The Millennial Fair", storyline 0x15 → "The Queen
 is Gone".

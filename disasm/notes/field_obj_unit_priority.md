@@ -32,7 +32,7 @@ the priority byte is chosen PER UNIT:
 | 3 (24 units) | C0/E4D1-E52F | `LDA #22` into all 24 attrs — a fixed OBJ priority 2; neither byte is read |
 
 (Found with a byte scan of bank C0 for `19 00 0C` / `19 01 0C` — `ORA $0C00,Y` / `ORA $0C01,Y` — and
-`9F 7F 4C 7F` for class 3's last attr; disassembled with `tools/dis.py <addr> <len> 1 0`.)
+`9F 7F 4C 7F` for class 3's last attr; disassembled with `tools/romdis.py <addr> <len> 1 0`.)
 
 Then mode 1's slot order (snes/ppu.c layersPerMode[1]: OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0, OBJ1, BG3.1,
 OBJ0, BG3.0) puts an OBJ priority-1 pixel behind BG1/BG2 at either priority.

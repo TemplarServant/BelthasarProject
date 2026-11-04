@@ -18,7 +18,7 @@ nothing; canonically the confirmed attack should be SCHEDULED and fire when the 
 
 Method: our engine driven headless via `CT_BATTLE_SCRIPT`/`CT_BATTLE_TRACE` on `Belthasar.exe`
 (`saves/battle_re/gato_t0.raw.wram`); the oracle driven via `ct.exe --monitor --btnscript` on
-`gato_press_action.state` (+ `saves/battle_re/gato_wait.state` for Wait mode) + `tools/dis.py`. All addresses are
+`gato_press_action.state` (+ `saves/battle_re/gato_wait.state` for Wait mode) + `tools/romdis.py`. All addresses are
 ROM/oracle-cited; writer PCs = the PC after the store retires.
 
 ---
@@ -105,7 +105,7 @@ should already be open while the current action animates.
 
 ### B.1 The confirm handler (runs every frame, independent of `$A013`)
 
-`tools/dis.py 11600 170` (bank C1) — the target-select confirm path:
+`tools/romdis.py 11600 170` (bank C1) — the target-select confirm path:
 ```
 1626 DEC $9609              ; CLOSE target-select               (writer C1:1629)
 1629 LDA $95DB / BNE ...    ; ($95DB!=0 = a Tech/Item submenu variant; the plain Att path is $95DB==0)
@@ -292,7 +292,7 @@ CT_BATTLE_SCRIPT="n:20,a:1,n:391,a:1,n:500" CT_BATTLE_TRACE=1 \
   --from gato_press_action.state --btnscript "100:8,0:392,100:6,0:114,100:6,0:260" --diff --writer
 #   f478 A013=1 (C1:40A9); f524 confirm mid-freeze 9609->0 (C1:1629) 95D5->1 (C1:1735) A6DD->1 (C1:1732);
 #   f636 freeze end (C1:41BD) Crono 70->61 (C1:ED1A); f644 Crono attack animates (A013=1); f769 GATO 76->60
-python tools/dis.py 11600 170     # the confirm handler C1/1626 DEC $9609 + C1/1727-1735 dequeue/advance
+python tools/romdis.py 11600 170     # the confirm handler C1/1626 DEC $9609 + C1/1727-1735 dequeue/advance
 
 # Wait mode: same btnscript --from saves/battle_re/gato_wait.state -> identical, $99E0 stays 00
 ```

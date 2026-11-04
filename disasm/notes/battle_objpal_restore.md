@@ -25,7 +25,7 @@ action live and `ascOwnsFlash` set it copied `$9888+c` into `$993C+c` for all el
 | CF/FE59 | CF/FE20 (the death recolour) | `08` | the dying combatant |
 | EC/A1DA | -- | scan hit inside bank EC, not battle code (no oracle write from it) | -- |
 
-C1/5E87 (disassembled, `python tools/dis.py 15E87 60`):
+C1/5E87 (disassembled, `python tools/romdis.py 15E87 60`):
 
     C1/5E8B  LDA $A010 / CMP #04 / BCS ->5EC9      track >= 4: the target-list path
     C1/5E92  TAX / LDA $A014,X / TAX               the track's combatant

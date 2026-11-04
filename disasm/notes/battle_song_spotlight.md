@@ -31,7 +31,7 @@ Method: base states `gato_moving_lake.state` (scratch; song un-hit, span **monit
 independent cross-check, `gato_press_action.state` (HOLD boot `100:8,0:N`). Oracle `ct_song.exe` (copy of
 `build/ct.exe`). `--peek` renders + `.wram`/`.oam`(=CGRAM) sidecars self-verify each frame's `$9877`/`$A013`;
 `PEEK_SAVE` states parsed for the true PPU registers (`ppu_handleState` layout, `snes/ppu.c:189`). `--peek`≈
-`--monitor` here (±1–2 f, verified). ROM `tools/dis.py`. **Every register value below is read from the oracle's
+`--monitor` here (±1–2 f, verified). ROM `tools/romdis.py`. **Every register value below is read from the oracle's
 own PPU/CGRAM state — the mandate's source of truth.**
 
 ---
@@ -205,5 +205,5 @@ Dir: `%TEMP%/claude/C--Users-…-e5608df4-…/scratchpad/`
 - Analysis: `an.py` (fb→PNG+state), `sheet.py` (contact sheet), `cone.py` (additive-cone / darken fit),
   `aperture.py` (per-scanline). Inline Python: PPU-state parse, CGRAM diff, source-shadow search.
 - Repro: `--peek gato_moving_lake.state out.raw --frames N` (song f374–686; effect ~f416–610); HOLD =
-  `--peek gato_press_action.state out.raw --btnscript "100:8,0:N"`; disasm `tools/dis.py 0x17A6B` (op table),
+  `--peek gato_press_action.state out.raw --btnscript "100:8,0:N"`; disasm `tools/romdis.py 0x17A6B` (op table),
   `0x20230` (C2 vblank copy), `0x3DEB2C` (FD battle PPU block).

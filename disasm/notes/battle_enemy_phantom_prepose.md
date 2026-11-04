@@ -110,7 +110,7 @@ The SLIDE geometry agrees too (oracle `$1D0C/$1D23` vs our `asc SLIDE` lines):
 
 ## 3. THE ROM'S LAW: nothing can change an enemy's cell between the AI turn-start and the first playAnim
 
-`python tools/dis.py 142F0 0x30 1 0` — the publish, at the tail of the pose engine `C1/424C`:
+`python tools/romdis.py 142F0 0x30 1 0` — the publish, at the tail of the pose engine `C1/424C`:
 
 ```
   14300: LDA $E40000,X
@@ -120,7 +120,7 @@ The SLIDE geometry agrees too (oracle `$1D0C/$1D23` vs our `asc SLIDE` lines):
 ```
 
 and it is reached only through `C1/4250`'s scan, whose per-combatant gate is `$A124,X != 0`
-(`battle_enemy_anim_script.md` §7). `python tools/dis.py 14D50 0x28 1 0` — the ONLY writer of `$A124`:
+(`battle_enemy_anim_script.md` §7). `python tools/romdis.py 14D50 0x28 1 0` — the ONLY writer of `$A124`:
 
 ```
   14D5C: LDA $8A / TAY
@@ -374,17 +374,17 @@ at the wrong instruction, and the "the think length is right" instruction is ass
 
 | claim | my check |
 |---|---|
-| `C1/4304 STA $967B` + `C1/4307 JSR C1/1C4A` | `dis.py 142F0 0x30 1 0` — exact |
-| `C1/4D61 STA $A124,Y` (playAnim tail) | `dis.py 14D50 0x28 1 0` — exact |
-| the publish gate is `$A124,X != 0` | `dis.py 14250 0x60 1 0` — `LDA $A124,X / BEQ ->1425A`. **The dossier omits the SECOND half of the gate: `LDA $A12F,X / BEQ ->14269` — the scan proceeds only when the dwell is also 0.** |
+| `C1/4304 STA $967B` + `C1/4307 JSR C1/1C4A` | `romdis.py 142F0 0x30 1 0` — exact |
+| `C1/4D61 STA $A124,Y` (playAnim tail) | `romdis.py 14D50 0x28 1 0` — exact |
+| the publish gate is `$A124,X != 0` | `romdis.py 14250 0x60 1 0` — `LDA $A124,X / BEQ ->1425A`. **The dossier omits the SECOND half of the gate: `LDA $A12F,X / BEQ ->14269` — the scan proceeds only when the dwell is also 0.** |
 | `$A124` all-zero f0..f436; f402 `$AE91=05*(C1:ACFC)`; f405 `$A013=01*(C1:40A9)`; f437 `$A124[5]=02*(C1:4D64)`; f438 `$967B=03*(C1:4307)` | `--monitor "7EA124:11,7EAE91:1,7EA013:1,7E967B:1" --from saves/battle_crono_solo_lake.state --input "40:400,0:400" --diff --writer --frames 810` — every frame number identical. **Stronger than the dossier says: `$967B` is not written AT ALL between f401 and f438** (the idle steppers `C1:2EF2`/`C1:342B`, which fire every 5-15 f up to f401, stop dead at the turn-start). |
 | `$974A` untouched at the turn-start, next write `C1:336A` at f602 | `--monitor "7E974A:8,7EAE91:1" --diff --writer` — exact |
 | `$1D0C[0]=A0`, `$1D23[0]=46` for the whole fight | `--monitor "7E1D0C:11,7E1D23:11" --diff --frames 2000` — constant f199 to f1999 |
 | OURS: think f500 / arrive f503 / asc arm f524 / ascpose f536 pose=03 | `--loadwram saves/forest_re/battle_crono_solo.dumpwram --walkscript "l:400,."` — exact |
 | OURS: box (150,95)-(190,135) = 2281 B at f500/501/502 and at f536, 0 B at f503/505/520 | `CT_BATTLESHOT_FIELD_AT` — exact. **4x crop of (145,92)-(195,140): f498 mushroom -> f500 dark windup creature -> f503 mushroom -> f536 windup.** The phantom is unambiguous. |
 | OURS: the 183-frame held phantom | `CT_BATTLE_SCRIPT="n:283,a:2,n:4,a:2,n:2000" --battletest saves/battle_re/forest_pre.raw.wram` -> think f510 / pc-act f510 / act-end f651 / arrive f693. `CT_BATTLESHOT_AT=600` shows the left Hetake in the windup while the mushroom pose is back at f505/f700. |
-| track 15 `CD/96B2` bytes | ROM: `[24 ROM bytes at 0xD96B2: python tools/dis.py 0xD96B2 24]` — byte-exact as quoted. Header `CD/72B9 = 90 01 90 01 / C9 72 / F4 72 / B2 96` ok. **And I checked the other two tracks: `CD/72C9` (t0) and `CD/72F4` (t3) contain NO `A8`/`A9`** — so track 15 really is the only source of our `animKnockDist`. |
-| the A8/A9 handlers split combatant vs effect object at index 8 | `dis.py 169C3` -> `LDA $A010 / CMP #08 / BCC ->169D3 / JMP C1/6A99`; `dis.py 16AF0` -> `... / JMP C1/6C54`. `C1/6A99` works on `$A2B6`/`$A5B5`/`$A230` — it never touches `$96DB`/`$1D0C`. The mechanism is real. |
+| track 15 `CD/96B2` bytes | ROM: `[24 ROM bytes at 0xD96B2: python tools/romdis.py 0xD96B2 24]` — byte-exact as quoted. Header `CD/72B9 = 90 01 90 01 / C9 72 / F4 72 / B2 96` ok. **And I checked the other two tracks: `CD/72C9` (t0) and `CD/72F4` (t3) contain NO `A8`/`A9`** — so track 15 really is the only source of our `animKnockDist`. |
+| the A8/A9 handlers split combatant vs effect object at index 8 | `romdis.py 169C3` -> `LDA $A010 / CMP #08 / BCC ->169D3 / JMP C1/6A99`; `romdis.py 16AF0` -> `... / JMP C1/6C54`. `C1/6A99` works on `$A2B6`/`$A5B5`/`$A230` — it never touches `$96DB`/`$1D0C`. The mechanism is real. |
 | the victim drift | our `asc t15 FWD from=` line, 8 actions: `(160,70) -> (163,70) -> (163,66) -> (166,66) -> (169,66) -> (169,62) -> (172,62) -> (172,58)`. **Worse than the dossier states: it is UNBOUNDED and monotone, not "a few px".** |
 | O4 (`--battletest .../battle_crono_solo.raw.wram` fails staging) | reproduced verbatim. Note the harness prints `$2980..2=008080 want 000180 (party: Crono+Marle)` — the *expected* party is the 2-PC one, so the failure looks like a fixture-expectation mismatch against a solo capture, not a bad WRAM. Still open. |
 
@@ -444,7 +444,7 @@ python tools/ct.py oam f398.raw.oam ; python tools/ct.py oam f440.raw.oam
 (`boxdiff.py` / `crop.py` / `diffmask.py` = 20-line helpers over `tools/ctlib/fb.py::load`, which decodes the
 512x480 [pad,B,G,R] peek to 256x240 RGB. Scratch only; not added to the tree.)
 
-**B4 — "ROM `C1/762E` handler split `LDA $A010 / CMP #08 / BCS`". MIS-CITED.** `dis.py 17620 0x40 1 0`:
+**B4 — "ROM `C1/762E` handler split `LDA $A010 / CMP #08 / BCS`". MIS-CITED.** `romdis.py 17620 0x40 1 0`:
 `C1/762E: PHY / PHX / TAY / ASL A / TAX / JSR ($79D3,X) / PLX / PLY / RTS` — a jump-table dispatcher with no
 `CMP` in it. The `#08` split lives in the *individual* handlers (I found ~40 `LDA $A010 / CMP #08` sites in
 bank C1, including `C1/69C9` and `C1/6AF6` = exactly the A8/A9 handlers), and the branch is **`BCC +3 / JMP`,

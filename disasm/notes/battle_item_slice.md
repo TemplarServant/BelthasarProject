@@ -2,7 +2,7 @@
 
 Derives, from the ROM disasm + LakeSnes oracle **only**, the full path for ONE consumable item end-to-end
 plus the shared item infrastructure every item reuses. The slice PROVES the pipeline; the other consumables
-are data in the same tables. **Zero invention** — every field is byte-cited (`tools/dis.py <fileoffset>`,
+are data in the same tables. **Zero invention** — every field is byte-cited (`tools/romdis.py <fileoffset>`,
 fileoffset = `(bank−0xC0)<<16 | addr`) and every value is oracle-measured (`ct_probe.exe` = `build/ct.exe`,
 `--monitor ADDR:LEN --from STATE --btnscript ...`; ⚠ **LEN is DECIMAL**).
 

@@ -20,7 +20,7 @@ Y is the FRONTMOST — a plain depth sort, with PCs and enemies fully INTERLEAVE
 
 ---
 
-## 1. The ROM (bank CF; `tools/dis.py 0x0FE830 0x60` and `0x0FE880 0x50`; DP = `$1D00`)
+## 1. The ROM (bank CF; `tools/romdis.py 0x0FE830 0x60` and `0x0FE880 0x50`; DP = `$1D00`)
 
 ```
 FE83F  LDY #000C                       ; render objects 0x0C .. 0x16  (obj = cmb + 0x0C, combatants 0..10)

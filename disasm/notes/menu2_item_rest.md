@@ -7,7 +7,7 @@ Scope handed to this lane:
  (d) key item / weapon colour + description box vs CtMenuRenderItem
  (e) a full input-by-input differential ROM vs our engine
 
-Every claim below carries either a ROM address that was disassembled with `tools/dis.py` (or decoded
+Every claim below carries either a ROM address that was disassembled with `tools/romdis.py` (or decoded
 byte-by-byte from the image, where the linear decoder desyncs) or an oracle command that was actually
 run against `scratchpad/menu/ct_probe.exe`. Where neither exists it is in §6 OPEN.
 
@@ -878,7 +878,7 @@ the Item block, `field.c:8265-8364` and `menu.c:470-631`, is untouched, so the d
 
 # ADVERSARIAL VERIFICATION (second agent, independent pass)
 
-Method: every load-bearing address in §2/§3 was **re-disassembled** with `tools/dis.py` (and hand-decoded
+Method: every load-bearing address in §2/§3 was **re-disassembled** with `tools/romdis.py` (and hand-decoded
 from raw bytes where the linear decoder desyncs), every §4 measurement was **re-run from scratch with a
 script I wrote myself** (never copied where the dossier elided it), and the two claims that rest on
 exhaustive scans (`C2/EAD6` dead; `C2/AB62` touches no `$0415/$0416`) were re-scanned with my own
@@ -943,7 +943,7 @@ This does **not** disturb §5.2: the spec was already "buzz iff `$0DBC == 0`".
 
 §5.3 sketches the party-slot→sheet resolution as `mem[0x0D5F + i] & 0x7F` and points at §6 — but §6 has
 no such entry, so the sketch would be copied into C as-is. Hand-decoded from the raw bytes at `0x28839`
-(`tools/dis.py` desyncs here; bytes pasted so this is checkable):
+(`tools/romdis.py` desyncs here; bytes pasted so this is checkable):
 
 ```
 28839  8F 02 42 00   STA $004202          ; A = $0D5F,X (the party-slot byte)
@@ -1107,7 +1107,7 @@ exactly where it was.
 
 ## AV.11 — everything that reproduced EXACTLY
 
-**Disassembly re-derived at the cited address.** (⚠ `tools/dis.py` needs `x=0` at `C2/8BB8`, `C2/ADD6`,
+**Disassembly re-derived at the cited address.** (⚠ `tools/romdis.py` needs `x=0` at `C2/8BB8`, `C2/ADD6`,
 `C2/AA86`, `C2/AB4A`, `C2/AF42`, `C2/B0AB`, `C2/F2F3` or it desyncs — the dossier's listings are the
 *correct* ones.) Verified: `C2/8B93`, `C2/8BB8` (all of it, incl. `LDX #E000 / TXY`), `C2/ADD0`,
 `C2/EA81`, `C2/E92D`, `C2/E984`, `C2/AA4A`, `C2/AA86`, `C2/AAC8`, `C2/AB14`, `C2/AB4A`, `C2/AC1D`,

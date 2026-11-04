@@ -153,7 +153,7 @@ them to the camera the frame the tech's script ended. Three links, all measured 
 3. **The epilogue hands it to the objects.** `C0/076B` (enemies, gate = the back-map `$A3+slot` BMI) and
    `C0/0871` (the party via `$0197/$0199/$019B`) `JSR C0/A98A` (unlink), then `C0/080D` / `C0/08A0`: the position,
    `LDA +4 / STA $0F01,Y` (`C0/0837` / `C0/08CB`), `$0A00 = +0 << 4 | +2`, `$0A80 = +1 << 4 | +3`, `STZ $1601`,
-   `JSR C0/A9CD` (link), and `BRL C0/CB0A` -- both BRLs land there (`82 99 C2` / `82 05 C2`; `tools/dis.py` prints
+   `JSR C0/A9CD` (link), and `BRL C0/CB0A` -- both BRLs land there (`82 99 C2` / `82 05 C2`; `tools/romdis.py` prints
    the displacement, not the target). `CB0A` is the drain's twin: its four gates, then `CDC8`/`D124`/`DD28`
    rebuild the OAM records of that `$0F01` into `$7F4BC0 + $1700,X` and always end `LDA #80 / STA $1B00,X`
    (`CEEE`, `D283`, `DF28`/`E123`). The port composes sprites from `$0F01` itself, so the stamp is what it keeps.

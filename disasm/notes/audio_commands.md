@@ -4,7 +4,7 @@
 song or a sound effect. Companion to `apu_upload.md` (which covers the boot-time IPL upload of
 the driver into ARAM; that is a *different* protocol and is NOT what the game uses at runtime).
 
-Everything below is either (a) disassembled with `python tools/dis.py <flatoffset> <len> [m] [x]`
+Everything below is either (a) disassembled with `python tools/romdis.py <flatoffset> <len> [m] [x]`
 (flat offset = `(bank-0xC0)*0x10000 + off`, so `$C7:061C` → `0x7061C`), or (b) an observed
 `build/ct.exe` value. Every claim carries its citation. Gaps are listed in §12.
 
@@ -58,7 +58,7 @@ bedslide.state          $1EF0+4 = 0F 00 79 00     bank 15 -> 0xF1-0x78 = 0x79  O
 exactly **59** call sites and no others (§9). `$C7:0000` (the IPL upload) has exactly one caller,
 `C0/0053`, i.e. boot only.
 
-Prologue/epilogue (`tools/dis.py 70140 0x120 1 0`):
+Prologue/epilogue (`tools/romdis.py 70140 0x120 1 0`):
 
 ```
 C7/0140  PHB PHD PHP           ; save
@@ -152,8 +152,8 @@ identically (raw port write), so the differentiation is made by the SPC-side dri
 
 ## 4. `$C7:061C` — **THE routine the C port must call**
 
-`tools/dis.py 7061C 0x40 1 0`, raw bytes
-`[57 ROM bytes at 0x7061C: python tools/dis.py 0x7061C 57]`:
+`tools/romdis.py 7061C 0x40 1 0`, raw bytes
+`[57 ROM bytes at 0x7061C: python tools/romdis.py 0x7061C 57]`:
 
 ```
 C7/061C  SEP #20
@@ -261,7 +261,7 @@ both are VM handlers. **That is the complete set.**
 | `$EF` | `C0/5F6E` | 1 | unassigned |
 
 Raw handler bytes (for the record):
-`C0/3C11: [30 ROM bytes at 0x3C11: python tools/dis.py 0x3C11 30]`
+`C0/3C11: [30 ROM bytes at 0x3C11: python tools/romdis.py 0x3C11 30]`
 `C0/3CBC: BB AD 41 21 D0 01 E8 18 60` · `C0/3CC5: BB AD 43 21 29 0F D0 01 E8 18 60`
 
 Operand addressing: the handlers read `$7F2001,X` with X = script index; `INY/TYX` walks the

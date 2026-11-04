@@ -2,7 +2,7 @@
 
 > Derived 2026-08-30. Fills hole (3) of `disasm/notes/menu2_tech_screen.md` §6 — *"`C2/8F55` (the actual
 > tech EFFECT) is not decoded here … whether `C2/8F55` is the same routine [as the Item screen's] was not
-> checked."* Every claim below carries a ROM address disassembled in this pass (`python tools/dis.py
+> checked."* Every claim below carries a ROM address disassembled in this pass (`python tools/romdis.py
 > <hexoff> <len> [m] [x]`, or a raw byte dump) **or** an oracle command run with
 > `scratchpad/menu/ct_probe.exe`, pasted verbatim in §4. Scratch scripts written for this pass:
 > `scratchpad/menu/tfx_rom.py` (ROM hexdump), `scratchpad/menu/tfx_splice.py` (WRAM state splicer),
@@ -70,7 +70,7 @@ reads `+0x09`** (§5.3). Also gate the tech cast on `$7E:7700+techId` bit7 (nine
 
 ## 2. ROM TRACE
 
-### 2.1 `C2/8F55` — the whole routine (`python tools/dis.py 28F55 0x120`)
+### 2.1 `C2/8F55` — the whole routine (`python tools/romdis.py 28F55 0x120`)
 
 ```
 28F55: PHP / REP #30
@@ -154,7 +154,7 @@ runs (measured, §4.1).
 
 ### 2.4 `C2/8E82` (HP) and `C2/8EAB` (MP) — **THE APPLY**
 
-Raw `d[0x28E85:0x28EAC]` = `[25 ROM bytes at 0x28E85: python tools/dis.py 0x28E85 25]
+Raw `d[0x28E85:0x28EAC]` = `[25 ROM bytes at 0x28E85: python tools/romdis.py 0x28E85 25]
 D9 3F 00 90 03 B9 3F 00 99 03 00 28 60` — note `B5 22` = `LDA $22,X` is **direct page**, and `2C BF 0D`
 = `BIT $0DBF` is **absolute with A 16-bit**, i.e. it reads the WORD `$0DBF|$0DC0<<8`.
 
@@ -268,7 +268,7 @@ exit. Measured: `$E8` = `0201` for the whole popup and `0000` on the frame the t
 29091:   BRA ->2904C
 ```
 `$FF:CEBA` is the per-frame Y offset of the floating number:
-`[25 ROM bytes at 0x3FCEBA: python tools/dis.py 0x3FCEBA 25]×17 | FF` — **41 positive
+`[25 ROM bytes at 0x3FCEBA: python tools/romdis.py 0x3FCEBA 25]×17 | FF` — **41 positive
 entries then the `FF` terminator at +$29**, and the MP arm at +$2A is another **41** entries then `FF` at
 +$53. That is exactly the 41-frame gap measured between the HP chime and the MP chime (§4.6).
 `$0F60` = the animation cursor, `$0F61` = 3 (HP) / 1 (MP) — a colour, `$16` = 0 (read `$0F63`) / 6 (read
@@ -292,8 +292,8 @@ with `$0D76` zeroed first so the 3-frame menu throttle can never swallow it. (`C
 
 ### 2.7 The two callers, and where they diverge
 
-**TECH — `C2/B4DE`** (raw `[25 ROM bytes at 0x2B4DE: python tools/dis.py 0x2B4DE 25]
-[34 ROM bytes at 0x2B4F7: python tools/dis.py 0x2B4F7 34]`):
+**TECH — `C2/B4DE`** (raw `[25 ROM bytes at 0x2B4DE: python tools/romdis.py 0x2B4DE 25]
+[34 ROM bytes at 0x2B4F7: python tools/romdis.py 0x2B4F7 34]`):
 ```
 2B4DE: LDA $0DBC / BNE ->2B4E6 / JMP C2/EACC        ; ** REFUSAL: nothing restorable **
 2B4E6: LDA #90 / STA $19D1
@@ -919,7 +919,7 @@ Order of operations, byte-for-byte:
 
 > Second pass, 2026-08-30, by a different agent whose brief was to **refute** the sections above.
 > Nothing below was taken from the text it checks: every routine was re-disassembled from the ROM
-> (`python tools/dis.py`, plus raw byte dumps), every model was re-written from those bytes before
+> (`python tools/romdis.py`, plus raw byte dumps), every model was re-written from those bytes before
 > being compared to a measurement, and every probe was re-run with `scratchpad/menu/ct_probe.exe`.
 > Scratch scripts written for this pass: `scratchpad/menu/adv2_sheet.py`, `adv2_sweep.py` (my own
 > `C2/8ECC` model + 26 cases), `adv2_apply.py` (`C2/8E82`/`C2/8EAB` sweeps), `adv2_all.py`
@@ -940,24 +940,24 @@ Nothing in the spec would make the engine spend MP for an invented amount.
 
 | claim | how it was re-checked | result |
 |---|---|---|
-| `C2/8F55` = `JSR C2/8E2D` + `MVN` **8** bytes `$FF:CB9C`→`$7E:9588` + `JSR C2/8F6C` | `dis.py 28F55` (`LDA #0007` → A+1 = 8 bytes) | ✔ |
+| `C2/8F55` = `JSR C2/8E2D` + `MVN` **8** bytes `$FF:CB9C`→`$7E:9588` + `JSR C2/8F6C` | `romdis.py 28F55` (`LDA #0007` → A+1 = 8 bytes) | ✔ |
 | `C2/8F55` is shared by item + tech, and by nothing else | byte scan of all 4 MB for `20 55 8F` / `4C 55 8F` / `22 55 8F C2`: **exactly two** hits, `0x2B1BF` (item) and `0x2B4FC` (tech). `20 2D 8E` → 1 hit, `20 CC 8E` → 1, `20 82 8E` → 1, `20 AB 8E` → 1, `20 6C 8F` → 2 (`28F67`, `2B2D6`) | ✔ |
 | the amount formula, **both arms** | my own model, 26 cases, `--callrom C2/8ECC` (§AV.1) | **26/26 exact** |
 | the two `BIT $0DBF` in the appliers and the one at `C2/8F41` are 16-bit | raw bytes: `28E87`, `28EB0` and `28F41` all read `2C BF 0D` (`BIT` absolute) with M=16 at that point (`REP #30` at `28E83`/`28EAE`, `REP #20` at `28F36`) | ✔ |
 | sheet `+$09/$0A` is the max-MP cap, not `+$41` | `--callrom C2/8EAB` with `sheet+$41 = 63 00` and `sheet+9 = 07 00`, amount 50, MP 0 → **newMP = 7** (§AV.2) | ✔ the `src/menu.c` `sh[9]` fix is right |
 | the 999 clamp is HP-only | `--callrom C2/8EAB` amount 2000 → **disp = 2000**, no clamp | ✔ |
 | `$0DBF` (tech) = the caster's derived MAGIC, clamped to 99 | 11 spliced states (§AV.3): patching `+$39` directly does nothing; patching `+$0E` moves it; `$64/$7F/$FF` all land on `$63` | ✔ |
-| `$0DBD` b7/b6/b3 and the count-`$73` loop | `dis.py 28E2D`; `--callrom C2/8E2D` with `$0DBD = $88` returns `x=0004 y=26A0` (the loop reached party index 2) vs `x=0000 y=2600` for `$84` | ✔ |
-| the nine ids, `$CC:2140`/`$CC:2141`/`$CC:1ACB`/`$CC:253B` derivations | `dis.py 3FF82E` (nine `TSB`s) + a table dump: every row of §2.8 reproduces byte-for-byte, including `id 29 rec[0] = $4E → $0DC0 = $0E` | ✔ |
-| the item-side build | `dis.py 2B0AB`: `$0DBD = ((($CC:1BB5[i]+1)&3)<<2) | $CC:0001[rec]`; `$0DC0 = $CC:0002[rec] & $0F`, and `$0F → $40` | ✔ |
+| `$0DBD` b7/b6/b3 and the count-`$73` loop | `romdis.py 28E2D`; `--callrom C2/8E2D` with `$0DBD = $88` returns `x=0004 y=26A0` (the loop reached party index 2) vs `x=0000 y=2600` for `$84` | ✔ |
+| the nine ids, `$CC:2140`/`$CC:2141`/`$CC:1ACB`/`$CC:253B` derivations | `romdis.py 3FF82E` (nine `TSB`s) + a table dump: every row of §2.8 reproduces byte-for-byte, including `id 29 rec[0] = $4E → $0DC0 = $0E` | ✔ |
+| the item-side build | `romdis.py 2B0AB`: `$0DBD = ((($CC:1BB5[i]+1)&3)<<2) | $CC:0001[rec]`; `$0DC0 = $CC:0002[rec] & $0F`, and `$0F → $40` | ✔ |
 | Aura Whirl is refused at `C2/B406`, before the cost | drive to the Double tab: f227 `$0F4C=39`, f289 `$1E01=01`, `$0F4F` **never leaves 00** | ✔ |
 | the four refusals | re-driven from my own splices (§AV.5) | ✔ all four |
 | a dead (HP 0) target is healed | `$2603 = 0000` → f279 `$0DBC=02`, f349 `$2603=2C00` (44), f391 MP still spent | ✔ |
 | the `$0F63` double use | reproduced with **different numbers**: targeting Marle gives `$0F63 = 4500 2D00 FFFF` — raw `0x002D` = 45 at slot 1, BCD `0x0045` compacted into slot 0 | ✔ |
 | the 10-frame gap and the 41-frame popup | f339 → f349; `$0F60` 01→`$2A` over f349..f390; `$FF:CEBA` = 41 entries + `FF`, twice | ✔ |
-| the chime goes through `C2/EAF9` | `dis.py 2EAF9` (`STZ $0D76` **before** the post) + a scan: `C2/EAF9` has **one** JSR site (`C2/9047`) and `C2/EAD6` has **zero** callers | ✔ dead code confirmed |
+| the chime goes through `C2/EAF9` | `romdis.py 2EAF9` (`STZ $0D76` **before** the post) + a scan: `C2/EAF9` has **one** JSR site (`C2/9047`) and `C2/EAD6` has **zero** callers | ✔ dead code confirmed |
 | all-party, live | Lapis `$0DBD=89 $0DBF=B2 $0DC0=04` → 3 heals, `$0F53=3`, chime `$06`; Elixir `$0DBD=CA $0DC0=40` → six BCD maxima, HP chime f241 → **MP chime f282, exactly 41 frames** | ✔ |
-| the item path has the same `$0DBC==0` buzz | `dis.py 2B1B5`: `LDA $0DBC / BNE +5 / JSR C2/EACC` | ✔ |
+| the item path has the same `$0DBC==0` buzz | `romdis.py 2B1B5`: `LDA $0DBC / BNE +5 / JSR C2/EACC` | ✔ |
 
 ### AV.1 `C2/8ECC` re-swept against a model written from the bytes, not from §2.3
 
@@ -1046,7 +1046,7 @@ ct_probe --monitor "7E0D00:1" --from saves/tech_double.state --btnscript "0:60,2
   f98   7E0D00=01*(C2:842F)      <- first tick, ~37 frames AFTER the X press at f60
   f99   7E0D00=02*(C2:842F)  ... every frame thereafter
 ```
-`dis.py 28420` shows why: `C2/8420` is the **menu's NMI handler** — `PHA/PHD/PHP/SEP #20/PEA $0D00/
+`romdis.py 28420` shows why: `C2/8420` is the **menu's NMI handler** — `PHA/PHD/PHP/SEP #20/PEA $0D00/
 PLD/CMP $4210/ INC $00` — so `INC $00` at **`C2/842D`** with `D = $0D00` is `INC $0D00`, once per NMI.
 It does **not** tick in the field (f0..f97 stay `00`), and it wraps at 256 because it is `INC` on a
 byte. Arithmetic check against §4.1: the menu comes up ~f58 in that script, and f338 − f58 + 1 = 281,
@@ -1086,7 +1086,7 @@ ct_probe --monitor "7E00E8:1,7E00E9:1,7E00EA:2" --from saves/tech_double.state -
   f349  7E00E8=02*(C2:823E)  7E00E9=01*(C2:823E)  7E00EA=1690*(C2:824E)
   f390  7E00E8=00*(C2:821C)  7E00E9=00*(C2:81D8)
 ```
-`dis.py 281B9` names both halves. The menu scheduler walks `X = 0, 8, … $38` and does
+`romdis.py 281B9` names both halves. The menu scheduler walks `X = 0, 8, … $38` and does
 ```
 281D1: LDY $B0,X / DEY / BMI ->281DA      ; state 0 = dead slot, skip
 281D6: DEC $B1,X / BEQ  ->281E8           ; ** $B1,X is a FRAME COUNTDOWN **
@@ -1126,7 +1126,7 @@ It is. `--writer` names the store on the first frame of the tech list:
 ```
 f215  7E19C0=01*(C2:BA29)
 ```
-`dis.py 2BA09` shows the store is `C2/BA27 STA $00` executing under `PEA $19C0 / PLD`, with the
+`romdis.py 2BA09` shows the store is `C2/BA27 STA $00` executing under `PEA $19C0 / PLD`, with the
 source `LDA $9A90` = the sheet copy's byte `+0` = **the caster's charId**. So `$19C0` is written by
 `C2/BA09`'s body every time the tech screen builds, the `$FF` that `C2/F40F` leaves at f55 cannot
 survive to `C2/B4EC`, and the "real out-of-table read the ROM never guards" that OPEN #6(2) worries
@@ -1184,7 +1184,7 @@ max HP at 999; recorded because §5.3 claims to enumerate the divergences.
 ### AV.D7 — DEFECT (spec vs ROM, unreachable): the all-party loop and an empty party slot
 
 §5.2's `CtMenuRestoreApply` does `uint8_t* sh = mem + 0x2600 + (slots[idx] & 7) * 0x50`. The ROM
-(`dis.py 28820` → `C2/8839`) does:
+(`romdis.py 28820` → `C2/8839`) does:
 ```
 28839: STA $004202 / ORA #00 / BMI ->28880      ; ** bit7 set: RETURN WITHOUT TOUCHING $6F **
 ```
@@ -1215,7 +1215,7 @@ ROM-derived, unmeasured reserve-caster refusal.)
 2. **§4.0/§5.3's `+0x41` values.** §5.3 says the live sheets hold "`00 FF` / `FF FF` / `00 04`" at
    `+0x41`. Read out of `saves/tech_double.state` I get `sheet0 +41,+42 = 04 04`, `sheet1 = FF FF`,
    `sheet2 = 04 05`. The substantive point (it is not a pool) is unaffected.
-3. **OPEN #6(8) calls `C2/B28E` "the *status* path".** `dis.py 2B27E` shows it doing
+3. **OPEN #6(8) calls `C2/B28E` "the *status* path".** `romdis.py 2B27E` shows it doing
    `LDX $0DBD / LDA $FFCF2B,X / TAY / LDA $9A9B,Y / CMP $FFCF32,X / BCS + / LDA #02 / STA $0DBC`,
    i.e. it indexes a **stat offset** into `sheet+$0B` and compares it against a **cap**
    (`$FF:CF2B = 04 00 02 01 04 05 03 06 63`, `$FF:CF32 = 06 63 10 63 …` — the `$63`/`$10` reading as

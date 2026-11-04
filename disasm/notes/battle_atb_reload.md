@@ -19,7 +19,7 @@ SELECTS the action; in our engine a PC can attack twice in a row.
   latched by the per-obj turn-state `$93EE`), so a committed seat is never re-enqueued until its ATB reloads
   (span-end) and counts back down to 0.
 
-Method: oracle = `ct.exe --monitor --btnscript --writer` on `gato_press_action.state`; ROM = `tools/dis.py`
+Method: oracle = `ct.exe --monitor --btnscript --writer` on `gato_press_action.state`; ROM = `tools/romdis.py`
 (fileoffset `(bank−0xC0)<<16|addr`, battle bank C1 is 16-bit M=0 X=0). Our engine = `Belthasar.exe` headless
 `CT_BATTLE_SCRIPT`/`CT_BATTLE_TRACE` on `saves/battle_re/gato_t0.raw.wram`. Writer PC = the instr AFTER the store.
 
@@ -248,11 +248,11 @@ is per-seat, so both options handle it, but capture it.
 <scratch>/ct_probe.exe --monitor "93EE:12,95D6:1,A6D9:3,AFAB:8,95D5:1,9609:1" \
   --from gato_press_action.state --btnscript "100:8,0:392,100:6,0:20,100:6,0:180" --diff --writer
 # ROM sites:
-python tools/dis.py 18260 0x40 1 0     # ATB dec + ready-flag (C1:826B)
-python tools/dis.py 11B19 0x40 0 0     # readiness detector: $A6D9,X guard + $95D6 request (1B37) + $93EE (1B2E)
-python tools/dis.py 11B67 0x50 0 0     # enqueue: consume $95D6 (1B8E), $A6D9/$A6DE/$A6DD (1B83/1BA0/1BA9)
-python tools/dis.py 1BCE1 0x10 0 0     # RELOAD $AFAB,X <- $B158,X (C1:BCEB), X = $B18B
-python tools/dis.py 11620 0x120 0 0    # confirm: DEC $9609 (1629), chosen-action save, dequeue (172A), $93EE clr (1713)
+python tools/romdis.py 18260 0x40 1 0     # ATB dec + ready-flag (C1:826B)
+python tools/romdis.py 11B19 0x40 0 0     # readiness detector: $A6D9,X guard + $95D6 request (1B37) + $93EE (1B2E)
+python tools/romdis.py 11B67 0x50 0 0     # enqueue: consume $95D6 (1B8E), $A6D9/$A6DE/$A6DD (1B83/1BA0/1BA9)
+python tools/romdis.py 1BCE1 0x10 0 0     # RELOAD $AFAB,X <- $B158,X (C1:BCEB), X = $B18B
+python tools/romdis.py 11620 0x120 0 0    # confirm: DEC $9609 (1629), chosen-action save, dequeue (172A), $93EE clr (1713)
 # (B) our bug (copy Belthasar.exe + SDL2.dll to a scratch dir):
 CT_BATTLE_SCRIPT="n:20,a:1,n:3,a:1,n:135,a:1,n:3,a:1,n:400" CT_BATTLE_TRACE=1 \
   <scratch>/Belthasar.exe --assets ct_assets.dat --battletest saves/battle_re/gato_t0.raw.wram

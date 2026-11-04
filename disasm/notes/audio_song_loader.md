@@ -22,7 +22,7 @@ takes a song id and pushes its **sequence, its instrument samples, its sample di
 per-instrument parameter blocks and its per-song parameter block** into the SPC700's ARAM.
 
 Every claim below is either
-* **[DIS]** a `python tools/dis.py <flat> <len> [m] [x]` disassembly (HiROM: bank `$C7` = flat
+* **[DIS]** a `python tools/romdis.py <flat> <len> [m] [x]` disassembly (HiROM: bank `$C7` = flat
   `0x70000 + addr`), or
 * **[OBS]** an observed oracle value with the exact `build/ct.exe` command.
 
@@ -118,7 +118,7 @@ Every block-length word is a multiple of 9 for the instruments (BRR blocks) — 
 
 ## 2. `$C7:0A39` — the record lookup, the first port block, the abort
 
-`python tools/dis.py 0x70A39 0x60 1 0`:
+`python tools/romdis.py 0x70A39 0x60 1 0`:
 
 ```
 0A39  PHP / REP #20
@@ -186,7 +186,7 @@ ARAM but `$1E84 = $11` = `(cmd $10)+1`, i.e. the token was seeded and then the r
 
 ## 3. `$C7:09DA` / `$C7:09EA` — the rolling token
 
-`python tools/dis.py 0x709DA 0x30 1 0`:
+`python tools/romdis.py 0x709DA 0x30 1 0`:
 ```
 09DA  PHP / SEP #20
 09DD  STA $2140                      ; write the token
@@ -439,7 +439,7 @@ Song `$06` moves 10 instruments totalling **31,806** bytes (`$C53F - $4901` ✔)
 04D4  LDA $F3 / BEQ ->04DB
 04D8  JSR C7/0922                                   ; re-upload the $2F00 block
 ```
-`$C7:0922` (`python tools/dis.py 0x70922 0xC0 1 0`):
+`$C7:0922` (`python tools/romdis.py 0x70922 0xC0 1 0`):
 ```
 0922  $2143=$2F ; $2142=$00                        ; ARAM $2F00
 092E  $2141 = ($1E00 == $70) ? 05 : 03 ; STA $86 ; handshake ; verify against $86 (else $09EA+retry)
@@ -600,7 +600,7 @@ so `$FC` is "set SFX bank" and its parameter is the same nibble (`audio_commands
 ## 14. Multi-frame: it is ONE LONG BUSY-WAIT — proof
 
 **(a) There is no frame-sync instruction.** The full disassembly of `$C7:01A1-$C7:0726`
-(seven contiguous `tools/dis.py` chunks, widths noted in §15) was scanned for
+(seven contiguous `tools/romdis.py` chunks, widths noted in §15) was scanned for
 `\$4[0-9A-F]{3}|WAI|STP|CLI|SEI|JSL|MVN|MVP` → **zero hits**. The only hardware registers touched
 in the entire region are:
 ```
@@ -852,19 +852,19 @@ PUSHES:
 ## 19. Repro commands (every one used above)
 
 ```
-python tools/dis.py 0x701A1 0xA0 1 0     # $01A1 head + the instrument diff
-python tools/dis.py 0x70217 0xC0 0 0     # evict / hole scan / defragmenter  (16-bit A)
-python tools/dis.py 0x702D6 0xB0 1 0     # defrag tail + $02E4 rebuild + $0326
-python tools/dis.py 0x7037B 0xF0 0 0     # $037B directory build + the $1E80 / $1F40 pushes
-python tools/dis.py 0x70469 0x100 1 0    # $1FC0 push, $1EFC, mode, sequence head
-python tools/dis.py 0x70568 0x120 1 0    # sequence stream, $F120 block, $0601 GO, $061C, $0655 head
-python tools/dis.py 0x70687 0xA0 1 0     # $0655 tail + $071D
-python tools/dis.py 0x70734 0x30 1 0     # $0734 (cmd |= 4)
-python tools/dis.py 0x70755 0x70 0 0     # cmd $71 head (the $1EFC consumer)
-python tools/dis.py 0x708E3 0x40 1 0     # cmd $70 (mode toggle)
-python tools/dis.py 0x70922 0xC0 1 0     # the ARAM $2F00 mode-block re-upload
-python tools/dis.py 0x709DA 0x30 1 0     # $09DA token / $09EA resync / $09FD bank / $0A12 cull
-python tools/dis.py 0x70A39 0x60 1 0     # $0A39 record lookup + port block + abort
+python tools/romdis.py 0x701A1 0xA0 1 0     # $01A1 head + the instrument diff
+python tools/romdis.py 0x70217 0xC0 0 0     # evict / hole scan / defragmenter  (16-bit A)
+python tools/romdis.py 0x702D6 0xB0 1 0     # defrag tail + $02E4 rebuild + $0326
+python tools/romdis.py 0x7037B 0xF0 0 0     # $037B directory build + the $1E80 / $1F40 pushes
+python tools/romdis.py 0x70469 0x100 1 0    # $1FC0 push, $1EFC, mode, sequence head
+python tools/romdis.py 0x70568 0x120 1 0    # sequence stream, $F120 block, $0601 GO, $061C, $0655 head
+python tools/romdis.py 0x70687 0xA0 1 0     # $0655 tail + $071D
+python tools/romdis.py 0x70734 0x30 1 0     # $0734 (cmd |= 4)
+python tools/romdis.py 0x70755 0x70 0 0     # cmd $71 head (the $1EFC consumer)
+python tools/romdis.py 0x708E3 0x40 1 0     # cmd $70 (mode toggle)
+python tools/romdis.py 0x70922 0xC0 1 0     # the ARAM $2F00 mode-block re-upload
+python tools/romdis.py 0x709DA 0x30 1 0     # $09DA token / $09EA resync / $09FD bank / $0A12 cull
+python tools/romdis.py 0x70A39 0x60 1 0     # $0A39 record lookup + port block + abort
 
 build/ct.exe --teleport 12 8 8 0 --from candy_shop_lake.state --frames 240 --out tp12.state
 build/ct.exe --read "wram:1E00+16,wram:1E20+32,wram:1E40+32,wram:1E60+34,wram:1E82+8,wram:1EF0+16,wram:1F00+32,wram:1F20+32,wram:1F80+64" --from tp12.state

@@ -20,7 +20,7 @@ playAnim did not.
 
 ## 2. The ROM: C1/4D08 `CMP #04 / BEQ ->14D79`
 
-`python tools/dis.py 14D04 0x120 1 0`, `14E22 0x100 1 0`, `1577D 0x80 1 0`:
+`python tools/romdis.py 14D04 0x120 1 0`, `14E22 0x100 1 0`, `1577D 0x80 1 0`:
 
 ```
 C1/4D0D  LDA $A010 / CMP #08 / BCC / JMP C1/4DDF   effect object

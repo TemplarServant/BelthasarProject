@@ -10,7 +10,7 @@ Closes the explicitly-flagged open item at `battle_tech_cyclone_choreography.md`
 **The premise of that note is REFUTED.** The shards do **not** orbit the target. Every position write in
 Ice's four effect tracks resolves to **role 0 = the ACTING combatant = the caster (Marle)**; the victim
 enters only as the *bearing* of the shatter sweep (`76 00 03`), never as an origin. Derived below from the
-ROM (`tools/dis.py`) + the LakeSnes oracle (`build/ct.exe`) only. **Zero invention.**
+ROM (`tools/romdis.py`) + the LakeSnes oracle (`build/ct.exe`) only. **Zero invention.**
 
 > **Reproducible oracle seed (new, all-committed sources — `ice_precast.state` is NOT in the repo):**
 > `gato_ice.state = gato_press_action.state` with WRAM `$2838 |= 0x20` (Marle learns Ice; the tech-slice
@@ -312,7 +312,7 @@ python tools\regress.py --quick        (then FULL)
 | **I1** | `ice_precast.state` is **not committed**, so the fixture is not regenerable as shipped. | commit the state, or re-bake from the reproducible recipe in the header box (accepting the 2-frame phase + shatter-bearing change as a deliberate re-pin) |
 | **I2** | **The shatter bearing is victim-dependent** (`76 00 03` = caster→victim, `C1/60E6`→`C1/6144`), so a translated fixture still carries `ice_precast`'s aim (§4.4, y off by 0/1/3 vs this capture). | port the effect-object mover: `1B` anchor (`C1/561F`/`C1/5652`) + `85`/`76` angle (`C1/628C`/`C1/6144`) + `A8` arm (`C1/6A99`) + the per-frame apply `CF/F640` with `CF/F9FB`/`C0/F900`. Then the shards are computed, not replayed |
 | **I3** | The mask-bit → ROLE law is still unsolved (cyclone OPEN C1). New data point: Ice mask `word1=0xF090`/`word2=0x0080` (bits 15,14,13,12,7,4 + w2 b7) instantiates roles **0, 6, 8, 9, 10, 11**; Cyclone `0x8098`/`0x0080` (bits 15,7,4,3 + w2 b7) instantiates **0, 3, 4, 8** — the SAME bit (7) yields role 3 in one and role 10 in the other, so it is not a static bit→role table. | disassemble the CE track loader (`C1/4477` / `C1/4662` / `C1/4816`) and read the mask walk |
-| **I4** | Ops `73`, `22`, `50`, `61`, `70`, `77`, `C1`, `34`, `3D` (used by Ice's tracks/supers) are located in `C1/7A6B` but not disassembled here; lengths were confirmed only by the track-length arithmetic in §1.2. | `dis.py` at `C1/6059`, `C1/572C`, `C1/5ADB`, `C1/5D93`, `C1/5FC1`, `C1/6154`, `C1/6F31`, `C1/5931`, `C1/59B9` |
+| **I4** | Ops `73`, `22`, `50`, `61`, `70`, `77`, `C1`, `34`, `3D` (used by Ice's tracks/supers) are located in `C1/7A6B` but not disassembled here; lengths were confirmed only by the track-length arithmetic in §1.2. | `romdis.py` at `C1/6059`, `C1/572C`, `C1/5ADB`, `C1/5D93`, `C1/5FC1`, `C1/6154`, `C1/6F31`, `C1/5931`, `C1/59B9` |
 | **I5** | Why `ice_precast`'s caster sits at x=179 rather than the staged 176 was not established (the state is unavailable). It does not affect the plan — the delta bake is correct either way — but it means the fixture's 3 px was a real, silent render error. | inspect `ice_precast.state` if it resurfaces (`$1D0C[1]`, `$29B0+5`) |
 
 ---

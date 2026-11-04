@@ -1,7 +1,7 @@
 # COMPLETENESS CRITIC — audit of the 8-front derivation wave (2026-07-25)
 
 Adversarial re-check of the eight returned dossiers **against the ROM and the oracle**, not against the
-summaries. Every verdict below is either a `tools/dis.py` disassembly (flat file offset; HiROM, bank
+summaries. Every verdict below is either a `tools/romdis.py` disassembly (flat file offset; HiROM, bank
 `$XX` = flat `(XX-0xC0)<<16 | addr`), a direct ROM byte read, a repo command, or an observed
 `build/ct.exe` value. Nothing here is taken on the authority of the dossier that asserted it.
 
@@ -25,17 +25,17 @@ risk in this wave and it is not mentioned in any summary.
 
 | claim | my check | verdict |
 |---|---|---|
-| song = byte +0 of the 14-byte record at `$F6:0000`, read `C0/1B79` | `dis.py 0x1B53 0x50` → `1B77 LDX $FE / 1B79 LDA $F60000,X` | ✅ |
-| `X = loc*14`, built `C0/092B` | `dis.py 0x92B 0x40` → `LDA #0E / STA $4203` … `ADC #0E00` for loc≥256 / `STA $FE` | ✅ |
+| song = byte +0 of the 14-byte record at `$F6:0000`, read `C0/1B79` | `romdis.py 0x1B53 0x50` → `1B77 LDX $FE / 1B79 LDA $F60000,X` | ✅ |
+| `X = loc*14`, built `C0/092B` | `romdis.py 0x92B 0x40` → `LDA #0E / STA $4203` … `ADC #0E00` for loc≥256 / `STA $FE` | ✅ |
 | bit7 set = "do not change the music" | `1B7D BMI ->1B8F` (skips **both** the `$29AE` store and the play) | ✅ |
 | 87 of 512 records have bit7 set; every other ≤ `$46` | ROM histogram: `bit7 count = 87`, `max non-FF = 0x46` | ✅ exact |
 | the pre-song `$81 (00,FF,FF)` | `1B5F..1B73` verbatim | ✅ |
 | `$7F01ED != 0` → replay the shadow instead | `1B53 LDA $7F01ED / BEQ ->1B5F / LDA $7E29AE / BRA ->1B83` | ✅ |
-| loader chain `C0/00F4` = `092B` → `1B53` → `0960` | `dis.py 0xF4 0x18` | ✅ |
+| loader chain `C0/00F4` = `092B` → `1B53` → `0960` | `romdis.py 0xF4 0x18` | ✅ |
 | the menu-return reload skips both | **`C0/01C3 JSR C0/0960`** then the identical `6DCF/7084/7F7E/A33B/09DD` tail | ✅ (the load-bearing instruction is at `C0/01C3`, not at the routine head `C0/01A5` the dossier cites) |
-| `loc >= 0x1F0` never reaches `1B53` | `dis.py 0x66 0x18 1 0` → `LDX $0100 / CPX #01F0 / BMI ->0072 / JML $C2:0000` | ✅ |
-| overworld has the real same-song compare | `dis.py 0x23000` → `23009 LDA $1B9B,X / CMP $02AE / BEQ` | ✅ |
-| battle start `C0/1BAB`, `$2A1F` bit6, `$01FA = $45` | `dis.py 0x1BAB` (`LDA $7E2A1F / BIT #40 / BNE ->1BD5`; else `$1E10=FF`, `LDA $FA`, cmd `$14`) + `dis.py 0xC50` (`LDA #45 / STA $FA`, and `$FC=#53`, `$FB=#65`) | ✅ |
+| `loc >= 0x1F0` never reaches `1B53` | `romdis.py 0x66 0x18 1 0` → `LDX $0100 / CPX #01F0 / BMI ->0072 / JML $C2:0000` | ✅ |
+| overworld has the real same-song compare | `romdis.py 0x23000` → `23009 LDA $1B9B,X / CMP $02AE / BEQ` | ✅ |
+| battle start `C0/1BAB`, `$2A1F` bit6, `$01FA = $45` | `romdis.py 0x1BAB` (`LDA $7E2A1F / BIT #40 / BNE ->1BD5`; else `$1E10=FF`, `LDA $FA`, cmd `$14`) + `romdis.py 0xC50` (`LDA #45 / STA $FA`, and `$FC=#53`, `$FB=#65`) | ✅ |
 
 **LIVE CROSS-CHECK (the best evidence in the whole wave).**
 `build/ct.exe --read "wram:0029AE+1,000100+2,001E00+6" --from saves/base_loc6.state --frames 2` →
@@ -49,9 +49,9 @@ So record → shadow → `$1E01`, and `$1E02/$1E03` = the two song-parameter tab
 * `JSL $C7:0004` call sites: ROM scan for `22 04 00 C7` → **exactly 59**. ✅ (list matches the
   dossier's bank distribution: 22 in `C0`, `C1/1B50`, `C1/40DD`, `C1/61B5…`, `C2/…`, `CD/…`, `FF/…`.)
 * `$C7:0004 = JMP $0140`: `rom[0x70004] = 4C 40 01`. ✅
-* `C7/061C` port order: re-disassembled with **16-bit X** (`dis.py 0x70625 0x30 1 0`) —
+* `C7/061C` port order: re-disassembled with **16-bit X** (`romdis.py 0x70625 0x30 1 0`) —
   `STA $2143 / $2142 / $2141`, `LDX #0400`, `STA $2140`, `CMP $2140 / BEQ / DEX / BNE`. ✅
-  (The dossier's transcript prints `LDX #00` + a garbled `TSB $8D`; that is a dis.py width artifact,
+  (The dossier's transcript prints `LDX #00` + a garbled `TSB $8D`; that is a romdis.py width artifact,
   not an error in the conclusion. The retry budget is **0x400**, not the 1024-decimal wording.)
 * `$1E05` mutex: `C7/0157 LDA $05 / BPL ->70192` — bit7 **clear** drops the command; `$E0` passes,
   a song id (`$45`) drops. ✅
@@ -80,7 +80,7 @@ $1F80, $1F00`). The correction of the old dossier is **confirmed byte-for-byte**
   each track carries a later `1B 00`. ✅
 * `C1/561F`: `LDA $A010 / CMP #08 / BCS ->15652` → role ≥ 8 writes **`$A240,X` / `$A250,X`**
   (`X = $A2B6*2`), role < 8 writes `$1D0C,X`/`$1D23,X` via `$A014,X`. ✅
-* The resolver: `dis.py 0x1764A` → `TYA / SEC / SBC #09 / TAY / LDA $A014,Y / TAX` — **mode 09 ⇒
+* The resolver: `romdis.py 0x1764A` → `TYA / SEC / SBC #09 / TAY / LDA $A014,Y / TAX` — **mode 09 ⇒
   `$A014[0]` ⇒ role 0**, then `$1D0C,X + $9708,X` / `$1D23,X + $9713,X`. ✅ The refutation of
   "target-anchored" is sound.
 

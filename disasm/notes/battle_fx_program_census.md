@@ -1,6 +1,6 @@
 # Battle EFFECT PROGRAMS -- census (bank D1, runner CD/1609)
 
-Read-only RE, 2026-09-29. Every claim cites a ROM address (disassembly: `tools/dis.py`, the scratchpad's
+Read-only RE, 2026-09-29. Every claim cites a ROM address (disassembly: `tools/romdis.py`, the scratchpad's
 `fxdis.py` recursive walker) or an oracle observation (`ct_fxprog.exe` = copy of build/ct.exe, under
 `CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`). Files beside this one:
 

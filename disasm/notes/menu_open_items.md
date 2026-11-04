@@ -4,7 +4,7 @@ Scope: the six X-menu sub-screens. Triage of every self-declared APPROXIMATION /
 `src/menu.c` + `src/menu.h` + the "Open questions" of `disasm/notes/menu_phase2.md`, and derivation
 of everything that is closable NOW.
 
-Every claim below cites either a ROM address disassembled with `python tools/dis.py <flat> <len> [m] [x]`
+Every claim below cites either a ROM address disassembled with `python tools/romdis.py <flat> <len> [m] [x]`
 (flat file offset; bank C2 = 0x02xxxx, bank CC = 0x0Cxxxx, bank FF = 0x3Fxxxx) **or** an observed
 oracle value (`build/ct.exe` mode + the exact command).
 
@@ -58,9 +58,9 @@ variable-length from ~$CC/1486; the id→offset indexing is not fully derived."
 
 **It is a single uniform fixed-stride table, and the ROM builds an explicit pointer table for it.**
 
-### 2.1 The builder — C2/98ED (`dis.py 0x0298ED 0x19 0 1`)
+### 2.1 The builder — C2/98ED (`romdis.py 0x0298ED 0x19 0 1`)
 
-Raw bytes `[25 ROM bytes at 0x298ED: python tools/dis.py 0x298ED 25]`:
+Raw bytes `[25 ROM bytes at 0x298ED: python tools/romdis.py 0x298ED 25]`:
 
 ```
 C2/98ED  A9 5E 0B    LDA #$0B5E        ; first record offset inside bank $CC
@@ -79,7 +79,7 @@ C2/9904  90 EE       BCC ->C2/98F4
 So `$7E7D00[id] = 0x0B5E + id*11`, for **all** ids `0x00..0xF1`. There is no second region, no
 variable-length packing, no branch on item class.
 
-### 2.2 The fetch — C2/F2E2 (`dis.py 0x02F2E2 0x11 0 1`)
+### 2.2 The fetch — C2/F2E2 (`romdis.py 0x02F2E2 0x11 0 1`)
 
 Raw bytes `08 C2 30 29 FF 00 0A A8 B9 00 7D A8 A9 0B CC 28 60`:
 
@@ -138,7 +138,7 @@ is closed; the note should be corrected so nobody re-opens it.
 
 ## 3. ✅ CLOSED (mechanism) / ❌ NOT DERIVED (entered geometry) — SCREEN 5, FORM
 
-### 3.1 ★ THE ENTRY GATE — C2/C627 (`dis.py 0x02C627 0x30 1 1`)
+### 3.1 ★ THE ENTRY GATE — C2/C627 (`romdis.py 0x02C627 0x30 1 1`)
 
 `$0067=5`, `$0068=0` → dispatch C2/8292[5*2] = C2/C621, array word[0] = **C2/C627**:
 
@@ -165,7 +165,7 @@ build/ct.exe --monitor 0067:1 --from saves/menu_open_gato2.state \
   f26  000067=00*(C2:C638)     <- ★ the screen-5 init writes it back (STZ $67 @ C2/C636)
 ```
 
-### 3.2 ★ WHAT $0F0B / $0F0C ARE — the roster builder C2/CD2B (`dis.py 0x02CD2B 0x70 1 1`)
+### 3.2 ★ WHAT $0F0B / $0F0C ARE — the roster builder C2/CD2B (`romdis.py 0x02CD2B 0x70 1 1`)
 
 ```
 C2/CD2B  PHP / REP #$30
@@ -274,7 +274,7 @@ whole party (`$7F01DF & (0x80>>id) == 0` for two members), or after a 4th charac
 
 ## 4. ✅ CLOSED — SCREEN 6, SAVE
 
-### 4.1 ★ THE ENTRY GATE — C2/CEDC (`dis.py 0x02CEDC 0x20 1 1`) + C2/9875
+### 4.1 ★ THE ENTRY GATE — C2/CEDC (`romdis.py 0x02CEDC 0x20 1 1`) + C2/9875
 
 Screen-6 handler array C2/CED4 = words `CEDC, CEFD, CF61, CF92`. Substate 0 = **C2/CEDC**:
 
@@ -288,7 +288,7 @@ C2/CEF2  JMP C2/EACC
 C2/CEF5  JSR C2/EAC2 / INC $68 / JMP C2/D0E5   ; -> the 3-slot loader
 ```
 
-`$0D34` is computed at menu-open by **C2/9875** (`dis.py 0x029875 0x40 1 1`):
+`$0D34` is computed at menu-open by **C2/9875** (`romdis.py 0x029875 0x40 1 1`):
 
 ```
 C2/9895  STZ $0D32
@@ -394,7 +394,7 @@ tiles 0x300-0x313), marble rows 14-15, and **two bottom windows** rows 16-25 (co
 
 ### 4.3 The slot scan + the A-flow (validates `menu.h`)
 
-`C2/D156` (`dis.py 0x02D156 0x50 1 1`):
+`C2/D156` (`romdis.py 0x02D156 0x50 1 1`):
 ```
 C2/D168  LDX $79 / STZ $0D49,X
 C2/D16D  JSL FF/F9C4                ; the validity check
@@ -403,7 +403,7 @@ C2/D175  LDA #$1A / STA $020C / JSR C2/D296     ; EMPTY: string id 0x1A ("No dat
 C2/D17F  INC $0D49,X / JSR C2/D19F              ; USED: $0D49[slot]=1 + read the summary
 C2/D185  JSR C2/D2C4 / INC $79 / CMP #$03 / BCC ->C2/D168
 ```
-`FF/F9C4` (`dis.py 0x3FF9C4 0x30 0 0`) — exactly as `menu.h` claims:
+`FF/F9C4` (`romdis.py 0x3FF9C4 0x30 0 0`) — exactly as `menu.h` claims:
 ```
 PEA $3030 / PLB / PLB        ; DB = $30 (the SRAM save-file image)
 JSR FF/FBD3
@@ -416,7 +416,7 @@ A-on-a-slot, `C2/CF0A`: `LDX $79 / LDA $0D49,X / BEQ ->C2/CF1E` — an **empty**
 the write path; a **used** slot goes `STA $0F00 / INC $68 / JMP C2/D4BB` = the "Erase old save?" confirm
 staged on BG1 (§4.2). (Both are inside the DEFERRED save-WRITE boundary.)
 
-### 4.4 ★ TWO ERRORS in `menu.h` / `CtMenuSaveSlot`, from C2/D19F (`dis.py 0x02D19F 0xB0 1 1`)
+### 4.4 ★ TWO ERRORS in `menu.h` / `CtMenuSaveSlot`, from C2/D19F (`romdis.py 0x02D19F 0xB0 1 1`)
 
 ```
 C2/D1BF  LDX $22                       ; $22 = slotBase + memberIdx

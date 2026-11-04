@@ -32,7 +32,7 @@ queue:
 
 Method: oracle = scratch `ct_probe.exe` `--monitor --btnscript --diff --writer` on `saves/battle_re/
 forest_battle_3hetake.state` (an in-battle state: `$AF02 = 5E 5E 5E FF …` = 3 Hetakes alive slots 0/1/2,
-staging DONE, Crono current). ROM = `tools/dis.py` (fileoffset `(bank-0xC0)<<16|addr`; battle bank C1 is
+staging DONE, Crono current). ROM = `tools/romdis.py` (fileoffset `(bank-0xC0)<<16|addr`; battle bank C1 is
 16-bit M=0 X=0). Low-HP repro via a WRAM `.state` patch at file/payload offset `0x45` (the LakeSnes payload
 preamble is 69 bytes; legacy bare states have WRAM at 0x45, CTLS at 0x55, CRC re-fixed). Writer PC = the
 instruction AFTER the store retires. Enemy blocks: `ENEMY_BLOCK(slot)=$5FAD+slot*0x80`; forest Hetake curHP
@@ -47,15 +47,15 @@ block+0x1D bit7 (`$5E4A` Crono).
 
 The target-select "hand" does NOT point via `$9614` directly. The chain is a per-menu-update rebuild:
 
-**Entry** — command-menu A-on-Att opens target-select (`dis.py 11200 0xE0 0 0`):
+**Entry** — command-menu A-on-Att opens target-select (`romdis.py 11200 0xE0 0 0`):
 ```
 112B0  JSR C1/1F79        ; build the target cursor (below)
 112B6  INC $9609          ; target-select OPEN   (writer C1:12B9)
 ```
-`C1/1F79` (`dis.py 11F79 0x70`): `$960F := $95D5` (the choosing actor), zero `$9613/$960C/$960A/$A64F/$A6D8`,
+`C1/1F79` (`romdis.py 11F79 0x70`): `$960F := $95D5` (the choosing actor), zero `$9613/$960C/$960A/$A64F/$A6D8`,
 scan 11 slots to build the eligibility, then pick the first eligible into `$9613`.
 
-**Per-menu-update REBUILD** — the compacted living-enemy list + the resolved target (`dis.py 12070 0x40`):
+**Per-menu-update REBUILD** — the compacted living-enemy list + the resolved target (`romdis.py 12070 0x40`):
 ```
 12047..1207A  (loop)      ; build the COMPACTED living-enemy list into $99C1,Y (living combatant idx per entry)
 1207B  JSR C1/27C5        ; finalize: copy $99C1,X -> $99C0,X for 11 entries (127CC: LDA $99C1,X / STA $99C0,X;
@@ -68,7 +68,7 @@ scan 11 slots to build the eligibility, then pick the first eligible into `$9613
 So **`$99C0[i]` = the i-th LIVING enemy's combatant index, FF-padded** (dead enemies are compacted OUT, not
 left as holes), and **`$9614` is a POSITION in that compacted list**, and `$A62D` = the enemy under the hand.
 
-**Nav** — L/R / U/D while target-select is held (`dis.py 1176C 0x50`):
+**Nav** — L/R / U/D while target-select is held (`romdis.py 1176C 0x50`):
 ```
 1176C  INC $9614 / LDA $9614 / (wrap 0x0B) / STA $9614 / TAX
 1177B  LDA $99C0,X / BMI 1176C     ; skip trailing-FF (past the living count)
@@ -76,12 +76,12 @@ left as holes), and **`$9614` is a POSITION in that compacted list**, and `$A62D
 11786  DEC $9614 …                 ; the -1 (Up/Left) mirror, same $99C0,X BMI skip
 ```
 
-**Confirm** zeroes the cursor slot (`dis.py 11620 0x140`): `116D4 STZ $9614` (writer C1:16D7) — the cursor
+**Confirm** zeroes the cursor slot (`romdis.py 11620 0x140`): `116D4 STZ $9614` (writer C1:16D7) — the cursor
 position resets at each confirm.
 
 ### A.2 The DEATH path touches NOTHING in the cursor state
 
-`dis.py 1ECC0 0xC0` (the HP-apply → death):
+`romdis.py 1ECC0 0xC0` (the HP-apply → death):
 ```
 1ECC4  STA $5E30,X                 ; write curHP
 1ECC7  LDA $5E30,X / BMI / CMP #0 / BEQ 1ECDB    ; curHP <= 0 -> death
@@ -165,7 +165,7 @@ run — the committed target is re-resolved from the live compacted list at anim
 
 ### B.1 The confirm PUSHES the action onto a pending-action stack + writes a `$93EE` record
 
-`dis.py 11620 0x140` (the confirm handler; corroborates battle_confirm_queue.md B.1 + battle_atb_reload.md B.3):
+`romdis.py 11620 0x140` (the confirm handler; corroborates battle_confirm_queue.md B.1 + battle_atb_reload.md B.3):
 ```
 11626  DEC $9609                        ; close target-select
 11640  LDA $95D5 / TAX                  ; X = the confirming seat
@@ -186,7 +186,7 @@ advance. `$99D4/$99D5/$99D6` is the pending-action ACTOR stack (party-depth), `$
 
 ### B.2 The executor POPS the stack; DEATH zeroes the record first
 
-**Executor front-end** `C1/8580` (`dis.py 18590 0x40`): the turn/action processor pops the pending stack:
+**Executor front-end** `C1/8580` (`romdis.py 18590 0x40`): the turn/action processor pops the pending stack:
 ```
 18592  LDA $99D4 / BMI 1860A           ; empty (FF)? skip
 18597  LDA $99D4 / STA $B18B           ; $B18B = the acting combatant (the reload C1/BCE1 later reads this)
@@ -196,7 +196,7 @@ advance. `$99D4/$99D5/$99D6` is the pending-action ACTOR stack (party-depth), `$
 185B1  LDA $B18B / CMP … / BEQ 185F3 / BRA 1860A     ; (validity gate — see OPEN)
 185C2  LDA $93EE / EOR $B188 / BPL …   ; process the action's effect flags from the $93EE record
 ```
-**Death-side turn cleanup** `FD/A8FE` (`dis.py 3DA8FE 0x40`): when a combatant dies, its `$93EE` record is
+**Death-side turn cleanup** `FD/A8FE` (`romdis.py 3DA8FE 0x40`): when a combatant dies, its `$93EE` record is
 purged:
 ```
 3DA8FE  LDA $14 / TAX / LDA $B188,X / BEQ         ; X = the dying actor ($14)
@@ -204,7 +204,7 @@ purged:
 3DA914  STZ $93EE,X / STZ $93EF,X                 ; *** ZERO the dead actor's action record ***  (writer FD:A91A)
 3DA920  LDA $14 / TAX / LDA $B158,X / STA $AFAB,X ; reload the dead actor's timer (harmless; he's dead)
 ```
-**PC-death flag** `C1/B2B1` (`dis.py 1B2A0 0x40`): the enemy hit that kills a PC sets the dead flag + delist:
+**PC-death flag** `C1/B2B1` (`romdis.py 1B2A0 0x40`): the enemy hit that kills a PC sets the dead flag + delist:
 ```
 1B2B4  LDA #80 / STA $5E4A,X            ; DEAD FLAG block+0x1D bit7 (PC path)   (writer C1:B2B9)
 1B2BE  LDA #FF / STA $AEFF,Y            ; mark the PC dead in the target-eligibility table
@@ -345,13 +345,13 @@ ct_probe --monitor "A013:1,95D5:1,AF02:4,5E30:2,5E4A:1,5FB0:2,99D4:4,99D8:1,93EE
 #   f232 pending pop empties $99D4 (C1:85AE); Het0 $5FB0 stays 14 = attack CANCELLED
 
 # --- ROM sites ---
-python tools/dis.py 12070 0x40 0 0    # $A62D = $99C0[$9614] (C1:2088); JSR C1/27C5 = $99C0 rebuild (C1:27D2)
-python tools/dis.py 1176C 0x50 0 0    # target nav: $99C0,X BMI skip-dead -> $A62D
-python tools/dis.py 11620 0x140 0 0   # confirm: STZ $9614 (16D7); push $99D4 (16E5)/$99D8 (1716); $93EE record
-python tools/dis.py 18590 0x40 0 0    # executor C1/8580: pop $99D4->$B18B, DEC $99D8 (85AE/85B1)
-python tools/dis.py 3DA8FE 0x40 0 0   # death cleanup FD/A8FE: STZ $93EE,X (FD:A914) + timer reload
-python tools/dis.py 1B2A0 0x40 0 0    # PC-death flag: STA $5E4A,X #80 (C1:B2B9) + $AEFF,Y=FF
-python tools/dis.py 1ECC0 0xC0 0 0    # death path: dead flag (ED04) / zero curHP (ED0F-ED12); no cursor writes
+python tools/romdis.py 12070 0x40 0 0    # $A62D = $99C0[$9614] (C1:2088); JSR C1/27C5 = $99C0 rebuild (C1:27D2)
+python tools/romdis.py 1176C 0x50 0 0    # target nav: $99C0,X BMI skip-dead -> $A62D
+python tools/romdis.py 11620 0x140 0 0   # confirm: STZ $9614 (16D7); push $99D4 (16E5)/$99D8 (1716); $93EE record
+python tools/romdis.py 18590 0x40 0 0    # executor C1/8580: pop $99D4->$B18B, DEC $99D8 (85AE/85B1)
+python tools/romdis.py 3DA8FE 0x40 0 0   # death cleanup FD/A8FE: STZ $93EE,X (FD:A914) + timer reload
+python tools/romdis.py 1B2A0 0x40 0 0    # PC-death flag: STA $5E4A,X #80 (C1:B2B9) + $AEFF,Y=FF
+python tools/romdis.py 1ECC0 0xC0 0 0    # death path: dead flag (ED04) / zero curHP (ED0F-ED12); no cursor writes
 ```
 
 ## Addendum 2026-10-16 — the empty pop is a PASS of its own, and the head waits for the counter loop (census family 3)
@@ -362,7 +362,7 @@ before the cartridge in ~220 fights. Two mechanisms, both measured on the rule's
 
 ### 1. A zeroed record stays in the confirm FIFO
 
-`C1/8570`'s executor (dis.py 18570 0x9A 1 0) ALWAYS pops the FIFO head first -- `LDA $99D4 / BMI` (empty), then
+`C1/8570`'s executor (romdis.py 18570 0x9A 1 0) ALWAYS pops the FIFO head first -- `LDA $99D4 / BMI` (empty), then
 `STA $B18B`, the shift `$99D4 := $99D5 := $99D6 := FF`, `DEC $99D8` (C1/8597-85AE) -- and only then tests the seat's
 record: `LDA $93EE,X / EOR $B188,X / BPL -> C1/860D` (C1/85C2-85C8, 85DA-85E0, 85F3-85F9). A record zeroed by FD/A8FE
 (the sweep C1/883D for a dead / berserk / stop / sleep / chaos PC: `$93EE = 00` FD:A917, `$B188 = 00` FD:A934) or by

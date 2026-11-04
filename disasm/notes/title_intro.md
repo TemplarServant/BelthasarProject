@@ -15,7 +15,7 @@ ct.exe ROM --ppuregs build/_title150.state --btnscript "0:N"          (m7 + math
 ct.exe ROM --monitor "7E005A:8,..." --from build/_title150.state --btnscript "0:N" --diff --writer
 ```
 
-The overlay runs FROM WRAM, so `tools/dis.py` (a ROM disassembler) cannot read it. **`tools/wdis.py
+The overlay runs FROM WRAM, so `tools/romdis.py` (a ROM disassembler) cannot read it. **`tools/wdis.py
 <wram.bin> <hexaddr> <len> [m] [x]`** is the same decoder pointed at a `.wram` sidecar; **`tools/
 c3script.py <wram.bin> <hexaddr> [len]`** decodes the sequence byte-code (§5.1);
 **`tools/ti_sim.py [frames]`** is the derivation harness — it seeds the whole machine from the

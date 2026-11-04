@@ -1,6 +1,6 @@
 # PC TECH EFFECTS 01-74 -- the per-tech effect table, the executor, and the port's gap list
 
-Derived from the ROM disassembly (`tools/dis.py <fo> <len> 1 0`, fo = `(bank-0xC0)<<16|addr`; the executor runs
+Derived from the ROM disassembly (`tools/romdis.py <fo> <len> 1 0`, fo = `(bank-0xC0)<<16|addr`; the executor runs
 m=8-bit x=16-bit) and the logical oracle (`ct_techfx.exe` = a copy of `build/ct.exe`, `CT_ORACLE_LOGICAL=1
 CT_ORACLE_VIRTUAL_BEAM=1`, `--monitor ... --diff --writer`; writer PC = the instruction after the store).
 Builds on battle_tech_slice.md, battle_multitarget.md, battle_status_pipeline.md, battle_pc_damage_formulas.md,

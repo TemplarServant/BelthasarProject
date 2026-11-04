@@ -25,7 +25,7 @@ Cartridge vs port (HEAD), slots 0-4 = obj 18 19 20 21 17: (33,183) (205,187) (80
 `ct.exe --vmdiff` from attract f4320 (saves/attract_07d_field_f4320.state) diverged first at f57: obj17 posX/posY
 ours 0700/18FF, oracle 0780/19FF, on its `8C 08 09` (vars `$7F0210 = 07 00`, `$7F0212 = 19 00`).
 
-`python tools/dis.py 04BC3 0x60 1 0`:
+`python tools/romdis.py 04BC3 0x60 1 0`:
 
 ```
 4BC3  INY / TYX / LDA $7F2001,X / REP #20 / AND #00FF / ASL / TAX / SEP #20

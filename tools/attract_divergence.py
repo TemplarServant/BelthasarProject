@@ -56,8 +56,6 @@ import sys
 import time
 import zlib
 
-# tools/dis.py would shadow the standard library's `dis`, which numpy's import chain needs (as tools/attract_survey.py).
-sys.path = [p for p in sys.path if os.path.abspath(p or '.') != os.path.dirname(os.path.abspath(__file__))]
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

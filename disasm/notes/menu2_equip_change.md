@@ -4,7 +4,7 @@ Scope = the gap "the EQUIP screen is read-only": our engine draws the 4 gear slo
 but **A on a slot is a no-op**. Below is the whole ROM flow: the 4-substate handler table, the
 candidate-list builder, the commit, the derived-stat recompute, nav/refusals and the SFX sites.
 
-Everything carries a ROM address I disassembled this pass (`python tools/dis.py <hexoff> <len> [m] [x]`)
+Everything carries a ROM address I disassembled this pass (`python tools/romdis.py <hexoff> <len> [m] [x]`)
 or an oracle command pasted verbatim in §4. Unproven items are in §6.
 
 ---
@@ -62,7 +62,7 @@ $C2:9C20  96 A9 05 00 54 7E FF 28 60 | 31 9C  39 9C  70 9C  A5 9C | 20 C2 EA ...
 > `A = [C2/8292+X],Y`, `JMP ($0000)`. `$68` is TASK-LOCAL: the real value lives in slot 1's `+6`
 > word = **`$7E:00BE`**.
 
-### 2.1 `C2/9C31` — substate 0, the BUILD (`python tools/dis.py 29C31 0x120 1 0`)
+### 2.1 `C2/9C31` — substate 0, the BUILD (`python tools/romdis.py 29C31 0x120 1 0`)
 
 ```
 29C31: JSR C2/EAC2        ; blip $00
@@ -155,7 +155,7 @@ $C2:9C20  96 A9 05 00 54 7E FF 28 60 | 31 9C  39 9C  70 9C  A5 9C | 20 C2 EA ...
 
 ### 2.5 `C2/8953` — **THE CANDIDATE-LIST BUILDER** (gap (b))
 
-`python tools/dis.py 28953 0x80 1 0`; the two tables re-read as raw bytes.
+`python tools/romdis.py 28953 0x80 1 0`; the two tables re-read as raw bytes.
 
 ```
 28953: PHP / SEP #30
@@ -1160,7 +1160,7 @@ scratchpad/menu/ct_probe.exe Chrono_Trigger_USA_SNES.sfc \
 
 ### A1 [MAJOR] The candidate list is sorted **DESCENDING**, not ascending (§2.5, §5.2)
 
-`python tools/dis.py 28953 0x8A 1 0` — the inner loop:
+`python tools/romdis.py 28953 0x8A 1 0` — the inner loop:
 ```
   289AA: INX
   289AB: LDY  $0F00,X
@@ -1229,7 +1229,7 @@ accessory list. The fix is the ROM's own shape: key = `id < 0x94 ? power[id] : 0
 
 ### A4 [MAJOR] §2.7 step 3 is wrong twice — wrong range AND wrong index — and it corrupts `$7B00`, which IS on the equip path
 
-`python tools/dis.py 29875 0x120 1 0`:
+`python tools/romdis.py 29875 0x120 1 0`:
 ```
   29924: LDA  #0094          ; ** the loop STARTS at id 0x94 **
   29927: STA  $00
@@ -1268,7 +1268,7 @@ from §2.7's recipe hands the wrong `$CC:29D7` bonus-set index to 64 non-accesso
 
 ### A6 [MAJOR, method] Reading `$7E:1E01` to identify a played sound is **unsound**, and it mis-reads the commit frame
 
-`python tools/dis.py 2EAF9 0x30 1 1` — the shipper `C2/EB03`:
+`python tools/romdis.py 2EAF9 0x30 1 1` — the shipper `C2/EB03`:
 ```
   2EB03: LDX  #18
   2EB05: STX  $1E00        ; cmd, UNCONDITIONAL
@@ -1452,7 +1452,7 @@ menu open, `$0067 = 01`, `$00BE = 03`, `$0077 = 03` (Accessory), `$0FC6 = 01`, `
 
 ## F.1 The list rows live in ONE place; the WINDOW is what moves
 
-`C2/A569` (`python tools/dis.py 2A569 0x90 1 0`):
+`C2/A569` (`python tools/romdis.py 2A569 0x90 1 0`):
 
 ```
 2A569: LDY #0008 / STY $22          ; eight rows

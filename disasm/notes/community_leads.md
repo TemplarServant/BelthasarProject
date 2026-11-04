@@ -3,14 +3,14 @@
 **Purpose.** Every entry below is a **HINT harvested from community reverse-engineering docs**, to be
 verified against the ROM/oracle before ANY use (project mandate — CLAUDE.md, `no-invention-rule`). Facts are
 paraphrased (no source text copied); each is tagged `[SRC: url]` and `[STATUS: UNVERIFIED HINT]` with a
-per-lead "how to verify" (`dis.py` / oracle probe). Conflicts between sources are flagged inline.
+per-lead "how to verify" (`romdis.py` / oracle probe). Conflicts between sources are flagged inline.
 Cross-references to our own byte-exact dossiers use `[OURS: file §]`.
 
 **ROM addressing convention.** Community offsets are almost always **unheadered file offsets** (HiROM). To get
 our SNES bank/addr: `bank = 0xC0 + (fileoff >> 16)`, `addr = 0x8000 | (fileoff & 0x7FFF)` for the low-page
 banks, OR for the CC/CD/CE data banks the file offset maps directly: fileoff `0x0Cxxxx → CC/xxxx`,
-`0x0Dxxxx → CD/xxxx`, `0x0Exxxx → CE/xxxx` (e.g. `0x0C8B08 → CC/8B08`; our `dis.py` flat = `(bank−0xC0)<<16 |
-addr`, so `CC/8B08 → dis.py 0xC8B08`... note file `0x0C8B08` already IS that flat value −0 — verify the ±0x200
+`0x0Dxxxx → CD/xxxx`, `0x0Exxxx → CE/xxxx` (e.g. `0x0C8B08 → CC/8B08`; our `romdis.py` flat = `(bank−0xC0)<<16 |
+addr`, so `CC/8B08 → romdis.py 0xC8B08`... note file `0x0C8B08` already IS that flat value −0 — verify the ±0x200
 header on any headered-source doc). **Always confirm the header offset before trusting an address.**
 
 **Sources consulted** (● = fetched full; ◐ = via search summary only, page blocked WebFetch; ○ = referenced,
@@ -98,7 +98,7 @@ large separate subsystem"; we only reached the memclear at `CC/F06B`). Community
 **L2.1 — AI pointer table + data location.** `[STATUS: VERIFIED — battle_interp_verify.md T1: CC/8B08[id×2] (C1/AFD6), GATO 0x92→CC/A77B; CC/8D08 = data base AND the confusion-override script (C1/B4DA).]` `[SRC: DC Enemy AI Doc]`
 - **Pointer table `0x0C8B08–0x0C8D07` (CC/8B08)** → per-enemy script; **AI script data `0x0C8D08–0x0CCBC8`
   (CC/8D08)**.
-- **Verify:** for GATO (id `0x92`) read `word[CC/8B08 + 0x92*2]` → a pointer into `CC/8D08..`; `dis.py` /
+- **Verify:** for GATO (id `0x92`) read `word[CC/8B08 + 0x92*2]` → a pointer into `CC/8D08..`; `romdis.py` /
   hex-dump there and expect it to START with the condition/action structure (L2.2). Cross-check by monitoring
   the AI dispatch during our GATO idle→attack (`gato_press_action`, HOLD driver) — the fetch of GATO's script
   pointer should read `CC/8B08+0x124`. This is the single highest-value AI lead.

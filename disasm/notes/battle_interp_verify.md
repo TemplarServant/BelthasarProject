@@ -1,9 +1,9 @@
 # BATTLE INTERPRETER VERIFICATION — enemy-AI + anim-script + tech-records + elemental-defenses
 
 Verifies four community-documentation leads (`disasm/notes/community_leads.md` AREAS 1-3, 8) against the ROM
-(`tools/dis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) and the LakeSnes oracle (`ct_probe.exe --monitor`,
+(`tools/romdis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) and the LakeSnes oracle (`ct_probe.exe --monitor`,
 base `gato_press_action.state`; HOLD driver `100:8,0:N` = Crono idles + enemy acts; MASH driver
-`100:16,0:16`×N). Every claim is HINT→VERIFIED/CORRECTED/REFUTED with a dis.py address or a monitor line.
+`100:16,0:16`×N). Every claim is HINT→VERIFIED/CORRECTED/REFUTED with a romdis.py address or a monitor line.
 **Zero invention.** Method note: `ct_probe --monitor` prints 2-byte regions **byte-swapped** (region `$B1D0`
 shown `7BA7` = pointer `0xA77B`); all pointer values below are the corrected little-endian value.
 

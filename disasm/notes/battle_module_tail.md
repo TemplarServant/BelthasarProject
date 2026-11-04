@@ -3,7 +3,7 @@
 Status: PORTED (battle.c `CtBattleVictoryRewards`, `battleModuleTail`). Before this, the port ran all of it in
 field.c `fieldBattleFinish`, i.e. at the field's ack ($0117 bit 0 clear, C0/18B9), after the whole exit tail CD/03B4.
 
-## 1. The ROM (dis.py, X 16-bit: `python tools/dis.py 0183BB 0x8a 1 0`)
+## 1. The ROM (romdis.py, X 16-bit: `python tools/romdis.py 0183BB 0x8a 1 0`)
 
 Every fight that hands back to the field leaves through one of these chains. There is NO wait anywhere in them, so under
 the rule (the infinitely fast CPU) each lands on ONE frame -- the frame its caller reaches it.

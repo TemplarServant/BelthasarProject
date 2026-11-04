@@ -94,7 +94,7 @@ whole story.
 
 ## 3. ROM: op 0x96 has NO stored heading
 
-`python tools/dis.py 4F61 90` — handler C0/4F61 (op-0x96 MOVETO):
+`python tools/romdis.py 4F61 90` — handler C0/4F61 (op-0x96 MOVETO):
 
 ```
 4F61: LDX $6D
@@ -360,16 +360,16 @@ Everything below was re-run by me, from my own snapshots
 
 ## R1. Every ROM citation re-checked -- all HOLD
 
-| dossier claim | `tools/dis.py` | verdict |
+| dossier claim | `tools/romdis.py` | verdict |
 |---|---|---|
-| `4F63 LDA $1A01,X / 4F66 BEQ` ticket gate | `dis.py 4F61 90` | OK |
+| `4F63 LDA $1A01,X / 4F66 BEQ` ticket gate | `romdis.py 4F61 90` | OK |
 | `4F7C/$1801 4F81/$1881 -> $F0/$F1` (tile = position HIGH byte) | same | OK |
 | `4F86 CMP $F3 / BNE ->4FAB`, `4F8C CMP $F2 / BNE ->4FAB` | same | OK |
 | `4FAB JSR C0/ABA2` UNCONDITIONAL on the not-arrived path | same | OK |
-| `4FB5 LDA $F700,X / 4FBA STA $1600,X` facing from the fresh heading | `dis.py 4FBA 40` | OK |
+| `4FB5 LDA $F700,X / 4FBA STA $1600,X` facing from the fresh heading | `romdis.py 4FBA 40` | OK |
 | `4FC2` +0x30 object-solid sidestep, `4FD4 $1000,X -> $1A01,X + $7F0B00,X`, `4FE0 JSR C0/ACFD` | same | OK |
-| `C0/ABA2` reads ONLY `$F0..$F3`, writes `$EE` (+ `$EF/$F4/$F6/$F7` scratch), no per-object store | `dis.py ABA2 60`, `ABDC 30`, `ABF8 70` | OK |
-| op-0x12 `loc[N]` = `$7F0200 + 2N` (`ASL A`) | `dis.py 62DE 30` -> `62E9 ASL A / 62ED LDA $7F0200,X` | OK |
+| `C0/ABA2` reads ONLY `$F0..$F3`, writes `$EE` (+ `$EF/$F4/$F6/$F7` scratch), no per-object store | `romdis.py ABA2 60`, `ABDC 30`, `ABF8 70` | OK |
+| op-0x12 `loc[N]` = `$7F0200 + 2N` (`ASL A`) | `romdis.py 62DE 30` -> `62E9 ASL A / 62ED LDA $7F0200,X` | OK |
 | scene-19 script bodies (obj1 poll loop, obj24 `0x0357..0x0389`, obj25 `0x038A..0x03BF`) | raw dump of the seeded script image (`$7F2001 + IP`, base `0x0540`) | OK, byte-for-byte |
 
 Two nits, neither load-bearing: obj1's loop has a `7D 52` at `0x0068` that the dossier's listing
@@ -424,13 +424,13 @@ ops 0x05/0x06/0x07 -> `C0/61E9/61FE/6214`, which translate the party index via `
 **`BRL` back into the 0x02/0x03/0x04 bodies**. Every one of them ends its INSTALL arm the same way:
 
 ```
-;  op 0x02 REQ   (python tools/dis.py 5FB6 80  +  dis.py 6003 60)
+;  op 0x02 REQ   (python tools/romdis.py 5FB6 80  +  romdis.py 6003 60)
    6027: STA $1180,X      ; the new function pointer
    602E: STA $1C00,X      ; the new priority
    6031: STZ $1A80,X      ; <== DROP THE TARGET'S IN-FLIGHT MOVE
    6034: STZ $1A01,X      ; <== DROP ITS STEP TICKET
-;  op 0x03        (dis.py 60F0 0x1C)          60F0/60F7 + 60FA STZ $1A80,X / 60FD STZ $1A01,X
-;  op 0x04 CALL   (dis.py 6109 60 + 6144 90)  618C/6193 + 6196 STZ $1A80,X / 6199 STZ $1A01,X
+;  op 0x03        (romdis.py 60F0 0x1C)          60F0/60F7 + 60FA STZ $1A80,X / 60FD STZ $1A01,X
+;  op 0x04 CALL   (romdis.py 6109 60 + 6144 90)  618C/6193 + 6196 STZ $1A80,X / 6199 STZ $1A01,X
 ;                                             61A0: STA $7F0980,X  = ARM THE CALLER'S WAIT LATCH
 ```
 Both are reached ONLY on the preempt arm (`5FE7 BEQ` = same prio, `5FE9 BCS` = less urgent ->

@@ -43,7 +43,7 @@ are untouched by this pass.
 
 ## 1. ROM ROUTINES + RAM MAP
 
-### 1.1 The end-check and its two branches (`dis.py 18120 0x60 1 0`, x=0 for the 16-bit `CPX`)
+### 1.1 The end-check and its two branches (`romdis.py 18120 0x60 1 0`, x=0 for the 16-bit `CPX`)
 
 ```
 18127  LDA #03 / 18129 JSR C1/0003        ; dispatch A=3 -> C1/106E (flee housekeeping + ONE frame wait)
@@ -70,7 +70,7 @@ are untouched by this pass.
 ```
 
 Raw bytes verified: `C1/8130 = 20 23 B2 A5 24 F0 30 20 9D EA 20 BB B3 A9 01 8F EC 01 7F …`,
-`C1/8167 = [33 ROM bytes at 0x18167: python tools/dis.py 0x18167 33]
+`C1/8167 = [33 ROM bytes at 0x18167: python tools/romdis.py 0x18167 33]
 20 03 00 4C BB 83`.
 
 `C1/0003` → `JMP C1/0045` → `PHA/PHX/PHY / ASL A / TAX / JSR ($0051,X)`. Table `C1/0051` decoded
@@ -81,7 +81,7 @@ A=3 → `C1/106E`.
 ROM, at `C1/8186`**, and there is **no** `JSR/JMP/JSL C1/356D` anywhere. So the full teardown is
 **VICTORY-ONLY** — see §5.
 
-### 1.2 `C1/356D` — the victory UI teardown (raw `[38 ROM bytes at 0x1356D: python tools/dis.py 0x1356D 38] …`)
+### 1.2 `C1/356D` — the victory UI teardown (raw `[38 ROM bytes at 0x1356D: python tools/romdis.py 0x1356D 38] …`)
 
 ```
 1356D  JSL CD/0009
@@ -145,7 +145,7 @@ ROM, at `C1/8186`**, and there is **no** `JSR/JMP/JSL C1/356D` anywhere. So the 
 * **Target HAND OBJ** — 16×16 tile 0x000 pal1 prio3 built by `C1/1F79` on target-select entry
   (`battle_actionfx.md` P5.2); it is emitted only while target-select is live (OAM proof §3.2).
 
-### 1.5 The "no eligible target" flag `$9613` (`C1/1F79`, `dis.py 11F79 0x80 1 0`)
+### 1.5 The "no eligible target" flag `$9613` (`C1/1F79`, `romdis.py 11F79 0x80 1 0`)
 
 ```
 11F79  LDA $95D5 / TAX / STX $960F
@@ -493,7 +493,7 @@ Ordering / hygiene notes:
   `C1/8123-8135` is reached from the turn processor after the action executor's tail; which instruction
   waits out the dissolve was not isolated. Next step: `--monitor` the executor's own state (`$A013`, `$B18B`,
   `$99D4/$99D8`, `$AE5A`) with `--writer` across f816-f862, or disassemble backwards from `C1/8123` to the
-  routine entry (the region needs manual M/X re-segmentation — linear `dis.py` desyncs at `C1/8150-8166`).
+  routine entry (the region needs manual M/X re-segmentation — linear `romdis.py` desyncs at `C1/8150-8166`).
   Until then `CT_BATTLE_END_TEARDOWN 43` is an oracle-measured interval, corroborated by
   `battle_dissolve.md` S2's independent 43-frame death→gone curve — **not** an eyeballed constant, but its
   MECHANISM is unproven, so it may differ for a different enemy's dissolve length.
@@ -551,17 +551,17 @@ CT_BATTLE_TRACE=1 build/Belthasar.exe --assets ct_assets.dat --scene 19 \
 #   f1628 victory cur=1 9609=1  ... f4000 end-debug cur=1 9609=1   (ROM: 9609=0 at delist+3, 95D5=FF at +46)
 
 # --- ROM sites ---
-python tools/dis.py 18130 0x60 1 1    # end-check: defeat (dp $24) vs victory scan C1/8167; A=8 @C1/8186
-python tools/dis.py 1356D 0x40 1 0    # C1/356D victory handler: 1BAA x3 + $95D5=FF (35A1) + JSR C1/0C2D
-python tools/dis.py 11BAA 0x90 1 0    # C1/1BAA queue-remove + the $9609/$960E/$9614/$95DB/$99E0 teardown
-python tools/dis.py 11561 0x50 1 0    # C1/1561 target-select tick: $9613<0 -> STZ $9614/$960E / DEC $9609
-python tools/dis.py 11F79 0x80 1 0    # C1/1F79 rebuild: $99C0/$A62D FF-fill + $9613=FF when all FF (11FD9)
-python tools/dis.py 12040 0x60 1 0    # the compaction loop + $A62D = $99C0[$9614] (C1/2085)
-python tools/dis.py 11C3A 0x20 1 0    # C1/1C3A: D1/5800 -> $0B40 (0x180) = restore the DEFAULT HUD strip
-python tools/dis.py 10C2D 0x60 1 0    # C1/0C2D: repaint when $A6DD != $A6DF, and when $95D5 < 0 (10C71)
-python tools/dis.py 11153 0x20 1 0    # the tick's input machine, gated $95D5>=0 then $9609
-python tools/dis.py 117DD 0x20 1 0    # the tick's second member, same gates
-python tools/dis.py 1354D 0x20 1 0    # C1/354D (A=9, DEFEAT): no C1/1BAA, no $95D5 write
+python tools/romdis.py 18130 0x60 1 1    # end-check: defeat (dp $24) vs victory scan C1/8167; A=8 @C1/8186
+python tools/romdis.py 1356D 0x40 1 0    # C1/356D victory handler: 1BAA x3 + $95D5=FF (35A1) + JSR C1/0C2D
+python tools/romdis.py 11BAA 0x90 1 0    # C1/1BAA queue-remove + the $9609/$960E/$9614/$95DB/$99E0 teardown
+python tools/romdis.py 11561 0x50 1 0    # C1/1561 target-select tick: $9613<0 -> STZ $9614/$960E / DEC $9609
+python tools/romdis.py 11F79 0x80 1 0    # C1/1F79 rebuild: $99C0/$A62D FF-fill + $9613=FF when all FF (11FD9)
+python tools/romdis.py 12040 0x60 1 0    # the compaction loop + $A62D = $99C0[$9614] (C1/2085)
+python tools/romdis.py 11C3A 0x20 1 0    # C1/1C3A: D1/5800 -> $0B40 (0x180) = restore the DEFAULT HUD strip
+python tools/romdis.py 10C2D 0x60 1 0    # C1/0C2D: repaint when $A6DD != $A6DF, and when $95D5 < 0 (10C71)
+python tools/romdis.py 11153 0x20 1 0    # the tick's input machine, gated $95D5>=0 then $9609
+python tools/romdis.py 117DD 0x20 1 0    # the tick's second member, same gates
+python tools/romdis.py 1354D 0x20 1 0    # C1/354D (A=9, DEFEAT): no C1/1BAA, no $95D5 write
 ```
 
 ---
@@ -606,7 +606,7 @@ Verdict: **SOUND WITH CORRECTIONS** — the two-moment mechanism reproduces byte
 ### V-B. REFUTED
 
 **R1 — §5's "VICTORY-ONLY" is FALSE. Defeat and flee run the SAME `C1/1BAA` teardown.**
-Table entry `[2] = C1/1BAA`, and `python tools/dis.py 1B7F2 0x40 1 0`:
+Table entry `[2] = C1/1BAA`, and `python tools/romdis.py 1B7F2 0x40 1 0`:
 ```
 1B7F2 TDC / STA $A1 / LDA #02 / JSR C1/0003      ; seat 0 -> C1/1BAA
 1B7FA LDA #01 / STA $A1 / LDA #02 / JSR C1/0003  ; seat 1
@@ -700,7 +700,7 @@ dossier predicted (every MASHA fight confirms before the kill, so both changes w
 ## 9. THE VICTORY'S FOUR FRAMES (2026-10-13, roadmap B5) — SHIPPED
 
 The addendum above ran C1/356D's three `C1/1BAA` removals together, one frame after the victory, and armed the pose
-ladder in the victory's own frame. `dis.py 1356D 0x48 1 0` says otherwise: every removal is followed by `JSR C1/007E`
+ladder in the victory's own frame. `romdis.py 1356D 0x48 1 0` says otherwise: every removal is followed by `JSR C1/007E`
 (the one-frame wait), and the arm comes after the third wait:
 
 ```
@@ -712,7 +712,7 @@ ladder in the victory's own frame. `dis.py 1356D 0x48 1 0` says otherwise: every
 135A9 LDA $2989 / AND #01 / BEQ ; 135B1-135DD the windows +28, the copier C1/35DD -> C1/367D's 64-frame loop
 ```
 
-The defeat and flee teardown `C1/B7F2` (`dis.py 1B7F2 0x1B 1 0`) is three `LDA #02 / JSR C1/0003` with `$A1` = 0/1/2 and
+The defeat and flee teardown `C1/B7F2` (`romdis.py 1B7F2 0x1B 1 0`) is three `LDA #02 / JSR C1/0003` with `$A1` = 0/1/2 and
 no wait: those stay immediate.
 
 **Measured**, the rule's cartridge (CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1) on GATO's fight made into a Dark Matter

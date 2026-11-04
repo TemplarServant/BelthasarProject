@@ -11,7 +11,7 @@ against**: two complete, frame-by-frame recordings of the oracle actually perfor
 the frame window, the `$2140-$2143` traffic, every changed ARAM range, the WRAM mailbox evolution,
 and the exact DSP voice state at the first frame that produces sound.
 
-Everything below is either **(a)** a ROM address disassembled with `python tools/dis.py <flatoffset>
+Everything below is either **(a)** a ROM address disassembled with `python tools/romdis.py <flatoffset>
 <len> [m] [x]` (headerless HiROM, bank `$XX` = flat `(XX-0xC0)<<16 | addr`, so `$C7:06F9` =
 `0x706F9`), or **(b)** an **observed oracle value** marked ⟦OBS⟧ with the exact command. Gaps are in
 §K. Nothing here is inferred from a render or from prose.
@@ -160,7 +160,7 @@ observe the ports".
 ## C.2 The streaming loop, from the ROM
 
 The `--trace` PC histogram of a mid-load window (§C.3) puts the overwhelming majority of executed
-instructions in one 3-byte loop plus one handshake. `python tools/dis.py 706D0 0x60 1 0`:
+instructions in one 3-byte loop plus one handshake. `python tools/romdis.py 706D0 0x60 1 0`:
 
 ```
 C7/06F9  LDA [$12],Y      ; $1E12/13/14 = 24-bit ROM source pointer
@@ -179,7 +179,7 @@ C7/0712  DEX / DEX / DEX  ; 3 bytes consumed
 C7/0715  BNE ->706F9
 C7/0717  LDA #E0 / STA $84 / PLP / RTS
 ```
-`python tools/dis.py 709DA 0x30 1 0` confirms `C7/09DA` = `PHP / SEP #20 / STA $2140 /
+`python tools/romdis.py 709DA 0x30 1 0` confirms `C7/09DA` = `PHP / SEP #20 / STA $2140 /
 CMP $2140 / BNE / INC A / AND #7F / PLP / RTS` and `C7/09EA` = the `$E0` reset.
 A second, near-identical loop at `C7/06C1-C7/06F5` carries the same 3-byte payload but bumps
 `$14` (`INC $14`) so the 24-bit source pointer can cross a ROM bank.
@@ -523,8 +523,8 @@ build/ct.exe --teleport 5  8 8 0 --from saves/truce_market.state --frames 200 --
 build/ct.exe --teleport 12 8 8 0 --from build/tp5s.state          --frames 200 --out build/tp12s.state
 
 # --- ROM side ---
-python tools/dis.py 706D0 0x60 1 0        # C7/06C1-C7/071C : the 3-byte streaming loops
-python tools/dis.py 709DA 0x30 1 0        # C7/09DA / C7/09EA / C7/09FD : the handshakes
+python tools/romdis.py 706D0 0x60 1 0        # C7/06C1-C7/071C : the 3-byte streaming loops
+python tools/romdis.py 709DA 0x30 1 0        # C7/09DA / C7/09EA / C7/09FD : the handshakes
 ```
 
 ---
@@ -581,7 +581,7 @@ from a settled state (`--frames 200`), and check `$1E05 == $E0` before trusting 
    disassembly (§C.2) or an ARAM-diff/token cross-check (§C.4) — never an interpolated trace.
 2. **Where the padded transfer count is computed.** §E.3 proves the *law* (4/4 songs) and §C.2 shows
    the `DEX/DEX/DEX ; BNE` loop it implies, but the instruction that loads `X` with
-   `3*(size/3+1)` was not located. **Closes it:** `python tools/dis.py 0x704C0 0x80 1 0` around
+   `3*(size/3+1)` was not located. **Closes it:** `python tools/romdis.py 0x704C0 0x80 1 0` around
    `C7/04DD` (front 2's sequence-dest site) and follow the write to `$0C`.
 3. **ARAM `$F220`/`$F301`** (8 bytes each, one per DSP voice, written in the same frame as the
    sequence: `FF` and `$10`). **Closes it:** an SPC700 disassembly of the driver at ARAM `$0200+`
@@ -593,7 +593,7 @@ from a settled state (`--frames 200`), and check `$1E05 == $E0` before trusting 
 5. **Why `evol` goes 0/0 → 20/20 exactly at f139** (cold boot) and reads 15/15 in the field capture.
    Observed, not explained; it is a driver-side (SPC) decision. **Closes it:** the same SPC700
    disassembly.
-6. **The `$7E:31A8/31AD/376A/376F` intro caller.** It is RAM-resident code, so `tools/dis.py` cannot
+6. **The `$7E:31A8/31AD/376A/376F` intro caller.** It is RAM-resident code, so `tools/romdis.py` cannot
    reach it. **Closes it:** dump WRAM `$7E:3100+0x800` from `build/b80.state` and disassemble the
    image offline, or find the ROM source of the block copy.
 7. **Whether a load can ever be interrupted/resumed in real play.** Never observed — both captures

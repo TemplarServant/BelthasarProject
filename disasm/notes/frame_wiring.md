@@ -1,6 +1,6 @@
 # The field FRAME — where every leg lives, and what the port calls
 
-Derived 2026-07-31, first-hand from `tools/dis.py` plus a byte scan for every call site. This is the
+Derived 2026-07-31, first-hand from `tools/romdis.py` plus a byte scan for every call site. This is the
 map that says where `src/move.c` plugs in, and it supersedes the guesswork in earlier notes.
 
 ## The frame, verbatim
@@ -15,7 +15,7 @@ C0/00D6  JSR C0/CA76    the DRAIN            <- ONCE per frame, not per object
 C0/00DB  BRL C0/B271    the DRAW pass
 ```
 
-`00DB`'s operand is `82 93 B1`; `dis.py` prints the displacement (`-4D8F`) where a target is
+`00DB`'s operand is `82 93 B1`; `romdis.py` prints the displacement (`-4D8F`) where a target is
 expected, so read it as `$00DE + $B193 = C0/B271`.
 
 **Call-site census** (byte scan for `20 xx xx` across bank `$C0`), which is what makes "once per
@@ -2275,7 +2275,7 @@ ct.exe --monitor "7E0100:2,7E0B30:2,7E0EB0:2" --from saves/truce_market.state \
   f87   7E0EB0=942F*(C2:04AA)
 ```
 
-The two writers, disassembled (`dis.py 20471 0x1A 0 0` / `dis.py 2048A 0x45 0 0` — **both need 16-bit
+The two writers, disassembled (`romdis.py 20471 0x1A 0 0` / `romdis.py 2048A 0x45 0 0` — **both need 16-bit
 M/X or the linear decoder desyncs into garbage**):
 
 ```

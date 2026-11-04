@@ -1,6 +1,6 @@
 # Battle TARGET-SELECT on the PC side -- groups 00/80, 01/81, 03 (items + techs)
 
-Derived from the ROM disassembly (`python tools/dis.py <fo> <len> 1 0`, fo = `(bank-0xC0)<<16 | addr`; the whole
+Derived from the ROM disassembly (`python tools/romdis.py <fo> <len> 1 0`, fo = `(bank-0xC0)<<16 | addr`; the whole
 block runs M=1 / X=0) and measured in the LakeSnes oracle under the timing rule (`CT_ORACLE_LOGICAL=1
 CT_ORACLE_VIRTUAL_BEAM=1`, `ct_tgt_probe.exe` = a copy of `build/ct.exe`). Fixture: `saves/battle_re/gato_wait.state`
 (the field before the A that starts GATO), party/inventory/HP poked into the FIELD WRAM with `PEEK_POKE`.
@@ -76,7 +76,7 @@ the `$EE/$EF` button map), `battle_end_ui_teardown.md` §1.5-1.6 (the auto-cance
 
 ## 1 -- THE ENTRY `C1/1F79` (runs at every open AND every tick)
 
-`dis.py 11F79 0x64 1 0`:
+`romdis.py 11F79 0x64 1 0`:
 ```
 11F79 LDA $95D5 / TAX / STX $960F        ; $960F (word) = the chooser seat = the CASTER  ($9610 = 00, measured)
 11F80 STZ $9613 / STZ $960C / STZ $960A / STZ $A64F / STZ $A6D8
@@ -120,7 +120,7 @@ Table `C1/1FF8` (33 words, raw ROM): `00:203A 01:209A 02:20D6 03:20E0 04:209A 05
 19:203A 1A:225F 1B:22D3 1C-20:203A`.
 
 ### 2.1 `C1/203A` (00/80, also 0E/10/15-17/19/1C-20) and `C1/209A` (01/81, 04) -> the shared builder `C1/2045`
-`dis.py 1203A 0x70 1 0`:
+`romdis.py 1203A 0x70 1 0`:
 ```
 1203A LDX #0003 / STX $80 / LDX #0000 / INC $960A     ; range [0,3) PCs, SINGLE
 1209A LDX #0003 / STX $80 / LDX #0000 / LDA #80 / STA $960C / BRA 12045   ; range [0,3), ALL
@@ -141,7 +141,7 @@ Table `C1/1FF8` (33 words, raw ROM): `00:203A 01:209A 02:20D6 03:20E0 04:209A 05
 (For the enemy ranges `[3,0x0B)` the caster is never in range, so `C1/27C5` always shifts -- the known enemy order.)
 
 ### 2.2 `C1/20E0` (03) -- one DEAD PC
-`dis.py 120E0 0x56 1 0`:
+`romdis.py 120E0 0x56 1 0`:
 ```
 120E0 INC $960A / TDC / TAX
 120E5 LDA $96F5 / BEQ / LDA $A09B / BNE / LDA $5E4A / BPL / STZ $99C0 / INX      ; seat 0 dead?
@@ -180,7 +180,7 @@ f912 (`C1/B28E`). So between a revive's dispatch and its close a Tonic list woul
 
 ## 3 -- THE PER-TICK HANDLER `C1/1561` and the openers
 
-### 3.1 `C1/1561` (`dis.py 11561 0xC0 1 0`)
+### 3.1 `C1/1561` (`romdis.py 11561 0xC0 1 0`)
 ```
 11561 JSR C1/1F79                       ; rebuild
 11564 LDA $9613 / BPL ->1156E

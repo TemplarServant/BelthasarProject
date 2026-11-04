@@ -18,7 +18,7 @@ the mechanism for both. **Nothing implemented; `src/` + git untouched (this note
 individual Hetakes via `--monitor`/`--btnscript` (target-select navigation derived below), reading the live-
 position rows (X=`$1D0C+cmb`, Y=`$1D23+cmb`, `battle_enemy_move_target.md` §A.2) + the mover state + writer PCs
 (`--writer`). GATO facing from `gato_press_action.state` (`--monitor` the facing var, `--peek` the OAM/VRAM).
-`tools/dis.py` for every routine (file offset = `(bank−0xC0)<<16 | addr`). Button grammar (LakeSnes serial):
+`tools/romdis.py` for every routine (file offset = `(bank−0xC0)<<16 | addr`). Button grammar (LakeSnes serial):
 A=0x100, Up=0x10 Down=0x20 Left=0x40 Right=0x80. FB decode 512×480 2×-doubled `[pad,B,G,R]` R@+3, fb-row = OAM y+8.
 
 ---

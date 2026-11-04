@@ -1,6 +1,6 @@
 # The field ANIMATION RATE — `C0/C98A` reload + `C0/5614` auto-select, and the two clocks in our engine
 
-Derived 2026-08-22 from the ROM (`tools/dis.py`) + the LakeSnes oracle (`build/ct.exe`), against the
+Derived 2026-08-22 from the ROM (`tools/romdis.py`) + the LakeSnes oracle (`build/ct.exe`), against the
 user report *"the blue imps in scene 113 seem to have their animation too fast"*.
 
 Companions: [`anim_drain_cad9.md`](anim_drain_cad9.md) (the assembler FIFO the advance rides on),
@@ -361,13 +361,13 @@ Probe binary: `cp build/ct.exe "$TMP/ctwf/anim-adv/ct_probe.exe"`; all commands 
 
 | claim | how | result |
 |---|---|---|
-| `C0/C98A`-`CA75` listing | `python tools/dis.py C98A 0xF0` | matches line for line, incl. `CA2E ADC $C1` with no `CLC` and `CA6A STZ $1681` |
-| `C0/5614`/`C0/568B` listing | `python tools/dis.py 5610 0xA0` | matches |
-| `C0/5545`/`C0/55F0` = `STA $1600,X / STZ $1601,X`, no `STZ $1681,X` | `dis.py 5540 0x20`, `dis.py 55F0 0x20` | matches |
+| `C0/C98A`-`CA75` listing | `python tools/romdis.py C98A 0xF0` | matches line for line, incl. `CA2E ADC $C1` with no `CLC` and `CA6A STZ $1681` |
+| `C0/5614`/`C0/568B` listing | `python tools/romdis.py 5610 0xA0` | matches |
+| `C0/5545`/`C0/55F0` = `STA $1600,X / STZ $1601,X`, no `STZ $1681,X` | `romdis.py 5540 0x20`, `romdis.py 55F0 0x20` | matches |
 | the four writer tables | my own scan, **whole ROM**, widened to `8D/9C/9F` abs+long and to a 16-bit spill through `$167F,X`/`$177F,X` | reproduces the dossier EXACTLY. `DEC $1601,X` = `C0/C991` only. `STA $1680,X` = 2E6F 2E93 2EF0 2F58 2F89 4545 4585 5654 5667 5681 569C; `STZ $1680,X` = 2ECB 2F32; `STA $1680,Y` = A17E A1AD A1C4 A1DB A21C A246 A25D. `JSR $5614` at the 13 sites, `JSR $568B` at the 7. The only hits outside bank C0 are `FD/1BB7` and `E8/BBB8` (other banks/contexts) |
 | sprite 268 strip at `0x24B8D8` | raw ROM read | `05 00 00 00 / 0F 0A 0F 0A / 00 00 00 00 / 0F 0A 00 00 / 0F 00 00 00 / 0A 00 00 00 / 05 05 00 00 / 0F 05 1F 00 / 0F 05 1F 00` — exact |
-| `C0/A810` is a FLAT per-frame loop over all objects (NOT scheduler-gated) | `dis.py A810 0xA0` + a `JSR $A810` scan -> only `C0/00D3` and `C2/2D01` | confirmed; state 7 -> `A947` only, state 8 -> nothing, bit7 filtered inside `A88D` by `A892 BMI ->A910` |
-| `CC04 CMP $0F01,X / BNE` | `dis.py CBDC 0x50` | confirmed |
+| `C0/A810` is a FLAT per-frame loop over all objects (NOT scheduler-gated) | `romdis.py A810 0xA0` + a `JSR $A810` scan -> only `C0/00D3` and `C2/2D01` | confirmed; state 7 -> `A947` only, state 8 -> nothing, bit7 filtered inside `A88D` by `A892 BMI ->A910` |
+| `CC04 CMP $0F01,X / BNE` | `romdis.py CBDC 0x50` | confirmed |
 | oracle obj15 timeline | `<probe> --monitor "7E169E:1,7E169F:1,7E161F:1,7E0F1E:1,7E0F1F:1,7E179E:1,7E191E:1,7E199E:1,7E111E:1" --from saves/jogo_trava_lake.state --frames 150 --diff --writer` | **exact**: f68 `$169E` 00->04 (`C0:2E72`), `$161F`=0F (`C0:CA48`), `$0F1E` 00->80 (`C0:A8F5`); 15f steps; f83/f98 wrap; f100 ->01 (`C0:2E72`) phase 1 dur 0A; f110/f120/f130 |
 | oracle obj12 = mode 0, `$1918/$1998` = 00/E9, 15f steps | `--monitor "7E1698:1,7E1699:1,7E1619:1,7E1798:1,7E1918:1,7E1998:1"` | confirmed |
 | OURS at loc112 f100 | `CT_DUMPWRAM_AT=100 CT_DUMPWRAM=... ./build/Belthasar.exe --assets ct_assets.dat --scene 112 --loadwram saves/jogo_trava_loadwram.state --selftest x.raw --frames 101` | obj15 `$1780/$1680/$1681/$1601` = **00/00/00/02** vs oracle 01/01/01/0A — reproduced |

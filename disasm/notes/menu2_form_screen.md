@@ -298,7 +298,7 @@ inert.** Measured in §4.5 (three L/R presses, `$0054` never moves).
 2C782 PLP / RTS
 ```
 
-**C2/C784 — the panel (col,row) formula** (raw `[34 ROM bytes at 0x2C784: python tools/dis.py 0x2C784 34]`):
+**C2/C784 — the panel (col,row) formula** (raw `[34 ROM bytes at 0x2C784: python tools/romdis.py 0x2C784 34]`):
 
 ```
 C784 LDX #03                 ; default column = 3   (two-column screen: the ACTIVE column)
@@ -344,7 +344,7 @@ bytes to `$7E:005B` (`MVN $7E,$FF`, which also leaves `DB = $7E`) and dispatches
 `03 00 05 00 05 00 04 00 01 00 01 00 03 00 01 00 05 00 05 00 05 00 08 00`): op00→4, op02→6, op04→6,
 op06→5, op08→2, op0A→2, op0C→4, op0E→2, op10→6, op12→6, op14→6, op16→9.
 
-`$FF:BF7B` (dumped `[27 ROM bytes at 0x3FBF7B: python tools/dis.py 0x3FBF7B 27]
+`$FF:BF7B` (dumped `[27 ROM bytes at 0x3FBF7B: python tools/romdis.py 0x3FBF7B 27]
 0E 7A B7 08 80 96 0E F6 BC FF`) decodes to:
 
 | bytes | meaning |
@@ -1316,13 +1316,13 @@ instruction; I found no address that does not contain what the dossier says.
 | 2.3 | `C2/C627` gate + `C2/C649` skip loop (`AND #C0` = locked **and** empty) | OK byte for byte |
 | 2.4 | `C2/C65D` / `C2/C6B9` idles; `BMI`=A `BVS`=B off `$0D1D` | OK; and `C2/E984` builds `$0D1D` bit7/bit6 from `$2993,Y`/`$2994,Y` via table `C2/E9D9 = 00 01 00 00 ...` — note `C2/E9CD LDA $0D83 / BNE / LDA #40 / TSB $0D1D` is a **second** way bit6 (cancel) gets set |
 | 2.5 | `C2/E9E2` mover; `($EA1F,X)` = `EA45 EA40 EA3B EA36`; `$F5` bit3=Up bit2=Dn bit1=Lf bit0=Rt -> graph `+2/+3/+4/+5`; `C2/EA27` = `cell*6`; `$5A` bit7 = SCROLL via `TSB $5A / TRB $54` | decoded from raw `C2/E9E2..EA52` OK |
-| 2.5 | graph = 42 bytes at `$FF:B77A`, length-prefixed `2A` | `FF/B77A: [25 ROM bytes at 0x3FB77A: python tools/dis.py 0x3FB77A 25] ...` OK, all 7 cells exactly as tabulated |
+| 2.5 | graph = 42 bytes at `$FF:B77A`, length-prefixed `2A` | `FF/B77A: [25 ROM bytes at 0x3FB77A: python tools/romdis.py 0x3FB77A 25] ...` OK, all 7 cells exactly as tabulated |
 | 2.5 | active `handX` patched `08 -> 38` by `C2/CB18` and `C2/CC63` when `$0D36 != 0` | disasm OK **and** live `$7E9380 = 38 23 ...` (read-back below) |
 | 2.6 | `C2/C805`, `C2/C85B` (both arms; max `$80 = $0F0C-4`), `C2/C9AE` | OK byte for byte. Tail is `PLP / LDX #FC37 / JMP C2/8385` (raw `28 A2 37 FC 4C 85 83`) |
 | 2.6 | reserve window = 4 rows, cells 3..6, ring via `cell3.up = 0x86` / `cell6.dn = 0x83` | from `$FF:B77A` OK |
 | 2.7 | `C2/C674`, `C2/C6D0`, `C2/C6DE`, the `C2/C6E7` teardown, `C2/C70C` | OK incl. raw `C2/C696: A2 00 2E 86 61 A2 02 20 86 5D A2 0A 06 86 5F 20 05 EF` = the `C2/EF05` blank |
 | 2.7 | `C2/8255` = "STZ `$00B0 + 8*bit` per set mask bit" | disassembled: `STA $00 / LDA #00 / LSR $00 / BCC / TAX / STZ $B0,X / CLC ADC #08 / CMP #40 / BCC` OK |
-| 2.7 | `C2/C784` raw + `(col,row)` formula, `$0D36 != 0` => col 9 | raw `[34 ROM bytes at 0x2C784: python tools/dis.py 0x2C784 34]` OK identical |
+| 2.7 | `C2/C784` raw + `(col,row)` formula, `$0D36 != 0` => col 9 | raw `[34 ROM bytes at 0x2C784: python tools/romdis.py 0x2C784 34]` OK identical |
 | 2.8 | `C2/CAF3`; `C2/ED31` interpreter; `$FF:BD18` arg counts; handler table `$ED59` | all three dumped and identical (`$ED59: 77 ED 05 EF AA ED 48 EF 32 F3 64 F3 37 F3 64 F3 78 F3 B0 ED B6 ED`) |
 | 2.8 | the `$FF:BF7B` decode, **including** what each opcode does | the dossier asserted op semantics without showing them — so **I disassembled all four handlers**, and every description is right: op08 `C2/F332 = LDX $5B / STX $61`; op00 `C2/ED77` = word-fill by `MVN $7E,$7E` propagate (`$5B`=0x80 => 0x80 bytes); op0C `C2/F337` = DMA setup at `$43x0-7` **and** `$61 = (($5B & 0x00F0) << 3) + 0x9000` (`4330 -> $9180`, `4320 -> $9100` OK); op0E `C2/F364` = length-prefixed `MVN $7E,$FF` copy to `$61` (`LDA $0000,X / DEC A / INX / MVN` => exactly `len` bytes after the prefix => 0x2A bytes of `$FF:B77A` -> `$7E:9380`). The list also **re-aligns exactly** on the `FF` terminator at `$FF:BF9F` |
 | 2.9 | `C2/CC4F` both variants (`2E84/100E` vs `2E90/1010`), acts only on `AND #00C0` panels, `+0x1000` = BG2, `+0x180` = next panel | OK byte for byte |

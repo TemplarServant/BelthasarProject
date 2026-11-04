@@ -42,8 +42,7 @@ import struct
 import subprocess
 import sys
 
-sys.path = [p for p in sys.path if os.path.abspath(p or '.') != os.path.dirname(os.path.abspath(__file__))]
-import numpy as np  # noqa: E402  (tools/dis.py would shadow the stdlib's dis that numpy imports)
+import numpy as np  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'build', '_battle_ab')

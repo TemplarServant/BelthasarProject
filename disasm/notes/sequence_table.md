@@ -1978,7 +1978,7 @@ The leg is 1033 frames (f4261 -> f5294 of attract_cena_inicial). The port held 8
   Robo's pose windows, so the script's `03 10` park was 7 frames instead of 52 (`$A124[1]` armed f133, five
   dwells of $0A, released f184). battle.c: the tech branch of the scheduled dispatch.
 - **The close is the script's.** C1/40CE `LDA $9876 / BEQ ->40B0` is the action loop's only exit, written by
-  op 01 (C1/4CF7 -> C1/4D00). The tail (dis.py 140D3): #FF post, C1/40E1 one wait (+ one per frame `$5D9B`
+  op 01 (C1/4CF7 -> C1/4D00). The tail (romdis.py 140D3): #FF post, C1/40E1 one wait (+ one per frame `$5D9B`
   still holds), C1/4116 one wait + CC/F06B + the C1/305C loop (no wait), C1/4138 walks `$AC5C`: a PC entry 0/1/2
   takes C1/4148 (C1/414B, C1/41B4, C1/41B7 = three more), the FF terminator STZ $A013 at once. X-Strike (list
   `07 FF`) `$9876 = 1` f274 / `$A013 = 0` f276; tech $28 (`03 04 FF`) f592 / f595; the run-off (`00 FF`) f946 /

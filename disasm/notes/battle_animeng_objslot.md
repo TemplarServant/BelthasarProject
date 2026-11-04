@@ -1,6 +1,6 @@
 # BATTLE ANIM ENGINE — PART 1: the OBJ-slot TICK (FD/E39C) = the TILE/PALETTE frame streamer
 
-Derives, from the ROM disasm (`tools/dis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+Derives, from the ROM disasm (`tools/romdis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`ct.exe --monitor`, base `gato_press_action.state`, HOLD driver `100:8,0:N`) **only**, the core of the
 battle animation engine's per-frame OBJ-slot tick — the routine `battle_stance.md` S4 flagged as
 `FD:E3A9-E3CE` (per-slot records `$0520+n*0xC`). **Zero invention.** Every field/handler is byte-cited and
@@ -24,7 +24,7 @@ Oracle exe: `ct_slot.exe` (= `build/ct.exe`, copied to scratch). All `$0520` sem
 
 ## 1 — Routine anatomy: FD/E39C, DP=$0500, 12 slots × 12 bytes, RTL
 
-Entry **FD/E39C** (a far/JSL target — ends `RTL` at FD/E436). `tools/dis.py 0x3DE39C`:
+Entry **FD/E39C** (a far/JSL target — ends `RTL` at FD/E436). `tools/romdis.py 0x3DE39C`:
 
 ```
 FD/E39C  PHB / PHD                 ; save caller bank + direct page
@@ -218,6 +218,6 @@ Dir: `%TEMP%/claude/C--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/e5608d
 - `ct_slot.exe` (= build/ct.exe). Base state (repo root) `gato_press_action.state`.
 - `slot_diff.txt` (`--monitor "0520:144"` 646f idle), `slot_modes.txt` (12 mode bytes + action state, 1520f
   — the idle-dormant / song-mode-5 proof), `parse_slots.py` / `analyze_slots.py` (decoders).
-- Disasm: `tools/dis.py 0x3DE39C 0x140` (tick), `0x3DE437`/`0x3DE485` (streamers), `0x3DE4E8`/`0x3DE532`
+- Disasm: `tools/romdis.py 0x3DE39C 0x140` (tick), `0x3DE437`/`0x3DE485` (streamers), `0x3DE4E8`/`0x3DE532`
   (scrollers), `0x3DE57C`/`0x3DE5A4`/`0x3DE807`/`0x3DE82C` (oscillators) + `0x3DE64F`/`0x3DE8D7` (appliers).
 - Script table: ROM `$FDFE00..` (headers+frame-lists), tile source ROM `$F6xxxx`.

@@ -42,7 +42,7 @@ palettes, which is every one measured; not re-derived here.
 
 ## 3. CD/0E79 — the effect load's own record (was counted, never armed)
 
-`dis.py D0EF0` (16-bit X from D0E35):
+`romdis.py D0EF0` (16-bit X from D0E35):
 
 ```
 CD/0EF8  JSR CD/0E9D / BCC 0F42          ; no sheets ({86, 7B..7F}) -> none of this

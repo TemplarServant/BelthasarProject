@@ -11,7 +11,7 @@ Three separate mechanisms, all derived from the ROM + the oracle. Companion to `
 
 ## A. THE ANIMATION — an item use is a multi-track bank-CE script, exactly like a tech
 
-`C1/475B` (`tools/dis.py 0x01475B 0xB0 1 0`), entered with `$AE93` = the item id:
+`C1/475B` (`tools/romdis.py 0x01475B 0xB0 1 0`), entered with `$AE93` = the item id:
 
 ```
 1475B  SEC / LDA $AE93 / SBC #BC              ; sub = id - 0xBC
@@ -58,7 +58,7 @@ numbers above carry a lag frame), every one the port's too (tools/battle_ab.py i
 
 ## B. THE SOUNDS — they are the script's own op 0x78 / 0x79 / 0x7A
 
-Handlers (`tools/dis.py 0x01619E 0x60 1 0`):
+Handlers (`tools/romdis.py 0x01619E 0x60 1 0`):
 
 ```
 C1/619E (ops 78/79): INY / LDA [$E6],Y / STA $1E01

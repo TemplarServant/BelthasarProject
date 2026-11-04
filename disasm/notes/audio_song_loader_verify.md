@@ -2,7 +2,7 @@
 
 Target: `audio_song_loader.md` (front 1, disassembly), `audio_song_data.md` (front 2, ROM data),
 `audio_song_trace.md` (front 3, live capture). **Nothing was re-derived on trust.** Every claim below
-was re-executed here: `python tools/dis.py` for ROM, `build/ct.exe --read/--aram/--trace/--teleport/
+was re-executed here: `python tools/romdis.py` for ROM, `build/ct.exe --read/--aram/--trace/--teleport/
 --savestate` for the oracle. Default verdict when a check could not be made: *refuted*.
 
 Read-only session. Nothing under `src/` was edited, nothing was built.
@@ -86,8 +86,8 @@ f133          $1E00..$1E07 = 00 30 C0 06 00 E0 00 00      <- $1E00 cleared, $1E0
 
 ### 1.5 The sequence padding law — HOLDS, and the mechanism is `BPL` not a padded count
 
-`python tools/dis.py 0x70539 0x70 1 0`: `$0539 LDX $0C` (X = the **raw** size word) … `$0571/$0591
-DEX/DEX/DEX` … **`BPL`**. `python tools/dis.py 0x706E0 0x50 1 0`: the sample loop is the same shape
+`python tools/romdis.py 0x70539 0x70 1 0`: `$0539 LDX $0C` (X = the **raw** size word) … `$0571/$0591
+DEX/DEX/DEX` … **`BPL`**. `python tools/romdis.py 0x706E0 0x50 1 0`: the sample loop is the same shape
 but ends in **`BNE`**. So the sequence sends `floor(len/3)+1` units, samples send exactly `len/3`.
 I confirmed the overshoot bytes land in ARAM and equal the **next ROM block's head**:
 
@@ -115,7 +115,7 @@ its ARAM base comes from wherever that instrument sits in `$1E20`.** Verified 9/
 
 ### 1.7 Boot-time constants — HOLD, and one is *computed*, not a literal
 
-`python tools/dis.py 0x700F0 0x28 0 0`:
+`python tools/romdis.py 0x700F0 0x28 0 0`:
 ```
 700FF LDX #0100 / 70102 STA $1DFF,X / DEX / BNE      ; clears $7E:1E00-$1EFF ONLY (256 bytes)
 7010A LDA $C740B4 (=$0201) / CLC / ADC #4700         ; = $4901
@@ -217,7 +217,7 @@ same error — `$FC` sets the **echo delay**.
 
 ### 3.3 ⚠ UNSUPPORTED — front 1 §2: "`$1E03` survives because SFX callers never write it"
 
-`python tools/dis.py 0x1C08 0x20 1 0` → `C0/1C20 LDA #FF / STA $1E03` immediately before
+`python tools/romdis.py 0x1C08 0x20 1 0` → `C0/1C20 LDA #FF / STA $1E03` immediately before
 `$1E00 = $81`. A caller does write it. Not load-bearing (the loader always refills `$1E02/$1E03` from
 `$0A45/$0A4B`), but the sentence is an inference, not a derivation.
 
@@ -297,20 +297,20 @@ data moves, because a wrong token is an infinite spin with no diagnostic. Then t
 ## 7. REPRO — every command used in this verification
 
 ```
-python tools/dis.py 0x70A39 0x60 1 0     # record lookup, port block, token seed, ABORT
-python tools/dis.py 0x709DA 0x30 1 0     # $09DA token / $09EA resync
-python tools/dis.py 0x709FD 0x40 1 0     # $09FD EDL->ESA / $0A12 cull (byte-stride clear at $0A29)
-python tools/dis.py 0x70150 0x60 1 0     # $0157 BUSY gate, dispatch, $0192 exit
-python tools/dis.py 0x701A1 0x30 1 0     # head, range check, $01B3 STA $05
-python tools/dis.py 0x701C4 0x60 0 0     # 16-bit A: the $1F00/$1F20 diff builder
-python tools/dis.py 0x70431 0x40 1 0     # $1F40 push, the LDA $C70C20,X long,X wrap
-python tools/dis.py 0x704A9 0x90 1 0     # $1EFC, mode, $2F00, sequence head
-python tools/dis.py 0x70539 0x70 1 0     # $0F00 test + the sequence DEX/DEX/DEX / BPL
-python tools/dis.py 0x706E0 0x50 1 0     # the sample DEX/DEX/DEX / BNE
-python tools/dis.py 0x70601 0x40 1 0     # the GO block + $061C
-python tools/dis.py 0x70734 0x30 1 0     # $0734 cmd|=4 + the $0AD8 scan
-python tools/dis.py 0x700F0 0x28 0 0     # boot: $4901 = rom16($C7:40B4)+$4700
-python tools/dis.py 0x1BA0 0x40 1 0      # C0/1BAB..1BC1 $1E10=$FF ; 0x1C08 -> C0/1C11 $1E10=0
+python tools/romdis.py 0x70A39 0x60 1 0     # record lookup, port block, token seed, ABORT
+python tools/romdis.py 0x709DA 0x30 1 0     # $09DA token / $09EA resync
+python tools/romdis.py 0x709FD 0x40 1 0     # $09FD EDL->ESA / $0A12 cull (byte-stride clear at $0A29)
+python tools/romdis.py 0x70150 0x60 1 0     # $0157 BUSY gate, dispatch, $0192 exit
+python tools/romdis.py 0x701A1 0x30 1 0     # head, range check, $01B3 STA $05
+python tools/romdis.py 0x701C4 0x60 0 0     # 16-bit A: the $1F00/$1F20 diff builder
+python tools/romdis.py 0x70431 0x40 1 0     # $1F40 push, the LDA $C70C20,X long,X wrap
+python tools/romdis.py 0x704A9 0x90 1 0     # $1EFC, mode, $2F00, sequence head
+python tools/romdis.py 0x70539 0x70 1 0     # $0F00 test + the sequence DEX/DEX/DEX / BPL
+python tools/romdis.py 0x706E0 0x50 1 0     # the sample DEX/DEX/DEX / BNE
+python tools/romdis.py 0x70601 0x40 1 0     # the GO block + $061C
+python tools/romdis.py 0x70734 0x30 1 0     # $0734 cmd|=4 + the $0AD8 scan
+python tools/romdis.py 0x700F0 0x28 0 0     # boot: $4901 = rom16($C7:40B4)+$4700
+python tools/romdis.py 0x1BA0 0x40 1 0      # C0/1BAB..1BC1 $1E10=$FF ; 0x1C08 -> C0/1C11 $1E10=0
 
 build/ct.exe --aram --from candy_shop_lake.state --out aram_candy.bin
 build/ct.exe --teleport 12 8 8 0 --from candy_shop_lake.state --frames 240 --out vtp12.state

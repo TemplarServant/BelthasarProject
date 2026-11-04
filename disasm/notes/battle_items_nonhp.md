@@ -3,7 +3,7 @@
 Closes `battle_item_slice.md` **O4** ("Non-HP selectors live"). The HP heal (Tonic, selector-2) shipped in
 `76cfb7f`; this dossier derives, from the ROM disasm + LakeSnes oracle **only**, the other three consumable
 effect kinds end-to-end, each oracle-measured on a purpose-built seed. Every field is byte-cited
-(`tools/dis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) and every value is oracle-measured
+(`tools/romdis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) and every value is oracle-measured
 (`ct_probe.exe` = `build/ct.exe`, `--monitor "ADDR:LEN" --from STATE --btnscript ... --diff --writer`; ⚠ **LEN
 is DECIMAL**; writer PC = the instruction AFTER the store).
 

@@ -1,6 +1,6 @@
 # Battle anim-script ops, group C0-C5 / 27-2B / D8 / 75 / 19 / 10 / 15 / 9C / 9D / 5E / 6B / 25 / 43 / 4A (2026-09-29)
 
-Sources: `tools/dis.py` on every handler (m=1 x=0, the C1/4CD2 `SEP #20` state), a byte scan of banks C1/CC/CD/CF/D1/FD for
+Sources: `tools/romdis.py` on every handler (m=1 x=0, the C1/4CD2 `SEP #20` state), a byte scan of banks C1/CC/CD/CF/D1/FD for
 every reader, and oracle runs (a copy of build/ct.exe; `CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`,
 `saves/battle_re/gato_wait.state`, the recipe's PEEK_POKE, `--monitor ... --writer --diff`). Writer PCs are "the instruction
 after the store". Frames are the oracle run's own (f0 = the state's load).

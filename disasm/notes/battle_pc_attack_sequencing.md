@@ -3,7 +3,7 @@
 User defect (translated from Portuguese): *"in battle, crono starts the attack animation while he still has not finished
 moving to the enemy"* — the strike animation starts while Crono is still travelling to the enemy.
 
-Derived from the ROM disasm (`tools/dis.py`, flat offset = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+Derived from the ROM disasm (`tools/romdis.py`, flat offset = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`build/ct.exe` copied to scratch as `ct_probe.exe`) ONLY. Every number below carries either a ROM address
 with its disasm line, or an oracle frame with the exact command that produced it. **Zero invention.**
 Extends `battle_ai_interp.md` §11/§13/§14, `battle_pc_approach_facing.md` §1.5, `battle_span_emergence.md`.
@@ -41,7 +41,7 @@ op 1F -> C1/56FB   op 20 -> C1/5714   op 24 -> C1/5756   op 36 -> C1/594B
 op 50 -> C1/5ADB   op 01 -> C1/4CF7   op 72 -> C1/5FDE   op 98 -> C1/6299   op 7C -> C1/61EB
 ```
 
-`python tools/dis.py 0x15409 0x40`:
+`python tools/romdis.py 0x15409 0x40`:
 ```
 1542D: INY                 ; op 0x18 = walk-to-TARGET
 1542E: LDA  [$E6],Y        ;   the tt operand (resolver mode, C1/762E)
@@ -58,7 +58,7 @@ op 50 -> C1/5ADB   op 01 -> C1/4CF7   op 72 -> C1/5FDE   op 98 -> C1/6299   op 7
 
 ### 1.2 The ARM frame parks (C1/54BE)
 
-`python tools/dis.py 0x15448 0x60` + `0x15490 0x35 1 0`:
+`python tools/romdis.py 0x15448 0x60` + `0x15490 0x35 1 0`:
 ```
 15454: LDA $1D0C,X / STA $80 / STA $A553,X      ; base = the live foot
 1545C: LDA $1D23,X / STA $A55E,X / STA $81
@@ -75,7 +75,7 @@ op 50 -> C1/5ADB   op 01 -> C1/4CF7   op 72 -> C1/5FDE   op 98 -> C1/6299   op 7
 
 ### 1.3 The per-segment controller parks; only the STOP probe releases (C1/55FC vs C1/55FE)
 
-`python tools/dis.py 0x154C1 0x50` and `0x155C0 0x50`:
+`python tools/romdis.py 0x154C1 0x50` and `0x155C0 0x50`:
 ```
 154C1: LDX $80 / LDA $A500,X / BMI ->154CB ; JMP C1/55FC   ; mid-segment -> C1/55FC
 154CB: LDA #07 / STA $A500,X                                ; new segment: reload 7
@@ -93,7 +93,7 @@ op 50 -> C1/5ADB   op 01 -> C1/4CF7   op 72 -> C1/5FDE   op 98 -> C1/6299   op 7
 `C1/75BB` is the shared cursor advance (`$E6 += A`), so `A=0` literally re-executes the same op next frame.
 **This is the sequencing law.** The same primitive gates the swing:
 
-`python tools/dis.py 0x14E22 0x30` (op 0x03 PLAY-ONCE) + `0x14D5C 0x2A` (the shared play body tail):
+`python tools/romdis.py 0x14E22 0x30` (op 0x03 PLAY-ONCE) + `0x14D5C 0x2A` (the shared play body tail):
 ```
 14E32: LDA $A145,X / BNE ->14E41    ; first visit?
 14E37: INC $A145,X / LDA #01 / STA $8E / JMP C1/4D08   ; arm: $A124[cmb] = 1 (mode ONCE)
@@ -139,7 +139,7 @@ New op facts derived this session:
 
 ## 2 — THE POSE ENGINE DURING AND AFTER THE WALK (ROM, byte-exact)
 
-`python tools/dis.py 0x1423A 0x80` + `0x142B0 0x3A` + `0x142EC 0x40` — the per-frame anim advance the action
+`python tools/romdis.py 0x1423A 0x80` + `0x142B0 0x3A` + `0x142EC 0x40` — the per-frame anim advance the action
 loop calls (`C1/4090` → `JSR C1/423A`):
 
 ```
@@ -528,7 +528,7 @@ The only GATO-fight behaviour that stays bit-identical is an already-adjacent se
   `"5DBD:2,5DC9:2,5DED:2,5DFD:16,A013:1,A15B:1,1D0C:1,A3D1:1,5D9D:1"` (track cursors + pauses + the parks),
   `"9907:1,967B:1,968C:1,9689:1,A124:1,008E:1,96DB:1,A15B:1,A013:1,1D0C:1,A3D1:1"` (poses),
   `"1D0C:1,1D23:1,A15B:1,A517:1,A500:1,A013:1,9614:1"` (the walk + target cursor).
-- ROM: `tools/dis.py 0x15409 0x40` / `0x15448 0x60` / `0x15490 0x35 1 0` / `0x154C1 0x50` / `0x155C0 0x50`
+- ROM: `tools/romdis.py 0x15409 0x40` / `0x15448 0x60` / `0x15490 0x35 1 0` / `0x154C1 0x50` / `0x155C0 0x50`
   / `0x15603 0x20` / `0x14D04 0x60` / `0x14D5C 0x2A` / `0x14E22 0x30` / `0x14F1A 0x3A` / `0x1423A 0x80`
   / `0x142B0 0x3A` / `0x142EC 0x40` / `0x161EB 0x18`.
   Tables: `C1/7A6B` (op JT), `CE/0000` (super JT), `CE/0380` (melee base), `CE/D4C3` / `CE/D776` / `CE/D428`
@@ -539,7 +539,7 @@ The only GATO-fight behaviour that stays bit-identical is an already-adjacent se
 
 ## VERIFICATION (adversarial pass)
 
-Independent re-run of every ROM citation (`tools/dis.py`) and every oracle number
+Independent re-run of every ROM citation (`tools/romdis.py`) and every oracle number
 (`$SCRATCH/verify_A/ct_probe.exe` = `cp build/ct.exe`), plus **three states the derivation never
 touched** (`bat2_lake`, `bat4_lake`, `bat5_lake`). Nothing under `src/` was modified.
 

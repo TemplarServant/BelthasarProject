@@ -1,6 +1,6 @@
 # BATTLE HUD STRIP — render RE dossier (GATO fight, party Crono+Marle)
 
-Everything below is derived from the ROM (`tools/dis.py`, font at file-offset 0x3F8C60 = $FF:8C60)
+Everything below is derived from the ROM (`tools/romdis.py`, font at file-offset 0x3F8C60 = $FF:8C60)
 and the committed oracle dumps in `saves/battle_re/` (fb + `.vram` + `.wram` + `.oam`[incl. CGRAM]),
 plus states regenerated from `gato_press_action.state`. Prior work: `disasm/notes/battle_boot.md`
 (the HDMA split + VRAM/CGRAM layout) and `disasm/notes/battle_menu_synthesis.md §(c)` (HUD provenance).
@@ -300,7 +300,7 @@ uses committed `saves/battle_re/p600.raw*` for the command phase).
 # ADDENDUM 2 — the party-box bar = ATB gauge (closes the "HP bar" Q) + command-menu navigation (closes "OAM cursor")
 
 Method = **peek-only render-state sampling** (each `--peek` dump carries its OWN wram+vram+oam, read together
-so logic↔render correlate at one instant) + `--monitor --writer` for builder/handler PCs + `tools/dis.py` on
+so logic↔render correlate at one instant) + `--monitor --writer` for builder/handler PCs + `tools/romdis.py` on
 the routines. Base = `gato_press_action.state` + A-boot. Scratch helpers: `bstate.py` (battle-state decoder),
 `sweep.py`, `menu.py`; dumps `idle_f*.raw*`, `mdense_f*.raw*`, `act_f*.raw*`, `atb_f360.raw*`, `mn_*.raw*`,
 `pre_battle.raw*`. FB/map decode as Q1-Q5 (map word 0x7800; bar = party-box cols 25-30 = end-cap 0x15D, 4 fill
@@ -322,7 +322,7 @@ f378→457, bar fills cell-by-cell:
 |---|---|---|---|---|---|---|---|---|---|
 | bar total (0..32) | 0 | 2 | 4 | 7 | 8 | 13 | 16 | 23 | 32 |
 
-**Builder = C1/0700** (`dis.py 10700`; writer PCs from `--monitor "0DB4:2,0D34:2,AFAC:1,AFAB:1" ... --writer`,
+**Builder = C1/0700** (`romdis.py 10700`; writer PCs from `--monitor "0DB4:2,0D34:2,AFAC:1,AFAB:1" ... --writer`,
 cells change at C1:0762/0774/0784):
 ```
 timer = $99DD,X   (X=seat; $99DD,X is the per-tick MIRROR of the $AFAB,X countdown — S1)
@@ -390,7 +390,7 @@ Item box should appear only when that PC's ATB is full). Our engine bakes the **
 `Q3(b)` claims **two** command boxes (box0 Crono + box1 Marle, both "Att/Tech/Item"). That is only correct when
 **both** PCs are pending; in the normal single-active flow **only the acting PC's box shows the list**. Method =
 `--peek` strip-map decode (`cmdbox_sweep.py`, map word 0x7800, shadow $7E0C80) + `--monitor --writer` +
-`dis.py`. Base `gato_press_action.state` + A-boot.
+`romdis.py`. Base `gato_press_action.state` + A-boot.
 
 ## §C — the content gate: box_k shows "Att/Tech/Item" ⟺ seat k is ENQUEUED in `$A6D9` (byte-exact timeline)
 
@@ -411,8 +411,8 @@ So the box's command list is gated on **queue membership, not raw ATB**: Marle's
 box stays blank until she is **enqueued** at **f465** (`$A6D9`[1]=01) — a ~10-frame enqueue lag. `p600` (both
 enqueued) is the *both-pending* special case, not the general state.
 
-**ROM mechanism (cited).** The command strip builder = **C1/0560** (`dis.py 10560`; inline labels below are
-dis.py file offsets, `1056A` = CPU `C1/056A`). Runs when `$95DB`==0 (no submenu):
+**ROM mechanism (cited).** The command strip builder = **C1/0560** (`romdis.py 10560`; inline labels below are
+romdis.py file offsets, `1056A` = CPU `C1/056A`). Runs when `$95DB`==0 (no submenu):
 ```
 1056A LDA $A6DE ; DEC ; STA $95F1      ; $95F1 = pending-PC count − 1
 10571 LDA $A6DD ; TAX ; LDA $A6D9,X …  ; $95D5 (active seat) = queue[$A6DD] (first valid entry)  [1058A STA $95D5]
@@ -479,7 +479,7 @@ enqueued, Crono command open), `--monitor "95D5:1,A6DD:1,A6DE:1,A6D9:4,95DC:1,96
 - **LEFT (0x40)**: `$A6DD` 1→0 → `$95D5`→0 → bracket → Crono. Verified repeatable (4 presses). The queue `$A6D9`
   itself is UNCHANGED — only the HEAD pointer `$A6DD` cycles. `$9609` stays 0, `$95DB` stays 0.
 
-**Handler `C1/1224`** (`dis.py 11214`, the next/RIGHT branch):
+**Handler `C1/1224`** (`romdis.py 11214`, the next/RIGHT branch):
 ```
 11221 INC $A6DD                                   ; head++
 11224 LDA $A6DD / CMP #03 / BNE / STZ $A6DD        ; wrap 3->0 (3 = max party = queue capacity)

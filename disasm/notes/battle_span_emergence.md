@@ -2,7 +2,7 @@
 
 Closes `battle_anim_engine.md` §B.4 (the pinned span constants → emergent) and the standing boundary
 `battle_interp_verify.md` T2.C/RESIDUAL ("the span total does NOT emerge" / "per-opcode `03/06` playback
-durations remain the anim-engine boundary"). **Zero invention** — every field byte-cited (`tools/dis.py`,
+durations remain the anim-engine boundary"). **Zero invention** — every field byte-cited (`tools/romdis.py`,
 flat = `(bank−0xC0)<<16|addr`) and every timing oracle-confirmed on `gato_press_action.state` +
 `crono_crit_ready.state` (`ct_probe.exe = build/ct.exe`, `--monitor … --diff --writer`; ⚠ 2-byte regions print
 **byte-swapped**, `5DBD=8B7B` = pointer `0x7B8B`).

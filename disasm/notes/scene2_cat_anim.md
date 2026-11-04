@@ -97,7 +97,7 @@ op B2 -> C0/3543   op B4 -> C0/2E8B   op AD -> C0/2F96
 ```
 
 ```
-$ python tools/dis.py 2E67 0x40
+$ python tools/romdis.py 2E67 0x40
   2E67: INY / TYX / LDA $7F2001,X       ; the anim-id operand
   2E6D: LDX $6D / STA $1680,X           ; <- $1680 = anim id
   2E72: LDA #01 / STA $1780,X           ; <- mode 1 = LOOP
@@ -109,7 +109,7 @@ $ python tools/dis.py 2E67 0x40
 ```
 
 ```
-$ python tools/dis.py 2F71 0x28
+$ python tools/romdis.py 2F71 0x28
   2F71: TYX / INX / LDA $7F2001,X
   2F77: LDX $6D / STA $1301,X           ; <- the HELD assembly frame
   2F7C: STZ $1681,X / STZ $1601,X
@@ -119,11 +119,11 @@ $ python tools/dis.py 2F71 0x28
 ```
 
 ```
-$ python tools/dis.py 3543 0x08
+$ python tools/romdis.py 3543 0x08
   3543: TYX / CLC / RTS                 ; op 0xB2 = park on the op forever (X = Y, IP unchanged)
 ```
 
-Frame resolution `C0/CB3A` (`python tools/dis.py CB3A 90` + `dis.py CB8D 80`): the record base comes
+Frame resolution `C0/CB3A` (`python tools/romdis.py CB3A 90` + `romdis.py CB8D 80`): the record base comes
 from `$1600,X` (facing) via `$1480/$1500`; the anim slot is `$1781,X` when `$1780,X == 2` else
 `$1680,X`; the step cursor is `$1681,X`; a `$FF` data byte decrements `$7F0B01,X` (`CBA4`).
 **Mode 3 never reaches CB3A** — `C0/CBF2` inside `C0/CBDC` short-circuits it: `$1780,X == 3 →

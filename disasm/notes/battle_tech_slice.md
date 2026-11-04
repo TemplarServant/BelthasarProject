@@ -2,7 +2,7 @@
 
 Derives, from the ROM disasm + LakeSnes oracle **only**, the full path for ONE physical PC tech end-to-end
 plus the shared tech infrastructure every tech reuses. The slice PROVES the pipeline; the other techs are data
-in the same tables. **Zero invention** — every field is byte-cited (`tools/dis.py <fileoffset>`, fileoffset =
+in the same tables. **Zero invention** — every field is byte-cited (`tools/romdis.py <fileoffset>`, fileoffset =
 `(bank−0xC0)<<16 | addr`) and every value is oracle-measured (`ct_probe.exe` = `build/ct.exe`).
 
 > ⚠ **The first GATO fight has NO techs.** Crono learns Cyclone via tech points; `gato_press_action.state`
@@ -242,7 +242,7 @@ Header `CE/0909` = masks `word1=0x8098 / word2=0x0080` → 4 tracks (A0B3=0, wor
 1E ss   SUPER → CE/D613                        ; the STRIKE + multi-target sweep
 … 50    ShowDamage popup ; 01 EndTech
 ```
-The SUPER-subscript `CE/D613` = `[25 ROM bytes at 0xED613: python tools/dis.py 0xED613 25] …`
+The SUPER-subscript `CE/D613` = `[25 ROM bytes at 0xED613: python tools/romdis.py 0xED613 25] …`
 — the repeated `49 1x` blocks are the per-target strike/sweep; the `97 xx` refs in the effect tracks
 (`CE/0960`/`0970`) are the spinning-blade assembly indices. **For an honest first render:** the poses (rear-up +
 spin) come from the E3/E4 pose engine at the live foot (the existing engine boundary); the ShowDamage popup +

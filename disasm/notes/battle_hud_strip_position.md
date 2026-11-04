@@ -1,6 +1,6 @@
 # The battle HUD strip has TWO resting positions — `$7E:2989` bit1
 
-Derived 2026-08-29 from the ROM (`tools/dis.py`) and MEASURED on the oracle. User report:
+Derived 2026-08-29 from the ROM (`tools/romdis.py`) and MEASURED on the oracle. User report:
 *"the hud does not change position in battle; in some battles it appears at the top and at the bottom"* (translated from Portuguese).
 
 `battle_hud_render.md` pins the strip's PIXELS at renderY 160..207. That geometry is only ONE of the

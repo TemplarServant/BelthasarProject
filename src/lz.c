@@ -212,7 +212,7 @@ size_t ct_lz_decompress(const uint8_t* data, uint8_t* out, size_t start) {
                      LZC_REPSEP + LZC_LDA_ABX16 + LZC_DP16 + LZC_DP16 + 3 * LZC_IMP + LZC_REPSEP + LZC_BR_T)
 #define LZC_BLKEND  (LZC_DP16 + LZC_BR_T + LZC_LDA_ABX8 + LZC_IMM8 + LZC_BR_T + LZC_JMP)
 
-// HiROM: banks $C0-$FF map straight onto the file, offset = (bank - $C0) << 16 | addr (as in tools/dis.py).
+// HiROM: banks $C0-$FF map straight onto the file, offset = (bank - $C0) << 16 | addr (as in tools/romdis.py).
 size_t ct_lz_hirom_offset(unsigned addr24) {
   return (size_t)(((addr24 >> 16) - 0xC0u) & 0x3Fu) << 16 | (addr24 & 0xFFFFu);
 }

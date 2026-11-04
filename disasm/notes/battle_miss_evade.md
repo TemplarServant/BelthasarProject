@@ -2,7 +2,7 @@
 
 Derives, from the ROM disasm + LakeSnes oracle **only**, what the battle module SHOWS when a physical attack
 misses: the "MISS" glyph popup, the (absent) victim reaction, and the ATB/counter/HP semantics. Every claim is
-anchored to a `tools/dis.py <fileoffset>` (fileoffset = `(bank−0xC0)<<16 | addr`; battle code runs 16-bit A/X
+anchored to a `tools/romdis.py <fileoffset>` (fileoffset = `(bank−0xC0)<<16 | addr`; battle code runs 16-bit A/X
 `m=0 x=0` unless noted 8-bit) or an oracle `ct_probe.exe`(`= build/ct.exe`) `--monitor`/`--peek`/`--read`
 observation. Writer PCs = the PC *after* the store retires.
 
@@ -51,7 +51,7 @@ f172  $AE94 →0            miss marker cleared for the next action
 
 ## 1 — THE ACCURACY LAW  (`C1/DC64`, the D306 physical executor)
 
-### 1.1 The executor `C1/D306` splits hit vs miss on `$16` (dis.py `1D306`, 8-bit)
+### 1.1 The executor `C1/D306` splits hit vs miss on `$16` (romdis.py `1D306`, 8-bit)
 ```
 1D306 LDA $AE4D / AND #20 / BNE 1D32C   ; $AE4D bit5 = "no accuracy" attack -> straight to damage
 1D30D JSR C1/D174                        ; $16 = attacker[block+$AEE9] (HIT), $18 = target[block+$AEEA] (EVADE)
@@ -63,7 +63,7 @@ f172  $AE94 →0            miss marker cleared for the next action
 1D32C … (HIT) JSR C1/D1A4 / E0F5 / E65F / DCAD  ; the pinned damage pipeline (battle_loop.md S3)
 1D338 …AE4D bit2 -> E976 (a secondary roll) ; …AE4D bit1 -> C1/E9D5 (the STATUS roll, §HEADLINE)
 ```
-`D174` (dis.py `1D174`, 8-bit): `$16 = mem[$5E2D + $AEE9 + $B1F4]` (attacker block + `$AEE9`),
+`D174` (romdis.py `1D174`, 8-bit): `$16 = mem[$5E2D + $AEE9 + $B1F4]` (attacker block + `$AEE9`),
 `$18 = mem[$5E2D + $AEEA + $B1F6]` (target block + `$AEEA`). For a physical weapon the effect-header
 (`CC/213F[0x3A] = 03 00 00 3a 3b 01 3e 80 80 08 04 80`, staged into `$AEE6+`) gives **`$AEE9`=+3=`0x3A`**
 (attacker HIT) and **`$AEEA`=+4=`0x3B`** (target EVADE).
@@ -98,7 +98,7 @@ physical shifts every RNG stream, which moved 16 pinned checks — all re-pinned
 (still a victory, statuses still land/block per immunity). NOT ported, stated: the header staging
 (`$AEE6` → `$AEED`) itself, so a PHYSICAL reaching the D864/D971 arm would wrongly roll; none does.
 
-### 1.2 The roll `C1/DC64` (dis.py `1DC64`, 8-bit) — byte-exact
+### 1.2 The roll `C1/DC64` (romdis.py `1DC64`, 8-bit) — byte-exact
 ```
 1DC64 LDA $16 / CMP $18 / BCC 1DC72     ; if HIT >= EVADE:
 1DC6A   LDA #63 / STA $16 ; LDA #64 / STA $18   ;   $16=99, $18=100  (hitPct clamps to 99 -> ALWAYS hits)
@@ -129,7 +129,7 @@ which is exactly why our always-hit engine matched every pin. A miss requires `h
 
 ## 2 — THE "MISS" POPUP  (`C1/E8E2` → the type-5 result, glyph tiles `0x19A/0x19B`)
 
-### 2.1 The result routine `C1/E8E2` (dis.py `1E8E2`, 8-bit)
+### 2.1 The result routine `C1/E8E2` (romdis.py `1E8E2`, 8-bit)
 ```
 1E8E2 LDA $1C / CMP #01 / …               ; $1C=0 on a to-hit miss (D306 STZ $1C) -> use $1A bit7
 1E8F8 LDA $1A / BIT #80 / BEQ 1E927        ; ($1A = $AEF1, weapon byte +11; Crono 0x80 -> bit7 set)

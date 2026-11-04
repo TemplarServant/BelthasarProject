@@ -33,7 +33,7 @@ scene 8):
 So the report was not the player, not the map, not the follower. It was **Taban himself** — obj10, which
 `ct_vm.c` already names at the `$1C81` seed, running op 0x96.
 
-## 1. C0/4F61 has NO cached heading (`tools/dis.py 0x004F61 0x90 1 0`)
+## 1. C0/4F61 has NO cached heading (`tools/romdis.py 0x004F61 0x90 1 0`)
 
 ```
 4F6B  TYX / INX / LDA $7F2001,X -> $F2      ; operand 1 = target tile X

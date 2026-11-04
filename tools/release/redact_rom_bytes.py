@@ -8,7 +8,7 @@ hex dump ("A6 EB BD 01 ..."), long hex string or assembler byte list in the file
 window of --window bytes with at least 8 distinct values, the same test as scan_rom_leaks.py), the quoted bytes are
 replaced by
 
-    [N ROM bytes at 0xOFFSET: python tools/dis.py 0xOFFSET N]
+    [N ROM bytes at 0xOFFSET: python tools/romdis.py 0xOFFSET N]
 
 so the reader can see them in their own copy. Only the matched text changes; everything around it is kept.
 """
@@ -64,7 +64,7 @@ def main():
                 return m.group(0)
             n += 1
             off, ln = hit
-            return '[%d ROM bytes at 0x%X: python tools/dis.py 0x%X %d]' % (ln, off, off, ln)
+            return '[%d ROM bytes at 0x%X: python tools/romdis.py 0x%X %d]' % (ln, off, off, ln)
 
         for pat in PATTERNS:
             text = pat.sub(repl, text)

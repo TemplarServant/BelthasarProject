@@ -22,7 +22,7 @@ sleep-specific code path anywhere** — sleep is row 2 of that table.
 > per-frame OAM (§4) shows zero positional motion. (Other statuses' icons *do* hop — see the `CC/F6D4`
 > table in §3.2, groups 8-11 and 16-19 — so "some status icons move" is true, "sleep's does" is not.)
 
-Method / provenance: ROM disasm via `python tools/dis.py <fileoffset> <len> [m] [x]`
+Method / provenance: ROM disasm via `python tools/romdis.py <fileoffset> <len> [m] [x]`
 (fileoffset = `(bank−0xC0)<<16 | addr`); oracle = `ct_probe.exe` (= `build/ct.exe`) run from the
 **`sleeppatch/`** ROM copy built by `mk_sleeppatch.py` (the `battle_status_pipeline.md` §8.3 recipe — GATO's
 attack headers `CC/89C6[0]`/`[1]` and Crono's `CC/213F[58]` carry the sleep rider: byte+1 = 0x63 accuracy,
@@ -82,7 +82,7 @@ byte+2 = 0x04 mask, byte+7 |= 0x04). Base state `crono_normal_ready.state`; driv
 
 ## 1 — THE STATUS SCAN `C1/2F97` (the single source of both outputs)
 
-`python tools/dis.py 0x12F97 0x70 1 1` + `0x13006 0x5C 1 1` (8-bit m/x):
+`python tools/romdis.py 0x12F97 0x70 1 1` + `0x13006 0x5C 1 1` (8-bit m/x):
 
 ```
 12F97 LDX $94                          ; X = combatant index (0..10)
@@ -201,7 +201,7 @@ Raw: `00 80 81 08 | 01 80 02 00 | 01 04 04 1A | 01 02 05 08 | 01 08 08 FF | 01 2
 | 9 | `C1/3163` | 0x60 | `CC/F602` = 0x0A | 24-27 (tiles AC/CC, pal3) |
 | 14 | `C1/3141` | 0x70 | `CC/F603` = 0x0E | 28-31 (tiles AA/CA, pal3) |
 
-The SLEEP handler verbatim (`dis.py 0x131B0 0x24 1 1`):
+The SLEEP handler verbatim (`romdis.py 0x131B0 0x24 1 1`):
 ```
 131B0 JSR C1/30B6            ; clear $A483/$A48E/$A457/$A46D/$A478
 131B3 LDX $94
@@ -233,7 +233,7 @@ grp base  recs        records (dx, dy, tile, attr)                              
 **attr `0x25`** → tile bit8 = 1, **pal 2**, prio 2, hf=vf=0. **attr `0x27`** → pal **3**.
 So the SLEEP icon's real VRAM tiles are **`0x1A6` and `0x1C6`** (16×16 = tiles T, T+1, T+0x10, T+0x11).
 
-### 3.3 The OAM builder `CF/EE2C` (`dis.py 0xFEE2C 0x14 1 0` + `0xFEE30 0x70 1 1`)
+### 3.3 The OAM builder `CF/EE2C` (`romdis.py 0xFEE2C 0x14 1 0` + `0xFEE30 0x70 1 1`)
 
 ```
 FEDC0 LDA $A013 / BNE FEDCD / LDA $A0FE / BNE FEDCD / JMP CF/EE2C   ; ** the GATE (§4.3) **
@@ -327,7 +327,7 @@ already mirrors (`battletrace … A013=…`).
 
 ## 5 — THE SLEPT-PC POSE
 
-### 5.1 The class → window-offset multiply (`dis.py 0x12E00 0xA0 1 1`)
+### 5.1 The class → window-offset multiply (`romdis.py 0x12E00 0xA0 1 1`)
 
 ```
 12E20 DEC $9689,X / BEQ 12E28 / JMP C1/2F13      ; the per-PC pose TIMER

@@ -149,7 +149,7 @@ which the VM port already had right. Two RENDER defects, both measured at Norste
 # doors
 ct.exe --teleport 4 10 6 0 --from saves/truce_market.state --out o4.state --frames 240
 ct.exe --monitor "7E320A:2,7E0117:1,7E015B:2" --from o4.state --input "10:40,0:20" --frames 60 --writer --diff
-python tools/dis.py 9CA1 0x90 ; python tools/dis.py 0D3E 0x50 ; python tools/dis.py 11C9 0x50
+python tools/romdis.py 9CA1 0x90 ; python tools/romdis.py 0D3E 0x50 ; python tools/romdis.py 11C9 0x50
 # occluders
 ct.exe --teleport 200 39 8 0 --from saves/truce_market.state --out o200.state --frames 240
 ct.exe --peek o200.state o200.raw --btnscript "0:60" ; python tools/ct.py oam o200.raw.oam

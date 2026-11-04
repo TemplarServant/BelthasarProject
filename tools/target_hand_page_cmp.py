@@ -43,7 +43,6 @@ TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path = [p for p in sys.path if os.path.abspath(p or '.') != TOOLS]
 sys.path.insert(0, TOOLS)
 import battle_ab as ab  # noqa: E402
-sys.path.insert(0, TOOLS)                                 # (battle_ab drops it: tools/dis.py shadows dis)
 import battle_sim as bs  # noqa: E402
 
 ROOT = os.path.dirname(TOOLS)

@@ -280,7 +280,7 @@ ct.exe --teleport 157 52 10 0 --from saves/truce_market.state --out o157.state -
 ct.exe --peek o157.state o157.raw --btnscript "0:60"     # read $0F80/$0C00/$0C01 per object
 PEEK_ISOBG=0 ct.exe --peek o129.state o129_L0.raw --btnscript "0:60"    # 0=BG1 .. 3=BG4, 4=OBJ
 ct.exe --teleport 240 7 16 0 --from saves/truce_market.state
-python tools/dis.py 4C74 0x60 ; python tools/dis.py AD90 0xA0
+python tools/romdis.py 4C74 0x60 ; python tools/romdis.py AD90 0xA0
 
 # section 5 -- the gate, and the window that makes its priority-0 sprite visible
 ct.exe --monitor "7E0139:1" --from saves/field_re/scene8_gate_cutscene.state \

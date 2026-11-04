@@ -4,7 +4,7 @@ Closes the two open halves the corpus (`battle_animeng_corpus.md`) proved must e
 per-pose/per-facing tile CONTENT into OBJ VRAM** (Parts 1/2 accounted for the OAM tile-NUMBERS and the
 effect/BG streamer, but nothing uploaded GATO's body pixels 0x68–0x8E, whose VRAM content is md5-distinct
 per facing), and **the PC-side pose tick** (Part 2 §9 left it "un-derived… a parallel PC-side routine"). All
-derived from the ROM disasm (`tools/dis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+derived from the ROM disasm (`tools/romdis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`ct_tiles.exe = build/ct.exe`), and **end-to-end pixel-validated**: the derived pipeline reproduces the
 corpus's exact VRAM tile bytes (21/21 GATO cells; all four facing md5s). **Zero invention** — every field
 byte-cited and every address confirmed against a live monitor / peek. `src/` + git untouched.
@@ -56,7 +56,7 @@ the same fixed VRAM window. Nothing streams the combatant pixels except this bui
 
 ## 2 — The tile BUILDER `C1/1C4A` (the upload routine), byte-exact
 
-`tools/dis.py 0x11C4A`. Called per-combatant from the pose ticks (callers: **C1/2F10** PC · **C1/345D**
+`tools/romdis.py 0x11C4A`. Called per-combatant from the pose ticks (callers: **C1/2F10** PC · **C1/345D**
 enemy · C1/3702 · C1/416A/418B/41AC · **C1/4307** the CD/song path). Entry + the CHANGE GATE:
 
 ```
@@ -133,7 +133,7 @@ the NMI DMA drain `battle_boot.md §3` `D1:E77C → JSL CD:0C95/CD:0C89`; not di
 
 ## 4 — The PC pose tick `C1/2E00` (Part 2 §9's "un-derived PC-side routine" — RESOLVED)
 
-`tools/dis.py 0x12E00`. A loop over the 3 PC slots (`$92`/`$94` = 0,1,2) that is **structurally identical to
+`tools/romdis.py 0x12E00`. A loop over the 3 PC slots (`$92`/`$94` = 0,1,2) that is **structurally identical to
 the enemy tick `C1/3360`**, keyed on PC-indexed vars, feeding the SAME builder. It is NOT the `$8E`/CD path:
 
 ```
@@ -285,7 +285,7 @@ Dir: `%TEMP%/claude/C--Users-…-e5608df4-…/scratchpad/`
 - Key monitors: facing/pose `--monitor "008E:1,967B:1,96DE:8,9877:1,A013:1,9679:1" --diff`; the staging
   writer `--monitor "70AD:8,96E1:1,008E:1,967B:1" --writer --diff`; PC/enemy cache+cursor
   `--monitor "9907:8,969C:8,008E:1,95D5:1" --writer`; PC-tick advance `--monitor "968C:3,9689:3,96DB:3"`.
-- Disasm: builder `tools/dis.py 0x11C4A` (gate 11C5D, raw-copy 11D5A, decode/`C1:1E2A` 11DD3); decode table
+- Disasm: builder `tools/romdis.py 0x11C4A` (gate 11C5D, raw-copy 11D5A, decode/`C1:1E2A` 11DD3); decode table
   `rom:C0/FD00`; PC tick `0x12E00`; enemy tick `0x13440`; meta loader `0x0CEAE0`; streamer `0x3DE170`.
 - Live tables: `rom:CC/F92D` (slot·3 remap), `rom:CC/F941` (VRAM-shadow base), `rom:CC/F40A` (class stride);
   ptrs `wram:1C57`(sheet) `wram:1C78`(assembly/E3) `wram:1C99`/`1CA2`(pose/E4).

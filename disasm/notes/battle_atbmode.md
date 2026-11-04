@@ -5,7 +5,7 @@ wait"): **(1)** the selector screen at new-game start — where it sits, its lay
 persistent flag byte it writes; **(2)** what that flag does in battle — the exact consumer PC and the ATB-freeze
 rule, proven in BOTH modes.
 
-Every claim cites a ROM disasm address (`tools/dis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 | addr) or an
+Every claim cites a ROM disasm address (`tools/romdis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 | addr) or an
 oracle observation. Writer PCs from `--monitor --writer` are the PC of the instruction AFTER the store retires.
 
 Source state: `aux crono decompile/active_time_battle_selector.state` (snes9x). Decoded: **loc $0100 = 0, story

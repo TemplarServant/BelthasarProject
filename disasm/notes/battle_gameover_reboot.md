@@ -10,7 +10,7 @@ and sets a `gameOver` flag that gates the player controller, the talk key, the X
 (field.c:5447/6241/6374/6451). **Losing a battle in `Belthasar` is therefore a permanent freeze** — the
 window stays up, nothing responds, only Escape quits. This dossier derives the ROM's real behaviour.
 
-Every line below is `tools/dis.py` output on the USA ROM. Nothing here is inferred.
+Every line below is `tools/romdis.py` output on the USA ROM. Nothing here is inferred.
 
 ---
 

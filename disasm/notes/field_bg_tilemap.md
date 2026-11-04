@@ -1,7 +1,7 @@
 # The field's BG tilemaps, scroll registers and scroll mask
 
 Derived 2026-09-15 from the attract's loc 1B0 (the time vortex) and 0A5 (the moon), where the port drew the wrong part of a
-layer. ROM listings via tools/dis.py; oracle = build/ct.exe from saves/attract_cena_inicial.state.
+layer. ROM listings via tools/romdis.py; oracle = build/ct.exe from saves/attract_cena_inicial.state.
 
 ## 1. Tilemap geometry
 

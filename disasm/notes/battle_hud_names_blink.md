@@ -3,7 +3,7 @@
 Derives the two HUD-strip behaviors the user reports missing from our battle HUD:
 **(1) the PC NAME glyphs before the HP values**, and **(2) the LOW-HP text FLASH** (HP/MP
 blink white↔grey when a PC is critical). Everything below is anchored to the ROM
-(`tools/dis.py`, fileoffset = (bank−0xC0)<<16 | addr) or an oracle read/peek/monitor from
+(`tools/romdis.py`, fileoffset = (bank−0xC0)<<16 | addr) or an oracle read/peek/monitor from
 `gato_press_action.state` + a spliced in-battle command state. Companion dossiers:
 `battle_hud_render.md` (strip geometry/glyph/palette), `battle_loop.md` (RAM ledger, block layout).
 
@@ -116,7 +116,7 @@ only**, all critical PCs blink in the same global phase.
 
 ### B2. Threshold = curHP ≤ maxHP/8 (maxHP >> 3) — disasm + boundary-verified
 
-The critical test lives in the HP/MP builder (`C1/0560`→ inline, `dis.py 10604`):
+The critical test lives in the HP/MP builder (`C1/0560`→ inline, `romdis.py 10604`):
 ```
 1060B LDA $5E30,X   ; A = curHP (block+3)
 1060E STA $9499      ; $9499 = curHP scratch (NOT a persistent mirror — used only for the compare)
@@ -128,7 +128,7 @@ The critical test lives in the HP/MP builder (`C1/0560`→ inline, `dis.py 10604
 1061E BCC ->10628    ; maxHP/8 <  curHP -> NOT critical  (curHP above 1/8)
       (fall through)  ; maxHP/8 >  curHP -> CRITICAL
 ```
-`C1/011B` confirmed (`dis.py 10116`): `10116..1011D` = eight `LSR A`; the JSR target `1011B` is the 6th,
+`C1/011B` confirmed (`romdis.py 10116`): `10116..1011D` = eight `LSR A`; the JSR target `1011B` is the 6th,
 so it executes **3× LSR = >>3**. ⇒ **critical ⟺ curHP ≤ (maxHP >> 3) = maxHP / 8.**
 
 Boundary-verified empirically (Crono maxHP=70, 70>>3=8): **curHP=8 → flashes, curHP=9 → steady white,
@@ -137,7 +137,7 @@ curHP=7 → flashes.** Matches `≤ maxHP/8` exactly.
 ### B3. The blink toggle `$A110` — period = 12 frames (24-frame cycle)
 
 The grey/white phase is the global byte **`$A110`** (0/1), toggled by the render/HUD bank CF
-(`dis.py 9E58A`, hand-decoded from raw ROM `CF/E585`; the linear pass desyncs on M/X here):
+(`romdis.py 9E58A`, hand-decoded from raw ROM `CF/E585`; the linear pass desyncs on M/X here):
 ```
 CF/E58A CE 12 A1   DEC $A112        ; blink countdown
 CF/E58D D0 0D      BNE ->E59C        ; not zero -> keep current phase
@@ -154,7 +154,7 @@ on `$A112`'s battle-start value (not byte-pinned; visually irrelevant).
 
 ### B4. The apply — HP/MP digit palette = (critical AND `$A110`) ? grey : white
 
-`dis.py 10620` (HP digits) + `dis.py 1066B/106A2/106C2` (MP digits):
+`romdis.py 10620` (HP digits) + `romdis.py 1066B/106A2/106C2` (MP digits):
 ```
 105FB STZ $A10F                       ; clear per-build grey-enable (start of each PC row)
 ...
@@ -255,7 +255,7 @@ Dir: `%TEMP%/claude/…/scratchpad/`
   `cmd_lowhp1.state` (Crono curHP=1), `marle_lowhp.state` (Marle curHP=1), `thr_{7,8,9}.state`
   (threshold-boundary), `fA_*/s1_*/lo_*/ml_*/t_*.raw*` (per-frame peek dumps).
 - Commands of record: `--peek … --btnscript "0:N"` (renders the flash); `--monitor "A110:1,A10F:1"
-  … --writer` (toggle period + writers); `dis.py 10604 / 10620 / 10116 / 9E585`.
+  … --writer` (toggle period + writers); `romdis.py 10604 / 10620 / 10116 / 9E585`.
 
 ## CORRECTION 2026-09-15 -- there is no load-time name seed in the ROM
 

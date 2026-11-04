@@ -9,7 +9,7 @@ CLEARED at boot C1:CE04; the stance is the module's OWN OBJ engine building the 
 and pins the pixels: sprite provenance, the idle assembly, placement, the sequence mechanism, and the
 boundaries — with a byte-exact render verify (`tools/_gen_battlestance.py --verify` → **0/2672 px**).
 
-Everything is derived from the ROM (`tools/dis.py`, OBJ char base word 0 per `battle_boot.md §1`) and
+Everything is derived from the ROM (`tools/romdis.py`, OBJ char base word 0 per `battle_boot.md §1`) and
 `--peek` dumps regenerated from `gato_press_action.state` (A-press boots battle ≈ f222). Decoders:
 scratch `an1.py`/`an2.py` (OAM cluster), `render.py`/`render2.py` (VRAM+CGRAM sprite render vs fb),
 `vdiff.py` (VRAM diff), `anim.py` (anim-slots + shadow). FB decode (`battle_hud_render.md`): fb is

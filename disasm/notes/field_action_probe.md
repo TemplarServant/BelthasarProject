@@ -1,6 +1,6 @@
 # The ACTION-button probe (C0/1AAC -> C0/1CFC -> C0/5AC5)
 
-Derived from the ROM only. Every claim cites `tools/dis.py <fileoffset>` (bank C0 = the offset
+Derived from the ROM only. Every claim cites `tools/romdis.py <fileoffset>` (bank C0 = the offset
 directly). The field/event code runs with **D = $0100**, so a direct-page `$97` in the disasm is
 WRAM **$0197**, and `$C3`/`$C5`/`$DB`/`$EB` are `$01C3`/`$01C5`/`$01DB`/`$01EB`.
 
@@ -38,7 +38,7 @@ not a render-level one, and `field.c` now just calls it. Pinned by `field-scene2
 Note `1AC6`: a target already latched in `$01EB` (the touch scan's hit) is activated **without
 re-probing**. `$01EB` is the same latch the touch path uses (`field_touch_preempt.md`).
 
-## 2. The probe -- C0/1CFC (`dis.py 1CFC`)
+## 2. The probe -- C0/1CFC (`romdis.py 1CFC`)
 
 ```
 1CFC  REP #20 / AND #0006 / STA $DB            ; facing*2 & 6 -> 0/2/4/6 = the handler index
@@ -86,7 +86,7 @@ with a LOWER index than the player measures one subpixel further away than the s
 higher one. The SECOND `SBC` always runs with C = 0 (the last flag-setter before it is the primary
 axis's `CMP #01C0` with its BCS not taken), so the cross-axis delta is always -1.
 
-## 4. The invoke -- C0/5AC5 (`dis.py 5AC5`)
+## 4. The invoke -- C0/5AC5 (`romdis.py 5AC5`)
 
 Structurally the twin of the touch invoke C0/3154, with three differences:
 

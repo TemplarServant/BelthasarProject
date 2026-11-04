@@ -85,7 +85,7 @@ victory and the run-off -- CF/FBE5's `$A4` loop (CF/FCB5-FCC3), `$0900 = FF`, CF
 seven sheets), `JSL CD/0006` -> CD/03B4 (CD/039E's sound + 15 waits, CD/0516, the band, `$CA25` 0E / 08). The port left
 on C1/8164's frame (`return 1` beside battleModuleTail): 42 frames early, and the party came back on 0 HP.
 
-Then, in every exit, CD/0415-0438 (dis.py D03E8 0x62): `JSR CD/3E7D` (the `$CA25 = 08` frame's wait); `$0501/$0503 =
+Then, in every exit, CD/0415-0438 (romdis.py D03E8 0x62): `JSR CD/3E7D` (the `$CA25 = 08` frame's wait); `$0501/$0503 =
 D1:F4C0` (the exit NMI, CtBattleTailFrame), `$45 = $BB00`, `JSR CD/044A` (a wait); then `LDA $2A1F / AND #40 / BNE
 ->0438`, else `LDA $002141 / BNE ->0428` -- one CD/044A wait per round until the SPC's port 1 reads 0 --, `STZ $2A21`,
 CD/043E `JSL C0/000B` (C0/1BE6's chain). The port posted the chain on the `$CA25 = 08` frame.

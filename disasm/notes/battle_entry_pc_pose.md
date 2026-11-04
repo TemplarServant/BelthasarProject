@@ -294,7 +294,7 @@ cause before the re-triggered-battle harness trap was found).
 
 # Adversarial review (independent re-derivation, read-only session)
 
-Method: every cited ROM address re-disassembled with `python tools/dis.py` from the ROM file offset;
+Method: every cited ROM address re-disassembled with `python tools/romdis.py` from the ROM file offset;
 every oracle value re-measured with my own `--monitor`/`--peek` runs from
 `saves/battle_crono_solo_lake.state`; our side re-measured with my own snapshot of `build/Belthasar.exe`.
 Scratch: `%TMP%/ctwf3/facing-adv/` (`ct_probe.exe`, `Belthasar.exe`, `crop.py`, `z.py`, oracle peeks
@@ -310,7 +310,7 @@ for a reason that is fatal in exactly the scenario the user reported.
 
 **Every ROM citation holds.** Re-disassembled, byte for byte:
 
-| cited | my dis.py | verdict |
+| cited | my romdis.py | verdict |
 |---|---|---|
 | `C0/0453 LDA $0F01,X : STA $7E29B4` | `0453: LDA $0F01,X` / `0456: STA $7E29B4` | OK |
 | `CC/E965 LDA $96A8,X : STA $A4DC,Y` + `CC/E96B TDC : STA $96DB,Y` | identical | OK |
@@ -794,8 +794,8 @@ $P --read "7F36E0+192" --from saves/battle_crono_solo_lake.state
 $P --monitor "1604:1,1684:1,1605:1,1685:1,0F05:1,1B04:1" --from saves/battle_crono_solo_lake.state \
    --input "40:400" --diff --writer --frames 130
 # ROM
-python tools/dis.py 326C 0x120 ; python tools/dis.py 5545 0x30 ; python tools/dis.py 5690 0x20
-python tools/dis.py 00A0 0x50  ; python tools/dis.py CB3A 0x50 ; python tools/dis.py 5F70 0x40
+python tools/romdis.py 326C 0x120 ; python tools/romdis.py 5545 0x30 ; python tools/romdis.py 5690 0x20
+python tools/romdis.py 00A0 0x50  ; python tools/romdis.py CB3A 0x50 ; python tools/romdis.py 5F70 0x40
 #   op table: handler = word at (C0/5D6E + 2*op)  ->  0xD9 = C0/326C, 0xA6 = C0/5545, 0xD8 = C0/3A83
 # OURS: the timeline, the turn, the anim inputs, the staged byte
 CT_VMTRACE=1  ... $F --assets ct_assets.dat --scene 19 \
@@ -1018,8 +1018,8 @@ $P --monitor "1184:2,1C04:1,1604:1,0F04:1,011F:1" --from saves/battle_crono_solo
 $P --monitor "1604:1,1684:1,1605:1,1685:1,0F05:1,1B04:1" --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 200
 $P --monitor "29B0:5,2989:1,9907:1" --from saves/battle_crono_solo_lake.state --input "40:400" --diff --writer --frames 260
 $P --read "7F371F+32" --from saves/battle_crono_solo_lake.state
-python tools/dis.py 326C 0xE0 ; 3315 0x60 ; 5535 0x30 ; 5690 0x20 ; 4FA0 0x50 ; 5F90 0x24
-python tools/dis.py 0097 0x50 ; CC00 0x20 ; 041A 0x50 ; 0CE955 0x25 ; 0134A7 0x25 ; 18D9 0x20 ; 1770 0x14 ; 0380 0x20
+python tools/romdis.py 326C 0xE0 ; 3315 0x60 ; 5535 0x30 ; 5690 0x20 ; 4FA0 0x50 ; 5F90 0x24
+python tools/romdis.py 0097 0x50 ; CC00 0x20 ; 041A 0x50 ; 0CE955 0x25 ; 0134A7 0x25 ; 18D9 0x20 ; 1770 0x14 ; 0380 0x20
 # byte scans (python): jump table C0/5D6E+2*op ; canned block at 0x5D50 ; callers of C0/024C, C0/041A, C0/1770
 # OURS -- the discriminator
 CT_FRAMELEGS=0 CT_DUMPWRAM=q1230.wram CT_DUMPWRAM_AT=123 $F --assets ct_assets.dat --scene 19 \

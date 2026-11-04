@@ -22,8 +22,6 @@ import os
 import struct
 import sys
 
-# tools/dis.py would shadow the standard library's `dis`, which numpy's import chain needs.
-sys.path = [p for p in sys.path if os.path.abspath(p or '.') != os.path.dirname(os.path.abspath(__file__))]
 import numpy as np
 
 REC = 6 + 128 * 112 * 3

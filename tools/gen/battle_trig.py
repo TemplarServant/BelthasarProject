@@ -27,7 +27,7 @@ import os, sys
 ROM = os.environ.get('CT_ROM', 'Chrono_Trigger_USA_SNES.sfc')
 OUT_H = 'src/data/battle_trig.h'
 
-# HiROM: file offset == the bank-C0 CPU offset for bank C0 (dis.py convention).
+# HiROM: file offset == the bank-C0 CPU offset for bank C0 (romdis.py convention).
 TAB = [('ctBattleAtanTab', 0xF300, 'C0/F300 arctangent (C1/0222)'),
        ('ctBattleSinTab',  0xF900, 'C0/F900 sine, signed-when-idx>=0x200 (CF/F9FB, C1/01F9)'),
        ('ctBattleFaceTab', 0xF700, 'C0/F700 facing/octant (C1/379A)')]

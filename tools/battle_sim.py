@@ -92,7 +92,7 @@ def names():
 # ---------------------------------------------------------------------------------------------------- the catalog
 def scan_scripts():
     """[(scene, obj, id, op2, tx, ty)]: every op 0x83 in an object's fn0 and the coordinate op that follows it."""
-    if TOOLS not in sys.path: sys.path.append(TOOLS)       # (battle_ab drops tools/ from the path: tools/dis.py)
+    if TOOLS not in sys.path: sys.path.append(TOOLS)
     from ctlib import rom, script
     r = rom.load(ROM)
     out = []

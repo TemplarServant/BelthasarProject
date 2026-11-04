@@ -52,7 +52,7 @@ EOF
 data space; they are byte coincidences, not instructions. *disasm-only, unconfirmed* that they are data —
 but the oracle agrees: the only writer PC ever reported for `$A4E7` during a battle is `C1:434C`.)
 
-### 1.2 What `C1/4349` stores — `python tools/dis.py 14300 0x90`
+### 1.2 What `C1/4349` stores — `python tools/romdis.py 14300 0x90`
 
 ```
   1432C: LDA  $AE91                 ; the acting combatant's PC slot
@@ -78,7 +78,7 @@ but the oracle agrees: the only writer PC ever reported for `$A4E7` during a bat
 
 so **`$A4E7 = $1C48[5 * $AE91]`**.
 
-### 1.3 What `$1C48` is — the filler, `python tools/dis.py 3DAF04 0x50`
+### 1.3 What `$1C48` is — the filler, `python tools/romdis.py 3DAF04 0x50`
 
 ```
   3DAF04: LDX  $02              ; $02 = the slot counter
@@ -169,7 +169,7 @@ sound (op 0x7D). No 0x7D fired in this capture ⇒ `CD/6DAC`'s role is **disasm-
 (`C1/7640`, `C1/765A`, `C1/76CF`, `C1/7736`, `C1/778A`, `C1/77CA/D3/E2/FA`, `C1/78D0`, `C1/790A`, `C1/796D`,
 plus the `C1/4FC2/4FD4`, `C1/51F6/520D`, `C1/540C/541E`, `C1/6733`, `C1/6F43/6F87`, `C1/7211` copy sites).
 
-`python tools/dis.py 1762E 0x60`:
+`python tools/romdis.py 1762E 0x60`:
 
 ```
   1762E: PHY / PHX / TAY / ASL A / TAX / JSR ($79D3,X)   ; mode -> leaf
@@ -179,7 +179,7 @@ plus the `C1/4FC2/4FD4`, `C1/51F6/520D`, `C1/540C/541E`, `C1/6733`, `C1/6F43/6F8
          CLC / LDA $1D0C,X / ADC $9708,X / STA $A2B0     ; mode 09-11: + the per-combatant engage offset
 ```
 
-and the op that reads it (`python tools/dis.py 1619E 0x90`):
+and the op that reads it (`python tools/romdis.py 1619E 0x90`):
 
 ```
   161C1: INY / LDA [$E6],Y / STA $1E01    ; id  = operand 1
@@ -242,7 +242,7 @@ python - <<'EOF'   # scan for 20 71 3B / 22 71 3B CD / 20 5F 3B
 EOF
 ```
 
-`python tools/dis.py D3B50 0x50`:
+`python tools/romdis.py D3B50 0x50`:
 
 ```
   D3B5F: LDA $CD23 / BEQ ->D3B70        ; nothing pending
@@ -251,7 +251,7 @@ EOF
   D3B71: STA $1E01 / LDA #18 / STA $1E00 / TXA / STA $1E02 / JSL C7/0004 / RTS
 ```
 
-and the direct callers (`python tools/dis.py D0080 0x30`, raw bytes at `0x0D04FD` / `0x0D01C9`):
+and the direct callers (`python tools/romdis.py D0080 0x30`, raw bytes at `0x0D04FD` / `0x0D01C9`):
 
 ```
   D0093: LDA $CD00 / TAX / LDA $1D0C,X / TAX     ; pan = a combatant's screen X
@@ -273,7 +273,7 @@ and the direct callers (`python tools/dis.py D0080 0x30`, raw bytes at `0x0D04FD
 `CD/3B71` was entered at `D3B71` from a direct `JSR`, never via `D3B6D`.
 
 Consistent with the disassembly: the stagers read the **bank-CD interpreter's** script pointer, not the C1
-anim engine's `[$E6]` (`python tools/dis.py D18C0 0x40` / `D1915 0x30`):
+anim engine's `[$E6]` (`python tools/romdis.py D18C0 0x40` / `D1915 0x30`):
 
 ```
   D18CF: LDA [$40] / STA $CD24 / LDA $5DA0 / TAX / STX $CD25 / INC $CD23
@@ -325,7 +325,7 @@ The oracle says why. `--monitor "7E9884:1,7E9885:2,7E9878:2,7E1E01:1" … --diff
 
 (the monitor prints bytes in address order, so `7E9878=8003` is `$9878=80, $9879=03` ⇒ the word `0x0380`.)
 
-`C1:4433` is the PC after `14430 STA $9878`. `python tools/dis.py 14401 0x60`:
+`C1:4433` is the PC after `14430 STA $9878`. `python tools/romdis.py 14401 0x60`:
 
 ```
   14427: LDA  $9877 / ASL A / TAX

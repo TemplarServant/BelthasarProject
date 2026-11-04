@@ -1,6 +1,6 @@
 # The driver MODE byte `$1E10` — why battles have no sound
 
-Derived from the ROM + oracle. `dis.py <fileoffset>` (bank C0 = the offset directly); the field code
+Derived from the ROM + oracle. `romdis.py <fileoffset>` (bank C0 = the offset directly); the field code
 runs with **D = $0100**, so a direct-page `$FA` is WRAM **$01FA**. Bank $C7 (the sound driver) runs
 with **D = $1E00**, so a direct-page `$10` there is **$7E:1E10** — the same byte.
 
@@ -19,7 +19,7 @@ never uploaded, and every battle SFX plays against the field sample set.
 
 Only three, all in bank C0.
 
-### 1.1 BATTLE — C0/1BAB (`dis.py 1BAB`)
+### 1.1 BATTLE — C0/1BAB (`romdis.py 1BAB`)
 
 ```
 1BAB  PHB / PHD / REP #20 / LDA #0100 / TCD / SEP #20 / PHA / PLB
@@ -33,7 +33,7 @@ Only three, all in bank C0.
 `$1E10` is written as `$FF`, not 1. The DRIVER normalises it: `C7:04D0` writes 1 (measured below),
 which is exactly what `CtAudioLoadSong`'s ported `$C7:04C0` block does (`M8(m,0x1E10) ? 1 : 0`).
 
-### 1.2 FIELD — C0/1BE6 (`dis.py 1BE8`)
+### 1.2 FIELD — C0/1BE6 (`romdis.py 1BE8`)
 
 ```
 1BF2  LDA $7F01EC / BEQ ->1C09               ; 0 -> the 1C09 arm

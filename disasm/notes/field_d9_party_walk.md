@@ -18,7 +18,7 @@ The walk: `E3 00 / 89 40 / 0D 00 / AE / 96 x y / A6 f / 71 FE / 12 FE 04 04 04 .
 speed $40, no collision, auto-anim, MOVETO (op 0x96, the one every script uses), face, count the arrival in var FE =
 `$7F03FC`, wait for 4, RETURN. The largest shipped script is 0x16FA bytes: none reaches $7F3700.
 
-## 2. The op (C0/326C, `python tools/dis.py 0326C 0x230 1 0`)
+## 2. The op (C0/326C, `python tools/romdis.py 0326C 0x230 1 0`)
 
 * FIRST visit (`$7F03FC == 0`, 32C8): `STZ $1F`; for slot 0 (`LDX $97`, 16-bit, no bit-7 test) and slots 1/2 when
   present (`$99`/`$9B` BPL): push `$1180,X` at `$7F0580 + $1C00,X * $80 + X`, `$1180,X := 171F/173F/175F`,

@@ -10,7 +10,7 @@ Derives, from the ROM disasm + LakeSnes oracle **only**, GATO's full move *prese
 
 Method (mandate: measured, not invented). Base `gato_press_action.state` (repo root; A-press boots battle ≈f222).
 Oracle `ct_probe.exe` (scratch copy of `build/ct.exe`). `--monitor` for all RAM timelines (never `--peek`; the
-peek≠monitor gotcha). ROM `tools/dis.py <fileoffset>` (fileoffset = (bank−0xC0)<<16 | addr) + a multi-track anim
+peek≠monitor gotcha). ROM `tools/romdis.py <fileoffset>` (fileoffset = (bank−0xC0)<<16 | addr) + a multi-track anim
 decoder that mirrors our engine's `battleAnimOpLen` (ROM opcode jump-table `C1/7A6B`). Writer PCs = the PC after
 the store retires. Drivers: **MASH** `('100:20,0:40')×24` (keeps GATO in his when-hit block2 → attack-B every turn),
 **HOLD** `100:8,0:2700` (Crono idles in the command menu → GATO un-hit → block1 attack-A + song).
@@ -54,7 +54,7 @@ the store retires. Drivers: **MASH** `('100:20,0:40')×24` (keeps GATO in his wh
 
 ## A — THE MULTI-HIT HP PIPELINE (disasm) — and the byte-proof GATO does NOT use it
 
-### A.1 The apply routine `C1/EC7F` (fresh disasm `tools/dis.py 1EC7F`, 16-bit A/X)
+### A.1 The apply routine `C1/EC7F` (fresh disasm `tools/romdis.py 1EC7F`, 16-bit A/X)
 
 Damage is staged into THREE per-target hit slots (stride `0x2C`, index `Y = target*4`): **`$B328` = hit-1,
 `$B354` = hit-2, `$B380` = hit-3**, each with a 16-bit flag word (`$B32A`/`$B356`/`$B382`). The apply loop
@@ -154,7 +154,7 @@ f1462  $5EB0 : 4100 -> 4000 (C1:ED1A)      ; MARLE curHP 65 -> 64  (-1)
 f2411  $B328 = 0100 (C1:EC2F)              ; a later song: staged hit-1 = 1 (single hit)
 ```
 
-**The floor** (`tools/dis.py 1DCED`): after the variance+bonus add, if the accumulated damage is 0 it is bumped
+**The floor** (`tools/romdis.py 1DCED`): after the variance+bonus add, if the accumulated damage is 0 it is bumped
 to 1 — this is where the song's "damage" comes from:
 ```
 C1/DCF0  LDX $AD89 / BNE ->DCF9            ; damage != 0 -> keep it
@@ -291,5 +291,5 @@ Dir: `%TEMP%/claude/C--Users-...-e5608df4-.../scratchpad/`
 - `ct_probe.exe` (oracle copy of build/ct.exe), `song_oam.txt` (OAM-shadow monitor over the HOLD song span).
 - `/tmp/animdec.py` (multi-track anim decoder, engine-mirrored op lengths → the §B decodes), `/tmp/animdump.py`
   / `/tmp/tdump.py` (raw script/track dumps), `/tmp/parse_oam.py` (digit-popup + pal4-flash detector, §C).
-- Repro commands inlined per section (MASH `('100:20,0:40')×24`; HOLD `100:8,0:2700`). Disasm: `tools/dis.py
+- Repro commands inlined per section (MASH `('100:20,0:40')×24`; HOLD `100:8,0:2700`). Disasm: `tools/romdis.py
   1EC7F` (apply), `1DCED` (min-1 floor), `14562` (anim header loader); records `CC/89C6`.

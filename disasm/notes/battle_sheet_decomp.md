@@ -3,7 +3,7 @@
 Closes the anim-engine's #1 standing boundary (`battle_anim_engine.md` O3/C5, `battle_animeng_tiles.md` §8,
 `battle_boot.md` open "GATO's OBJ graphics ROM source … unexplored"): **how the compressed enemy sprite SHEET
 gets from ROM into WRAM `$7F8000`.** It turns "an enemy's poses need a live `$7F8000` capture" into "any enemy's
-sheet loads from the ROM alone". Every claim is anchored to a ROM disassembly (`tools/dis.py`, HiROM flat =
+sheet loads from the ROM alone". Every claim is anchored to a ROM disassembly (`tools/romdis.py`, HiROM flat =
 `(bank−0xC0)<<16|addr`) or a byte-exact oracle/ROM diff; nothing invented.
 
 **RESULT: the enemy sheet is the SAME `ct_lz_decompress` (Evil Peer LZ, `src/lz.c`) already in-tree, run on a

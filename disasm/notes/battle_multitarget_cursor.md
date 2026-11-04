@@ -4,14 +4,14 @@ User defect (translated from Portuguese): *"when using crono's cyclone tech, whi
 on the potentially affected enemies"* — during Cyclone's target-select the pointing hand appears
 on only ONE enemy instead of on every enemy the tech will hit.
 
-Everything below is derived from the ROM disasm (`python tools/dis.py <fileoffset> <len> [m] [x]`, fileoffset =
+Everything below is derived from the ROM disasm (`python tools/romdis.py <fileoffset> <len> [m] [x]`, fileoffset =
 `(bank−0xC0)<<16 | addr`) and measured in the LakeSnes oracle (`ct_probe.exe` = a copy of `build/ct.exe`;
 ⚠ `--monitor` LEN is DECIMAL). **Zero invention.** This CLOSES `battle_actionfx.md` **P5.4** (both open items:
 the cursor anchor formula AND multi-enemy navigation) and adds the render half of `battle_multitarget.md`
 (whose §5 T3 left the presentation open).
 
 > ⚠ The whole routine block `C1/1979–C1/1B18` runs with **M=1 (8-bit A) / X=0 (16-bit index)**. Disassemble it as
-> `python tools/dis.py <fo> <len> 1 0` — with the default 8-bit index the decode desynchronises at `C1/1AA2`
+> `python tools/romdis.py <fo> <len> 1 0` — with the default 8-bit index the decode desynchronises at `C1/1AA2`
 > (`A0 01 00` = `LDY #$0001`) and prints garbage (`BRK #84 / BRL`).
 
 ---
@@ -55,7 +55,7 @@ f413  Down: $9614=01  $A62D = 04 03 FF  OBJ0/1=(72,87) OBJ2=(104,55)            
 
 ## 1 — THE DISPATCHER `C1/17DD` (who draws the cursor, and when)
 
-`dis.py 117DD 0x20 1 0`:
+`romdis.py 117DD 0x20 1 0`:
 ```
 117DD LDA $95D5 / BPL 117E5 / JMP C1/1AFE   ; $95D5 = 0xFF (no chooser) -> HIDE the 4 cursor OBJs
 117E5 LDA $9609 / BEQ 117ED / JMP C1/1979   ; ** $9609 != 0 = TARGET-SELECT -> the CURSOR BUILDER **
@@ -63,7 +63,7 @@ f413  Down: $9614=01  $A62D = 04 03 FF  OBJ0/1=(72,87) OBJ2=(104,55)            
 117F5 JMP C1/17FE   ; $95DB==1 tech submenu cursor      117F8 JMP C1/18B0 ; $95DB==2 item submenu cursor
 117FB JMP C1/1B14   ; command level -> nothing
 ```
-Callers (`dis.py 110A0 0x80 1 0`) — all three are gated on the redraw request `$993A`:
+Callers (`romdis.py 110A0 0x80 1 0`) — all three are gated on the redraw request `$993A`:
 ```
 110C6 LDA $993A / BEQ .. / STZ $993A / JSR C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD
 110E3 (same, RTL variant)      110FA (same)
@@ -81,7 +81,7 @@ Oracle: at the confirm frame (GATO f457) `$0700 = 78 F0 .. 82 F0 .. 7A F0 .. 82 
 
 ## 2 — THE BUILDER `C1/1979` — tiles, palette, and the ORIGIN FORMULA (P5.4 CLOSED)
 
-`dis.py 11979 0x70 1 0`:
+`romdis.py 11979 0x70 1 0`:
 ```
 11979 LDA $9613 / BPL 11981 / JMP C1/1AFB   ; $9613 bit7 = "no selectable target" -> leave OAM untouched
 11981 LDA $95DB / DEC A / BNE .. / JSR C1/0EBA
@@ -120,7 +120,7 @@ target's idle motion" IS `liveY − 48`. The forest column reproduces our baked 
 along, so replacing it with the formula is byte-identical.
 
 ### 2.2 Where `$9708`/`$9713` come from — the PC defaults
-`dis.py 0xCE3A0 0x50 1 0` (battle init, bank CC):
+`romdis.py 0xCE3A0 0x50 1 0` (battle init, bank CC):
 ```
 CE3C2 LDX #0002 / LDA #F0
 CE3C7 STZ $9708,X          ; ** PC cursor dX = 0 **        (X = 2,1,0)
@@ -131,7 +131,7 @@ Oracle read (forest, in battle): `$9708 = 00 00 00 00 00 00 …`, `$9713 = F0 F0
 (PCs) `F0`, indices 3-5 (the three Hetakes) `F8`. ✓ Both directions.
 
 ### 2.3 Where `$9708`/`$9713` come from — the ENEMY graphics record `E4/F604 + id*10`
-`dis.py 0xCEB50 0x90 1 0` (the per-enemy loader; `$8C` = enemy id, `$80` = enemy SLOT 0..7):
+`romdis.py 0xCEB50 0x90 1 0` (the per-enemy loader; `$8C` = enemy id, `$80` = enemy SLOT 0..7):
 ```
 CEB65 LDA $8C / ASL A / STA $82 / ASL A / ASL A / CLC / ADC $82 / TAX    ; X = id*10
 CEB73 LDY $80                                                            ; Y = enemy slot
@@ -162,7 +162,7 @@ non-GATO enemy. The canonical value is record `+3` — Hetake = `0x10` = **16**.
 
 ## 3 — THE MULTI HEAD `C1/1A7B` + the PAGE loop `C1/1AA2` (the blink)
 
-`dis.py 11A7B 0x50 1 0`:
+`romdis.py 11A7B 0x50 1 0`:
 ```
 11A7B LDA $A62D / BMI 11AA2                 ; sprite 0 = the PRIMARY $A62D[0], always
 11A80 TAX / CLC / LDA $1D0C,X / ADC $9708,X / SEC / SBC #10 / STA $0700
@@ -208,7 +208,7 @@ non-GATO enemy. The canonical value is record `+3` — Hetake = `0x10` = **16**.
 
 ## 4 — THE REBUILD CADENCE (the blink clock)
 
-`dis.py 0xFE720 0x40 1 0`:
+`romdis.py 0xFE720 0x40 1 0`:
 ```
 FE73B INC $9931 / LDA $9931 / AND #03 / BNE FE748 / INC $993A   ; ** request a cursor-OBJ rebuild every 4 frames **
 ```
@@ -290,11 +290,11 @@ into +1 (`C1/C9BC-C9CF`). Every measured value is in it (01 12/03, 02 0B/01, 03-
 attract 07D's Frog Squash 28 -> 08/00 (all enemies: the cartridge's `$A017 = 03`, `$A018 = 04 05 06 07`). `C1/C264`
 reads an alternative `CC:1BB5[id] & 7F` when the actor record's bit 6 is set (not ported). battle.c battleTechGroup.
 
-The group jump table `C1/1FF8` (33 words, `dis.py`-dumped raw) decodes to:
+The group jump table `C1/1FF8` (33 words, `romdis.py`-dumped raw) decodes to:
 `00→203A 01→209A 02→20D6 03→20E0 04→209A 05→2136 06→2163 07→20A9 08→20B6 09→20C6 0A→20B6 0B→2169 0C→2203
 0D→21AF 0E→203A 0F→22F5 10→203A 11→224B 12→225F 13→22A4 14→22A4 15..17→203A 18→2329 19→203A 1A→225F 1B→22D3
 1C..20→203A` — this **extends** `battle_multitarget.md` §1 (which left 0x05/0x06/0x0C/0x0D blank).
-Handler ranges (`dis.py 1203A/1209A/120A9/120B6 …`):
+Handler ranges (`romdis.py 1203A/1209A/120A9/120B6 …`):
 ```
 1203A LDX #0003 / STX $80 / LDX #0000 / INC $960A   ; idx 0 default = PCs [0,3), SINGLE   (items' 0x80 -> here)
 1209A LDX #0003 / STX $80 / LDX #0000 / LDA #80 / STA $960C ; all PCs
@@ -471,30 +471,30 @@ Dir: `%TEMP%/claude/C--Users-…-e956ecca-…/scratchpad/lane_D1/`
 
 Independent re-run of every ROM address and every oracle datum the IMPLEMENTATION SPEC depends on
 (`ct_probe.exe` = a fresh copy of `build/ct.exe`; states rebuilt from `forest_holdleft_pre.state` with the
-same `0x45+0x2837` patch; `python tools/dis.py` re-run on every cited offset). **Mechanism: SOUND.
+same `0x45+0x2837` patch; `python tools/romdis.py` re-run on every cited offset). **Mechanism: SOUND.
 Two numeric claims in §7 about OUR CURRENT RENDER are REFUTED, plus one inverted pin.**
 
 ### CONFIRMED (re-derived / re-measured)
 
 | # | claim | independent evidence |
 |---|---|---|
-| 1 | dispatcher `C1/17DD` (`$95D5` BPL -> hide `C1/1AFE`; `$9609` BEQ -> builder `C1/1979`) | `dis.py 117DD 0x20 1 0` -- byte-identical to §1 |
-| 2 | **origin formula** `x=$1D0C,A+$9708,A-0x10`, `y=$1D23,A+$9713,A` | `dis.py 11979 0x70 1 0` (C1/19C0-19D4) **and** `dis.py 11A7B 0x50 1 0` + `11AC7 0x60` (C1/1A80-1A95, C1/1ABA-1ACE) -- three identical copies |
-| 3 | page loop + toggle 0<->3, `$82` advances on skipped entries, stop at idx 3 or 6, `TDC` at 6 | `dis.py 11AC7 0x60 1 0` (C1/1ADD-1AF8) |
+| 1 | dispatcher `C1/17DD` (`$95D5` BPL -> hide `C1/1AFE`; `$9609` BEQ -> builder `C1/1979`) | `romdis.py 117DD 0x20 1 0` -- byte-identical to §1 |
+| 2 | **origin formula** `x=$1D0C,A+$9708,A-0x10`, `y=$1D23,A+$9713,A` | `romdis.py 11979 0x70 1 0` (C1/19C0-19D4) **and** `romdis.py 11A7B 0x50 1 0` + `11AC7 0x60` (C1/1A80-1A95, C1/1ABA-1ACE) -- three identical copies |
+| 3 | page loop + toggle 0<->3, `$82` advances on skipped entries, stop at idx 3 or 6, `TDC` at 6 | `romdis.py 11AC7 0x60 1 0` (C1/1ADD-1AF8) |
 | 4 | `CC/FB8D = FE FB EF BF` | raw ROM read `rom[0x0CFB8D:+8] = FE FB EF BF 00 01 01 01` |
-| 5 | PC defaults `$9708=0 / $9713=0xF0` | `dis.py 0xCE3A0 0x50 1 0` (CE3C2-CE3CE) + oracle `$9713 = F0 F0 F0 F8 F8 F8` read on `forest_battle_3hetake.state` (a state the dossier did NOT use) |
-| 6 | enemy record `E4/F604 + id*10`, +1/+2 = cursor dX/dY, and the **slot<->combatant alias** | `dis.py 0xCEB50 0x90 1 0`; raw ROM `id 5E = 00 00 F8 10 10 41 70 4D 6B 30`, `id 92 = 02 00 D0 10 10 41 7C 77 B8 A0`; oracle `--monitor "9700:11,970B:11,9716:11,9708:11,9713:11,971E:11,9721:11" --from gato_wait.state --input "100:8,0:400" --diff` -> f292 `$9716[3]=D0` **is the same byte as** `$9713[6]=D0` (both `$9719`), `$9721[3]=10` == `$971E[6]=10` (`$9724`), `$9700[3]=02` == rec+0. Four independent bytes of the record. |
+| 5 | PC defaults `$9708=0 / $9713=0xF0` | `romdis.py 0xCE3A0 0x50 1 0` (CE3C2-CE3CE) + oracle `$9713 = F0 F0 F0 F8 F8 F8` read on `forest_battle_3hetake.state` (a state the dossier did NOT use) |
+| 6 | enemy record `E4/F604 + id*10`, +1/+2 = cursor dX/dY, and the **slot<->combatant alias** | `romdis.py 0xCEB50 0x90 1 0`; raw ROM `id 5E = 00 00 F8 10 10 41 70 4D 6B 30`, `id 92 = 02 00 D0 10 10 41 7C 77 B8 A0`; oracle `--monitor "9700:11,970B:11,9716:11,9708:11,9713:11,971E:11,9721:11" --from gato_wait.state --input "100:8,0:400" --diff` -> f292 `$9716[3]=D0` **is the same byte as** `$9713[6]=D0` (both `$9719`), `$9721[3]=10` == `$971E[6]=10` (`$9724`), `$9700[3]=02` == rec+0. Four independent bytes of the record. |
 | 7 | 4 cursor OBJs, tile 0x000, attr 0x32, size 16x16, `$0900` bit0/2/4/6 = parked | `--peek forest_alltechs` `.oam` sidecar: `OBJ0(104,55) OBJ1(104,55) OBJ2(72,87) OBJ3(152,119) tile=00 attr=32 X8=0 size=1` |
 | 8 | Cyclone set {3,4}: 3 hands on page 0 (`$0900=EA`), 1 on page 3 (`FE`) | reproduced verbatim from §5's command: f365 `$A62D=0304FF...` `$0700=68370032|68370032|48570032|(stale)` `$0900=EA`; f368 `$0900=FE` |
 | 9 | Lightning 2 set {3,4,5}: all four sprites (`$0900=AA`) | f414 `$960D=08 $A62D=030405FF... $0700=...|98770032 $0900=AA` |
 | 10 | the blink is visibility ONLY | two `--peek`s 4 frames apart: tail `0:5` -> OBJ0-3 all `X8=0`; tail `0:9` -> OBJ0 `X8=0`, OBJ1/2/3 `X8=1`. tile/attr constant `00/32`. |
 | 11 | moving the primary rebuilds the set, **primary first** | `$9614` 0->2->1 gives `$A62D` `0304FF` -> `05FFFF` -> **`0403FF`** (primary first, then slot order -- matches `battleBuildHitSet`'s `out[0]=primary`) |
 | 12 | GATO single: `$A62D=06FF...`, `$0900=FE`, hide path | f409-f454 `$0700` OBJ0 = `78 3F..46 00 32`; f457 `$0700 = 78F00032 82F00032 7AF00032 82F00032`, `$0900=FF` |
-| 13 | `$A62D`/`$99C0` are FF-filled at target-select open and `$960B` is NOT reset | **new disasm** `dis.py 11F80 0x50 1 0`: `11F8F LDX #000B / LDA #FF / STA $99C0,X / STA $A62D,X`, and the STZ list is `$9613/$960C/$960A/$A64F/$A6D8` only. This is what makes the spec's `i < n` equivalent to the ROM's `BMI`. |
-| 14 | group dispatch = `($960D & 0x7F)` clamped to 0x20, 33-word table `C1/1FF8` | **new disasm** `11FBC LDA $960D / AND #7F / CMP #21 / BCC / LDA #20 / ASL / TAX / JSR ($1FF8,X)`; the whole table re-decoded byte-by-byte from `dis.py 11FF8 0x46` -- every one of the 33 entries matches §5.1 |
-| 15 | handlers `C1/2045` (list), `C1/207E`/`C1/208D` (the `$960C` bit7 fork), `C1/209A/20A9/20B6/20C6`; group 0x12 -> `C1/225F` -> `JSR C1/20A9` ... `$9607=9` (0x19 for 0x1A) -> `JMP C1/27E8` (which forces `$960C=0x80` + full copy) | `dis.py 12045 0x60`, `120A9 0x30`, `1225F 0x50`, `127C5 0x50` |
-| 16 | rebuild cadence `CF/E73B` and `$9931` = battle frame index, **1 rebuild : 1 request** | `dis.py 0xFE720 0x40 1 0`; `--monitor "9931:1,993A:1,960B:1"`: `$9931` +1/frame (0x74,0x75,...); over f365-f483 there are **30** frames with `$9931&3==0` and **exactly 30** `$960B` toggles. The 3/5/6-frame gaps in a per-frame sample are consume phase, as §4 says. |
-| 17 | `$9931` zeroed at `CC/F0E6` | `dis.py 0xCF0E0 0x14 1 0` -> `CF0E6 STZ $9931` |
+| 13 | `$A62D`/`$99C0` are FF-filled at target-select open and `$960B` is NOT reset | **new disasm** `romdis.py 11F80 0x50 1 0`: `11F8F LDX #000B / LDA #FF / STA $99C0,X / STA $A62D,X`, and the STZ list is `$9613/$960C/$960A/$A64F/$A6D8` only. This is what makes the spec's `i < n` equivalent to the ROM's `BMI`. |
+| 14 | group dispatch = `($960D & 0x7F)` clamped to 0x20, 33-word table `C1/1FF8` | **new disasm** `11FBC LDA $960D / AND #7F / CMP #21 / BCC / LDA #20 / ASL / TAX / JSR ($1FF8,X)`; the whole table re-decoded byte-by-byte from `romdis.py 11FF8 0x46` -- every one of the 33 entries matches §5.1 |
+| 15 | handlers `C1/2045` (list), `C1/207E`/`C1/208D` (the `$960C` bit7 fork), `C1/209A/20A9/20B6/20C6`; group 0x12 -> `C1/225F` -> `JSR C1/20A9` ... `$9607=9` (0x19 for 0x1A) -> `JMP C1/27E8` (which forces `$960C=0x80` + full copy) | `romdis.py 12045 0x60`, `120A9 0x30`, `1225F 0x50`, `127C5 0x50` |
+| 16 | rebuild cadence `CF/E73B` and `$9931` = battle frame index, **1 rebuild : 1 request** | `romdis.py 0xFE720 0x40 1 0`; `--monitor "9931:1,993A:1,960B:1"`: `$9931` +1/frame (0x74,0x75,...); over f365-f483 there are **30** frames with `$9931&3==0` and **exactly 30** `$960B` toggles. The 3/5/6-frame gaps in a per-frame sample are consume phase, as §4 says. |
+| 17 | `$9931` zeroed at `CC/F0E6` | `romdis.py 0xCF0E0 0x14 1 0` -> `CF0E6 STZ $9931` |
 | 18 | Crono tech->group table (§5.1) | re-measured all 8 rows independently (`--monitor "9EE3:7"`, 0..7 Down): `01120302 / 020B0102 / 03070002 / 04070004 / 05080008 / 0603800A / 0707800C / 08088014` -- exact |
 | 19 | side finding C7 (`battleMoveExtent`) | `--read "971E+11" --from forest_battle_3hetake.state --settle 60` -> `0808081010100000000000`. Real bug. |
 | 20 | the defect reproduces in our engine | `CT_BATTLE_TRACE=1 CT_BATTLE_SCRIPT="n:40,d:2,n:8,a:2,n:8,a:2,n:120"` -> `techtrace f220 tech-confirm ... 9609=1 960D=12`; the f230 shot has the hand ONLY at (104,55) (96 white px) and nothing at (72,87) / (152,119) (5 px = background). NOTE: the dossier's repro command omits `CT_BATTLE_TRACE=1`, without which no `techtrace` line is printed. |

@@ -1,6 +1,6 @@
 # BATTLE MODULE BOOT — RE dossier (GATO fight, loc 006, storyline 08)
 
-Every claim below is anchored to a ROM disassembly address (tools/dis.py, file-offset = (bank-0xC0)<<16|addr) or an observed oracle value (ct_probe.exe --peek/--monitor --writer/--trace from gato_press_action.state, btnscript "100:8,0:592"). Writer PCs from --monitor --writer are the PC *after* the store retires (verified: FD:AE83 reported for the STA $0000,Y at FD:AE80). All captures in the scratchpad (p000/p300/p600/p900.raw + .wram/.vram/.oam, p600.state, btl_trace.txt).
+Every claim below is anchored to a ROM disassembly address (tools/romdis.py, file-offset = (bank-0xC0)<<16|addr) or an observed oracle value (ct_probe.exe --peek/--monitor --writer/--trace from gato_press_action.state, btnscript "100:8,0:592"). Writer PCs from --monitor --writer are the PC *after* the store retires (verified: FD:AE83 reported for the STA $0000,Y at FD:AE80). All captures in the scratchpad (p000/p300/p600/p900.raw + .wram/.vram/.oam, p600.state, btl_trace.txt).
 
 ## 0. Handoff & boot timeline (frames after the A-press)
 
@@ -142,7 +142,7 @@ C2:85BC tick at f35.
 
 CD/043E `JSL C0/000B` (C0/1BE6's upload of the field's sample set) and CD/0444 run inside the battle, so its main loop
 sits in the SPC handshake while its NMI keeps coming. That NMI is not the fight's: CD/0418-0420 install D1/F4C0 before
-the upload. D1/F4C0 (dis.py 11F4C0) uploads the CGRAM page from $7E:2200 (CD/09CE), runs C0/0005 -> C0/0AFF (FD/C2C1
+the upload. D1/F4C0 (romdis.py 11F4C0) uploads the CGRAM page from $7E:2200 (CD/09CE), runs C0/0005 -> C0/0AFF (FD/C2C1
 twice with $53 bit 7, FD/C1EE: the field's HDMA tables and channels), INIDISP from $45, the scrolls from $2C70..,
 `JSL CD/0C89` -> C0/2C41 with no $CD02 gate, and `JSL FD/FFF7` = FD/E39C (the objslot records), and has no `$7C++`.
 Measured on the 0AD fight (`--hookpc` + `--monitor 7E2C74:4`): C0/1BE6 at c4306, CD/0444 at c4321, C0/18B9's ack at

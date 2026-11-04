@@ -5,7 +5,7 @@ the carry-propagating checksum) and `disasm/notes/menu_sfx.md` (the mailbox / `$
 **Nothing derived there is re-derived here**; where this pass *contradicts* an earlier note the
 contradiction is called out with a ⭐ and the measurement that settles it.
 
-Everything below was read out of the cartridge with `tools/dis.py` or measured on the LakeSnes oracle
+Everything below was read out of the cartridge with `tools/romdis.py` or measured on the LakeSnes oracle
 (`scratchpad/menu/ct_probe.exe`) **in this pass**. Every command is pasted verbatim in §6.
 
 ---
@@ -43,10 +43,10 @@ without leaving screen 6.
 ### 2.1 Screen 6's four sub-state handlers (`C2/CED4`)
 
 `d[0x2CED4:0x2CEDC]` = `dc ce fd ce 61 cf 92 cf` → `$CEDC`(0) `$CEFD`(1) `$CF61`(2) `$CF92`(3).
-(`dis.py` mis-decodes `2CED4` as code — it is data.) Screen `$0B`'s table `d[0x2D4F0:0x2D4F8]` =
+(`romdis.py` mis-decodes `2CED4` as code — it is data.) Screen `$0B`'s table `d[0x2D4F0:0x2D4F8]` =
 `f8 d4 06 d5 61 cf 92 cf` **shares entries 2 and 3 verbatim** — a port must share, not copy.
 
-`python tools/dis.py 2CED4 0x100 1 0`:
+`python tools/romdis.py 2CED4 0x100 1 0`:
 
 ```
   2CEDC: LDA $0D34 / ORA $0294 / ORA $0299 / ORA $029E / AND #40   ; sub 0 = the entry gate
@@ -89,7 +89,7 @@ without leaving screen 6.
 
 ### 2.2 `C2/D4BB` — OPEN the prompt, and `C2/D4D5` — CLOSE it
 
-`python tools/dis.py 2D4BB 0x60 1 0`:
+`python tools/romdis.py 2D4BB 0x60 1 0`:
 
 ```
   2D4BB: PHP / SEP #20
@@ -109,7 +109,7 @@ without leaving screen 6.
 
 ### 2.3 `C2/ED31` — the menu's display-list interpreter (this is the whole prompt mechanism)
 
-`python tools/dis.py 2ED31 0x40 1 0`:
+`python tools/romdis.py 2ED31 0x40 1 0`:
 
 ```
   2ED31: PHB / PHP / SEP #20 / REP #10
@@ -193,7 +193,7 @@ tilemap, 2 bytes per entry.
 Entry `$25` → `$FF:C912` is the same text without the leading `{0A}{20}` (used elsewhere).
 The other two ids screen 6 sets in `$0D13` are **not** strings — see §3.3.
 
-`C2/EF65` — ⭐ **THIS IS NOT A VWF.** `python tools/dis.py 2EF65 0x120 1 0`:
+`C2/EF65` — ⭐ **THIS IS NOT A VWF.** `python tools/romdis.py 2EF65 0x120 1 0`:
 
 ```
   2EF65: PHB / PHP / SEP #20
@@ -213,7 +213,7 @@ The other two ids screen 6 sets in `$0D13` are **not** strings — see §3.3.
   2EFBA: INX / INX
 ```
 
-Control-code jump table `$C2:EFD4` (`d[0x2EFD4:0x2EFF4]` = `[26 ROM bytes at 0x2EFD4: python tools/dis.py 0x2EFD4 26] ...`):
+Control-code jump table `$C2:EFD4` (`d[0x2EFD4:0x2EFF4]` = `[26 ROM bytes at 0x2EFD4: python tools/romdis.py 0x2EFD4 26] ...`):
 
 | code | handler | meaning (the two screen 6 uses) |
 |---|---|---|
@@ -234,7 +234,7 @@ oracle's BG1 tilemap holds** (§4.2). Codes `02..0C` (position, indirect string,
 ```
 
 `C2/8385` = "push an 8-byte transfer descriptor into the queue at `$7E:0C00 + $0D11`, then `$0D11 += 8`"
-(`python tools/dis.py 28385 0x60 1 0`). The two descriptors:
+(`python tools/romdis.py 28385 0x60 1 0`). The two descriptors:
 
 * `d[0x2FC0D:0x2FC15]` = `40 60 80 3e 7e 00 03 00` → VRAM word **`$6040`** ← `$7E:3E80`, `$0300` bytes.
   `$6040` = BG2's map base `$6000` + row 2×32 → **the 12 slot-list rows of BG2**.
@@ -291,7 +291,7 @@ screen**, so they move nothing and (via `CFAD`/`CF6F`) make no sound. The should
 
 ### 2.8 `$0D49` — the occupancy array, and WHEN it is built
 
-`python tools/dis.py 2D156 0x44 1 0`:
+`python tools/romdis.py 2D156 0x44 1 0`:
 
 ```
   2D159: LDX $51 / STX $0D79 / STZ $0D7B / STX $79
@@ -332,7 +332,7 @@ so it is written into every save and restored by every load. Therefore:
 > allocator alone; a *new* playthrough picks up the bumped value and becomes a distinct file.
 
 Both `E66A` and `FA6F` run with `SEP #20`, so **only the low byte participates**. Boot initialises the
-pair: `python tools/dis.py 28030 0x40 1 0` →
+pair: `python tools/romdis.py 28030 0x40 1 0` →
 
 ```
   28042: LDA $7F0061 / BNE ->28064       ; no game has ever started
@@ -388,7 +388,7 @@ the oracle names the routine that disproves it. `$0D13` is never read by an abso
 4 MB (§6.5); it is read **DP-relative with `D = $0D00`** inside the NMI:
 
 ```
-python tools/dis.py 28620 0x20 1 0
+python tools/romdis.py 28620 0x20 1 0
   28626: LDA #80
   28628: TRB $13                 ; = TRB $0D13, DP = $0D00
   2862A: BEQ ->28651
@@ -528,7 +528,7 @@ differing pixels on the Save screen are the **`C2/5DC4`** engine's output.
 
 ### 5.2 `C2/5DC4` — the per-glyph rasteriser, fully derived
 
-`python tools/dis.py 25DC4 0x74 1 0`:
+`python tools/romdis.py 25DC4 0x74 1 0`:
 
 ```
   25DC4: REP #20
@@ -580,7 +580,7 @@ tall**, so column 16 starts after both rows of the first 16); `d[0x26066:...]` =
 07 07 07 07 06 06 07 07 05 07 08 06 09 08 07 07 07 07 06 07 07 07 0b 07 07 07   A..Z
 07 07 06 07 07 06 07 07 03 06 07 03 0b 07 07 07 07 06 06 05 07 07 0b 07 07 07   a..z
 07 04 07 07 08 07 07 07 07 07                                                   0..9
-[26 ROM bytes at 0x26124: python tools/dis.py 0x26124 26]   $DE..$F7
+[26 ROM bytes at 0x26124: python tools/romdis.py 0x26124 26]   $DE..$F7
 00 00 00 00 00 00 00 04                                                         $F8..$FF
 ```
 
@@ -1020,7 +1020,7 @@ My independent diff (§AV.4) reproduces both runs exactly.
 ### AV.3 D2 — `$0D13 & $7F` IS HDMAEN
 
 ```
-python tools/dis.py 28430 0x30 1 1
+python tools/romdis.py 28430 0x30 1 1
   2843C: STZ $420C
   2843F: JSR C2/85D6
   28442: LDA $13            ; DP = $0D00  ->  $7E:0D13
@@ -1064,7 +1064,7 @@ Consequences:
 ### AV.4 The remaining defects, in full
 
 **D3 — §2.7's `C2/E9E2` listing is not a faithful transcription.** The real routine
-(`python tools/dis.py 2E9E2 0x50 1 0`):
+(`python tools/romdis.py 2E9E2 0x50 1 0`):
 
 ```
   2E9E2: PHP / SEP #30
@@ -1111,7 +1111,7 @@ and the trailing `a9` is `C2/CF37`'s own `LDA #19` opcode byte — worth stating
 copies "the descriptor" must know it is 8 wide and that this one runs into code.
 
 **D8 — where the post-save summary actually comes from.** `C2/CF37` in full
-(`python tools/dis.py 2CF37 0x2A 1 1`):
+(`python tools/romdis.py 2CF37 0x2A 1 1`):
 
 ```
   2CF37: LDA #19 / STA $1E00 / LDA #8A / STA $1E01 / LDA #80 / STA $1E02 / JSL C7/0004   ; the jingle
@@ -1185,7 +1185,7 @@ Every item below was produced from scratch in this pass and matched the dossier.
   ff`; `$FF:C16F` and `$FF:C191` likewise. Decodes check out: window at pos `$0216` = (22,2) 8x10,
   backup (2,2) 28x12 -> (2,32), restore the inverse.
 * The string path: `C2/EF48 LDA $5B / ASL A / TAX / LDA $FFC457,X`; `d[0x3FC479]` = `87 c7` -> `$FF:C787`;
-  `d[0x3FC787]` = `[28 ROM bytes at 0x3FC787: python tools/dis.py 0x3FC787 28]
+  `d[0x3FC787]` = `[28 ROM bytes at 0x3FC787: python tools/romdis.py 0x3FC787 28]
   0a 00 00` — every byte of §2.5. Entry `$25` -> `$C912` also confirmed.
 * **`C2/EF65` is confirmed NOT a VWF**: `STA $7E0000,X` stores the character code as the tile index and
   `LDA $7E / STA $7E0001,X` the attribute; the `$FF` special writes a second space at `X - $40` (one
@@ -1277,7 +1277,7 @@ Four measurements that strengthen or complete claims the dossier could only asse
 file. `LDA $7F01CE` occurs exactly **once in 4 MB**, and it is the gate builder:
 
 ```
-python tools/dis.py 2989B 0x1C 0 1
+python tools/romdis.py 2989B 0x1C 0 1
   29895: STZ $0D32 / STZ $0D34
   2989B: LDA #FFFF / STA $0D36
   298A1: LDA $0100 / CMP #01F0 / BCS ->298B5      ; loc >= $1F0 = OVERWORLD -> $0D34 stays 0 = ALLOWED
@@ -1307,17 +1307,17 @@ capture that unblocks it is now specified precisely: any field state (`$0100 < $
 ### AV.7 COMMANDS RUN IN THIS PASS
 
 ```
-python tools/dis.py 2CEDC 0x40 1 0        2CF1E 0x20 1 0     2CF5E 0x40 1 0
-python tools/dis.py 2D4BB 0x40 1 0        2ED31 0x30 1 0     2ED77 0x40 1 0
-python tools/dis.py 2F332 0x60 1 0        2EF48 0x20 1 0     2EF65 0x60 1 0
-python tools/dis.py 2E9E2 0x50 1 0        2EA27 0x30 1 0     2E984 0x30 1 0
-python tools/dis.py 2E9B5 0x30 1 0        28385 0x40 1 0     2D156 0x40 1 0
-python tools/dis.py 28620 0x40 1 0        28030 0x40 1 1     2E65D 0x20 1 1
-python tools/dis.py 3FFA60 0x30 1 1       28430 0x30 1 1     25DC4 0x74 1 1
-python tools/dis.py 25E36 0x60 1 1        258B2 0x20 1 1     2D32C 0x40 1 1
-python tools/dis.py 2D19F 0x30 1 1        28275 0x20 1 1     2CFA2 0x20 1 1
-python tools/dis.py 2CF37 0x2A 1 1        28510 0x50 1 1     2989B 0x1C 0 1
-python tools/dis.py 133B0 0x18 1 1        13788 0x18 1 1
+python tools/romdis.py 2CEDC 0x40 1 0        2CF1E 0x20 1 0     2CF5E 0x40 1 0
+python tools/romdis.py 2D4BB 0x40 1 0        2ED31 0x30 1 0     2ED77 0x40 1 0
+python tools/romdis.py 2F332 0x60 1 0        2EF48 0x20 1 0     2EF65 0x60 1 0
+python tools/romdis.py 2E9E2 0x50 1 0        2EA27 0x30 1 0     2E984 0x30 1 0
+python tools/romdis.py 2E9B5 0x30 1 0        28385 0x40 1 0     2D156 0x40 1 0
+python tools/romdis.py 28620 0x40 1 0        28030 0x40 1 1     2E65D 0x20 1 1
+python tools/romdis.py 3FFA60 0x30 1 1       28430 0x30 1 1     25DC4 0x74 1 1
+python tools/romdis.py 25E36 0x60 1 1        258B2 0x20 1 1     2D32C 0x40 1 1
+python tools/romdis.py 2D19F 0x30 1 1        28275 0x20 1 1     2CFA2 0x20 1 1
+python tools/romdis.py 2CF37 0x2A 1 1        28510 0x50 1 1     2989B 0x1C 0 1
+python tools/romdis.py 133B0 0x18 1 1        13788 0x18 1 1
 
 # byte dumps + full-4MB operand scans (scratchpad/menu/_av2_d.py, _av2_scan.py)
 python scratchpad/menu/_av2_d.py 2CED4:10 2D4F0:10 3FBD18:20 2ED59:24 3FC138:2A 3FC16F:24 \

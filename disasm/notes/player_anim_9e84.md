@@ -1,6 +1,6 @@
 # `C0/9E84` — the player's FACING + WALK-ANIM selector
 
-Derived 2026-08-01, first-hand from raw ROM bytes (`dis.py` desyncs on the jump table, which is
+Derived 2026-08-01, first-hand from raw ROM bytes (`romdis.py` desyncs on the jump table, which is
 data). This is what `--portrun`'s idx-02 residual is: 28 of its 32 remaining divergences are the
 player, and most of them are `$0F01`, the animation frame.
 

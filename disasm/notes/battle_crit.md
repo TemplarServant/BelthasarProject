@@ -2,7 +2,7 @@
 
 Derives the PC critical-hit system from the user report *"when crono or marle land a critical hit, the screen
 should flash white"* (translated from Portuguese) (on a PC crit the screen should flash white). Our engine has **no crit path**
-(always-hit/no-crit, `battle_loop.md` open). Every claim is anchored to a `tools/dis.py` address (HiROM flat
+(always-hit/no-crit, `battle_loop.md` open). Every claim is anchored to a `tools/romdis.py` address (HiROM flat
 offset = `(bank−0xC0)<<16 | addr`; battle code runs 16-bit A/X, `m=0 x=0`) or an oracle `--monitor`/`--peek`
 observation on `gato_press_action.state`. Writer PCs = the PC *after* the store retires.
 
@@ -19,7 +19,7 @@ observation on `gato_press_action.state`. Writer PCs = the PC *after* the store 
 ### A.1 Where the roll lives — super-command `C1/ED89`, dispatched from the hit's op-1E
 The physical hit's anim exec-track op **`1E`** (`PerformSuperCommand`, `battle_interp_verify.md` T2.B) drives the
 super-command handler `C1/EAE8`, which fetches a 3-byte record and dispatches through a jump table
-(`dis.py 1EB20`):
+(`romdis.py 1EB20`):
 
 ```
 C1/EB22  LDA $B2CC              ; $B2CC = super-command index (=1 for the basic physical hit)
@@ -34,7 +34,7 @@ ROM record table `CC/2A05` (stride 3, `[dispatch, $1C, $1E]`): **idx 1 = `00 00 
 multiplier `$1E`=**2**. (idx 0 = `00 00 00`; idx 3-6 = `02 .. 04` = other attack types; the enemy physical uses a
 different index whose dispatch ≠ 0, §D.)
 
-### A.2 The roll itself — `C1/ED89`  (`dis.py 1ED89`, the byte-exact routine)
+### A.2 The roll itself — `C1/ED89`  (`romdis.py 1ED89`, the byte-exact routine)
 ```
 C1/ED89  LDX $B1F4             ; X = attacker battle-block base index ($B1F4)
 C1/ED8C  LDA $5E72,X           ; A = attacker block+0x45  = the CRIT RATE
@@ -61,7 +61,7 @@ MULTIPLIES** it in place afterward. On a non-crit, ED89 RTSs at EDB8 and `$AD89`
 crit, EDAD overwrites it (monitor shows the crit's last writer = EDB0).
 
 ### A.3 The RNG — `C1/AF79` = `C1/AF22` with a SEPARATE index `$B3E6` (same table `FD/BA61`)
-`dis.py 1AF22` vs `1AF79` are **byte-identical in algorithm** — both read `LDA $FDBA61,X`, divide via `C1/C92A`,
+`romdis.py 1AF22` vs `1AF79` are **byte-identical in algorithm** — both read `LDA $FDBA61,X`, divide via `C1/C92A`,
 `+$25`, and `INC` the index — **except AF22 uses index `$26`** (the main stream: damage variance, hit-roll,
 bonus) **and AF79 uses `$B3E6`** (the crit stream). So the crit roll draws from the **same FD/BA61 table** as our
 ported `battleRng`, but on an **independent counter** that the main pipeline never touches.
@@ -124,7 +124,7 @@ strike; anim-specific).
 
 ### C.3 Sync + trigger — it is IN the per-character CRIT ANIMATION (bank-CD), gated by the crit flag
 On a crit, the crit-flag-gated anim-select `C1/435B` (`LDA $AE9B / BPL →normal`) loads the **crit** anim id and
-params (`dis.py 14340`):
+params (`romdis.py 14340`):
 ```
 C1/435B  LDA $AE9B / BPL ->14394          ; crit? (bit7)  no → normal path (14394, params CD/4015)
 C1/4360  LDA $CD401F,X → $987A … $9884     ; crit anim PARAMS from CD/401F
@@ -206,7 +206,7 @@ wiring: the crit changes fight OUTCOMES, unlike the pure-cosmetic FX work.
 ---
 
 ## H — HIT/MISS ROLL (fell out of the same disasm — recorded per the mission)
-`C1/E9F0` (`dis.py 1E9EE`, 8-bit A): `$16 = hitStat×3` (E9E4-E9E8: `ASL A / CLC / ADC $16`), then
+`C1/E9F0` (`romdis.py 1E9EE`, 8-bit A): `$16 = hitStat×3` (E9E4-E9E8: `ASL A / CLC / ADC $16`), then
 `LDA #64 / JSR C1/AF22` (roll 0..99 on the **MAIN `$26` stream**), `CMP $16`:
 ```
 C1/E9F3  CMP $16 / BEQ ->EA02 / BCC ->EA02   ; roll ≤ hitStat×3 → HIT

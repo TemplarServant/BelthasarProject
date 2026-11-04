@@ -9,7 +9,7 @@ in `disasm/notes/`; the agent's memory index (`MEMORY.md`) lives outside the rep
 # ⛔ MANDATE: CANONICAL ENGINE, ZERO INVENTION
 
 The original ROM — through the **oracle** (`build/ct.exe`: `--vmdiff` lockstep, `--vm` 512-scene check,
-`--monitor`/`--followvm`, savestates) and the ROM disassembly (`tools/dis.py <hexaddr> <len> [m] [x]`) —
+`--monitor`/`--followvm`, savestates) and the ROM disassembly (`tools/romdis.py <hexaddr> <len> [m] [x]`) —
 is the **SOLE source of truth**. EVERY behavior is derived, byte-for-byte, from the ROM + the oracle's
 actual RAM. **Nothing may be invented or inferred.**
 
@@ -33,7 +33,7 @@ are never the implementation basis. ("it doesn't matter what I want", translated
 
 ## Required before ANY behavioral change:
 
-1. **Disassemble** the ROM routine that produces the behavior (`tools/dis.py`).
+1. **Disassemble** the ROM routine that produces the behavior (`tools/romdis.py`).
 2. **Read** the oracle's actual per-object RAM that gates it (savestate via `s9x_to_lake.py` +
    `--vmdiff`, or `--monitor`). Compare each case (e.g. Crono's bed mover vs a fair racer vs a sparkle).
 3. **Implement THAT** mechanism, byte-exact, gated on the same RAM. Validate with `--vmdiff` (first-

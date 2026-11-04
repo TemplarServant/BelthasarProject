@@ -39,7 +39,7 @@ Derives, from the ROM disasm + LakeSnes oracle **only**, the enemy-behavior trut
 Method: user state converted per `.claude/skills/capture-oracle-state` (`tools/s9x_to_lake.py` onto the
 in-battle donor `gato_mid.state`; WRAM off 0x45; render verified visually — GATO standing beside Crono at f2);
 oracle `--peek` (renders) + `--monitor --writer` (per-frame RAM; ⚠ peek≠monitor timelines, aligned by
-`$A013`/`$9877` events); ROM `tools/dis.py` + raw-byte hand-decode where the linear decoder desyncs (M/X flips).
+`$A013`/`$9877` events); ROM `tools/romdis.py` + raw-byte hand-decode where the linear decoder desyncs (M/X flips).
 Writer PCs = the PC after the store retires.
 
 ---
@@ -892,7 +892,7 @@ A633 A663 A693 A6C3 A6ED A709
 
 ## G.2 The nine witnessed values, disassembled
 
-`tools/dis.py <off> <len> 1 0` — **X is SIXTEEN BITS here** (`CPY #0003`), and decoding with the
+`tools/romdis.py <off> <len> 1 0` — **X is SIXTEEN BITS here** (`CPY #0003`), and decoding with the
 default 8-bit X desynchronises the whole block into `BRK`/`WAI` garbage. That is what had made this
 family look unreadable.
 

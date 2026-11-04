@@ -216,7 +216,7 @@ Dir: `%TEMP%/claude/…/e5608df4-…/scratchpad/`
 User report (translated from Portuguese): *"after choosing Att. it should be possible [to select the target]"* — after choosing Att there is a
 target-select step our engine skips. Derives the full command→dispatch state machine. Method = `--monitor`
 (authoritative for input — the `--peek` A-edge misregisters, `battle_hud_render` ADDENDUM 2 §B) to pin the RAM
-+ transitions, then `--peek` at a `$9609`==1 frame for the cursor OAM, + `dis.py` on the handler. Base
++ transitions, then `--peek` at a `$9609`==1 frame for the cursor OAM, + `romdis.py` on the handler. Base
 `gato_press_action.state`; single-A-on-Att input `100:8,0:412,100:8,0:…` (menu opens f383, cursor `$95DC`=0=Att).
 
 ## P5.1 — there IS a target-select state, and it REQUIRES a confirm A even with ONE enemy
@@ -247,7 +247,7 @@ the measured constant suffices for the single-enemy replay. Cursor-sprite builde
 ## P5.3 — the state machine + gate bytes (cited from ROM)
 
 Command-confirm handler entry **C1/1290** dispatches by cursor row `$95DC`: **Att(0)→C1/129C**, Tech(1)→C1/12BC,
-Item(2)→C1/12ED. The **Att→target-select** path (`dis.py 11290`):
+Item(2)→C1/12ED. The **Att→target-select** path (`romdis.py 11290`):
 ```
 1129C LDA #FF ; JSL CD002D            ; (cursor gfx setup)
 112A2 INC $A43F ; INC $A43F

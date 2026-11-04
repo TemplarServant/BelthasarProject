@@ -20,7 +20,7 @@ FLASH is still driven by that constant — the two clocks are unrelated. That is
 
 ### 1.1 `$993C,X` = the combatant's live OAM palette field; `$9888,X` = its default
 
-Battle setup, `CC/EA98` (`python tools/dis.py CEA98 0x30 1 0`):
+Battle setup, `CC/EA98` (`python tools/romdis.py CEA98 0x30 1 0`):
 
 ```
 CC/EAAB  LDA $29C7,X      ; the combatant's palette NUMBER from its setup block
@@ -37,7 +37,7 @@ Observed values (oracle, `gato_press_action.state` after boot, f292):
 → Crono `0x0A`>>1 = **pal5**, Marle `0x0C`>>1 = **pal6**, GATO (slot idx 6) `0x02`>>1 = **pal1** — exactly the
 stance palettes `battle_stance.md` / `battle_actionfx.md` P3 baked. `0x08`>>1 = **pal4** = the all-white flash.
 
-### 1.2 op `69 pp` = FLASH ON — handler `C1/5DD3` (`python tools/dis.py 15DD3 0xC0 1 0`)
+### 1.2 op `69 pp` = FLASH ON — handler `C1/5DD3` (`python tools/romdis.py 15DD3 0xC0 1 0`)
 
 ```
 C1/5DD3  INY / LDA [$E6],Y / STA $80     ; the operand pp
@@ -54,7 +54,7 @@ C1/5E7F  INC $A00F                      ; ** the op is FREE: zero frame cost **
 C1/5E82  LDA $8E / JMP C1/75BB          ;   advance 2
 ```
 
-### 1.3 op `6A` = FLASH OFF — handler `C1/5E87` (`python tools/dis.py 15E87 0x60 1 0`)
+### 1.3 op `6A` = FLASH OFF — handler `C1/5E87` (`python tools/romdis.py 15E87 0x60 1 0`)
 
 ```
 C1/5E87  LDA #01 / STA $8E              ; op length 1
@@ -282,9 +282,9 @@ MASH=$(python -c "print(','.join(['100:20','0:40']*24))")
   --from saves/battle_re/forest_battle_3hetake.state --input "$MASH" --frames 1400 --diff --writer
 
 # (d) the handlers
-python tools/dis.py 15DD3 0xC0 1 0     # op 69  FLASH ON
-python tools/dis.py 15E87 0x60 1 0     # op 6A  FLASH OFF
-python tools/dis.py CEA98 0x30 1 0     # the $9888/$993C boot fill
+python tools/romdis.py 15DD3 0xC0 1 0     # op 69  FLASH ON
+python tools/romdis.py 15E87 0x60 1 0     # op 6A  FLASH OFF
+python tools/romdis.py CEA98 0x30 1 0     # the $9888/$993C boot fill
 
 # (e) our engine, both arenas
 CT_BATTLE_SCRIPT=n:500 CT_BATTLE_ASCTRACE=1 CT_BATTLE_TRACE=1 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
@@ -332,7 +332,7 @@ parse-fail fallback, miss four render sites, and leave the knockback on the old 
 
 ### A1. ROM addresses — CONFIRMED verbatim (3/3)
 
-`python tools/dis.py 15DD3 0xC0 1 0`, `15E87 0x60 1 0`, `CEA98 0x30 1 0` all hold what §1 claims:
+`python tools/romdis.py 15DD3 0xC0 1 0`, `15E87 0x60 1 0`, `CEA98 0x30 1 0` all hold what §1 claims:
 
 - `C1/5DFA LDA #08 / C1/5DFC STA $993C,X` (ON), `C1/5E17 STA $993C,Y` (target-list arm) — present.
 - `C1/5EA8 LDA $9888,X / C1/5EAB STA $993C,X` (OFF), `C1/5ED1/5ED4` (target-list) — present.
@@ -342,7 +342,7 @@ parse-fail fallback, miss four render sites, and leave the knockback on the old 
   `C1/75BB` (`REP #21 / ADC $E6 / … / RTS`) contains none either — so **`6A` costs one frame**. Lengths
   `$8E = 02` / `01` confirmed.
 - Three cosmetic omissions in §1.2's listing, none load-bearing: `C1/5DDC STZ $82`; the `BRA ->5E1D` at
-  `C1/5DFF` (the `TDC/TAX` at `5E01` is *branch-target* code, not a fallthrough); and `dis.py CEA98`
+  `C1/5DFF` (the `TDC/TAX` at `5E01` is *branch-target* code, not a fallthrough); and `romdis.py CEA98`
   disassembles from mid-instruction (the real instruction there is `CEA97 CLC / CEA98 ADC $29C2,X`).
 
 > **Correction to a NEIGHBOURING dossier.** `battle_span_emergence.md` line 197 lists
@@ -408,7 +408,7 @@ interpreter's own clock says) but **cannot** make it byte-exact, because the dur
 The dossier says the `$29C7,X` index/stride "was NOT pinned here" and offers `battleFlashPal(c) << 1` as a
 byte-safe fallback. Both halves are now settled, and the second one is **wrong**.
 
-**The index (ROM).** `python tools/dis.py CEA50 0x50 1 0` shows the enclosing loop:
+**The index (ROM).** `python tools/romdis.py CEA50 0x50 1 0` shows the enclosing loop:
 
 ```
 CC/EA57  STZ $80 / STZ $81            ; the loop counter i

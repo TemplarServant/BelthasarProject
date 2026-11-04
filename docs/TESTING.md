@@ -196,6 +196,13 @@ The repository is public and the ROM never comes near it, so GitHub's runners te
 The suite with the ROM (after `tools/setup.py` and `tools/fixtures.py make all`) stays the gate for behaviour; a green
 CI says the tree builds and carries no game file, not that the game is right.
 
+### no-script-shadows-the-stdlib (`python tools/stdlib_shadow_check.py`)
+A script run as `python tools/x.py` has its own folder first on `sys.path`, so a `tools/<name>.py` named like a module of
+Python's standard library is imported in place of that module, by the standard library too. `tools/dis.py` did it (now
+`tools/romdis.py`): Python 3.14's argparse imports `inspect`, which imports `dis`, and the release's setup died on the
+disassembler's import (GitHub issue #8). The check lists every tracked script outside a package and fails on any such
+name; it needs no ROM, so the CI runs it. The script count is not pinned, only the `0`.
+
 ## The attract vehicle (`Belthasar --scene 433` from cold)
 
 Most attract checks run `Belthasar.exe --assets ct_assets.dat --scene 433` with no seed. Since 2026-10-21 that start PLAYS

@@ -4,7 +4,7 @@ Derives the **victory RESULTS presentation + rewards** the user reports missing:
 *"at the end of the battle (on winning) it should show some boxes at the top indicating what you
 won (items, gold, xp)"*. Closes the `battle_hud_render.md`/`battle_loop.md` "results window" OPEN.
 
-Every claim is anchored to a ROM disassembly address (`tools/dis.py <fileoffset>`, fileoffset =
+Every claim is anchored to a ROM disassembly address (`tools/romdis.py <fileoffset>`, fileoffset =
 `(bank−0xC0)<<16 | addr`) or an oracle observation (`ct_probe.exe --monitor --writer` for RAM timing /
 `--peek` for the rendered window — the **peek≠monitor timeline** gotcha applies: RAM values/writers below
 are `--monitor`; window pixels/text are `--peek`, aligned by event). Writer PCs = the PC **after** the store

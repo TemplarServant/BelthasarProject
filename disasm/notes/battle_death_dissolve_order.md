@@ -202,7 +202,7 @@ die with a walk segment in flight (`$98A7,X = 01`). On the delist's frame (f819 
 `C1:1076` zeroes it at f613 / f862 / f1404 -- the frame each corpse's `$96F5` clears (CF:FE7E), with `$0027`++ (C1:8124):
 the loop's head runs when the scan returns, 43 frames after the delist.
 
-**The ROM** (`dis.py 0FFE20 0x65 1 0`): CF/FE20, X = 10 down to 3, for each `$AEB0,X` set:
+**The ROM** (`romdis.py 0FFE20 0x65 1 0`): CF/FE20, X = 10 down to 3, for each `$AEB0,X` set:
 
 ```
 FE28  LDA $9FF7,X / BNE FE7B
@@ -258,7 +258,7 @@ loop, inside the same held stretch). The port runs the head on the delist's fram
 with a segment in flight steps through the dissolves -- in a multi-kill also the queued corpse, until battleAdvanceDissolves
 reaches it and battleDeathScanStores clears its flag.
 
-### D3 closed: the routine, frame by frame (CD/0043, `dis.py 0D0043 0xD0 1 0`)
+### D3 closed: the routine, frame by frame (CD/0043, `romdis.py 0D0043 0xD0 1 0`)
 
 ```
 D0043  STA $CD00

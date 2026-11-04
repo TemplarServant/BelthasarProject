@@ -1,6 +1,6 @@
 # Battle SFX — the six anim-script sound opcodes (C1 anim engine)
 
-Derived from the ROM + oracle. `dis.py <fileoffset>` (bank C1 = `0x1xxxx`, CD = `0xDxxxx`).
+Derived from the ROM + oracle. `romdis.py <fileoffset>` (bank C1 = `0x1xxxx`, CD = `0xDxxxx`).
 
 `src/battle.c` posts **no sound command at all** — a grep for `$1E00`/`CtAudioService`/any post in that
 file returns nothing. So every battle sound effect is missing, which is the reported "battles have no

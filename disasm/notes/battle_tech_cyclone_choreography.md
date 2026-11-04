@@ -6,7 +6,7 @@ Cyclone presentation for the attacker track: the CE base script that loads for a
 (and the supers it calls), the exact travel law (slide → 8-leg diamond orbit → slide home → snap), the pose
 ladder (bank-E4 windows + dwells), the facing stamps, and where the whirl FX sits in that timeline.
 
-**Zero invention.** Every op is cited to its handler in the C1 dispatch table `C1/7A6B[op*2]` with `tools/dis.py`
+**Zero invention.** Every op is cited to its handler in the C1 dispatch table `C1/7A6B[op*2]` with `tools/romdis.py`
 output; every frame number is an oracle `--monitor` row. Probe = `ct_probe.exe` (= `build/ct.exe`).
 
 > **Seeds (canonical injections, the tech-slice `$2837|=0x80` method).**
@@ -496,7 +496,7 @@ whirl keeps being drawn from the fixture**; if it is ever re-anchored to `mvLive
 | **C3** | **The pose-tick cadence contention.** `C1/424C` ticks at most ONE combatant per frame and gates on `$A012`/`$A028`; the forest run shows a clean 4f dwell, GATO shows 6/4/5/7 then 4. Where `$A012` is cleared is still unlocated (the same §14 "6.5f lattice" open). | find the per-frame `$A012` clear (an indirect dispatch; no static JSR/JSL refs) |
 | **C4** | **`$A4AF` render hop** (§2.2): the derived formula is `∓$A96E,Y` scaled by `$AA04` — the exact per-frame magnitude was not tabulated against a pixel capture. | OAM/`--peek` diff of a slide frame vs the live `$1D23` |
 | **C5** | **`CD/001B`** (the `80 nn ..` effect-subsystem call) — the whirl's actual pixels/mover. Unchanged T3 boundary; the fixture stands in. | the C3/FD effect-subsystem decode |
-| **C6** | Ops `27`, `28`, `1C`, `60`, `6C`, `73` (used by the victim/effect tracks) are located in the table but not disassembled here. | dis.py at `C1/5806`, `C1/5840`, `C1/5694`, `C1/5D1D`, `C1/5F13`, `C1/6059` |
+| **C6** | Ops `27`, `28`, `1C`, `60`, `6C`, `73` (used by the victim/effect tracks) are located in the table but not disassembled here. | romdis.py at `C1/5806`, `C1/5840`, `C1/5694`, `C1/5D1D`, `C1/5F13`, `C1/6059` |
 | **C7** | ⚠ **`battleAnimOpLen` has `DA = 2`; the ROM says 1** (`C1/175B6`, live cursor `093F→0940`). Fix when the parser is next touched — with 2 the snap `1B 19` mis-parses. | one-line change + re-run the parse-diagnostic checks |
 
 ---
@@ -524,7 +524,7 @@ Dir: `%TEMP%/claude/C--Users-…-e956ecca-…/scratchpad/lane_D2/`
 Independent re-derivation by a second agent. Probe = `verify_D2/ct_probe.exe` (copy of `build/ct.exe`);
 states rebuilt from scratch (`gato_press_action.state` / `saves/battle_re/forest_holdleft_pre.state` +
 `$2837|=0x80`); every ROM byte re-dumped from `Chrono_Trigger_USA_SNES.sfc`; every cited handler re-run
-through `tools/dis.py`. **Verdict: SOUND WITH CORRECTIONS** — the mechanism reproduces byte-for-byte; the
+through `tools/romdis.py`. **Verdict: SOUND WITH CORRECTIONS** — the mechanism reproduces byte-for-byte; the
 items in the second table must be fixed before code is written.
 
 ### CONFIRMED (re-measured, not re-read)

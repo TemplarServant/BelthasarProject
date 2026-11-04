@@ -2,7 +2,7 @@
 
 Derives, from the ROM disasm + LakeSnes oracle **only**, the battle STATUS system: where a combatant's active
 statuses live, how an attack inflicts one (mask + immunity), how it is cured, and the ONE cleanly-observable
-status law (wake-on-hit). Every claim cites a `tools/dis.py <fileoffset>` (fileoffset = `(bank−0xC0)<<16 | addr`;
+status law (wake-on-hit). Every claim cites a `tools/romdis.py <fileoffset>` (fileoffset = `(bank−0xC0)<<16 | addr`;
 battle code runs 8-bit `m=1 x=1` unless a `REP` is shown) or an oracle `ct_probe.exe` (= `build/ct.exe`)
 `--monitor`/`--read` observation. Writer PCs = the PC *after* the store retires.
 
@@ -56,7 +56,7 @@ battle code runs 8-bit `m=1 x=1` unless a `REP` is shown) or an oracle `ct_probe
 
 ## 1 — `C1/E9D5` IS THE CHARM ROLL (the misattribution, corrected)
 
-### 1.1 The routine (`dis.py 1E9D5`, 8-bit)
+### 1.1 The routine (`romdis.py 1E9D5`, 8-bit)
 ```
 1E9D5 STZ $B3BF                       ; roll marker = 0
 1E9D8 LDX $B1F4 / LDA $5E57,X         ; attacker block+0x2A
@@ -125,7 +125,7 @@ Evidence:
 
 ## 3 — THE INFLICT (`C1/DBAA`) + the def table + the roll boundary
 
-### 3.1 The inflict executor `C1/DBAA` (`dis.py 1DBAA`, 8-bit)
+### 3.1 The inflict executor `C1/DBAA` (`romdis.py 1DBAA`, 8-bit)
 ```
 1DBAA LDA $16 / CMP #FF / BEQ->skip           ; $16 = category (0..5) ; 0xFF = no status
 1DBB4 CMP #00/#01/#02  -> 1DBC0 (byte-set path)
@@ -274,7 +274,7 @@ insight (from `battle_drop_charm.md` — `$AE4D` = the staged header byte+7) is 
 inflicts is NOT read from `CC/05CC` (that table's `D4D6` pure-status executor only carries cat-4 effects, §3.2
 0x0F/0x10) but from the **STAGED ATTACK HEADER** `$AEE6`, via a dedicated rider on the `D306` physical hit-tail.
 
-### 8.1 The header STAGING model (dis.py `1D5DC` PC / `1D916` enemy) — byte-exact, oracle-observed
+### 8.1 The header STAGING model (romdis.py `1D5DC` PC / `1D916` enemy) — byte-exact, oracle-observed
 
 > **PORTED 2026-08-22** (`battleStageAtkHeader`, src/battle.c). The 12-byte copy + the `C1/EB0E` mirror
 > now run at dispatch, and our staged bytes are byte-identical to the table below —
@@ -329,7 +329,7 @@ So the **status the physical carries lives in header byte+1 (accuracy) / byte+2 
 all in the staged `$AEE6` block, NOT in `CC/05CC`. In a stock header byte+1 = byte+2 = 0 and byte+7 bit2 = 0, so
 the rider is inert (§8.2 (b)).
 
-### 8.2 The status ROUTE — the `D306` physical hit-tail (dis.py `1D338`/`1D14F`/`1E976`)
+### 8.2 The status ROUTE — the `D306` physical hit-tail (romdis.py `1D338`/`1D14F`/`1E976`)
 
 ```
 1D335 JSR C1/DCAD                     ; damage compute + WAKE-ON-HIT (block+0x1E &= 0xF9, §5a)
@@ -524,7 +524,7 @@ ct_probe <rom> --monitor "B2C8:1,B2C3:2,B2C7:1,AE93:1,AE4D:1" --from saves/statu
 
 ### S1. THREE action classes, one shape — not three paths to one table
 
-`dis.py 1D5DB / 1D809 / 1D91C` (m=1 x=0) show three byte-identical preambles, each pairing an ID
+`romdis.py 1D5DB / 1D809 / 1D91C` (m=1 x=0) show three byte-identical preambles, each pairing an ID
 table with its own RECORD table. All three end in the same 12-byte copy to `$AEE6`:
 
 | store (writer PC) | id table -> `$B2C8` | record table | terminator |
@@ -536,13 +536,13 @@ table with its own RECORD table. All three end in the same 12-byte copy to `$AEE
 The common tail is `TAX / STX $0028 / LDA #0C / TAX / STX $002A / JSR C1/C90B / LDX $2C /
 STX $B2C5 / TDC / TAY / LDA <table>,X / STA $AEE6,Y / INX / INY / CPY #000C / BCC`.
 
-**`C1/C90B` is a 16-bit shift-add MULTIPLY** (`dis.py 1C90B`): `LDX #0010 / STZ $2C / STZ $2E /
+**`C1/C90B` is a 16-bit shift-add MULTIPLY** (`romdis.py 1C90B`): `LDX #0010 / STZ $2C / STZ $2E /
 ROR $2A / BCC+ / CLC / LDA $28 / ADC $2E / STA $2E / ROR $2E / ROR $2C / DEX / BNE`, i.e.
 `$2C:$2E = $28 * $2A`. With `$2A = 0x0C` the index is **`$B2C8 * 12`**, and `$B2C5` keeps it.
 
 ### S2. STRIDE 12, MEASURED — the `17-byte header` in `battle_drop_charm.md:108` is a different site
 
-`battle_drop_charm.md` records the header as 17 bytes staged at `0x1BF81`. `dis.py 1BF81` confirms
+`battle_drop_charm.md` records the header as 17 bytes staged at `0x1BF81`. `romdis.py 1BF81` confirms
 that site is REAL (`$B18C * 17` via `ASL A x4 + ADC $0E`, `LDA $CC213F,X / STA $AEE6,Y / CPY #0011`)
 -- but it is **not the combat path**: no run of `status_aplicado.state` ever reports it as a writer
 of `$AEE6`, and every header the oracle DID stage sits at an exact multiple of **12** in the table
@@ -630,7 +630,7 @@ S5 could not reproduce `$B2C8` because it read the monitor's 2-byte field as a l
 
 ### S7.2 `$B2C3` = `$B18C * 11` — an 11-byte ACTION record, not a pointer
 
-`dis.py 1D523` (PC), `1D7C4` (class-2), `1D8D1` (enemy) are three byte-identical routines:
+`romdis.py 1D523` (PC), `1D7C4` (class-2), `1D8D1` (enemy) are three byte-identical routines:
 
 ```
 JSL FD/ACFD / TDC / TAX / STX $AE7B
@@ -653,7 +653,7 @@ LDA $B2C7 / REP #20 / CLC / ADC $B2C3 / TAX / LDA <idtable>,X / STA $B2C8
 mismatches at cursor 3 are the intra-frame ordering artifact: the id `0x80` was read at cursor 1
 or 2, and `C1/D71E` advanced the cursor to 3 before the frame ended.)
 
-### S7.3 The class SELECTOR is `$AEE3` (`dis.py 18E02`)
+### S7.3 The class SELECTOR is `$AEE3` (`romdis.py 18E02`)
 
 ```
 18E03  STA $AE4D / STA $AE4E     ; A=0 -- CLEAR BOTH first  (the C1:8E06 clear seen at f1606)
@@ -670,7 +670,7 @@ enemy staging (f1607, writer `C1:D92A`). The PC path is dispatched separately (`
 Each entry has exactly ONE caller in the whole ROM (byte scan for `JSR`/`JMP`/`JSL`):
 `C1/D523 <- C1/BF7D`, `C1/D7C4 <- C1/8E15`, `C1/D8D1 <- C1/8E10`.
 
-### S7.4 The PC action id: `$B18C = CC/2583[charId]` (`dis.py 1BFF3`)
+### S7.4 The PC action id: `$B18C = CC/2583[charId]` (`romdis.py 1BFF3`)
 
 ```
 1BFF3  LDA $B18B / TAX ; LDA $AEFF,X / CMP #FF / BEQ ; TAX
@@ -958,7 +958,7 @@ rule, the port through CT_ROM; `tools/battle_status_cmp.py`, check battle-status
 headers CC/89C6[0..1] with the rider (+1 = 63, +2 = 02 / 08, +7 |= 04); `chaosE` = Crono's physical header CC/23F7 with
 the rider (+1 = 63, +2 = 04, +7 |= 04) and GATO's +23 immunity CC/5422 = 00; `blindE` = the same with +2 = 01.
 
-### S9.5.1 LIFELINE -- C1/B279's PC arm past B2D9 (dis.py 1B2D9 0xE0 1 0)
+### S9.5.1 LIFELINE -- C1/B279's PC arm past B2D9 (romdis.py 1B2D9 0xE0 1 0)
 
 ```
 B2E1  X = FD/A849[Y*2] (the seat's command record $93EE + 7Y), `STA $06`; record +1 bit 4 -> $B18B = Y, JSR C1/BC60
@@ -969,7 +969,7 @@ B30F  +22 bit 7 -> B316: +22 &= 7F; $AD89 = +39 * 5 (C1/C90B); $B1FD = Y; C1/E89
       `$0200 = $AF0A,$B1FD / LDA #09 / JSL CD/0021` (CE:EF11[9] = "{11} got up!"); JSL FD/ACEE; STZ $24 -> B3B7
 B392  else `$9F22 = $99DD = $AFAB = $B158` (the fallen gauge) -> B3B7
 ```
-The sweep C1/B223 (dis.py 1B223 0x56 1 0) also runs, per enemy Y off the roster whose $5E12,Y ($5E15 + slot, its move
+The sweep C1/B223 (romdis.py 1B223 0x56 1 0) also runs, per enemy Y off the roster whose $5E12,Y ($5E15 + slot, its move
 target) is off it too, `$B23F,Y = FF / $B2B3,Y = 0`, and after the loop `$24 = 1` when all three PCs' $AEFF have bit 7.
 Measured (the lifeline fixture): the attack's close f605 (`$A013 = 0`, C1:41BD) and in the same frame the tail's sweep
 (`$5E4F = 00` C1:B318, `$AE93 = 7A` C1:B36A, `$B328 = E7 FF 00 80`, `$B2D3 = 00`: stopped at seat 0); `$A013 = 1` f607;
@@ -1012,7 +1012,7 @@ NOT PORTED (no fixture reaches it): C1/8E28-8E45, the turn's own actor gate afte
 $AEB3 death mark, or +1E & 82) -> no action and no step -- it runs the formula (C1/D8D1 / D7C4, with its draws and rider)
 first, which the port's enemy path computes later, at the think's end.
 
-### S9.5.3 LOCK at the dispatch -- C1/D74F (dis.py 1D74F 0x75 1 0), from C1/D573 in the formula
+### S9.5.3 LOCK at the dispatch -- C1/D74F (romdis.py 1D74F 0x75 1 0), from C1/D573 in the formula
 
 Per participant $B2EA[k]: `LDA $A0D1,X / BNE fail` (C1/D764, X = its seat), the cost (C1/CB48 / CB61 / CB7A, scaled by
 C1/CBF6) against curMP, `+1E & 08` -> fail; `$B3C8 = FF` on a failure. With $B3C9 bit 7 clear C1/D57A skips the formula

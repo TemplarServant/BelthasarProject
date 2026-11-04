@@ -69,7 +69,7 @@ build/ct.exe --monitor "...,7E5FEA:2,7E5E6B:1,7E5EEB:1,7EB1F4:2,..." --from ... 
 
 ## 2. THE ROM FORMULA (type-4 enemy physical, `C1/E276`)
 
-`python tools/dis.py 1E276 0x70 1 1`:
+`python tools/romdis.py 1E276 0x70 1 1`:
 
 ```
 1E276: CMP #04            ; $16 == 4 -> the ENEMY PHYSICAL formula ($AEEB = 04, measured below)
@@ -88,7 +88,7 @@ build/ct.exe --monitor "...,7E5FEA:2,7E5E6B:1,7E5EEB:1,7EB1F4:2,..." --from ... 
 1E2D0: JMP C1/E575        ; elemental, then the (256-def)/256 cut at C1/E65F+
 ```
 
-`C1/C02A` (`python tools/dis.py 1C02A 0x50 1 1`) is a fixed-point multiply:
+`C1/C02A` (`python tools/romdis.py 1C02A 0x50 1 1`) is a fixed-point multiply:
 `A=v*256; Y=A>>2 (v*64); $08=A>>5 (v*8); Y-=$08 (v*56); $08>>=1 (v*4); Y-=$08 (v*52);
 $08>>=3 (v>>1); Y-=$08;  $30 = (Y & 0xFF00) >> 8` →
 
@@ -96,7 +96,7 @@ $08>>=3 (v>>1); Y-=$08;  $30 = (Y & 0xFF00) >> 8` →
 C02A(v) = ((v*52) - (v>>1)) >> 8
 ```
 
-`C1/E65F` (`python tools/dis.py 1E63B 0x60 1 1`) selects the defense: `$18 == 0x3E` → `def = target
+`C1/E65F` (`python tools/romdis.py 1E63B 0x60 1 1`) selects the defense: `$18 == 0x3E` → `def = target
 block+0x3E` raw; `$18 == 0x3C` → `def * 5/2`. Enemy physical uses `0x3E`.
 
 **Closed arithmetic vs the oracle (Hetake atk 4, POW 12, Crono def 16):**
@@ -113,7 +113,7 @@ Marle: 5*(256-14)/256 = 4  -> 4 or 5 == the -4 / -5 Marle drops at f1727/f2890/f
 
 ## 3. THE ATTACK-RECORD INDEX — the ROM's real chain (this is DEFECT #1)
 
-Record loader for the enemy class (`python tools/dis.py 1D900 0x60 1 1`):
+Record loader for the enemy class (`python tools/romdis.py 1D900 0x60 1 1`):
 
 ```
 1D916: LDA $B2C7 / CLC / ADC $B2C3 / TAX
@@ -121,13 +121,13 @@ Record loader for the enemy class (`python tools/dis.py 1D900 0x60 1 1`):
 1D931: TAX / LDA #0C / JSR C1/C90B     ; X = id*12
 1D945: LDA $CC89C6,X / STA $AEE6,Y (12 bytes)   ; -> $AEE6..$AEF1, so $AEEF = record+9 = POWER
 ```
-and its index setter (`python tools/dis.py 1D8C0 0x40 1 1`):
+and its index setter (`python tools/romdis.py 1D8C0 0x40 1 1`):
 ```
 1D8DA: LDA $B18C / LDA #0B / JSR C1/C90B / STX $B2C3    ; $B2C3 = $B18C * 11
 1D8ED: STZ $B2C7                                        ; cursor 0
 ```
 
-**Where `$B18C` comes from — the ATTACK exec handler `C1/99BE`** (`python tools/dis.py 199B0 0x50 1 1`
+**Where `$B18C` comes from — the ATTACK exec handler `C1/99BE`** (`python tools/romdis.py 199B0 0x50 1 1`
 and `199FE 0x70 1 1`):
 
 ```
@@ -143,7 +143,7 @@ and `199FE 0x70 1 1`):
 `$AEC8` is the enemy **slot**, measured 0/1/2 (`--monitor "7EAEC8:1,..."`, rows f642 `7EAEC8=02`,
 f647 `=01`, f1131 `=00`), so `(slot+3)*0x80` is that enemy's own block. `$5E48 - $5E2D = 0x1B`.
 
-**`block+0x1B` is a STAGED ROM stat** — `python tools/dis.py 3DB438 0xA0 1 1`, the tail of FD/B438:
+**`block+0x1B` is a STAGED ROM stat** — `python tools/romdis.py 3DB438 0xA0 1 1`, the tail of FD/B438:
 ```
 3DB4C1: TDC / STA $00
 3DB4C4: INX / LDA $CC4700,X / STA $5FC6,Y / INY / INC $00 / CMP #03 / BCC ->3DB4C4
@@ -272,7 +272,7 @@ python -c "... ptr=CC/8B08+0x5E*2 -> 9E36, base 0xC9E36"
 `FD/BA4A[0x00] = 4`, `FD/BA4A[0x01] = 4`.
 
 ### 5.2 What the ROM does with a move-only section — the saved-IP walk
-Dispatch, `python tools/dis.py 18D43 0x80 1 1`:
+Dispatch, `python tools/romdis.py 18D43 0x80 1 1`:
 ```
 18D77: STX $B1D2 / LDA $CC0000,X / STA $AEE3     ; the op at the per-enemy saved IP $B1D4,Y
 18D86: ASL A / TAX / JSR ($B88D,X)               ; run the op's handler
@@ -281,7 +281,7 @@ Dispatch, `python tools/dis.py 18D43 0x80 1 1`:
 18D9A: CMP #01 / BNE ->18DA1
 18DA1: JMP C1/8E4A                               ; 2 (op-00 move, set at 199B8) -> the ADVANCE path
 ```
-`C1/8E4A` (`python tools/dis.py 18E40 0x60 1 1`):
+`C1/8E4A` (`python tools/romdis.py 18E40 0x60 1 1`):
 ```
 18E5D: LDX $B1D4,Y / STX $B273
 18E63: LDA $CC0000,X / TAX / LDA $FDBA4A,X       ; the op's own byte length

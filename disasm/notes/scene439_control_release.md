@@ -110,7 +110,7 @@ already matches.
 
 ## 3. What op 0xDA actually is (C0/345A) — disassembled
 
-`python tools/dis.py 345A 0x60` and `python tools/dis.py 34DA 0x68`:
+`python tools/romdis.py 345A 0x60` and `python tools/romdis.py 34DA 0x68`:
 
 ```
   345A: STY  $C7
@@ -157,7 +157,7 @@ Read straight out of the oracle's script image (`$7F2000 + 0x1700`):
 ```
 ct_probe.exe --read "7F36F0+0x60" --from tele439.state
   wram[7F36F0+96] = 00000000000000000000000000000000
-                    [25 ROM bytes at 0x5D37: python tools/dis.py 0x5D37 25]
+                    [25 ROM bytes at 0x5D37: python tools/romdis.py 0x5D37 25]
                     E3 00 89 40 0D 00 AE ...
 ```
 
@@ -180,8 +180,8 @@ Decoded:
   1717: 11 09     JUMPBACK
 ```
 
-`71` = op INC-local, handler `C0/6C78 LDA $7F0200,X / INC A / STA $7F0200,X` (`dis.py 6C70 0x20`);
-`E3` = `C0/3C05 ... 3C0B STA $1F` (`dis.py 3C05 0x14`) = `$7E011F`.
+`71` = op INC-local, handler `C0/6C78 LDA $7F0200,X / INC A / STA $7F0200,X` (`romdis.py 6C70 0x20`);
+`E3` = `C0/3C05 ... 3C0B STA $1F` (`romdis.py 3C05 0x14`) = `$7E011F`.
 
 **So the barrier law is `phase := 3 - nFollowers`** (2 for one follower, 1 for two) — the identical
 law our `CtSceneBattleReturn` already uses (`src/ct_vm.c:4270`, `w8(... LOC + 0xFF*2, (3 - nf))`).

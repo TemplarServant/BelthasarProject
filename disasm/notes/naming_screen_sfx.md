@@ -1,11 +1,11 @@
 # Name-entry screen — SOUND (ROM mode-3 screen `$0D`)
 
-**Status:** derived. Every row below carries either a `tools/dis.py` line / raw ROM bytes, or a
+**Status:** derived. Every row below carries either a `tools/romdis.py` line / raw ROM bytes, or a
 `build/ct.exe` output line. Provenance markers:
 
 | marker | meaning |
 |---|---|
-| `[dis]` | reproduced by the synthesizer in this session with `tools/dis.py` or a raw-byte read of `Chrono_Trigger_USA_SNES.sfc` |
+| `[dis]` | reproduced by the synthesizer in this session with `tools/romdis.py` or a raw-byte read of `Chrono_Trigger_USA_SNES.sfc` |
 | `[orc]` | reproduced by the synthesizer in this session with `build/ct.exe` (command + output pasted) |
 | `[orc*]` | oracle output reported by a measurement sub-agent and **not** re-run here |
 
@@ -45,7 +45,7 @@ The prelude's first post was reported as "PAUSE MUSIC". **That is wrong; the pol
 the post is normally inert.**
 
 ```
-[dis] python tools/dis.py 708E3 0x20 0 0
+[dis] python tools/romdis.py 708E3 0x20 0 0
   708E3: SEP #20
   708E5: LDA $01          ; DP = $1E00 (C7/0150 LDX #1E00 / PHX / PLD) -> $01 = $1E01
   708E7: CLC
@@ -81,7 +81,7 @@ It runs on **every** mode-3 open (main menu included), not only on naming. Port 
 as a naming special case.
 
 ```
-[dis] python tools/dis.py 28096 0x60
+[dis] python tools/romdis.py 28096 0x60
   28096: REP #30 / 28098: PEA $0000 / 2809B: PLD
   2809C: LDX #8406 / 2809F: LDY #0500 / 280A2: LDA #0007 / 280A5: MVN $7E,$C2   <- installs the NMI trampoline
   280A8: SEP #20
@@ -94,8 +94,8 @@ as a naming special case.
   280E5: LDA #83 / 280E7: STA $1E00 / 280EA: JSL C70004
 
 [dis] raw d[0x280A8:0x280EC] =
-  [29 ROM bytes at 0x280A8: python tools/dis.py 0x280A8 29]
-  [28 ROM bytes at 0x280C5: python tools/dis.py 0x280C5 28]
+  [29 ROM bytes at 0x280A8: python tools/romdis.py 0x280A8 29]
+  [28 ROM bytes at 0x280C5: python tools/romdis.py 0x280C5 28]
   22 04 00 c7 a9 83 8d 00 1e 22 04
 ```
 Residue proving it ran for both namings:
@@ -167,7 +167,7 @@ the dismissing press is consumed. `[orc*]` reports the same f5 row for all twelv
 The mode-3 shell dispatches on two variables: `$67` = screen index, `$68` = sub-state.
 
 ```
-[dis] python tools/dis.py 28270 0x40
+[dis] python tools/romdis.py 28270 0x40
   28275: LDA $68 / 28277: ASL A / 28278: TAY
   28279: LDA $67 / 2827B: ASL A / 2827C: TAX
   2827D: REP #30                            <- X and Y are 16-bit for the whole handler...
@@ -216,7 +216,7 @@ This is the cleanest live discriminator for the two flows, and it independently 
 ### 2a — the press latches the screen reads
 
 ```
-[dis] python tools/dis.py 2E984 0x80
+[dis] python tools/romdis.py 2E984 0x80
   2E984: JSR C2/E9E2            ; builds $0D1E (d-pad direction index, $80 = none) and $0081/$54
   2E98A: STZ $0D1D
   2E98D: LDA $68 / 2E98F: CMP $0D17 / 2E992: STA $0D17
@@ -241,7 +241,7 @@ calling `C2/E267`.
 ### 2b — the grid handlers (why every accepted direction blips)
 
 ```
-[dis] python tools/dis.py 2E2A0 0x50
+[dis] python tools/romdis.py 2E2A0 0x50
   2E2A0: LDA $0F09 / DEC A / BPL ->2E2B4 / LDA #07          (UP,   wrap 0 -> 7)
   2E2AA: LDA $0F09 / INC A / CMP #08 / BCC ->2E2B4 / LDA #00 (DOWN, wrap 7 -> 0)
   2E2B4: STA $0F09 / STA $004203 / STZ $0F0A
@@ -258,7 +258,7 @@ it with a different value, so `C2/E285 CPX $9380 / BEQ` never suppresses on this
 ## 3. The stager and the throttle, verbatim
 
 ```
-[dis] python tools/dis.py 2EABA 0x50            (the C2/EAxx wrapper family)
+[dis] python tools/romdis.py 2EABA 0x50            (the C2/EAxx wrapper family)
   2EABA: PHP / SEP #30 / JSR C2/EB03 / PLP / RTS                 ; "play the id already in A"
   2EAC2: PHP / SEP #30 / LDA #00 / JSR C2/EB03 / PLP / RTS       ; THE GENERIC BLIP, id $00
   2EACC: PHP / SEP #30 / LDA #01 / JSR C2/EB03 / PLP / RTS       ; id $01 (the name-entry buzz)
@@ -280,15 +280,15 @@ it with a different value, so `C2/E285 CPX $9380 / BEQ` never suppresses on this
   2EB1A: JSL  C70004
   2EB1E: RTS
 [dis] raw d[0x2EAF9:0x2EB1F] =
-  a2 19 8e 00 1e 9c 76 0d 80 05 | [28 ROM bytes at 0x2EB03: python tools/dis.py 0x2EB03 28]
+  a2 19 8e 00 1e 9c 76 0d 80 05 | [28 ROM bytes at 0x2EB03: python tools/romdis.py 0x2EB03 28]
 ```
 
 `$1E03` is **never written** by the stager, yet the driver ships it:
 
 ```
-[dis] python tools/dis.py 7061C 0x30
+[dis] python tools/romdis.py 7061C 0x30
   7061C: SEP #20 / LDA $03 -> STA $2143 / LDA $02 -> STA $2142 / LDA $01 -> STA $2141 / LDA $00 -> $2140
-[dis] python tools/dis.py 70140 0x60 0 0     (the JSL C7:0004 entry)
+[dis] python tools/romdis.py 70140 0x60 0 0     (the JSL C7:0004 entry)
   70150: LDX #1E00 / PHX / PLD                ; DP = $1E00
   70157: LDA $05 / BPL ->70192                ; $1E05 bit7 clear = driver busy -> COMMAND DROPPED
   7015D: LDA $00 / BEQ ->70192                ; command byte 0 = nothing
@@ -303,7 +303,7 @@ There is **no CPU-side table of SFX ids and no range check**: `$1E01` goes strai
 ### The drain
 
 ```
-[dis] python tools/dis.py 28455 0x20      (inside the mode-3 NMI, C2/840E)
+[dis] python tools/romdis.py 28455 0x20      (inside the mode-3 NMI, C2/840E)
   2845E: LDA $0D76
   28461: BEQ ->28466
   28463: DEC $0D76
@@ -334,7 +334,7 @@ for `{STA,STZ,LDA,DEC,INC,CMP,LDX,LDY,BIT,TSB,TRB} $0D76`:
 [dis] STA $0D76 @ C2/EB12   STZ $0D76 @ C2/EAD9   STZ $0D76 @ C2/EAFE
       LDA $0D76 @ C2/845E   LDA $0D76 @ C2/EB0B   DEC $0D76 @ C2/8463
       TRB $0D76 @ D6/14AE   <- FALSE POSITIVE: d[0x1614A0:0x1614C0] =
-        [32 ROM bytes at 0x1614A0: python tools/dis.py 0x1614A0 32]
+        [32 ROM bytes at 0x1614A0: python tools/romdis.py 0x1614A0 32]
         -- bank D6 event/dialogue data, not code.
 ```
 **But** there is a seventh, non-obvious writer: the whole latch is clobbered by the field↔menu
@@ -342,7 +342,7 @@ low-WRAM swap.
 ```
 [orc] --monitor "...7E0D76:1..." --from saves/luccaname.state --input "0:4,08:2,0:200" --diff --writer --frames 210
   f13  7E0D76=07*(C0:0914)          <- NOT a sound write
-[dis] python tools/dis.py 905 0x30 0 0
+[dis] python tools/romdis.py 905 0x30 0 0
   0905: LDY #0920 / 0908: LDX #2000 / 090D: LDA #14DF / 0910: PHB / 0911: MVN $00,$7F / 0914: PLB   (RESTORE)
   0918: LDX #0920 / 091B: LDY #2000 / 0920: LDA #14DF / 0923: PHB / 0924: MVN $7F,$00 / 0927: PLB   (SAVE)
 ```
@@ -447,8 +447,8 @@ These are not sound bugs, but the sound cannot be correct without them.
   `if (nmType && nmPos < 5)`. ROM `C2/E316`:
   ```
   [dis] raw d[0x2E316:0x2E34A] =
-    [26 ROM bytes at 0x2E316: python tools/dis.py 0x2E316 26]
-    [26 ROM bytes at 0x2E330: python tools/dis.py 0x2E330 26]
+    [26 ROM bytes at 0x2E316: python tools/romdis.py 0x2E316 26]
+    [26 ROM bytes at 0x2E330: python tools/romdis.py 0x2E330 26]
   [dis] 2E334: LDY $0F06 / 2E337: CPY #05 / 2E339: BCC ->2E33D / 2E33B: LDY #04
         2E33D: STA $0F00,Y / 2E340: INY / 2E341: CPY #06 / 2E343: BCS ->2E348 / 2E345: STY $0F06
   ```
@@ -521,22 +521,22 @@ proved with `--mutate` (a surviving mutation is an obligation of proof, not a ve
 ## Appendix — one-line reproductions
 
 ```
-python tools/dis.py 2EB03 0x20                # the stager
-python tools/dis.py 2EABA 0x50                # the C2/EAxx wrapper family
-python tools/dis.py 2E1ED 0x50                # screen $0D sub-states 0,3,4 and the naming loop
-python tools/dis.py 2E267 0x40                # cursor move + the CPX $9380 gate
-python tools/dis.py 2E2F4 0x30                # type / backspace / the silent-at-0 branch
-python tools/dis.py 2E2A0 0x50                # the four direction handlers (wrap + $9380/$9381)
-python tools/dis.py 2E363 0x30 1 0            # commit + own-slot zeroing
-python tools/dis.py 2E3E0 0x30 0 0            # the duplicate validator (m8/x16 in reality)
-python tools/dis.py 2E984 0x80                # $0D1D/$0D1E latch builder + the sub-state-change gate
-python tools/dis.py 28096 0x60                # the 5-command mode-open prelude
-python tools/dis.py 28455 0x20                # the NMI $0D76 drain
-python tools/dis.py 28270 0x40                # the $67/$68 dispatcher + the C2/8292 screen table
-python tools/dis.py 70140 0x60 0 0            # the JSL C7:0004 command router
-python tools/dis.py 7061C 0x30                # the mailbox -> $2140-$2143 shipper
-python tools/dis.py 708E3 0x20 0 0            # the cmd-$70 pause handler (polarity + the BEQ no-op)
-python tools/dis.py 905 0x30 0 0              # the C0 low-WRAM save/restore that clobbers $0D76
+python tools/romdis.py 2EB03 0x20                # the stager
+python tools/romdis.py 2EABA 0x50                # the C2/EAxx wrapper family
+python tools/romdis.py 2E1ED 0x50                # screen $0D sub-states 0,3,4 and the naming loop
+python tools/romdis.py 2E267 0x40                # cursor move + the CPX $9380 gate
+python tools/romdis.py 2E2F4 0x30                # type / backspace / the silent-at-0 branch
+python tools/romdis.py 2E2A0 0x50                # the four direction handlers (wrap + $9380/$9381)
+python tools/romdis.py 2E363 0x30 1 0            # commit + own-slot zeroing
+python tools/romdis.py 2E3E0 0x30 0 0            # the duplicate validator (m8/x16 in reality)
+python tools/romdis.py 2E984 0x80                # $0D1D/$0D1E latch builder + the sub-state-change gate
+python tools/romdis.py 28096 0x60                # the 5-command mode-open prelude
+python tools/romdis.py 28455 0x20                # the NMI $0D76 drain
+python tools/romdis.py 28270 0x40                # the $67/$68 dispatcher + the C2/8292 screen table
+python tools/romdis.py 70140 0x60 0 0            # the JSL C7:0004 command router
+python tools/romdis.py 7061C 0x30                # the mailbox -> $2140-$2143 shipper
+python tools/romdis.py 708E3 0x20 0 0            # the cmd-$70 pause handler (polarity + the BEQ no-op)
+python tools/romdis.py 905 0x30 0 0              # the C0 low-WRAM save/restore that clobbers $0D76
 
 build/ct.exe --read "wram:00BE+1,wram:0067+1,wram:0A00+2,wram:1E10+2" --from saves/crononame.state
 build/ct.exe --monitor "7E1E01:1,7E1E02:1,7E0D76:1,7E0F06:1,7E0F08:1,7E0F09:1,7E9380:2" \
@@ -548,7 +548,7 @@ build/ct.exe --monitor "7E1E01:1,7E1E02:1,7E0D76:1,7E0F06:1,7E0F08:1,7E0F09:1,7E
 
 This section supersedes rows 11-13 of §1 where they disagree. It was derived after the first pass,
 because the id-`$01` buzz could not be ported without knowing how the ROM encodes a "blank" — and
-the first pass got the empty-name verdict **wrong**. Everything here is either a `tools/dis.py`
+the first pass got the empty-name verdict **wrong**. Everything here is either a `tools/romdis.py`
 listing / raw ROM bytes or a `build/ct.exe` measurement.
 
 ## A1. The alphabet: `$EF` and `$FF` are DIFFERENT bytes
@@ -566,7 +566,7 @@ The trim treats them asymmetrically, which is the whole point.
 ## A2. The trim `C2/E390`, verbatim
 
 ```
-[dis] python tools/dis.py 2E390 0x50 1 0
+[dis] python tools/romdis.py 2E390 0x50 1 0
   REP #30 / STZ $9890 / LDX #9890 / LDY #9892 / LDA #0003 / MVN $7E,$7E   ; $9890..$9895 := 0
   LDX #0F00 / LDY #98A0 / LDA #0005 / MVN $7E,$7E                        ; $98A0 := a copy of $0F00
   SEP #20 / LDX #0005

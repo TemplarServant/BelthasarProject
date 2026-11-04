@@ -23,7 +23,7 @@ many staggered anchors, and an offset is kept only if it is an instruction start
 walks that reach it; linear 65816 decoding resynchronises quickly, so a real instruction start is
 reached from almost every anchor and a byte inside an operand from almost none. Hits are printed with
 that agreement count so a thin one can be checked. It is a filter, not a proof: confirm anything
-load-bearing with `tools/dis.py` at the reported address.
+load-bearing with `tools/romdis.py` at the reported address.
 """
 import os as _ctos, sys as _ctsys
 _ctsys.path.append(_ctos.path.normpath(_ctos.path.join(_ctos.path.dirname(_ctos.path.abspath(__file__)), '.')))
@@ -122,7 +122,7 @@ def main():
         print("  (none)")
     print("")
     print("NOTE: a hit that is a start on only SOME of the walks that covered it is probably data or a")
-    print("  mid-instruction ghost -- confirm with tools/dis.py at that address before believing it.")
+    print("  mid-instruction ghost -- confirm with tools/romdis.py at that address before believing it.")
     print("  And a JSR/JMP hit only reaches the address IN ITS OWN BANK: a routine with no direct")
     print("  caller is usually reached through a jump table, not missing.")
     return 0

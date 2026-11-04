@@ -3,7 +3,7 @@
 Derives, from the ROM disasm + LakeSnes oracle **only**, four user-reported battle-presentation truths at HEAD
 **a1004ea**. `src/` + git untouched — this notes file is the sole write. Method: oracle `ct_probe.exe`
 (= `build/ct.exe`, copied to scratch) `--monitor` (per-frame RAM, aligned by `$9877`/`$A013` — the `--peek`≠
-`--monitor` gotcha avoided), OAM shadow `$7E0700` decode for the palette-per-sprite proof, `tools/dis.py`
+`--monitor` gotcha avoided), OAM shadow `$7E0700` decode for the palette-per-sprite proof, `tools/romdis.py`
 (fileoffset = `(bank−0xC0)<<16 | addr`) + raw-byte ROM reads for every table/routine, and a `ctlib.lake`
 WRAM patcher (CRC-rewrapped states) to stage Marle at a chosen distance / disable crit. Our engine read from
 `src/battle.c` + `src/field.c`.
@@ -84,7 +84,7 @@ f424  Crono $5E30 -> 0000 (C1:ED12)  $5E4A -> 80 (dead flag, C1:B2B9)   ; GATO's
 The synthetic `gato_crono_dead.state` agrees: Crono's `$AFAB[0]` sits at `0x48` the whole run (it was **Marle's**
 `$AFAB[1]` counting `0x15→0x00`, not Crono's — the initial mis-read).
 
-**The death routine** `C1/B2B1` (`dis.py 1B2AC`; dead flag `LDA #80 / STA $5E4A,X` = `C1:B2B9`), for a **PC**
+**The death routine** `C1/B2B1` (`romdis.py 1B2AC`; dead flag `LDA #80 / STA $5E4A,X` = `C1:B2B9`), for a **PC**
 (`CPY #0003 / BCC` → the seat<3 path), reaches **C1/B392** (raw-decoded `99 22 9F / 99 DD 99 / 99 AB AF`):
 ```
 C1/B392  LDA $B158,Y        ; the seat's ATB RELOAD value (= its bar max)
@@ -140,7 +140,7 @@ chosen distance from GATO), DRIVE → she attacks. `--monitor "9877:1,9930:1,AE9
 
 ## 3.2 THE MECHANISM (disasm) — `$9930` melee flag, C1/2AE3 dist²≤40², CC/F63C weapon flag
 PC-physical anim-select dispatches on `$AE92` via `($7A63,X)`; `$AE92=1` → **C1/432C → C1/49FF setup → C1/4340
-selector** (Marle's attack is `$AE92=1`, measured). The setup **C1/49FF** (`dis.py 149FF`):
+selector** (Marle's attack is `$AE92=1`, measured). The setup **C1/49FF** (`romdis.py 149FF`):
 ```
 C1/49FF  LDA #01 / STA $9930                 ; $9930 = 1  (default = MELEE)
 C1/4A04  $D3/$D4 = attacker live X/Y ($1D0C,X/$1D23,X);  $D5/$D6 = target live X/Y
@@ -156,7 +156,7 @@ C1/4A48  BNE ->4A4F (melee weapon: refine via C1/4A71) ; else (ranged: Marle/Luc
 - **CC/F63C** (raw read) = `01 00 00 01 01 01 01` (charId 0-6 = Crono/Marle/Lucca/Robo/Frog/Ayla/Magus):
   **Marle=0 and Lucca=0 (RANGED weapons), all others=1 (MELEE).** For a ranged weapon `$9930` keeps the pure
   dist test; a melee weapon additionally runs `C1/4A71`.
-- **The selector C1/4340** (`dis.py 143C0`): `$AE9B` crit? → `CD/400E[cid]`; else `LDA $9930 / BNE` → `$9930≠0`
+- **The selector C1/4340** (`romdis.py 143C0`): `$AE9B` crit? → `CD/400E[cid]`; else `LDA $9930 / BNE` → `$9930≠0`
   (close) → **`CD/4007[cid]`** (Marle 0x03); `$9930==0` (far) → **`CD/4000[cid]`** (Marle 0x02). Tables (raw):
   `CD/4007 = 00 03 05 06 08 0A 0C`, `CD/4000 = 0E 02 04 11 0E 0E 12`, `CD/400E = 01 0F 10 07 09 0B 0D`.
 
@@ -268,11 +268,11 @@ Repro (from the scratch dir, ROM in CWD):
 ct_probe --monitor "0700:512,9877:1,A013:1,6130:2" --from gato_press_action.state --input <MASH> --frames 900
 # item2 (dead-PC ATB -> timer==max==empty):
 ct_probe --monitor "AFAB:3,9F22:3,99DD:3,5E30:2,5E4A:1,6130:2" --from gato_crono_lowhp.state --input <MASH> --diff --writer
-python tools/dis.py 1B2AC 0x40 0 0     # death routine -> C1/B392 (LDA $B158,Y / STA $9F22,$99DD,$AFAB)
+python tools/romdis.py 1B2AC 0x40 0 0     # death routine -> C1/B392 (LDA $B158,Y / STA $9F22,$99DD,$AFAB)
 # item3 (Marle melee gate):
 python3 patch (ctlib.lake): $5EF2=0 (crit off); $1D0D/$1D24 = staged distance to GATO
 ct_probe --monitor "9877:1,9930:1,AE92:1,A013:1,AEEB:1,9907:3,1D0D:1,1D24:1,1D12:1,1D29:1" --from marle_close_nocrit.state --input "0:120,100:12,0:26,100:12,0:260" --diff
-python tools/dis.py 149FF 0x40 0 0 ; python tools/dis.py 143C0 0x80 0 0   # setup ($9930) + selector
+python tools/romdis.py 149FF 0x40 0 0 ; python tools/romdis.py 143C0 0x80 0 0   # setup ($9930) + selector
 # CC/F63C = 01 00 00 01 01 01 01 ; CD/4007/4000/400E per-charId anim tables ; C1/2AE3 thr $9893=0x0640=40^2
 # item4 (counter faces target):
 ct_probe --monitor "96DE:8,9877:1,A013:1,1D0C:8,1D23:8" --from gato_crono_dead.state --input <MASH> --diff --writer   # $96DE[3]=3 via C1:600C

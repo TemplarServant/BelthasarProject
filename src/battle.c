@@ -1317,7 +1317,7 @@ static void battleAiTraceUnknown(CtBattleHost* h, const char* what, uint8_t op) 
 // put the count in `$AECB` rather than return one target: value 01 is all living PCs, value 02 all living
 // combatants.
 // Note: X is 16 bits in this block (`CPY #0003`, `LDX #0002`), DB = $7E and DP = 0; disassemble it with
-// 16-bit X (`tools/dis.py <addr> <len> 1 0`), or it decodes as garbage.
+// 16-bit X (`tools/romdis.py <addr> <len> 1 0`), or it decodes as garbage.
 //
 // C1/AE70 -- the candidate filter that values 0A..10 are built from. `x` is the seat*2 the callers pass in X;
 // the seat number is in $AF1E, and the two selectors are $0A (a block offset) and $AF1F (a bit mask).
@@ -3682,7 +3682,7 @@ static void battleHdmaPreset(uint8_t* s, int idx) {
   #undef CEW
 }
 // D1/F83D, JSL'd by the boot right after the preset (D1/F3FA): the HUD band's per-line COLDATA gradient, the blocks the
-// presets' channel 5 points its band lines at (`python tools/dis.py 11F83D 0xAE 1 0`). It clears $C02F..$C14E, then two
+// presets' channel 5 points its band lines at (`python tools/romdis.py 11F83D 0xAE 1 0`). It clears $C02F..$C14E, then two
 // ramps of one-line records -- `01 hi(a)` at $C030 and `81 hi(b)` at $C090, 24 of them, a = E8AB - 55k and b = E055 + 55k
 // (COLDATA all three channels from 8 down to 0 and back), and 12 more at $C0F0 / $C120 with steps of AA -- and the ends.
 // Note: the band's lines are not drawn by the effect compositor, but their COLDATA writes carry down the screen.
@@ -7818,7 +7818,7 @@ static void battleTechCoReloadBDB3(CtBattleHost* h, int techId) {
     h->pcInTurn[ps] = 0;
   }
 }
-// C1/D74F (dis.py 1D74F 0x75 1 0), from C1/D573 inside the formula C1/D523, after its prelude (FD/ACFD, `$AE7B / $AE7C /
+// C1/D74F (romdis.py 1D74F 0x75 1 0), from C1/D573 inside the formula C1/D523, after its prelude (FD/ACFD, `$AE7B / $AE7C /
 // $B3BF := 0`, $B18C = the tech, $B2C3 = id * 11, the participants $B2EA-$B2EC): for k = 0..2 ($B2D0) and participant
 // $B2EA[k] (a char id, FF skipped) at seat X = $B1BE[char] --
 //   D764  `LDA $A0D1,X / BNE fail`   the seat's lock latch (C1/B0B6: alive with +1E bit 3) -- the ROM's third $A0D1 reader
@@ -10232,7 +10232,7 @@ static void battleMoveFormation(CtBattleHost* h, int slot) {
 //     coordinate matches. Class 7 stops on a block only.
 //   * classes 7 and 8 do not `STZ $A5FD,X` (C1/3F5A opens `A6 9C BD 0F 1D`, with no `9E FD A5`), and class 8 has
 //     no step, no box, no collision test and no arrival.
-// The class table CC/FBAB[0x00..0x1F] (`python tools/dis.py 0xCFBAB 32`): class 2 = modes 07/1B/1E/1F, class 3 =
+// The class table CC/FBAB[0x00..0x1F] (`python tools/romdis.py 0xCFBAB 32`): class 2 = modes 07/1B/1E/1F, class 3 =
 // 08/09, class 7 = 11..18 and class 8 = 19 alone. Class 7's `else` arm is mode 0x18.
 
 // The tail classes 2, 3 and 7 share: commit the projected step into the C1/283D mirror, box it, and run
@@ -11652,7 +11652,7 @@ static int battleAscA9Revisit(CtBattleHost* h, int t, int rel, int tr) {
   if (tr) fprintf(stderr, "ascfwd f%d rel=%d t%d stop(%s) at=(%d,%d)\n", h->frames, rel, t, why, x, y);
   return 0;
 }
-// C1/762E's mode table (`TAY / ASL / TAX / JSR ($79D3,X)`, 64 entries, `python tools/dis.py 1762E 0x2E6 1 0`):
+// C1/762E's mode table (`TAY / ASL / TAX / JSR ($79D3,X)`, 64 entries, `python tools/romdis.py 1762E 0x2E6 1 0`):
 //   00-08 -> C1/7639  the live position of combatant $A014[mode]     (mode 0 = actor, 3 = primary victim)
 //   09-11 -> C1/764A  that combatant's foot + its cursor offsets $9708/$9713 (its centre: `0C` = the victim's)
 //   12    -> C1/767D  a bare RTS: $A2B0/$A2B2 keep the point the last resolve (or op) left there
@@ -18469,7 +18469,7 @@ int CtBattleFxShapeOpMem(uint8_t* mem, int op, const uint8_t* b, int* adv) {
   }
   return 1;
 }
-// ---- Program ops DE, B7, 8F, 97, C9, E1 (disasm/notes/battle_fx_program_census.md sec. 3; handlers dis.py 0D1918,
+// ---- Program ops DE, B7, 8F, 97, C9, E1 (disasm/notes/battle_fx_program_census.md sec. 3; handlers romdis.py 0D1918,
 // 0D1F4D, 0D253B, 0D30BE + 0EEA7E/0EE885, 0D1B78, 0D1B9A + 11E70A). `p` is the first operand's address, as in
 // battleFleeProgOp; each returns the value the runner's post-INY steps from.
 #define FXPB(i) CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + ((p + (uint32_t)(i)) & 0xFFFFu)))
@@ -19091,7 +19091,7 @@ static void battleFxOpBE(CtBattleHost* h, int b) {
   battleFxSpin(h, b, b);
 }
 // ---- Program ops D0 D1 D3 D4 D5 D6 DF E7 E8 E9 EE F0 F4 ----
-// (dis.py 0D1A51-0D1AE0, 0D1805-0D18C1, 0D1913 + 11F474-11F4BF, 11FB68-11FBCD, 11EDCD-11EE98, 11EBFF-11EC5E.) Entered as
+// (romdis.py 0D1A51-0D1AE0, 0D1805-0D18C1, 0D1913 + 11F474-11F4BF, 11FB68-11FBCD, 11EDCD-11EE98, 11EBFF-11EC5E.) Entered as
 // CD/16A6 leaves them (M 8-bit, X/Y 16-bit, B = 0, DB = $7E, carry = 1 from CD/16A8's ASL); `p` = $40 = the first
 // operand. ct --sweepfxmisc grades them against the ROM's handlers at every site the 148 programs hold. The
 // direct-page locals $45-$4A they leave are written too: the NMI restores only $00-$2A, so these outlive the frame, and
@@ -20040,7 +20040,7 @@ static void battleObjSlotFrame(CtBattleHost* h) {
   CtObjSlotService(&io);
 }
 // The stage machine: one frame of C1/81EC-821E's blocked main loop.
-// The defeat sequence, C1/813F-8164 (dis.py 1813F 0x28), blocking like the flee's: from the check to the module's exit
+// The defeat sequence, C1/813F-8164 (romdis.py 1813F 0x28), blocking like the flee's: from the check to the module's exit
 // the main loop is inside it, so the turn machinery does not run; the frame service and the ladder copier do.
 //   813F-814B  `$7F01EC = 1`, JSR C1/B7F2 (the queue teardown), `$A10E = 1`            (the check's frame, D)
 //   814C-815A  eight C1/106E idle ticks, two frame waits each                          (D+1 .. D+16)
@@ -20149,7 +20149,7 @@ static int battleFleeStageTick(CtBattleHost* h) {
   }
   if (h->fleeStage == 2) {
     int e = h->fleeExitT++;
-    // CD/03B4 (dis.py D03B4), in its order: `LDA $CD0C / BEQ / JSR CD/0453`, the effect layer's teardown, only when an
+    // CD/03B4 (romdis.py D03B4), in its order: `LDA $CD0C / BEQ / JSR CD/0453`, the effect layer's teardown, only when an
     // effect load put sheets up (CD/0FDD `INC $CD0C`): 21 frames (the four packets, one, fifteen, CD/0E23 + one), and
     // `STZ $CD0C`; then `STZ $CD23`, CD/039E's sound only with $2A1F bit 6 clear (its wait is 15 frames), then CD/0516.
     // CD/0453 runs whole here, not only its frames: the effect's colours 24-31 come back from $CCEE at its t 20
@@ -20188,7 +20188,7 @@ static int battleFleeStageTick(CtBattleHost* h) {
     return 0;
   }
   if (h->fleeStage == 4) {
-    // CD/0418-0428 (dis.py D0418), on the frame after: `$0503 = D1 / $0501 = F4C0` (the exit's NMI D1/F4C0, which the
+    // CD/0418-0428 (romdis.py D0418), on the frame after: `$0503 = D1 / $0501 = F4C0` (the exit's NMI D1/F4C0, which the
     // host runs from the next frame on, CtBattleTailFrame), `LDA $BB00 / STA $45` (its INIDISP), then `JSR CD/044A`:
     // `$47 = 1` and a wait. The poll that follows is CtBattleExitPoll's, one per frame.
     s[0x45] = s[0xBB00];

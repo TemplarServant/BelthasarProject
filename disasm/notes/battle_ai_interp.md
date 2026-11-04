@@ -1377,7 +1377,7 @@ Found on the playthrough's leg 53 (0E6, Robo's switch: three Acids `69` and two 
 against the port, both from `end52` with the same pad.
 
 **The co-actors.** C1/8CF9's only stores to `$AE97/$AE98` are its head, C1/8D1F-8D24 `LDA #FF / STA $AE97 / STA
-$AE98` (`dis.py 018CF9`; the 8DA4-8E15 decode stores neither). The AI's tech handlers then store a tech's co-actors there
+$AE98` (`romdis.py 018CF9`; the 8DA4-8E15 decode stores neither). The AI's tech handlers then store a tech's co-actors there
 (C1/9A77, C1/A086, C1/A2CE after C1/AC14 -- aiTechCoTargets), and CC/F156 binds them as roles 1/2 at the open (`$A015 =
 $AE97`, `$A016 = $AE98`; only a PC actor, `$AE91 < 3`, replaces a negative one from CC/FBC8). The Acids' "Chemically fuse
 with other members" is enemy tech 17 (anim `$9877 = 17`, fx `4B`), run as a COUNTER to Crono's hit: `$AE97 = FF FF` at the

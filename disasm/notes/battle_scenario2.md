@@ -13,7 +13,7 @@ hold LEFT = 0x40 to trigger). Provenance + conversion in [[battle_dissolve]] PAR
 `.vram`+`.oam`(incl CGRAM); `--monitor "0700:512,0900:32"` = the live OAM shadow `$7E0700` low + `$7E0900`
 high (strip the `*` change-markers). fb 512×480 doubled, true px `(x,y)=fb(2x,2y)` bytes `[pad,B,G,R]`; an OBJ
 px at OAM `(x,y)` → fb `(x, y+8)`; OBJ 16×16, 4bpp, CGRAM `128+pal*16+v`, `(v<<3)|(v>>2)`. Enemy palette =
-**pal1**. `dis.py <flat>` (HiROM flat = `(bank−0xC0)*0x10000+addr`, e.g. C1/176C → `0x1176C`). Peek/monitor
+**pal1**. `romdis.py <flat>` (HiROM flat = `(bank−0xC0)*0x10000+addr`, e.g. C1/176C → `0x1176C`). Peek/monitor
 frame-timeline caveat applies (peek A-edge phase-misregisters; monitor+disasm authoritative for input/logic).
 
 ---
@@ -107,7 +107,7 @@ single name; the 3-box command layout is the standard both-ready case.
 
 ## T3 — TARGET-SELECT nav across 3 slots (byte-exact from ROM + oracle)
 
-Enter via Att-confirm (**C1/129C**, `dis.py 11290`): `LDA #07 STA $960D` (`$960D`=7 = the **cursor's own
+Enter via Att-confirm (**C1/129C**, `romdis.py 11290`): `LDA #07 STA $960D` (`$960D`=7 = the **cursor's own
 battle-obj index**, a constant — NOT the target; corrects [[battle_actionfx]] P5.3's "target=$960D"),
 `STZ $9615`, `JSR C1/1F79` (cursor builder), `INC $9609` (→ **target-select state**). `$9614` (the selected
 slot) is **not** set here → it resolves to the **first alive slot 0** (observed initial `$9614`=0, cursor on
@@ -116,7 +116,7 @@ Hetake A).
 ### T3.1 The selected slot = `$9614` (0/1/2); nav is a cyclic list, skipping dead
 Peek-verified persistent selector (peek couples wram+the cursor render): `$9614`=0/1/2 ↔ cursor on Hetake
 A/B/C. (A transient monitor byte `$9618` is NOT the selector — it reads 0 in every peek.) **Nav handler
-C1/176C–179C** (`dis.py 11740`), byte-exact:
+C1/176C–179C** (`romdis.py 11740`), byte-exact:
 ```
 NEXT  (DOWN 0x20 / RIGHT 0x80):  INC $9614; if ==0x0B → 0;  X=$9614; if $99C0,X<0 (BMI) loop; else $A62D=$99C0,X
 PREV  (UP 0x10 / LEFT 0x40):     DEC $9614; if <0    →0x0A; X=$9614; if $99C0,X<0 (BMI) loop; else $A62D=$99C0,X
@@ -162,7 +162,7 @@ off-screen x≈−100..−108, only #0 shows). Position = **enemy anchorX, ancho
   physical DEF — the DEF byte within the stat bytes is unpinned here (see OPEN).
 
 ### T4.2 Reward on death: 3 XP + 16 + 1 item per Hetake (ROM + live-accumulated)
-Kill bookkeeping **FD/ABA2** (`dis.py 3DABA2`) reads reward table **`$CC:5E00 + id·7`** → Hetake id 0x5E =
+Kill bookkeeping **FD/ABA2** (`romdis.py 3DABA2`) reads reward table **`$CC:5E00 + id·7`** → Hetake id 0x5E =
 **$CC:6092** = `03 00 10 00 BD 00 01` and accumulates `$B28C += rec+0` (XP), `$B2A5 += rec+2`, `$B2DB += rec+6`
 (item). Live-verified over the victory mash: each death adds **XP +3, $B2A5 +16, item +1** (`$B28C` 0→3→6→9,
 `$B2A5` 0→16→32→48, `$B2DB`=3). (rec+4 = 0x00BD=189 = a further field — TP/GP semantics = battle_loop detail.)

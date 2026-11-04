@@ -11,7 +11,7 @@ Settles the one explicitly pinned open investigation in the memory file `ct-infr
 ported movement code. There is ZERO drift: every current number is bit-identical to the number the commit
 that CREATED the mode printed in its own body. The "commits recorded 270/270" premise is false.**
 
-Every claim below is anchored to a `tools/dis.py <flat hex>` disassembly (HiROM: bank `C0` addr `$XXXX` =
+Every claim below is anchored to a `tools/romdis.py <flat hex>` disassembly (HiROM: bank `C0` addr `$XXXX` =
 flat `0x0XXXX`) or to an observed `build/ct.exe` value. Writer PCs from `--findoam --watch` are the PC
 *after* the store retires; writer PCs from `--watchwrite` are the PC *of* the storing opcode.
 
@@ -19,7 +19,7 @@ flat `0x0XXXX`) or to an observed `build/ct.exe` value. Writer PCs from `--findo
 
 ## 0 — The frame skeleton (the one ROM fact that explains 4 of the 5 shortfalls)
 
-`tools/dis.py 881E 200 1 1` — the per-frame player controller, `DP=$1D00`:
+`tools/romdis.py 881E 200 1 1` — the per-frame player controller, `DP=$1D00`:
 
 ```
 881E: LDA #80 / STA $01EB / PHD / LDA #1D00 / TCD      ; DP = $1D00
@@ -38,11 +38,11 @@ flat `0x0XXXX`) or to an observed `build/ct.exe` value. Writer PCs from `--findo
 ```
 
 **So `$1D2E/$1D30` at the end of a frame are the CAMERA's request, not the player's accumulator.**
-`tools/dis.py 9175 60 1 1` shows `C0/9175` spans `9175..91AB` (`STZ $32`/`STZ $33` at 9175/9177, `STA $32`
+`tools/romdis.py 9175 60 1 1` shows `C0/9175` spans `9175..91AB` (`STZ $32`/`STZ $33` at 9175/9177, `STA $32`
 at 9193, `STA $33` at 91A9, `RTS` at 91AB) — i.e. `$1D32/$1D33` are 9175's output and nothing after 9175
 touches them, which is exactly why the *velocity* fields validate and the *accumulator* fields do not.
 
-`tools/dis.py 99DE 70 1 1`:
+`tools/romdis.py 99DE 70 1 1`:
 
 ```
 99DE: LDA $2E / BEQ 99FF / BMI 99F1
@@ -54,13 +54,13 @@ touches them, which is exactly why the *velocity* fields validate and the *accum
 9A1E: RTS
 ```
 
-`tools/dis.py 9A60 40 1 1` proves these are CAMERA tests, not player tests: `9A60` reads `$0C` (`$1D0C`,
+`tools/romdis.py 9A60 40 1 1` proves these are CAMERA tests, not player tests: `9A60` reads `$0C` (`$1D0C`,
 camera right-edge coarse tile), `$1B` (`$1D1B` mask bound), `$93` (`$1D93` scroll phase) and `$0A00,X` (the
 lead's ON-SCREEN foot) vs `#80` — the 128px deadzone. (This supersedes the label "TILE-collision clamp"
 used in commit `838ddd9`; the routine is the camera gate, per `field_camera_unification.md`. Either
 label gives the same conclusion: it runs AFTER 9175 and zeroes `$2E/$30`.)
 
-`tools/dis.py 91AC 60 1 1`: `91B8/91BE: STA $2E`, `91D6/91DC: STA $30` — the op-E7 seek **overwrites**
+`tools/romdis.py 91AC 60 1 1`: `91B8/91BE: STA $2E`, `91D6/91DC: STA $30` — the op-E7 seek **overwrites**
 `$2E/$30` whenever `$1D00 != 0`.
 
 ### Oracle confirmation of §0 (not just the disasm)
@@ -163,7 +163,7 @@ checkctrl: CtPlayerControl (881E: dispatch+8A6D+9175) vs oracle -> 400/400 veloc
 
 ### 3.1 Who writes the applied velocity
 
-`tools/dis.py 9E29 90 1 1`:
+`tools/romdis.py 9E29 90 1 1`:
 
 ```
 9E29: JSR C0/9E84
@@ -179,7 +179,7 @@ checkctrl: CtPlayerControl (881E: dispatch+8A6D+9175) vs oracle -> 400/400 veloc
 ```
 
 A full-ROM byte scan for `20 29 9E` (`JSR C0/9E29`) finds **exactly one** call site: flat `0x3047` =
-`C0/3047`. `tools/dis.py 3020 60 1 1`:
+`C0/3047`. `tools/romdis.py 3020 60 1 1`:
 
 ```
 3040: LDA #01 / LDX $6D / STA $1A01,X      ; arm a 1-frame move ticket
@@ -189,7 +189,7 @@ A full-ROM byte scan for `20 29 9E` (`JSR C0/9E29`) finds **exactly one** call s
 ```
 
 `C0/3040` is an **object-VM opcode handler**. So `$1900,X/$1980,X` are refreshed only on frames where the
-player object actually executes that op. `tools/dis.py AAFD 70 1 1` shows the integrator consumes them and
+player object actually executes that op. `tools/romdis.py AAFD 70 1 1` shows the integrator consumes them and
 is gated by the very ticket `3040` arms:
 
 ```
@@ -350,7 +350,7 @@ numbers.** The correctly-phased checks are green: `--checkctrl 400/400`, `--play
   object-VM opcode handler ending in `CLC` = park-on-op) plus 169/169 observed stale frames — I did not
   disassemble the object-VM dispatch table entry that selects `3040`, nor watch the VM's IP for the player
   object across the lock boundary. *Closes it:* `build/ct.exe --followvm --obj 1 --from bedslide.state
-  --input '<A-mash>' --frames 200` across the `$011F` 0→1 boundary + `tools/dis.py` on the op table entry
+  --input '<A-mash>' --frames 200` across the `$011F` 0→1 boundary + `tools/romdis.py` on the op table entry
   that vectors to `C0/303F/3040`.
 * **The exact per-frame 99DE kill counts (48 X / 136 Y)** are inferred from the mismatch totals decomposing
   exactly onto the request-frame populations (145+77=222, 126+8=134); I did not enumerate the killed frames

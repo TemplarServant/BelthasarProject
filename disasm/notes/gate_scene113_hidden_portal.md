@@ -374,11 +374,11 @@ CT_TRIGDBG=1 ./build/Belthasar.exe --assets ct_assets.dat --scene 113 --selftest
 
 # --- ROM ---
 python tools/ct.py script 113 --obj 11
-python tools/dis.py 4590 0xD0     # op 0x82 loader
-python tools/dis.py 4CD0 0x40     # the C0/4CD9 show/hide tail
-python tools/dis.py 6254 0x40     # op 0x0A KILL
-python tools/dis.py 421E 0xC0     # op 0x80 party loader
-python tools/dis.py 698B 0x20     # op 0x55
+python tools/romdis.py 4590 0xD0     # op 0x82 loader
+python tools/romdis.py 4CD0 0x40     # the C0/4CD9 show/hide tail
+python tools/romdis.py 6254 0x40     # op 0x0A KILL
+python tools/romdis.py 421E 0xC0     # op 0x80 party loader
+python tools/romdis.py 698B 0x20     # op 0x55
 ```
 
 Frame timeline (from `saves/jogo_trava_lake.state`, `--teleport 113`):

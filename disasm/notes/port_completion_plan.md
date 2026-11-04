@@ -14,7 +14,7 @@ with what would unblock them, not padded with guesses.
 
 Every item follows the same five steps, which is what the last four ports in this repo did:
 
-1. **Disassemble** the routine (`tools/dis.py <hexaddr> <len> [m] [x]` — pass the m/x flags, the
+1. **Disassemble** the routine (`tools/romdis.py <hexaddr> <len> [m] [x]` — pass the m/x flags, the
    default decode silently garbles 16-bit stretches, which cost a wrong reading of `C0/1AB8` today).
    1a. **To find who touches an address, use `tools/refscan.py <hexaddr> [bank]`, never a hand-rolled
    byte scan.** Three wrong derivations in one session (2026-09-11) came from ad-hoc scans, and all

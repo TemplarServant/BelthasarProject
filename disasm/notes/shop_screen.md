@@ -1,6 +1,6 @@
 # The SHOP screen (menu mode 2, screen `$0067 = $0C`) — derivation
 
-Sources: the ROM (`python tools/dis.py <off> <len> 1 0` — the screen runs **M=8 / X=16**; routines that
+Sources: the ROM (`python tools/romdis.py <off> <len> 1 0` — the screen runs **M=8 / X=16**; routines that
 `REP #30` were re-read with `0 0`) and the oracle (`build/ct.exe`, LakeSnes). Fixture:
 `build/_sp/shop90_t0.state` (loc 5, Crono under the fair merchant whose activate is `C8 90` = shop `$10`
 = `[5C Karate Gi, 7D BronzeHelm]`; party Crono+Marle; bag = one `D6` Pendant; 400 G).

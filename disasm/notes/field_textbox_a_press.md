@@ -3,7 +3,7 @@
 Derived 2026-08-29 from the ROM + the oracle only. User report (translated from Portuguese): *"often when smashing A
 quickly, the dialogue keeps repeating"*.
 
-Every claim below cites `python tools/dis.py <fileoffset>` (bank C0 = the file offset directly) or a
+Every claim below cites `python tools/romdis.py <fileoffset>` (bank C0 = the file offset directly) or a
 `build/ct.exe --monitor` measurement. The field engine runs with **D = $0100**, so a direct-page
 `$29`/`$34` in the disasm is WRAM **`$0129`**/**`$0134`**.
 
@@ -20,7 +20,7 @@ Every claim below cites `python tools/dis.py <fileoffset>` (bank C0 = the file o
 The A handler runs **unconditionally, every frame, before the box machine**. There is no
 "a box is open" gate anywhere in that chain.
 
-## 2. The handler -- C0/1AAC (`dis.py 1AAC 0x34`, A 8-bit / X 16-bit)
+## 2. The handler -- C0/1AAC (`romdis.py 1AAC 0x34`, A 8-bit / X 16-bit)
 
 ```
 1AAC  LDA $00F6 / BIT #80 / BNE ->1AB4 / RTS   ; the A EDGE ($00F6, not the held word)
@@ -39,7 +39,7 @@ entirely** -- the handler `RTS`es before `$011F`, before the probe, before the c
 
 ## 3. What `$0134` is -- the box machine C0/1F87
 
-Dispatch (`dis.py 1F87 0x50`): `$0129` = 1 -> C0/1FB4, 2/3/4 -> 1FC0, **5 -> 1FCD**, **6 -> 2018**,
+Dispatch (`romdis.py 1F87 0x50`): `$0129` = 1 -> C0/1FB4, 2/3/4 -> 1FC0, **5 -> 1FCD**, **6 -> 2018**,
 **7 -> 201C**, 8 -> 1FB4, 9/A/B -> 1FC0, C -> 1FC5, **D -> 2032**.
 
 ```
@@ -62,7 +62,7 @@ loads `$0134 = $0216 * 15` instead -- the auto-advance countdown 20A5 decrements
 > **CORRECTION (2026-08-29, same day).** This paragraph first called `$0216` the Config "message
 > speed" setting. It is not a setting at all: it is the **one-byte operand of an in-string control
 > code**, read straight out of the text stream by the C2 text engine --
-> `25945 LDA [$31] / 25947 STA $16 / 2594B INC $31` (`dis.py 0x25940 0x30 1 0`), which runs with
+> `25945 LDA [$31] / 25947 STA $16 / 2594B INC $31` (`romdis.py 0x25940 0x30 1 0`), which runs with
 > D = `$0200`, so `STA $16` IS `$0216` and `INC $31` steps the string pointer past the byte it just
 > consumed. A ROM-wide scan for an absolute writer (`8D/9C/8E/8C 16 02`) finds exactly one site, in
 > bank `$E2`, and nothing in the field or menu banks -- there is no config path to this byte. Its

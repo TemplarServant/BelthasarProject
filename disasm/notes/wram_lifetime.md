@@ -106,7 +106,7 @@ from FD/C0D3 into C0/000E.)
 ## 4. TWO CLAIMS THAT WERE WRONG — recorded because they were nearly shipped
 
 **(a) `C0/B246` does NOT fill `$7E:0F01+` with `FF 00 00 00` per object.** The raw bytes
-(`[28 ROM bytes at 0xB246: python tools/dis.py 0xB246 28]`) show
+(`[28 ROM bytes at 0xB246: python tools/romdis.py 0xB246 28]`) show
 `LDX #00FF` / `LDY #0000` are **16-bit** — there is no `SEP #10`, unlike the analogous loops at
 `C0/5709` and `C0/A7E9`. With D=$2100 a 16-bit `STX $80` writes the low byte to WMDATA (`$2180`) and
 the **high byte to WMADDL (`$2181`)**, resetting the WRAM port address every iteration. Decisive
@@ -150,7 +150,7 @@ structural divergence gets a structural fix — not more NULL guards and not mor
 
 > ## ⚠ THIS BLOCKER WAS WRONG — RESOLVED 2026-07-25, and the routine was misidentified
 >
-> **`C0/5CC7` is not the object-init runner and dis.py does not desync in it.** It decodes cleanly
+> **`C0/5CC7` is not the object-init runner and romdis.py does not desync in it.** It decodes cleanly
 > with **m=1 (8-bit A) / x=0 (16-bit index)** and is a **script SANITY CHECK** ending in `RTS` at
 > `C0/5CEB`; there is no `BRL C0/5CEC` in it. The "desync" was **my own wrong width assumption**:
 > read as x=1, the bytes `A2 F0 01` decode as `LDX #$F0` plus a stray `01`, when the instruction is
@@ -179,7 +179,7 @@ structural divergence gets a structural fix — not more NULL guards and not mor
 
 **The original (superseded) blocker text:** which ROM routine clears the per-object tables on a
 location load is NOT DERIVED. The chain traces `C0/56D4` → `JSL C3/0002` (script decompress to
-`$7F2000`) → `JSR C0/5CC7` → `BRL C0/5CEC` (the object-init runner), and **`tools/dis.py`'s linear
+`$7F2000`) → `JSR C0/5CC7` → `BRL C0/5CEC` (the object-init runner), and **`tools/romdis.py`'s linear
 decode desyncs inside C0/5CC7**.
 
 Today `fieldFree` + a fresh `CtScene` implicitly zeroes every object table. Move $7E to the host

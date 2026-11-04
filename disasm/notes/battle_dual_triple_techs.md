@@ -1,6 +1,6 @@
 # DUAL / TRIPLE TECHS in battle: boot records -> list -> grey -> nav -> confirm -> queue -> dispatch -> effects
 
-Everything below is from the ROM disasm (`tools/dis.py`, bank C1 at M=8/X=16) and the LOGICAL oracle
+Everything below is from the ROM disasm (`tools/romdis.py`, bank C1 at M=8/X=16) and the LOGICAL oracle
 (`CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`, a scratch copy of `build/ct.exe`). Writer PCs are the
 instruction after the store. Side files (scratchpad `dual/`): `combo_table.txt` (CC/1BEB decode of techs 39-75),
 `learn_table.txt` (CC/2778), disasm dumps `c1c900.txt c1ccfd.txt cc_e700.txt c1_0d40.txt c1_12bc.txt c1_1626.txt

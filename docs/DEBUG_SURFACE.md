@@ -570,7 +570,7 @@ tail's two stores, `$1600,X` and `$1601,X`.
 ### Conventions and traps
 
 - **The address is a 24-bit SNES address**, the same spec `--read`/`--monitor` take: `C0/5545` →
-  `0xC05545`. This is **not** `tools/dis.py`'s flat offset (`0x5545`). A bare 16-bit value defaults to
+  `0xC05545`. This is **not** `tools/romdis.py`'s flat offset (`0x5545`). A bare 16-bit value defaults to
   bank `$C0`. Assuming flat here sends the CPU to bank `$80` and every routine reports `NORETURN`.
 - **Width defaults are the VM runner's entry state**: `m8` `x16` (`C0/5A9E REP #10`, `C0/5AAF SEP #20`),
   DP `$0100`. Override with `--m16` / `--x8` / `--regdp`. The widths are echoed on the `in` line, so the

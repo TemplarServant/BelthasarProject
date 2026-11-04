@@ -2,12 +2,12 @@
 
 Closes the `battle_victory_rewards.md` + `battle_results_window.md` OPEN "**TP / tech-learn
 (`C1/F205`→`C1/F39A`) — a separate subsystem, not derived**". Derives, byte-exact from the ROM
-(`tools/dis.py`) and **oracle-validated** with a forced forest learn (Crono→Cyclone, Marle→Aura),
+(`tools/romdis.py`) and **oracle-validated** with a forced forest learn (Crono→Cyclone, Marle→Aura),
 the complete path: the per-char TP-countdown model, the CC/26FA / CC/276A / CC/1BEB tables, the
 learn law (bitfield write `$2837+charId`, learn-count `$2830+charId`, the countdown reload with the
 canonical **double-subtract**), the magic-tech gate, and the `{name} learns {tech}` message.
 
-Addressing: `dis.py` file offset = `(bank−0xC0)<<16 | addr`; ROM read at runtime = `(bank&0x3F)<<16|addr`
+Addressing: `romdis.py` file offset = `(bank−0xC0)<<16 | addr`; ROM read at runtime = `(bank&0x3F)<<16|addr`
 (HiROM), i.e. bank `CC` → `0x0C0000`. Oracle = `ct_probe.exe` (= `build/ct.exe`); WRAM in a bare
 `.state` at file offset `0x45`; `$7F0000` page (globals) = `glb[]` in the engine (`$7F01E0`=`glb[0x1E0]`).
 

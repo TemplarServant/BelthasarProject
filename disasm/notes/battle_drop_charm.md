@@ -2,7 +2,7 @@
 
 Closes the `battle_results_window.md` §OPEN "**Drop-rate & Charm semantics** (`FD/AC08+`)" and the
 `battle_status_pipeline.md` §1 headline "**`C1/E9D5` = CHARM**". Derives, from the ROM disasm
-(`tools/dis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) + the LakeSnes oracle
+(`tools/romdis.py <fileoffset>`, fileoffset = `(bank−0xC0)<<16 | addr`) + the LakeSnes oracle
 (`ct_probe.exe` = `build/ct.exe`, `--monitor ADDR:LEN --from STATE --input '<btn:frames,…>' --diff
 --writer`; ⚠ LEN is DECIMAL; `.state` WRAM at file 0x45; **A = 0x100** in the LakeSnes serial button
 word, NOT 0x80=Right) **only**: the full 7-byte reward record, the item-drop ROLL at enemy death, and
@@ -27,7 +27,7 @@ the CHARM steal-item roll. Both were previously OPEN/misattributed; both are now
 
 ## PART 1 — THE 7-BYTE REWARD RECORD `CC/5E00` (id×7)  [confirms battle_results_window.md P2]
 
-The death-time accumulator `FD/ABD2` (`dis.py 3DABD2`) reads the record with `X = id×7`:
+The death-time accumulator `FD/ABD2` (`romdis.py 3DABD2`) reads the record with `X = id×7`:
 ```
 3DABD6  LDA $CC5E00,X / ADC $B28C / STA $B28C   ; +0..1 = XP    (u16 LE)  -> $B28C
 3DABE1  LDA $CC5E02,X / ADC $B2A5 / STA $B2A5   ; +2..3 = Gold  (u16 LE)  -> $B2A5
@@ -49,7 +49,7 @@ reads). The engine's reward staging (`src/battle.c battleApplyDamage`, `field.c 
 
 ## PART 2 — THE DROP ROLL (`FD/AC08`-`AC4B`, byte-exact)
 
-### 2.1 The death handler tail (`dis.py 3DAC08`, 8-bit)
+### 2.1 The death handler tail (`romdis.py 3DAC08`, 8-bit)
 ```
 3DAC08  LDA $CC5E04,X       ; A = rec+4 (drop id)
 3DAC0C  BEQ  3DAC4B         ; drop == 0 -> no drop  (a)
@@ -64,7 +64,7 @@ reads). The engine's reward staging (`src/battle.c battleApplyDamage`, `field.c 
 3DAC40  STA $B2A7,Y         ; store the drop id (deduped, max 3)
 3DAC46  LDA $B2AF / ORA #20 / STA $B2AF        ; $B2AF bit5 = "a drop was collected"
 ```
-The RNG helper `C1/FDCB` (`dis.py 1FDCB`) is **`JSR C1/AF22; RTL`** — the SAME `$26`-stream RNG (table
+The RNG helper `C1/FDCB` (`romdis.py 1FDCB`) is **`JSR C1/AF22; RTL`** — the SAME `$26`-stream RNG (table
 `FD/BA61[$26]`, `$26++` per draw) that the miss-roll (`C1/DC94`), damage-variance (`C1/E15E`) and charm
 (`C1/E9D5`) use. **The roll draws `$26` on EVERY drop-eligible death, BEFORE the dedup** (`3DAC21` precedes
 `3DAC2D`) → N draws for N such deaths (3 for the forest), only one stored.
@@ -134,7 +134,7 @@ eleven ids, or the scene-VM staging path made drivable.
 
 ## PART 3 — THE CHARM ROLL (`C1/E9D5`, byte-exact)  [supersedes the misattribution]
 
-### 3.1 The caller — the D306 physical HIT-tail (`dis.py 1D338`)
+### 3.1 The caller — the D306 physical HIT-tail (`romdis.py 1D338`)
 ```
 1D335  JSR C1/DCAD                 ; damage compute+apply (variance wrapper / wake-on-hit)
 1D338  LDA $AE4D / AND #04 / BEQ 1D345   ; bit2 -> an extra effect (D14F/E976)
@@ -145,7 +145,7 @@ eleven ids, or the scene-VM staging path made drivable.
 header `CC/213F[rec]` is staged to `$AEE6` at `0x1BF81`). **Every basic-weapon header `CC/213F[rec]+7`
 = 0x00** (verified rec 0-6), so bit1 is set only by Ayla's **Charm** — the roll is INERT in every other fight.
 
-### 3.2 The roll + grant (`dis.py 1E9D5`, 8-bit)
+### 3.2 The roll + grant (`romdis.py 1E9D5`, 8-bit)
 ```
 1E9D5  STZ $B3BF                              ; marker = 0
 1E9DB  LDA $5E57,X (attacker block+0x2A) / CMP #A5 / BNE +   ; == 0xA5 (Ayla's Charm signature) ->
@@ -220,7 +220,7 @@ roll fires ONLY under `CT_BATTLE_CHARMTEST` (the header-patch analogue): env val
 | # | item | status |
 |---|---|---|
 | O1 | **The `$B2AA` list** (the `rec+4 == rec+5` drop==charm branch, `3DAC4D`) | routes an identical drop/charm id to a separate list, granted unknown; UNEXERCISED (no pinned enemy has `drop==charm != 0`). Our drop gate requires `rec+4 != rec+5` (faithful); the `$B2AA` path is not implemented. |
-| O2 | **The `$AE5D`/`$AE5A` spawn-init instruction** | the flag SEMANTICS (bit6=has-drop, bit7=has-charm = rec+4/rec+5 != 0) are oracle-proven on 2 enemies + read by `3DAC18` (drop) / `1EA29` (charm); the exact spawn-time store that sets them was not located (a computed/looped write my `dis.py` grep missed). Not needed — the drop gate uses the byte-equivalent `rec+4 != 0`. |
+| O2 | **The `$AE5D`/`$AE5A` spawn-init instruction** | the flag SEMANTICS (bit6=has-drop, bit7=has-charm = rec+4/rec+5 != 0) are oracle-proven on 2 enemies + read by `3DAC18` (drop) / `1EA29` (charm); the exact spawn-time store that sets them was not located (a computed/looped write my `romdis.py` grep missed). Not needed — the drop gate uses the byte-equivalent `rec+4 != 0`. |
 | O3 | **The charm's natural wiring** (`$AE4D bit1` gate + the `$16` status-accuracy chance + `C1/EB1C`'s `$1A` branch selector) | requires the attack-header staging model (`$AEE6`/`$AE4D`, `C1/1BF81`→`EB0E`) our engine does not have, plus the `$FA61`-dispatch effect `$B2CC`. The roll is validated via the forced hook (the header-patch analogue), exactly as the status lane validated E9D5 via `statuspatch/`. Natural Ayla's-Charm fire = future work. |
 | O4 | **The `id >= 0xBC` charm grant path** (`FD/B655` → item-EFFECT `CC/0ABC` instead of inventory) | we grant via the inventory add-item (`C1/D005`, `id < 0xBC` accessories). A charm item `>= 0xBC` (a consumable) would apply its item effect immediately; the item-effect engine exists (`battle_item_slice.md`) but is not wired to the charm. |
 | O5 | **Multi-drop / >3 unique drops / a fight with two distinct dropping enemies** | the dedup + 3-slot cap are implemented; only the single-unique-drop forest is captured. |

@@ -736,7 +736,7 @@ static void ctVm39F4(uint8_t* r) { for (int k = 0; k < 0x20; k++) r[0x21C0 + k] 
 // moveOp). The target index is in $01E9/$01EA (the caller's 16-bit STX $E9). Both compares use the 16-bit
 // position masked to $FFF0 (whole pixels); $01D9/$01DA holds the self side and ends holding sy past the X test.
 // Returns 1 = SEC (still aligning, the caller yields), 0 = CLC (aligned).
-// Note: tools/dis.py desyncs inside this routine at 313C; decode it from the raw bytes.
+// Note: tools/romdis.py desyncs inside this routine at 313C; decode it from the raw bytes.
 int CtVmMoveSnap30B3(uint8_t* r, int idx) {
   r[0x1900 + idx] = 0x00;                                // 30B5 STZ -- 8-bit, REP #20 is at 30BB
   r[0x1980 + idx] = 0x00;                                // 30B8

@@ -15,7 +15,7 @@ results box the whole time").
 
 ---
 
-## 1. The mechanism (ROM `CC/ECB2 .. CC/ED86`, `tools/dis.py 0x0CEC90 0x50 0 0` + `0x0CECDD 0x50 1 0`)
+## 1. The mechanism (ROM `CC/ECB2 .. CC/ED86`, `tools/romdis.py 0x0CEC90 0x50 0 0` + `0x0CECDD 0x50 1 0`)
 
 ```
 CECB2  TDC/TAY; STY $80; STY $82; STY $84; STY $86; STY $88   ; counts[0..2]=0, $86 = list cursor, $88 = slot

@@ -17,7 +17,7 @@ python tools/build.py [target]              # build; trust its per-target artifa
 python tools/regress.py --quick             # the pre-commit tier
 python tools/regress.py --summary           # how many checks, per tier, excluded, mutations
 python tools/regress.py --mutate <check>    # prove a check grades something
-python tools/dis.py <hexaddr> <len> [m] [x] # disassemble a ROM routine
+python tools/romdis.py <hexaddr> <len> [m] [x] # disassemble a ROM routine
 python tools/ct.py <subcommand>             # read states, OAM, framebuffers, scripts (below)
 python tools/doc_surface_check.py           # flags and env vars the sources read that no doc names
 ```
@@ -35,7 +35,7 @@ The suite and its checks: [docs/TESTING_OVERVIEW.md](../docs/TESTING_OVERVIEW.md
 | `python tools/mutation_retarget.py [--write] [--cross-file]` | Lists the suite's STALE mutations (their find text is gone) and re-targets the ones a refactor only moved, within a file or into another one. |
 | `python tools/regress_share.py` | Proves that checks can share one run, and gives them the same env so `regress.py` runs them once. |
 | `python tools/preflight.py` / `tools\preflight.ps1` | Local gate: build → check-inputs → regress (`--quick` default). Writes `build/preflight.json`. |
-| `python tools/dis.py <hexaddr> <len> [m] [x]` | Quick linear 65816 decode at a ROM **file offset** (HiROM: file off == bank-C0 offset; `0x2164B` = C2/164B). Full opcode matrix from `disasm65816.py`; JSR/JMP labels carry the REAL bank of the code being decoded; JSL/JML use their operand bank. Default widths 8-bit/8-bit (`SEP #$30`), REP/SEP tracked. Linear — no branch following. The one static disassembler: decode any routine or range with it (`<len>` in bytes). |
+| `python tools/romdis.py <hexaddr> <len> [m] [x]` | Quick linear 65816 decode at a ROM **file offset** (HiROM: file off == bank-C0 offset; `0x2164B` = C2/164B). Full opcode matrix from `disasm65816.py`; JSR/JMP labels carry the REAL bank of the code being decoded; JSL/JML use their operand bank. Default widths 8-bit/8-bit (`SEP #$30`), REP/SEP tracked. Linear — no branch following. The one static disassembler: decode any routine or range with it (`<len>` in bytes). |
 | `python tools/disasm65816.py <trace.txt> [rom]` | Trace-driven disassembler (**the** opcode-matrix/`hirom_off()`/`fmt()` library the others import). |
 | `python tools/refscan.py <hexaddr> [bank]` | Instruction-aligned reference scanner: who references a 16-bit address, decoding instruction boundaries (a plain byte scan, like `ct.py refs`, also matches operand bytes and data). |
 | `python tools/s9x_to_lake.py <s9x> <base_lake> <out>` | Splice a snes9x state's WRAM+CPU into a ct.exe LakeSnes base state so the oracle can load and RUN it. PPU/VRAM/APU come from the base — use a same-mode base. |
@@ -68,7 +68,7 @@ tool a check, a recipe or a mutation names.
 | `*_cmp.py` (about 130) | One behaviour, port against the oracle: each runs `Belthasar` / `ct.exe` and the cartridge on the same state and compares RAM, pictures or sound. Most are the `argv` of one or more checks. The prefix names the area: `attract_*` (the attract demo), `battle_*`, `menu_*` / `shop_*`, `ow_*` (the overworld), `race_*` / `seq_*` / `ending_*` / `entry3_*` (the `$C3` stages), `textbox_*`, `gate_*`, and single mechanisms (`zombor_*`, `cyclone_*`, `telepod_*`, ...). |
 | `*_check.py` | Invariants checked without running the cartridge, mostly for the mods: `widescreen_check.py`, `native_fx_check.py`, `fill_*_check.py`, `options_overlay_check.py`, `sync_free_check.py`; and `dialogue_refs_check.py` (each dialogue box a script can open against the string the ROM reads). |
 | Censuses and surveys | `battle_ab.py`, `battle_sim.py`, `battle_asc_census.py`, `attract_divergence.py`, `attract_survey.py`, `rom_census.py` / `rom_census_attract.py` (which ROM pages the game still reads), `ophist.py` (the field VM's opcode use). |
-| Disassemblers and script readers | `dis.py`, `disasm65816.py`, `refscan.py`, `wdis.py` (code in WRAM, the `$C3` overlay), `cputrace_dis.py` (a `ct.exe --cputrace` run's code), `spc700dis.py` (the sound driver), `c3script.py` and `race_script_walk.py` (the `$C3` sequence scripts). |
+| Disassemblers and script readers | `romdis.py`, `disasm65816.py`, `refscan.py`, `wdis.py` (code in WRAM, the `$C3` overlay), `cputrace_dis.py` (a `ct.exe --cputrace` run's code), `spc700dis.py` (the sound driver), `c3script.py` and `race_script_walk.py` (the `$C3` sequence scripts). |
 | Cost models | `*_cost_proto.py`, `*_cost_consts.py`, `cycle_costs.py`, `cycle_legs.py`, `cycle_prof.py`, `menu_init_legs.py`: the priced mechanisms (a load, a menu open, a pass) walked over the ROM and measured on beam traces; `src/field_cost.c` and `src/menu_cost.c` are written from them. |
 | State formats | `s9x_to_lake.py`, `parse_ppu_state.py`, `wram_peek.py` (a `Belthasar` run's WRAM at a frame), `ct.py` / `ctlib`. |
 | Suite infrastructure | `regress.py` + `regress_checks.json` + `regress_inputs.json`, `regress_share.py`, `mutation_retarget.py`, `input_provenance.py` + `private_captures.json`, `fetch_saves.py` + `third_party_saves.json`, `preflight.py` / `.ps1`, `peekshots_selftest.py`, `doc_surface_check.py`. `oracle_cache_site/sitecustomize.py` puts the oracle cache in front of the oracle runs of a check's Python tools. |

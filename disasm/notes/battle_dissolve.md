@@ -24,7 +24,7 @@ oracle; it was missed before because it is a **VRAM OBJ-tile stream**, invisible
 easy to mistake for an instant vanish (the dying enemy's OAM sprites stay in place the whole time; only their
 tile PIXELS and palette change).
 
-## S1 — FD/ABA2 is the death BOOKKEEPING, not the visual (dis.py `3DABA2`)
+## S1 — FD/ABA2 is the death BOOKKEEPING, not the visual (romdis.py `3DABA2`)
 
 `FD/ABA2` (`battle_loop.md` S5 death path `JSL FD/ABA2`) reads the enemy's drop record `CC/5E00,X` and
 accumulates **rewards** — XP `$B28C += CC5E00,X`, gold/TP `$B2A5 += CC5E02,X`, item `$B2DB += CC5E06,X`

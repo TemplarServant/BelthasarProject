@@ -96,7 +96,7 @@ GATO's flurry `CD/5FF0[0x34]` carries **seven** `78 46` in one track — the mul
 
 ---
 
-## 2. The machine — `python tools/dis.py 14CA2`
+## 2. The machine — `python tools/romdis.py 14CA2`
 
 ```
   14CB5  LDA $5DFD,X / BEQ +          ; the per-track PAUSE counter
@@ -115,7 +115,7 @@ Scan result for the opcodes these scripts use — free (zero-frame): `1B 24 36 3
 Costing: `00 01 02 03 06 08-0F 12 1E 20 26 2E 33 50 69 6A 72 73 98 99 A8 A9 D0 D1 D9 DA`.
 (`24` is conditional and is decided in the switch: satisfied → free + advance, else re-run next frame.)
 
-### 2.1 The tracks — `python tools/dis.py 1455E 0x50 0 0`
+### 2.1 The tracks — `python tools/romdis.py 1455E 0x50 0 0`
 
 ```
   Y = 0 ; REP #20
@@ -129,7 +129,7 @@ Costing: `00 01 02 03 06 08-0F 12 1E 20 26 2E 33 50 69 6A 72 73 98 99 A8 A9 D0 D
 **MSB-first**: header bit 15 → track **0**, bit 0 → track **15**. The Hetake's `0x9001` therefore loads
 `72C9` as track 0, `72F4` as track 3, `96B2` as track 15.
 
-### 2.2 The roles — `python tools/dis.py CF150 0xB0`
+### 2.2 The roles — `python tools/romdis.py CF150 0xB0`
 
 ```
   $A014 = $AE91                        ; the ACTOR
@@ -323,7 +323,7 @@ because the cost comes from the ROM scan, not from whether we implemented the ef
 ## 7. THE POSE ENGINE — `C1/423A` + `C1/424C`, and why `03 aa` parks for exactly as long as it does
 
 The playAnim opcodes do not animate anything. They ARM per-COMBATANT state and a separate machine walks it.
-`python tools/dis.py 1423A 0xE0 1 0`:
+`python tools/romdis.py 1423A 0xE0 1 0`:
 
 ```
   C1/423A  for cmb in 0..10: if $A12F[cmb] != 0: DEC $A12F[cmb]     ; every entry's frame countdown
@@ -990,7 +990,7 @@ the effect tracks finishing around rel 140; they now finish at rel 185-190 and t
 
    Each post lands **2 frames after that Hetake's curHP hits 0**, panned at its own X. It does NOT come
    through the `$CD23` staging flush (that slot never moves all fight, confirming `battle_sfx_ops_inputs.md`
-   §3): a ROM-wide scan for `20 71 3B` finds the direct caller, `python tools/dis.py D0060 0x50`:
+   §3): a ROM-wide scan for `20 71 3B` finds the direct caller, `python tools/romdis.py D0060 0x50`:
 
    ```
      D0093: LDA $CD00 / TAX / LDA $1D0C,X / TAX / LDA #95 / JSR CD/3B71

@@ -76,7 +76,7 @@ fixture's entry in `tools/regress_inputs.json` and each blocked attempt in `tool
 - ~~**The recipe step `["sram", <recipe>]`**~~ **Done (2026-10-11):** every recipe writes `<name>.state.srm`, its state's
   last 8 KB block (the battery; `name_saved`'s equals `saves/ct_real_save.srm` byte for byte), and the step boots the
   oracle with it.
-- **Python ROM reads.** `assets/extract_assets.py`, `tools/dis.py` and several comparison scripts open the ROM
+- **Python ROM reads.** `assets/extract_assets.py`, `tools/romdis.py` and several comparison scripts open the ROM
   themselves instead of `ctlib.rom.load()` (setup verifies it first; this is defence in depth).
 - **Generated headers' comments** still name the old one-off scripts and captures (menu_shop, menu_chrome,
   menu_saveform, dlg_cursor, menu_loader, ow_gullmap, ow_era_placard); changing the text means regenerating them.

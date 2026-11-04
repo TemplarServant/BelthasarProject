@@ -5,7 +5,7 @@
 ═══════════════════════════════════════════════════════════════════════════════
 CHRONO TRIGGER — MENU PHASE 2A: THE INTERACTIVE MAIN MENU (X-menu ribbon) — IMPLEMENTATION SPEC
 Synthesis of 3 RE dossiers, every conflict re-verified this pass against the oracle
-(ct_probe.exe --peek/--monitor/--read on saves/menu_open_gato2.state) and ROM (dis.py).
+(ct_probe.exe --peek/--monitor/--read on saves/menu_open_gato2.state) and ROM (romdis.py).
 State facts VERIFIED this pass: story=08 ($7F0001), party=00 01 80 (Crono id0, Marle id1,
 slot2 empty), loc $0100=0x006 (field), menu-mode $0A00=0x0106, screen $0067=00 (ribbon).
 Scope = ONLY the main ribbon (screen 0). All six SUB-screens (screen 1..6) = PHASE 3 (§6).
@@ -234,7 +234,7 @@ OAM/RAM signatures in §4 on the three menu_open states. No HP/MP bars, no right
 ═══════════════════════════════════════════════════════════════════════════════
 CHRONO TRIGGER — MAIN-MENU OPTION RIBBON + CURSOR/SELECTION (RE dossier)
 State: saves/menu_open_gato2.state (mode1 main screen $0A00=0106, loc $0100=006).
-All claims cite a ROM disasm addr (tools/dis.py, flat C2 offset = 0x2xxxx) or an
+All claims cite a ROM disasm addr (tools/romdis.py, flat C2 offset = 0x2xxxx) or an
 observed oracle value (ct_probe.exe --peek/--monitor, LakeSnes button grammar).
 Every capture cross-checked on menu_open_fair2.state (identical → NOT scene-gated).
 ═══════════════════════════════════════════════════════════════════════════════
@@ -553,7 +553,7 @@ NOT PRESENT (do not implement): proportional HP/MP fill bars.
 ## TRACE: menu_subscreens
 
 ＝＝ CHRONO TRIGGER — FIRST MENU SUB-SCREENS (X-menu, mode 1) RE DOSSIER ＝＝
-All claims cite a ROM disasm addr (tools/dis.py flat offset; C2 bank = 0x2xxxx) or an observed oracle value (ct_probe --peek/--monitor on saves/menu_open_gato2.state, screen id $7E0067). Captures live in SP = C:/Users/ICAROF~1/AppData/Local/Temp/claude/c--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/0659808f-a8c2-4887-9cf9-157a9540e206/scratchpad/. Oracle harness driven from menu_open_gato2 (mode1, main screen $0067=00, party=Crono+Marle, GATO/Leene's-Square early game, TIME 08:28, 400G).
+All claims cite a ROM disasm addr (tools/romdis.py flat offset; C2 bank = 0x2xxxx) or an observed oracle value (ct_probe --peek/--monitor on saves/menu_open_gato2.state, screen id $7E0067). Captures live in SP = C:/Users/ICAROF~1/AppData/Local/Temp/claude/c--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/0659808f-a8c2-4887-9cf9-157a9540e206/scratchpad/. Oracle harness driven from menu_open_gato2 (mode1, main screen $0067=00, party=Crono+Marle, GATO/Leene's-Square early game, TIME 08:28, 400G).
 
 ＝＝ 1. MENU DISPATCH ARCHITECTURE (verified) ＝＝
 The menu is a cooperative task scheduler (C2/8190, per menu_entry.md). Two state bytes drive every screen:
@@ -662,7 +662,7 @@ IMPLEMENTATION ORDER SUGGESTION: STATUS (screen1 view) is the cleanest first tar
 The FORM screen (ribbon opt4, $0067=5) is the PARTY-ORDER / exchange overlay. It is TASK-SPAWNED: A on
 the ribbon sets $0067=5 for one frame then the option spawns a scheduler task that slides the overlay in
 atop the main screen (so --peek never settles it — RE is from the ROM disasm; the EFFECT is validated on
-the active-party RAM $7E2980-82). Two-substate flow ($0068), disassembled this pass (dis.py 2C621+):
+the active-party RAM $7E2980-82). Two-substate flow ($0068), disassembled this pass (romdis.py 2C621+):
 
 FLOW (substate handlers off the C2/C621 array):
  - INIT (C2/C63D->C2/C649): the picker scans for the first NON-empty panel ($0F02,X AND #C0 == 0), stores

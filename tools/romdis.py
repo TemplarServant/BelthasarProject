@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Linear 65816 disassembler for the CT ROM (HiROM file offsets).
-# Usage:  python tools/dis.py <hexaddr> <len> [m] [x]
+# Usage:  python tools/romdis.py <hexaddr> <len> [m] [x]
 #   <hexaddr>  ROM file offset. HiROM: file offset == the bank-C0 CPU offset, so
 #              bank-C0 routines are addressed directly (e.g. 0x305D = C0/305D);
 #              other banks add (bank-0xC0)<<16 (e.g. 0x2164B = C2/164B).

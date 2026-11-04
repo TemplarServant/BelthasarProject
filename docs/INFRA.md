@@ -200,7 +200,7 @@ Load (`ctLoadStateOracle` / `CtLakeStateLoadPath` in `src/ct_lake_state.c`):
 
 Python: `tools/ctlib/lake.py` (`unwrap` / `wrap` / `read_payload` / `write_wrapped`).
 
-**`tools/dis.py <hexaddr> <len> [m] [x]`** — the ROM disassembler for the
+**`tools/romdis.py <hexaddr> <len> [m] [x]`** — the ROM disassembler for the
 required-before-any-change step: disassemble the routine that produces the behavior.
 `m`/`x` set the 65816 register-width flags. JSR/JMP absolute targets are labelled with
 the bank being decoded (a `JSR $1CDA` in bank C2 prints as `C2/1CDA`); JSL/JML use their

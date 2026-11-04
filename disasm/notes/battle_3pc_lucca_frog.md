@@ -1,6 +1,6 @@
 # BATTLE — LUCCA / FROG / 3-PC expansion (the next-milestone DOSSIER)
 
-Derives, from the ROM (`tools/dis.py`, fileoffset=`(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+Derives, from the ROM (`tools/romdis.py`, fileoffset=`(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`ct.exe --read/--monitor/--peek`) driven on the user's two converted states, everything the PORT
 needs to fight with **Lucca** and **Frog** and to stage a **3-PC party** — the stage-1..3 anim engine
 + battle machine are already GENERIC (per `battle_anim_engine.md`); what was missing is **per-PC data +
@@ -399,7 +399,7 @@ SP=<session scratchpad> ; O=<oracle ct.exe copy>
 # per-PC bases/sheets/staging (static reads)
 $O --read "wram:2980+3,wram:1C78+30,wram:1C57+30,wram:29B0+15,wram:29BF+108" --from bat9_lake.state
 # the $9877 tables + selector disasm
-$O --read "rom:CD/4000+7,rom:CD/4007+7,rom:CD/400E+7" ;  python tools/dis.py 143C0 0x60
+$O --read "rom:CD/4000+7,rom:CD/4007+7,rom:CD/400E+7" ;  python tools/romdis.py 143C0 0x60
 # Lucca attack (bat8): RIGHT->seat1, A(Att), A(target)
 $O --monitor "95D5,9609,9877,8E,A013,9907:2,967B" --from bat8_lake.state --btnscript "0:112,80:3,0:6,100:3,0:22,100:3,0:120" --diff
 # 3-PC HUD + Frog-active bracket (bat9)

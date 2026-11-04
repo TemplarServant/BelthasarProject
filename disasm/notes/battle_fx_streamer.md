@@ -7,7 +7,7 @@
 > against the cartridge). The ledgers below stay as the measurements they were; the "fixture" and "render" sections
 > are history.
 
-Derives, from the ROM disasm (`tools/dis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+Derives, from the ROM disasm (`tools/romdis.py`, HiROM flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`ct_probe.exe` = `build/ct.exe`, base `gato_cyclone.state`) **only**, the battle **tech-effect visual layer** —
 the piece that draws Cyclone's whirlwind, the song's notes, Ice's crystals. Closes the standing OPENs
 `battle_tech_slice.md` **T3** ("the CE super-subscript `CE/D613` + the spin EFFECT layer — the pixels of the

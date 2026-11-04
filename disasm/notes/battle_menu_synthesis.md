@@ -1,5 +1,5 @@
 # SYNTHESIS + VERIFICATION DOSSIER — GATO battle entry, field<->battle transfer, battle boot, X-menu
-All claims below were re-verified in THIS pass against the ROM (tools/dis.py, run from repo root) and the oracle artifacts in the scratchpad (SP = C:/Users/ICAROF~1/AppData/Local/Temp/claude/c--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/0659808f-a8c2-4887-9cf9-157a9540e206/scratchpad). Items I could not re-derive are labeled [DOSSIER-CITED] (trusted from a tracer's own oracle observation) or listed in the gaps section.
+All claims below were re-verified in THIS pass against the ROM (tools/romdis.py, run from repo root) and the oracle artifacts in the scratchpad (SP = C:/Users/ICAROF~1/AppData/Local/Temp/claude/c--Users-Icaro-Ferris-Desktop-Crono-Trigger-Decompile/0659808f-a8c2-4887-9cf9-157a9540e206/scratchpad). Items I could not re-derive are labeled [DOSSIER-CITED] (trusted from a tracer's own oracle observation) or listed in the gaps section.
 
 ## PART 1 — CROSS-CHECK RESULTS (conflicts resolved by me, with fresh disasm)
 

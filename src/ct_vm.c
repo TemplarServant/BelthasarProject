@@ -137,7 +137,7 @@ static void memBoot(Mem* m) {
 //
 // Everything else in $7E survives the load.
 // C0/0B86-0C75: the location load's constant-init pass over the direct page (D = $0100) and a few absolutes
-// (wram_load_census.md sec. 8). Read with `dis.py 0B86 <len> 1 0` and checked with `--loadcensus --censusat`.
+// (wram_load_census.md sec. 8). Read with `romdis.py 0B86 <len> 1 0` and checked with `--loadcensus --censusat`.
 static void memLoadInit0B86(Mem* m) {
   uint8_t* s = m->s;
   s[0x010A] = s[0x0100]; s[0x010B] = s[0x0101];      // 0B86 LDX $00  / 0B88 STX $0A   (16-bit)
@@ -6337,8 +6337,8 @@ int CtSceneActorSolid(const CtScene* sc, int obj) {
 }
 
 // ---- Invoke prologue (C0/5AC5 activate, C0/3154 touch) ----
-// The two invokes are the same seven instructions with one immediate different (`python tools/dis.py 3154 24`,
-// `dis.py 5AC5 24`): LDX $EB, then four tests that each take the shared bail:
+// The two invokes are the same seven instructions with one immediate different (`python tools/romdis.py 3154 24`,
+// `romdis.py 5AC5 24`): LDX $EB, then four tests that each take the shared bail:
 //   +02  LDA $1C01,X / BNE      ; (1) a pending cross-object wait (op 0x08 sets, op 0x09 clears)
 //   +07  LDA $1100,X / BMI      ; (2) deactivated (op 0x0A, C0/6254: $1100,X := $80)
 //   +0C  LDA $1000,X / BMI      ; (3) paused      (op 0x0B, C0/6269: $1000,X |= $80)

@@ -14,7 +14,7 @@ Derives, from the ROM disasm + oracle only, the mechanisms behind FOUR user repo
    any enemy staged in slot 3 is drawn AS GATO (field.c:2616).
 
 Method: bat1..9 lake states (`saves/battle_re/bat*_lake.state`, battle_states_catalog.md recipe), oracle
-`--monitor --diff --writer` runs, `tools/dis.py` (flat = (bank−0xC0)<<16|addr). Button A=0x100.
+`--monitor --diff --writer` runs, `tools/romdis.py` (flat = (bank−0xC0)<<16|addr). Button A=0x100.
 
 ---
 
@@ -552,7 +552,7 @@ canonical DRAW LEDGER, closing the proxy questions and one long-standing render 
 
 1. ~~**The battle boot ZEROES $26** (oracle f234: A0->00)~~ — **CORRECTED 2026-08-22: the boot COPIES
    `$29AD` into `$26` AND `$B3E6`** (`C1/800A LDA $29AD / 800D STA $26 / 800F STA $B3E6`, one load, two
-   stores — `python tools/dis.py 18000 0x1C 1 0`). The f234 observation was real and the law drawn from it
+   stores — `python tools/romdis.py 18000 0x1C 1 0`). The f234 observation was real and the law drawn from it
    was wrong: in THIS capture `$29AD` happens to be 0, so "A0 -> 00" and "seeded from `$29AD`" are
    indistinguishable. They are not elsewhere — `bat9_lake.state` carries `$29AD = 86` and `$B3E6 = 86` at
    f0 (its boot copied the nonzero cursor), and the end epilogue hands the final `$26` BACK:

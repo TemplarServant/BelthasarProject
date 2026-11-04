@@ -1,6 +1,6 @@
 # The battle's TOP MESSAGE BOX, party side (CD/0310, CD/02D8, CD/02CB) -- dossier 2026-09-29
 
-Sources: ROM disassembly (`tools/dis.py`), `ct_topbox.exe` (copy of build/ct.exe) under
+Sources: ROM disassembly (`tools/romdis.py`), `ct_topbox.exe` (copy of build/ct.exe) under
 `CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`, `--monitor --diff --writer`, `--cputrace`, `--peek` + fb2png.
 Fixtures: `saves/battle_re/gato_wait.state` + the Lucca-solo PEEK_POKE (recipe), a derived state `f640.state`
 (recipe to f640, scratchpad `tb/`), `f640i.state` (same + `2400=BD,2500=05` poked PRE-battle -- poking the item

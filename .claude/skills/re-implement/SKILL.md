@@ -25,7 +25,7 @@ report the boundary — do NOT approximate.
 ## Implementation loop
 
 1. **Re-verify each dossier claim at the site** you are about to change (fresh
-   dis.py at the cited address; a quick oracle probe if cheap). Dossiers have been
+   romdis.py at the cited address; a quick oracle probe if cheap). Dossiers have been
    wrong before — the disasm is the truth.
 2. Implement, matching the surrounding code style (dense, terse comments only for
    constraints the code can't show). New code paths must be INERT unless the

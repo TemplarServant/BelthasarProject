@@ -319,7 +319,7 @@ OAM cells, port vs oracle peeks, exact: f8 03/02 (the field poses), f30 39/35, f
 
 ### 5. `$A09B,seat` — staged and gated, meaning still open
 
-`CF/FBB8-FBE1` (bytes `[31 ROM bytes at 0xFFBB8: python tools/dis.py 0xFFBB8 31]
+`CF/FBB8-FBE1` (bytes `[31 ROM bytes at 0xFFBB8: python tools/romdis.py 0xFFBB8 31]
 BA 00 7F 29 02 49 02 8D A7 A0 5C 00 80 C1`): `$A0A6 = $7F00BA & 1`; if set, `$A09B,seat = $7F00B4[$2980,seat & 7]`
 for seats 2..0 (no presence test) and `$A0A7 = ($7F00BA & 2) ^ 2`; then `JML C1/8000`. Readers: the two arms
 (C1/34E4, C1/35B7 — non-zero -> window 0), the status scan C1/2F99 (non-zero -> pose class 0, no icon), C1/3037,

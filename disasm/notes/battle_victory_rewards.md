@@ -5,7 +5,7 @@ explicitly OUT OF SCOPE**". The reward VALUES (EXP/TP/G table `CC/5E00`), the aw
 message box were already derived + shipped (`battle_results_window.md` + commit `9b718cc` "victory results
 window (wave 2)"; check `field-battle-results-reward`). This dossier derives the one remaining vertical: **what
 happens when earned XP crosses a level threshold** — the threshold table, the stat-growth tables, and the exact
-per-block writes — byte-exact from the ROM (`tools/dis.py`) and **validated against the oracle** with a forced
+per-block writes — byte-exact from the ROM (`tools/romdis.py`) and **validated against the oracle** with a forced
 level-up on two characters.
 
 > **HEADLINE.** At victory, for each surviving PC, the ROM (`C1/F950` -> `C1/F623`) applies the earned XP total
@@ -16,7 +16,7 @@ level-up on two characters.
 > `$5E2D+seat*0x80`; the existing block→sheet writeback (`C1/B442`) carries it to `$2600` so the field menu shows
 > the new level + stats. curHP/curMP are **NOT** refilled. Speed (`+0x0D`) never grows (its rate is 0 for all).
 
-Addressing: `dis.py` file offset = `(bank−0xC0)<<16 | addr`; ROM read at runtime uses `(bank&0x3F)<<16|addr`
+Addressing: `romdis.py` file offset = `(bank−0xC0)<<16 | addr`; ROM read at runtime uses `(bank&0x3F)<<16|addr`
 (HiROM), i.e. bank `CC` → `0x0C0000`. Oracle probe = `ct_probe.exe` (a copy of `build/ct.exe`); WRAM in a bare
 `.state` is at file offset `0x45`.
 

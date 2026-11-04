@@ -2,7 +2,7 @@
 
 Derived 2026-09-03 from the ROM + the oracle only (defect #1 of the 2026-09-02 list: "in some scenes
 there is 1 scanline left over at the bottom (like in the tent of horrors)"). Every claim cites
-`python tools/dis.py <fileoffset>` (bank C0 = the file offset; D1/FE97 = 0x11FE97) or an oracle dump.
+`python tools/romdis.py <fileoffset>` (bank C0 = the file offset; D1/FE97 = 0x11FE97) or an oracle dump.
 
 ## 1. The measurement that started it
 

@@ -65,7 +65,7 @@ Read the writers off `$1BE8-$1BEB`, not off `$1E00`: the four staging bytes are 
 `C2/1900`, `C2/1908`, `C2/1910`, `C2/1913` — that is **`C2/18F1`, the op-`0x3D` handler**, verbatim:
 
 ```
-$ python tools/dis.py 218C7 0x70
+$ python tools/romdis.py 218C7 0x70
   218F1: SEP  #20
   218F3: LDA  $7F01ED
   218F7: BNE  ->21919          ; the field-song hold: non-zero -> do nothing
@@ -128,7 +128,7 @@ The caller is a **sub-VM opcode with a 16-bit address operand**. Handler table `
 $ python -c "...dump C2/0F91..."
 op 34 -> C2/1807     op 1A -> C2/136A     op 27 -> C2/151C     op 3D -> C2/18F1
 
-$ python tools/dis.py 21807 0x40 8 16
+$ python tools/romdis.py 21807 0x40 8 16
   21807: LDY #01 / LDA [$58],Y / STA $5B     ; the 16-bit operand
   21810: JSR C2/1819   ->  21819: JMP ($005B)
   21815: LDA #0003 / RTS                     ; len 3
@@ -140,7 +140,7 @@ $ python tools/dis.py 21807 0x40 8 16
 ### The three ops that matter, decoded from the ROM
 
 ```
-$ python tools/dis.py 2151C 0x60 8 16          # op 0x27
+$ python tools/romdis.py 2151C 0x60 8 16          # op 0x27
   2151C: LDY #01 / LDA [$58],Y / TAX          ; ADDR16 operand
   21522: SEP #20 / LDY #03 / LDA [$58],Y      ; MASK8 operand
   21529: AND $0000,X
@@ -151,7 +151,7 @@ $ python tools/dis.py 2151C 0x60 8 16          # op 0x27
 `27 <addr16> <mask8> <rel8>` — **`mem[addr] & mask` non-zero ⇒ advance 5; zero ⇒ advance += (int8)rel**.
 
 ```
-$ python tools/dis.py 2136A 0x20 8 16          # op 0x1A
+$ python tools/romdis.py 2136A 0x20 8 16          # op 0x1A
   2136A: LDY #01 / LDA [$58],Y / STA $58      ; absolute JUMP (target-1 convention)
   21371: LDA #0001 / RTS
 ```
@@ -249,7 +249,7 @@ $ ./build/ct.exe --loadcensus … --censusat 7E0104
 NEWGAME:     [ 0] seq=50663  = 80  by C0/0CC0
 TRUCE DOOR:  [ 0] seq=42111  = 03  by C0/0CC0
 
-$ python tools/dis.py 0CA8 0x30 8 16        (field code runs with D = $0100)
+$ python tools/romdis.py 0CA8 0x30 8 16        (field code runs with D = $0100)
   0CB4: LDX $12 / 0CB6: STX $00    ; $0100 = the loc word   (writer PC 0CB8 — matches the monitor)
   0CB8: LDX $14 / 0CBA: STX $02    ; $0102/$0103 = the arrival cell
   0CBC: LDA $16 / 0CBE: STA $04    ; $0104 = the entry/FACING byte  (writer PC 0CC0 — matches)

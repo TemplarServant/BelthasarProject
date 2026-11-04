@@ -4,7 +4,7 @@ Closes the pose-script half of the anim-engine's **O6** (`battle_anim_engine.md`
 "Diablos's E3 idle-pose SCRIPT … still needs its own derivation"). The sheet lane resolved the enemy sprite
 **pixels** from the id alone; this lane resolves the enemy pose **SCRIPT pointers + assembly base + window stride**
 from the id alone. It turns "an enemy's idle pose needs a live oracle capture of `$1CA2/$1CC3/$1C78`" into "any
-enemy's pose staging is computed from the ROM". Every claim is anchored to a ROM disasm (`tools/dis.py`, HiROM
+enemy's pose staging is computed from the ROM". Every claim is anchored to a ROM disasm (`tools/romdis.py`, HiROM
 flat = `(bank−0xC0)<<16|addr`) or a byte-exact oracle diff; nothing invented.
 
 **RESULT: the enemy pose staging is a pure id-keyed table walk — `E4:F600[id*10]` → `+3` animId → `E4:2600/2800`
@@ -37,7 +37,7 @@ Hetake   0x5E: 70 4E 6E 30 00 | 00 F8 10 10 41
 Diablos  0x48: 6F 4C 68 26 00 | 00 F0 08 08 22   (Gargoyle 0x49 = same +1/+3 → shared anim, palette variant)
 ```
 
-## 2. THE STAGING ROUTINE (bank CC, `dis.py 0x0CEAD2`) — byte-cited
+## 2. THE STAGING ROUTINE (bank CC, `romdis.py 0x0CEAD2`) — byte-cited
 
 The per-combatant battle-entry staging loop (`CC/E97E` party head → PC pass `CC/EA00` → enemy pass `CC/EA5B`).
 Its enemy pass reads the `E4:F600` record and writes the pose-script pointers. `$80` = enemy slot; `Y = $80*3`
@@ -155,6 +155,6 @@ Dir: `%TEMP%/claude/…-9e84b785-…/scratchpad/`
 - Oracle reads: GATO `--monitor "1CA2:30,1CC3:30,1C78:30,1C57:30,9671:8" --from gato_press_action.state
   --btnscript "100:8,0:300"` (staging fires f292); Naga/Diablos from `saves/battle_re/bat8|bat9.raw.wram`
   (WRAM images, `$97D9`/`$9907`/`$967C` per slot); Hetake `forest_battle_3hetake.state` (WRAM off 0x45).
-- Disasm: staging routine `tools/dis.py 0x0CEAD2` (record→animId/E3/ptrA-B), `0x0CEB2F` (stride), `0x0CEA00`
+- Disasm: staging routine `tools/romdis.py 0x0CEAD2` (record→animId/E3/ptrA-B), `0x0CEB2F` (stride), `0x0CEA00`
   (PC pass). ROM tables E4:F600 (0x24F600), E4:2000 (0x242000), E4:2300 (0x242300), E4:2600 (0x242600),
   E4:2800 (0x242800).

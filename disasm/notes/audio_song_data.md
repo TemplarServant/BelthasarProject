@@ -15,7 +15,7 @@ derived the `$1E00` mailbox; `audio_song_selection.md` derived *which id*. This 
 **DATA**: every ROM table `$C7:01A1-$C7:0613` reads, the exact bytes it streams, and the exact ARAM
 addresses they land at — so the port can point at the right bytes.
 
-Every claim is either (a) a ROM address disassembled with `python tools/dis.py <flatoffset> <len> [m] [x]`
+Every claim is either (a) a ROM address disassembled with `python tools/romdis.py <flatoffset> <len> [m] [x]`
 (ROM = `Chrono_Trigger_USA_SNES.sfc`, 0x400000 bytes, headerless HiROM; bank `$XX` = flat
 `(XX-0xC0)<<16 | addr`, so `$C7:0D18` = `0x70D18`), or (b) an **observed oracle value** marked ⟦OBS⟧
 with the exact command (`build/ct.exe --aram / --read / --teleport`). Gaps are in §J.
@@ -79,28 +79,28 @@ directory. Nothing dereferences the list itself; the code hardcodes each base.)
 ## A.2 The index arithmetic, quoted
 
 ```
-tools/dis.py 0x704FF 0x30 1 0        (SEQUENCE pointer)
+tools/romdis.py 0x704FF 0x30 1 0        (SEQUENCE pointer)
   704FF REP #20 / 70501 LDA $05 (=$1E05 = the song id) / AND #00FF
   70506 STA $82 / 70508 ASL A / CLC / ADC $82 / TAX        ; X = id*3
   7050F LDA $C70D18,X -> $12 ; 70515 LDA $C70D19,X -> $13 ; 7051B LDA $C70D1A,X -> $14
   70521 LDY $12 / 70523 STZ $12 / STZ $13                  ; [$12],Y = bank:offset, byte-walked
 
-tools/dis.py 0x701DC 0x34 1 0        (INSTRUMENT SET)
+tools/romdis.py 0x701DC 0x34 1 0        (INSTRUMENT SET)
   701DC LDA $04 (16-bit) / AND #FF00 / LSR A x3 / TAX      ; X = id*32   ($1E05 is the high byte)
   701E5 ADC #0020 / STA $0E                                ; $0E = id*32+32 = the row end
   701EA LDA $C70E11,X / 701EE BEQ ->7020F                  ; zero terminates the row
   70209 INX INX / CPX $0E / BNE ->701EA
 
-tools/dis.py 0x70655 0x30 1 0        (SAMPLE pointer)
+tools/romdis.py 0x70655 0x30 1 0        (SAMPLE pointer)
   7065A LDA $20,X (= $1E20,X, the instrument id) / DEC A / STA $82 / ASL A / CLC / ADC $82 / TAX
   70666 LDA $C70AEA,X -> $12 ; $C70AEB -> $13 ; $C70AEC -> $14        ; X = (instr-1)*3
 
-tools/dis.py 0x7059A 0x30 1 0        (PERCUSSION block)
+tools/romdis.py 0x7059A 0x30 1 0        (PERCUSSION block)
   7059C LDA $05 & 00FF / ASL/ADC -> id*3 / ASL A / ASL A -> id*12 / STA $82
   705AB ASL A / CLC / ADC $82 / TAY                        ; Y = id*36
   705B2 $12/$13/$14 = $C7:1871                             ; [$12],Y
 
-tools/dis.py 0x70A39 0x28 1 0        (the $1E02/$1E03 pair)
+tools/romdis.py 0x70A39 0x28 1 0        (the $1E02/$1E03 pair)
   70A3C LDA $01 (16-bit) / AND #007F / ASL A / TAX
   70A45 LDA $C7241E,X / STA $02                            ; $1E02
   70A4B LDA $C7241D,X / AND #0F / STA $03                  ; $1E03
@@ -134,7 +134,7 @@ It is **not** a pointer, not a bank/offset pair, and not a size: the pointers ar
 
 ## B.1 `$1E03` = the ECHO DELAY (EDL). Derived, then observed.
 
-ROM side (`tools/dis.py 0x709FD 0x30 1 0` and `0x70A12 0x30 1 0`):
+ROM side (`tools/romdis.py 0x709FD 0x30 1 0` and `0x70A12 0x30 1 0`):
 ```
 C7/0A53  LDA $03 / CMP $F0 / BEQ +5 / JSR C7/09FD        ; the song's nibble vs $1EF0
 C7/09FD  STA $F0                                          ; $1EF0 = the nibble
@@ -305,7 +305,7 @@ BRR structural check: 0/62 instruments deviate from
    "len%9==0, loop%9==0, END bit only on the LAST 9-byte block"
 ```
 
-Streaming loop (`tools/dis.py 0x70678 0xA8 1 0`):
+Streaming loop (`tools/romdis.py 0x70678 0xA8 1 0`):
 ```
 70680 LDA $60,X -> $2142 ; 70685 LDA $61,X -> $2143 ; 7068A LDA #03 -> $2141   ; ARAM dest, cmd 03
 706A2 LDA [$12],Y -> $0C, and -> $40,X (the length)   ; $62,X = $60,X + len (next free)
@@ -314,7 +314,7 @@ Streaming loop (`tools/dis.py 0x70678 0xA8 1 0`):
 
 ## D.3 The sample heap and the DSP directory
 
-* **Heap base = ARAM `$4901`**, computed at boot (`tools/dis.py 0x70108 0x14 1 0`):
+* **Heap base = ARAM `$4901`**, computed at boot (`tools/romdis.py 0x70108 0x14 1 0`):
   ```
   7010A LDA $C740B4 (16-bit)      ; = the SIZE word of boot block 2 = $0201
   7010E CLC / ADC #4700           ; + block 2's ARAM destination
@@ -428,7 +428,7 @@ bytes zero. **The per-field meaning of `b1`/`b2` is SPC-side and NOT DERIVED** (
 identical-sized block immediately after it in ROM**, and the driver swaps them:
 
 ```
-tools/dis.py 0x70922 0xB8 1 0
+tools/romdis.py 0x70922 0xB8 1 0
 70952  LDA $10 / BNE ->70998                 ; $1E10 (the cmd-$70 mode byte)
 70956  LDA $C74309 / $C7430A -> $0C          ; size word of SET A
 70962  $12/$13/$14 = $C7:430B                ; payload
@@ -597,13 +597,13 @@ instrument count 62 = `(0x70BA4 - 0x70AEA) / 3`.
 ## Repro commands
 
 ```
-python tools/dis.py 0x701A1 0x180 1 0    # C7/01A1 song handler: range check + instrument diff
-python tools/dis.py 0x70321 0x200 1 0    # compaction, DIR staging, the two param tables
-python tools/dis.py 0x704C0 0x160 1 0    # SFX-set reload, SEQUENCE upload, PERCUSSION upload
-python tools/dis.py 0x70655 0xF0 1 0     # C7/0655 sample upload
-python tools/dis.py 0x70922 0xB8 1 0     # C7/0922 the two SFX sets ; 0x709DA = the handshakes
-python tools/dis.py 0x709FD 0x30 1 0     # C7/09FD EDL -> ESA ; 0x70A12 = the eviction pass
-python tools/dis.py 0x70108 0x14 1 0     # boot: $1E60 = rom16[$C7:40B4] + $4700 = $4901
+python tools/romdis.py 0x701A1 0x180 1 0    # C7/01A1 song handler: range check + instrument diff
+python tools/romdis.py 0x70321 0x200 1 0    # compaction, DIR staging, the two param tables
+python tools/romdis.py 0x704C0 0x160 1 0    # SFX-set reload, SEQUENCE upload, PERCUSSION upload
+python tools/romdis.py 0x70655 0xF0 1 0     # C7/0655 sample upload
+python tools/romdis.py 0x70922 0xB8 1 0     # C7/0922 the two SFX sets ; 0x709DA = the handshakes
+python tools/romdis.py 0x709FD 0x30 1 0     # C7/09FD EDL -> ESA ; 0x70A12 = the eviction pass
+python tools/romdis.py 0x70108 0x14 1 0     # boot: $1E60 = rom16[$C7:40B4] + $4700 = $4901
 
 build/ct.exe --aram --from saves/truce_market.state --frames 300 --out a.bin
 build/ct.exe --aram --from saves/truce_market.state --frames 360 --out b.bin   # diff a/b -> echo buffer

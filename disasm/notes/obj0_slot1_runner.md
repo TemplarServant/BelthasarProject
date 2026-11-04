@@ -9,7 +9,7 @@ C0/0330. It is the same routine the location load calls (C0/56C8, already ported
 it has a third caller, the menu-exit reload chain (C0/0206). Nothing re-runs *every* object's slot 1: the
 runner reads obj0's pointer only.
 
-## 1. The runner (dis.py 595C 0x21)
+## 1. The runner (romdis.py 595C 0x21)
 
 ```
 595C  REP #20 / STZ $6D / LDA $7F2003 / TAX / SEP #20    X = obj0's slot-1 pointer ($7F2001 + 0*32 + 1*2)
@@ -32,7 +32,7 @@ Byte scan `20 5C 59` in bank C0 finds exactly three callers:
 | C0/0206 | C0/01A5-0206 reload chain, called from C0/1975 (menu resume) | after C0/56D4 re-decompresses `$7F:2000`; before C0/1978's party reconcile |
 | C0/0330 | C0/0304-038C battle-return tail | after C0/56D4; before `JSR C0/A712` and the regroup C0/5B1F |
 
-## 2. The battle-return path (dis.py 0283 0xB0, 0330 0x60)
+## 2. The battle-return path (romdis.py 0283 0xB0, 0330 0x60)
 
 ```
 18B9  LDA #01 / TRB $17 / LDA #01 / TSB $18 / JSR C0/0283      the ack, then the dispatch

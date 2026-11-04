@@ -1,6 +1,6 @@
 # BATTLE ANIM ENGINE — PART 3: the ASSEMBLY→OAM BUILDER (`$967B` → `$9F47/$9F49` → `$7E0700`)
 
-Derives, from the ROM disasm (`tools/dis.py`, flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
+Derives, from the ROM disasm (`tools/romdis.py`, flat = `(bank−0xC0)<<16|addr`) + the LakeSnes oracle
 (`ct_bld.exe = build/ct.exe`, base `gato_press_action.state`, HOLD driver `100:8,0:N`) **only**, the last
 major piece of the battle pose engine: the bank-C1/CF machine that turns the pose-tick's **assembly index
 `$967B`** (`battle_animeng_script.md` §3) into the per-combatant OAM cells in the shadow `$7E0700`. **Zero
@@ -56,7 +56,7 @@ by **CF:E7C3** (25×). The findoam "0 PCs" is a write-log-cap artifact — `--mo
 
 ## 2 — The builder routine `C1/1C4A` (byte-cited)
 
-`tools/dis.py 0x011C4A`. Entry cmb = `$9679`; assembly index = `$967B`; per-cmb "type" = `$967C,X`.
+`tools/romdis.py 0x011C4A`. Entry cmb = `$9679`; assembly index = `$967B`; per-cmb "type" = `$967C,X`.
 
 ```
 11C4A  LDX $9679 / LDA $967C,X / CMP #03 / BEQ RTS   ; type 3 = no sprite (skip)
@@ -87,7 +87,7 @@ unchanged) is why the pose only rebuilds when `$967B` changes — the per-frame 
 
 ## 3 — The compose routine `CF/EAC5` = `CF/EB60` "OamCompose" (byte-cited from raw)
 
-Raw `CF/EAC5-EB93` (dis.py desyncs on this data-dense routine — hand-decoded from ROM bytes). Two entries
+Raw `CF/EAC5-EB93` (romdis.py desyncs on this data-dense routine — hand-decoded from ROM bytes). Two entries
 (`EAC5` 16-bit, `EAC8` 8-bit) merge at `EACA`. Per render-object `C5 = cmb + 0x0C` (`$42 = (C5-0xC)*16 =
 cmb*16`, the `$9F47` cell-data base):
 
@@ -127,7 +127,7 @@ cmb*3`. One assembly = **`CCF4FC[type]` signed bytes = N cells × 2** (dx, dy), 
 | **Crono** (PC, type 0) | 0 | 0x00 | **DC/27D0** | **0x28** | **0x08 = 8** | **4** |
 | Marle (PC, type 0) | 1 | 0x03 | (bank DC, unread) | 0x28 | 0x08 | 4 |
 
-Tables (`tools/dis.py`): `CCF40A` (`28 00 50 00 78 00 F0 00 40 01…` type→stride), `CCF4FC` (`08 10 18 30
+Tables (`tools/romdis.py`): `CCF40A` (`28 00 50 00 78 00 F0 00 40 01…` type→stride), `CCF4FC` (`08 10 18 30
 40` type→dx/dy byte count), `CCF50A` (`04 00 08 01 0C 02 18 05 20 07` compose cell-count, low byte 4/8/12/
 24/32), `CCF92D` (`00 03 06 09 0C 0F 12 15 18 1B 1E 21 | 00 0C 18 24` cmb→pidx), `CCF917` (`00 00 10 00 20
 00 …` cmb→`$9F47` offset = cmb*16), `CCF941` (`AD 64 AD 67 AD 68 AD 6B …` cmb→construction-buf offset).
@@ -255,7 +255,7 @@ Dir: `%TEMP%/claude/C--Users-…-e5608df4-…/scratchpad/`
   (→ CF:E7C3), `"64AD:16"/"70AD:32" --writer` (construction → C1:1D41/1D92/1F1A), `--findoam --watch 0720`.
 - **Pointer/index reads**: `--monitor "00BA:3,9679:1,967B:1,967C:12"` (per-cmb assembly `$BA`),
   `"9FA7:48,0720:48,9907:12,96DE:8"` (GATO dx/dy vs OAM, the (136,125) base derivation).
-- **Disasm**: builder `tools/dis.py 0x011C4A 0x140` + tail `0x011D87`/`0x011F23`; helper `0x0100A7`;
+- **Disasm**: builder `tools/romdis.py 0x011C4A 0x140` + tail `0x011D87`/`0x011F23`; helper `0x0100A7`;
   compose (hand-decode raw) `CF/EAC5-EB93`; `$922D` copy `CF/EEC3`; assembler `CF/E6D6-E7C3`.
 - **ROM data**: GATO poses `E3/0060 + idx*0x78` (24-byte records); Crono `DC/27D0 + idx*0x28` (8-byte);
   tables `CC/F40A`,`CC/F4FC`,`CC/F50A`,`CC/F92D`,`CC/F917`,`CC/F941`,`CC/F3B6`; bit-reverse `C0/FD00`.

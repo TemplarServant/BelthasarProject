@@ -500,7 +500,7 @@ The derivation tooling for the runtime half already exists and is exact:
   mechanism `runPortCheck` (`src/main.c:758`) already uses, with the filter
   `(a >= 0x2100 && a <= 0x21FF)` — which **already covers the APU ports**, so the capture is a
   filter-narrowing away, not new infrastructure.
-* `python tools/dis.py <hexaddr> <len>` on `$C7:0140` / the `$C7:0AD9` handler table
+* `python tools/romdis.py <hexaddr> <len>` on `$C7:0140` / the `$C7:0AD9` handler table
   (`audio_boot.md` §8 gaps 3 and 5) for the command wrapper the field/battle code calls.
 
 Until that capture exists, a runtime `CtAudioPlaySong(id)` would be invention. **Ship the CMake

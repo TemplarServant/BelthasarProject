@@ -2,7 +2,7 @@
 
 Derives the MODULE-internal battle spine that `battle_menu_synthesis.md` / `battle_boot.md` left OPEN
 (ATB tick, command-open, damage pipeline, enemy AI, death→end). Every claim is anchored to a ROM
-disassembly address (`tools/dis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 | addr) or an oracle
+disassembly address (`tools/romdis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 | addr) or an oracle
 monitor/peek observation from `gato_press_action.state` (pre-battle; A-press boots battle ≈ f222).
 Writer PCs from `--monitor --writer` are the PC *after* the store retires.
 
@@ -12,7 +12,7 @@ Writer PCs from `--monitor --writer` are the PC *after* the store retires.
 > reads 0x011F/0x1B00 under peek but 0x1E under monitor). All *tracing* below (writer PCs, value
 > sequences, HP) uses **`--monitor` exclusively** and is self-consistent. Sparse `--peek` WRAM diffs
 > were only used for structure discovery and are cross-checked against monitor before any claim.
-> Battle code runs 16-bit A/X (D=0 proven, `battle_menu_synthesis.md §1.8`); linear dis.py desyncs on
+> Battle code runs 16-bit A/X (D=0 proven, `battle_menu_synthesis.md §1.8`); linear romdis.py desyncs on
 > M/X across unfollowed branches in this bank — cited instruction bytes were re-read where load-bearing.
 
 Repro base for everything: `ct_probe.exe --monitor "<regs>" --from gato_press_action.state --input "<mash>" --diff --writer`
@@ -51,7 +51,7 @@ where mash = A-pulses in the LakeSnes grammar (A=0x100), e.g. `python -c "print(
 **Reload rate / speed-scaling: PARTIALLY OPEN.** The −1/tick decrement and the "act at 0" trigger are byte-pinned.
 The reload VALUE is speed-derived (initial stagger 30; post-action recharge is much larger — Crono re-attacked
 ~450 frames after acting) but the exact Speed→reload equation was not fully traced (the reload writer path is
-in the same branch-heavy `C1/824x` block that dis.py can't linearly decode). For the minimal loop a fixed or
+in the same branch-heavy `C1/824x` block that romdis.py can't linearly decode). For the minimal loop a fixed or
 speed-scaled reload with −1/logic-tick decrement reproduces the observed turn cadence.
 
 Logs: `SP/gauge2.txt` (clean `$AFAB`→`$99DD` −1/tick, C1:826B), `SP/afab.txt` (init/reset/reload writers),
@@ -106,7 +106,7 @@ watched `$6132` = **maxHP**, constant 76 — that is why "GATO never took damage
 GATO `$612D`: id 92, curHP/maxHP 76, `+0x37` stats `01 08 08 64 06 32 07 7F 04 04 04 04` (= ROM `CC/541E`).
 
 **BOUNDARY (base ATK/DEF equation):** the pre-variance base `$16` = attacker-Attack vs target-Defense core is
-computed in the same `C1/DBxx-DCxx` block whose branch density defeats linear dis.py (repeated M/X desync). The
+computed in the same `C1/DBxx-DCxx` block whose branch density defeats linear romdis.py (repeated M/X desync). The
 FULL wrapper (variance formula, RNG, crit ≈2×, bonus, staging, apply, clamp, death) IS byte-pinned above, and
 the **oracle-observed GATO-fight damage** is documented (Crono→GATO 16–17 normal / 40 crit; GATO→Crono 9–16).
 A minimal GATO loop can reproduce the fight from these observed numbers; the exact base coefficients are marked
@@ -240,7 +240,7 @@ checkpoint (`surv*.state`, all HP=3000 so it never ends) and read the damage/rel
 `scratch/patchstate.py` + `scratch/measure.py`. Method caveat: two PCs both hit GATO, so *attacker* experiments
 zero Marle's stats and read GATO-HP deltas; *defense/enemy* experiments use the clean single-attacker
 GATO→Crono channel; C90B (16×16→32 mult, `$2C=$28×$2A`) **exits 8-bit A**, C92A (divide) preserves width — that
-width flip is what desynced linear dis.py in this region, and re-segmenting on it is what unblocked the trace.
+width flip is what desynced linear romdis.py in this region, and re-segmenting on it is what unblocked the trace.
 
 ## A. Damage base = f(attacker stats, target defense)  [closes S3]
 
@@ -547,7 +547,7 @@ NOT a freeze" (it IS a freeze — the ATB `$AFAB` is byte-frozen across it).
 
 Method = `--monitor` (never `--peek`; the peek/monitor gotcha) of the per-actor ATB countdown `$AFAB` + the
 candidate gates, EVERY frame, over A-mash fights on `gato_press_action.state` (ACTIVE) and `gato_wait.state`
-(WAIT), + `tools/dis.py`. Writer PCs = the PC after the store retires. Scratch: `ledger_full.txt`,
+(WAIT), + `tools/romdis.py`. Writer PCs = the PC after the store retires. Scratch: `ledger_full.txt`,
 `ledger_active.txt`.
 
 ## §E — THE FREEZE RULE: `$A013` = the "action-executing" flag (set C1/40A6, clear C1/41BA)
@@ -726,7 +726,7 @@ E769/E3F8/E909/EDC0/EDF7/EFAF`, `CD/09A0`); action-execution routine `C1/4090` (
 Closes the "OPEN (freeze)" residue above (enemy-span makeup) and the caller deltas *INTRO 80 vs 159 / enemy
 157 vs 157·226·222 / victory-hold parity* — user *"the battle still seems too fast"* (our 1705f vs the
 oracle 1950-class). Method = `--monitor` (never `--peek`, the timeline gotcha) of `$A013`/`$9876`/`$9877` +
-`--writer` + `tools/dis.py`, base `gato_press_action.state` (ACTIVE). Ledger-mash = `('100:20,0:40')×70`; HOLD
+`--writer` + `tools/romdis.py`, base `gato_press_action.state` (ACTIVE). Ledger-mash = `('100:20,0:40')×70`; HOLD
 (isolated-GATO) = `100:8,0:2600`. Writer PCs = the PC after the store. Scratch: `t1_ledger9876.txt`,
 `t1_9876writer.txt`, `t1_bytes.txt`, `t1_hold.txt`, `t3_victory.txt`, `t3_noA.txt`, `t3_phases.txt`.
 
@@ -903,7 +903,7 @@ Closes the 10751d7 "our staged seat0 fineY=03, lead ~179 vs oracle 176" residue 
 slightly"*). Disasm of the ROM staging + oracle monitor; connects to `battle_stance.md` ADDENDUM 8 (T1) which
 proved **battle screenAnchor = 16·rel + fine**, so a 3px error in the staged `fine` shifts the battle anchor 3px.
 
-## §T3.1 — the ROM staging math (C0/041A-044D, `dis.py 0400`): rel from the TILE byte, fine from the SCREEN byte
+## §T3.1 — the ROM staging math (C0/041A-044D, `romdis.py 0400`): rel from the TILE byte, fine from the SCREEN byte
 ```
 041A LDA $1D0A / LSR / STA $DB      ; oTX = arena origin ($1D0A>>1, the settled cam scroll in tiles)
 0420 LDA $1D0E / LSR / STA $DD      ; oTY

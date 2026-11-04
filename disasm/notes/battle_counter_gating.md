@@ -1,6 +1,6 @@
 # BATTLE — the WHEN-HIT COUNTER GATING rule (GATO attack-B): a PROXIMITY condition, now LIVE because GATO walks
 
-Closes GAP 3 / FIX C of `battle_pacing_v2.md`. Derived from the ROM disasm (`tools/dis.py`, HiROM flat =
+Closes GAP 3 / FIX C of `battle_pacing_v2.md`. Derived from the ROM disasm (`tools/romdis.py`, HiROM flat =
 `(bank−0xC0)<<16|addr`, battle bank C1 = 16-bit M=0 X=0) + the LakeSnes oracle (`ct_probe.exe --monitor
 --diff --writer` on `gato_press_action.state`) **only**. Nothing invented; the rule comes from the ROM +
 the oracle **agreeing** on 11 PC hits across 4 fights.
@@ -34,7 +34,7 @@ is §1, and it is **conditional on `1F 06`**; §2 is the un-conditional no-op fa
 condition fails.
 
 ### 1.B cond-op 0x1F = `C1/9765` — resolve NEAREST PC, then a mode-5 geometry test → `$9872`
-`dis.py 19765 … 1 0` (cond handlers run M=8/X=16):
+`romdis.py 19765 … 1 0` (cond handlers run M=8/X=16):
 ```
 19765  JSR C1/AC14          ; resolve the targeting byte after 1F (=06) -> NEAREST living PC -> $AECC  (06 -> C1/A4AF via ($B8BB,X))
 19768  LDA $AECB / BEQ 197A5 ; no valid target -> FAIL (set $AF24=1)
@@ -237,10 +237,10 @@ Repro (probe copied to scratch; ROM at repo root):
 ct_probe --monitor "1D0C:11,1D23:11,6130:2,9877:1,A013:1,AECC:1,AE93:1" --from gato_press_action.state \
   --input <('100:20,0:40')xN | ('100:8,0:160')xN> --frames 2600 --diff --writer <ROM>
 # ROM sites:
-python tools/dis.py 19765 0x48 1 0    # cond-1F C1/9765 (resolve nearest 06, mode-5, PASS iff $9872==0)
-python tools/dis.py 12986 0x30 0 0    # mode-5 C1/2986 (STZ $9872, dispatch $986E=0x0E -> C1/2B2B)
-python tools/dis.py 12B2B 0x40 0 0    # sub-0E C1/2B2B: $9893=0x0900=2304, dist²=dx²+dy² <= 2304 -> $9872=0
-python tools/dis.py 18720 0xE0 0 0    # reaction pipeline: cond dispatch 8749, $AF24 gate 876C, action 8780=C1/8CF9
+python tools/romdis.py 19765 0x48 1 0    # cond-1F C1/9765 (resolve nearest 06, mode-5, PASS iff $9872==0)
+python tools/romdis.py 12986 0x30 0 0    # mode-5 C1/2986 (STZ $9872, dispatch $986E=0x0E -> C1/2B2B)
+python tools/romdis.py 12B2B 0x40 0 0    # sub-0E C1/2B2B: $9893=0x0900=2304, dist²=dx²+dy² <= 2304 -> $9872=0
+python tools/romdis.py 18720 0xE0 0 0    # reaction pipeline: cond dispatch 8749, $AF24 gate 876C, action 8780=C1/8CF9
 python -c "print('GATO CC/A77B',open('Chrono_Trigger_USA_SNES.sfc','rb').read()[0xCA77B:0xCA79A].hex())"
 ```
 

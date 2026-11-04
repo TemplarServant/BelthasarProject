@@ -4,7 +4,7 @@ Derives the whole cold-boot chain of Chrono Trigger (USA): what the reset does, 
 screen actually lives, how the game decides between "new game" and "continue", where the save-slot
 screen comes from, and how a chosen save gets back into WRAM and into the world.
 
-Every claim cites a ROM address (`python tools/dis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 |
+Every claim cites a ROM address (`python tools/romdis.py <fileoffset>`, fileoffset = (bank−0xC0)<<16 |
 addr) or an oracle measurement. ⭐ = a fact that changed a wrong assumption; ⚠ = a trap.
 
 ---
@@ -62,7 +62,7 @@ is **`C2/8D6A`**:
 a third value, written later (C2/804B and C2/E662) meaning "a new game has been started". Scene 0's
 boot script branches on exactly these.
 
-**FF/F9C4, the validity gate** (`tools/dis.py 0x3FF9C4`): DB = $30, `JSR FF/FBD3` puts the slot base
+**FF/F9C4, the validity gate** (`tools/romdis.py 0x3FF9C4`): DB = $30, `JSR FF/FBD3` puts the slot base
 in `$7B`, then
 
 * `LDA $7FF8,X / CMP #E41B / BNE` → `A = $8080` (bad signature)
@@ -561,7 +561,7 @@ matched -- a green check over a live bug, killed by the mutation, not by a score
 2D2A0  LDX #D03E / STX $020D                       the 27-pointer STRING table, bank $FF
 ```
 
-`$FF:D024` = `[26 ROM bytes at 0x3FD024: python tools/dis.py 0x3FD024 26]`;
+`$FF:D024` = `[26 ROM bytes at 0x3FD024: python tools/romdis.py 0x3FD024 26]`;
 `$FF:D03E` points at "The Millennial Fair" … "The Final Battle", "No data".
 Verified against the reference save: storyline `0x15` → index 2 → **"The Queen is Gone"**, exactly
 what the oracle draws.

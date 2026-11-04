@@ -5,7 +5,7 @@ reports, and pinpoints each divergence in our engine (HEAD bfdc812, anim-engine 
 untouched — this notes file is the only write. Method: oracle `ct_ae.exe` (= build/ct.exe, HEAD) `--monitor`
 (per-frame RAM, writer PCs) + `--peek` (renders + OAM/VRAM), our engine `ct_field_ae.exe --battletest`
 (CT_BATTLE_SCRIPT/MASHA drivers + CT_BATTLE_FACETRACE/MVTRACE/TRACE + CT_BATTLESHOT_AT render captures), ROM
-`tools/dis.py`. HOLD driver `100:8,0:N` (GATO un-hit → block1 attack-A + song); MASH `CT_BATTLE_MASHA=1`
+`tools/romdis.py`. HOLD driver `100:8,0:N` (GATO un-hit → block1 attack-A + song); MASH `CT_BATTLE_MASHA=1`
 (GATO hit → block2 attack-B). All frames are the monitor's state-relative counter (gato_press_action).
 
 ## ⭐ HEADLINE — the four reports resolve into TWO root defects (one shared)
