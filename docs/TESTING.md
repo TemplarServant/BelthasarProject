@@ -20,9 +20,10 @@ python tools/mutation_retarget.py [--write]     # list STALE mutations, re-targe
 python tools/regress.py --mutate-all            # every check that declares mutations
 python tools/regress.py --mutate NAME --mutate-jobs 4   # mutants at once, each in a lab (default min(8, CPUs/2); 0 = in place)
 
-# One-command local gate (build + inputs + quick regress → build/preflight.json):
+# One-command local gate (build every target + inputs + quick regress → build/preflight.json):
 python tools/preflight.py
 python tools/preflight.py --full                # full suite instead of --quick
+python tools/preflight.py --target ct           # build only ct (the quick tier also runs Belthasar.exe)
 tools\preflight.ps1                             # Windows wrapper
 ```
 

@@ -117,7 +117,7 @@ the oracle inputs in the repo root.
   obtain it. `python tools/regress.py --check-inputs` verifies presence + hashes
   (exit 1 on MISS/MISMATCH); `--refresh-input-hashes` rewrites pins from disk.
 - **Preflight gate.** `python tools/preflight.py` (or `tools\preflight.ps1`) runs
-  build → `--check-inputs` → `regress --quick` (or `--full`) and writes
+  build (every target; `--target ct` for one) → `--check-inputs` → `regress --quick` (or `--full`) and writes
   `build/preflight.json`. Soft-MISSes on optional captures do not hard-fail the
   gate; hash mismatches and regress FAILs do. No CI service is required — this is
   the local/agent one-command gate.

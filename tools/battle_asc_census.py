@@ -31,12 +31,18 @@ def handled_ops():
     src = open(os.path.join(ROOT, 'src', 'battle.c'), encoding='utf-8', errors='replace').read().splitlines()
     start = next(i for i, l in enumerate(src) if l.startswith('static void battleAscTick('))
     sw = next(i for i in range(start, len(src)) if 'switch (op) {' in src[i])
-    end = next(i for i in range(sw, len(src)) if src[i].strip().startswith('default:') and
-               'facing/counter: inert' in src[i])
+    # The switch's extent by its layout, not by a comment's text: it closes at the first `}` alone at its own
+    # indentation, and its case labels sit one level in (the first `case` line's indentation). A label at another
+    # depth (a nested switch's) or in a comment is not one of its ops.
+    def ind(l):
+        return len(l) - len(l.lstrip())
+    end = next(i for i in range(sw + 1, len(src)) if src[i].rstrip() == ' ' * ind(src[sw]) + '}')
+    lab = ind(next(src[i] for i in range(sw + 1, end) if src[i].lstrip().startswith('case ')))
     ops = set()
-    for l in src[sw:end]:
-        for m in re.finditer(r'case 0x([0-9A-Fa-f]{2})\s*:', l):
-            ops.add(int(m.group(1), 16))
+    for l in src[sw + 1:end]:
+        if ind(l) == lab and l.lstrip().startswith('case '):
+            for m in re.finditer(r'case 0x([0-9A-Fa-f]{2})\s*:', l.split('//')[0]):
+                ops.add(int(m.group(1), 16))
     return ops
 
 

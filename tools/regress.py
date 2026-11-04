@@ -94,6 +94,12 @@ def run_check(check, root=ROOT):
         return {"status": "SKIP", "secs": 0.0,
                 "note": "missing input: " + ", ".join(miss), "out": ""}
     env = dict(os.environ)
+    if root != ROOT:
+        # a lab's checks run its own build (the rule _build applies): the shell's other tree (CT_BUILD_DIR: battle_ab,
+        # battle_sim, the *_cmp tools; PT_FIELD: playthrough.py) is not the mutant. A check's own "env" may still set
+        # one.
+        env.pop("CT_BUILD_DIR", None)
+        env.pop("PT_FIELD", None)
     if ORACLE_CACHE:
         # the oracle cache (tools/ctlib/oracle_cache.py): a check's own oracle runs and its tools' (sitecustomize)
         env["CT_ORACLE_CACHE"] = ORACLE_CACHE

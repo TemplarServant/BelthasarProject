@@ -5,8 +5,9 @@ A lab is build/_mutlabs/<k>: a mirror of the repo root's working tree (uncommitt
 inputs too: the ROM, ct_assets.dat, saves/, third_party/, src/xlat/, src/data/, the loose states at the root) with its
 own build/. Checks and tools resolve their inputs against their own root, so a check runs in a lab as it runs at the root.
 
-Left out of the mirror: the root's build trees (the lab builds its own; only build/recipes/, made by tools/recipes.py,
-is carried over), .git (a lab is not a checkout; it lives under the root's ignored build/, so git there sees the root's
+Left out of the mirror: the root's build trees, build/ and every top-level build_* folder (the lab builds its own, and a
+CT_BUILD_DIR tree is a session's binaries, never a lab's input; only build/recipes/, made by tools/recipes.py, is
+carried over), .git (a lab is not a checkout; it lives under the root's ignored build/, so git there sees the root's
 repository), .claude, the Android project, the vendored upstream clones and the scratch folders.
 
 A lab keeps a manifest (.mutlab.json): each mirrored file's stat at the root and in the lab when last copied. A file whose
@@ -18,7 +19,7 @@ import os
 import shutil
 
 LABS_DIR = os.path.join('build', '_mutlabs')
-DENY_TOP = {'build', 'build_alt', '.git', '.claude', '.vs', 'android', 'private_history', 'scratchpad', 'arquivos_criados'}
+DENY_TOP = {'build', '.git', '.claude', '.vs', 'android', 'private_history', 'scratchpad', 'arquivos_criados'}
 CARRY = [os.path.join('build', 'recipes')]          # the parts of build/ a tool may read as an input
 MANIFEST = '.mutlab.json'
 
@@ -28,7 +29,7 @@ def _walk(root, rel):
     top = os.path.join(root, rel) if rel else root
     for dp, dns, fns in os.walk(top):
         if not rel and os.path.normcase(dp) == os.path.normcase(root):
-            dns[:] = [d for d in dns if d not in DENY_TOP and not d.startswith('_vendor')]
+            dns[:] = [d for d in dns if d not in DENY_TOP and not d.startswith(('_vendor', 'build_'))]
             fns = [f for f in fns if f != '.git']           # a worktree's .git file: git in a lab must not find a repo
         dns[:] = [d for d in dns if d != '__pycache__']
         for f in fns:

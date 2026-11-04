@@ -3,6 +3,7 @@
 #   tools\preflight.ps1
 #   tools\preflight.ps1 -Full
 #   tools\preflight.ps1 -NoBuild
+#   tools\preflight.ps1 -Target ct      (build only that target; the default "all" builds every one)
 #   tools\preflight.ps1 -Only vmdiff-bedslide,sweepcollide
 param(
     [switch]$Full,
@@ -11,7 +12,7 @@ param(
     [string]$Only = "",
     [int]$Jobs = 4,
     [string]$Json = "build/preflight.json",
-    [string]$Target = "ct"
+    [string]$Target = "all"
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Local preflight gate for the CT decomp (build + input kit + regression).
 
-    python tools/preflight.py              # build + --check-inputs + regress --quick
+    python tools/preflight.py              # build (every target) + --check-inputs + regress --quick
     python tools/preflight.py --full       # same, but full regress suite
     python tools/preflight.py --no-build   # skip compile
+    python tools/preflight.py --target ct  # build only that tools/build.py target
     python tools/preflight.py --skip-inputs
     python tools/preflight.py --json build/preflight.json
     python tools/preflight.py --only vmdiff-bedslide sweepcollide
@@ -73,8 +74,11 @@ def main():
     ap.add_argument("--jobs", type=int, default=4, help="regress parallel jobs")
     ap.add_argument("--json", default=DEFAULT_JSON, metavar="PATH",
                     help="write report JSON here (default build/preflight.json)")
-    ap.add_argument("--target", default="ct",
-                    help="build.py target(s): default 'ct'; use 'all' for every target")
+    # every target by default: the suite runs build/Belthasar.exe as well as build/ct.exe (most of the quick tier is
+    # Belthasar's), so a ct-only build would grade a stale Belthasar.exe
+    ap.add_argument("--target", default="all",
+                    help="build.py target: default 'all' (every target, build.py with no argument); "
+                         "e.g. 'ct' for one")
     args = ap.parse_args()
 
     report = {
