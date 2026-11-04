@@ -53,7 +53,9 @@ set(CT_SRC_SOUND src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/m
                  src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c)
 # The rule's CPU infra, the ROM reader and checks, the oracle-state loader.
 set(CT_SRC_ROM src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c src/ct_lake_state.c)
-# The link order is the order below (it lays out the image): the files between the lists stand where they always stood.
+# The link order is the order below (it lays out the image): the files between the lists (move.c, title_intro.c,
+# seq_ppu.c, seq_xlat.c, hdma_table.c, wipe.c, touchpad.c) stand where they always stood, outside the named lists, so
+# grouping them by subsystem would move code in the image.
 set(CT_FIELD_SRC src/field.c ${CT_SRC_SEQ} ${CT_SRC_ENGINE} ${CT_SRC_HOST} src/move.c ${CT_SRC_SOUND}
                  src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c ${CT_SRC_ROM}
                  src/touchpad.c ${SNES_SRC})
@@ -79,8 +81,9 @@ if(ANDROID)
   return()
 endif()
 
-# Every MSVC target's defaults: the CRT's "secure" warnings off, and /W2 with the benign implicit-conversion warnings
-# the LakeSnes core emits quieted. Extra options (ct_oracle's /wd4505) follow the set.
+# The MSVC defaults of ct, ct_oracle, ct_viewer, Belthasar and ct_world: the CRT's "secure" warnings off, and /W2 with
+# the benign implicit-conversion warnings the LakeSnes core emits quieted. Extra options (ct_oracle's /wd4505) follow
+# the set. ct_tables_proof takes the define only (below).
 function(ct_msvc_defaults tgt)
   if(MSVC)
     target_compile_definitions(${tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -198,7 +201,8 @@ if(CT_SDL_INC)
   # Native interactive field: VM scheduler (ct_vm.c) + renderer + sprite compositor + SDL.
   # Belthasar also links the SOUND system: src/audio.c plays the sound machine in C (src/sound/machine.c), the vendored
   # SPC700/DSP its reference (CT_AUDIO_SPC=ref / lockstep); the whole vendored core (snes/*.c) is linked for that
-  # and for the files that still reach it (src/ct_cpu_infra.c, src/seq_xlat.c). `snes` goes AFTER `src` on the
+  # and for the files that still reach it (src/seq_ppu.c, the stages' PPU reference; src/ct_cpu_infra.c, the oracle
+  # for field.c's lockstep; src/seq_xlat.c). `snes` goes AFTER `src` on the
   # include path so an ambiguous name (input.h exists in both) still resolves to the engine's.
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
@@ -222,9 +226,7 @@ if(CT_SDL_INC)
     # runtime reads it when the DLL loads, before main() when it is a plain import
     target_link_options(Belthasar PRIVATE /DELAYLOAD:vcomp140.dll)
     target_link_libraries(Belthasar delayimp)
-  endif()
-  ct_msvc_defaults(Belthasar)
-  if(MSVC)
+    ct_msvc_defaults(Belthasar)
     if(DEFINED ENV{CT_ASAN})
       target_compile_options(Belthasar PRIVATE /fsanitize=address /Zi)
     endif()
