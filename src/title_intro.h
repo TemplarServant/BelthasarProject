@@ -153,6 +153,7 @@ void CtTitleIntroRender(const CtTitleIntro* t, unsigned char* fb, int w, int h);
 // from it (the frames between): the mode-7 matrix and its scroll are interpolated and the mode-7 layer is sampled at
 // the sub-pixel, which is the pendulum's swing; sprites and the tiled modes keep their 1x pixel, and only mode 7 extends
 // past the 256 columns (the tiled modes' maps wrap there: black, as a pillarbox). Output: RGB, (w1 * k) x (224 * k).
+// Defined in title_intro_mods.c, which title_intro.c includes at its end.
 void CtTitleIntroRenderEx(const CtTitleIntro* t, const struct CtTiLatch* prev, int t256, unsigned char* out,
                           int w1, int x0, int k);
 

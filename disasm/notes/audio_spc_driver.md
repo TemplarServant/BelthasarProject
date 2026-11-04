@@ -296,7 +296,7 @@ same routines now run as the sound processor's whole program, compared instructi
   through `SndDrvHost`: the S-DSP register sink and its reads (FLG, EDL, ADSR1, OUTX), the poll points (`poll` with the
   ROM's return address as the site), the status ports, timer 1, the control writes, the upload session. API:
   `SndDrvBoot`, `SndDrvCommand` (the loop's command), `SndDrvTick`, and inside a session `SndDrvUploadHeader` (returns
-  the receiver), `SndDrvUploadTick` (`$0415`), `SndDrvUploadReset`; the loader stores the blocks' bytes in `SndDrvMem`.
+  the receiver), `SndDrvUploadTick` (`$0415`), `SndDrvUploadReset`; the loader stores the blocks' bytes in the driver's RAM (`SndDrv.m`).
 - The lockstep, `src/sound/lockstep.c` (`CT_SNDDRV_LOCKSTEP=1` on Belthasar or ct.exe, every CtAudio's SPC): the
   original's inputs logged at its own points (the loop's command, each poll's ports, timer 1, the S-DSP reads, the
   session's headers, receivers, bytes and ticks), replayed into the C driver at each `$02A0`; compared: the S-DSP writes

@@ -56,8 +56,9 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
 
 The C sources in `src/`, one line each (a family of files shares a row). The headers mostly match the `.c` names; a few stand
 alone: `ct_vbeam.h` (the virtual beam's constants, shared by the oracle and the engine), `ct_owobj.h` (the overworld
-ambient-object block layout), `seq_wram.h` (the `$C3` stages' 16-bit WRAM access, one body for every stage file) and
-`macos.h` (the macOS integration's interface).
+ambient-object block layout), `seq_wram.h` (the `$C3` stages' 16-bit WRAM access, one body for every stage file),
+`seq_stage_int.h` (private to `seq_stage.c` and `seq_race.c`: their shared state and task-list helpers) and `macos.h`
+(the macOS integration's interface).
 
 | File | Role |
 |---|---|

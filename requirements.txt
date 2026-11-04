@@ -1,5 +1,6 @@
 # Python packages the tools and the regression suite need: python -m pip install -r requirements.txt
-# Everything else in tools/ and assets/ uses the standard library only. numpy: the battle census and simulator
-# (tools/battle_ab.py, tools/battle_sim.py), the attract audit (tools/attract_divergence.py), a dozen *_cmp.py tools
-# and the tools that import those; the checks that run them fail without it.
+# numpy: the battle census and simulator (tools/battle_ab.py, tools/battle_sim.py), the attract audit
+# (tools/attract_divergence.py), a dozen *_cmp.py tools and the tools that import those; the checks that run them fail
+# without it. Everything else uses the standard library, apart from the Pillow tools in requirements-optional.txt and
+# assets/bridge.py (a debugging bridge, not the pipeline), which imports numpy.
 numpy

@@ -4,6 +4,7 @@
 // by the NMI's MVN). A byte-code script (C3/0B03) installs and removes the tasks; its sixteen registers are the PPU
 // shadow cells (reg0 mode-7 scale, reg1 BG1HOFS, reg2 BG1VOFS, reg6 ripple amplitude). This file holds that machine
 // and a renderer that follows LakeSnes's PPU fetch for mode 7 (the swing) and mode 2 with offset-per-tile (the logo).
+// The options' renderer CtTitleIntroRenderEx lives in title_intro_mods.c, included at the end of this file.
 // Note (title_intro.md sec. 3): the scanline is 1-based (lines 1..224 enter the mode-7 matrix), and frame N renders
 // the state the vblank hooks latched at N, so CtTitleIntroTick latches first and runs the tasks after.
 #include <string.h>

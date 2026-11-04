@@ -87,6 +87,8 @@ not. It must:
    - [add-regress-check](.claude/skills/add-regress-check/SKILL.md): pin it.
 
    Write or update a dossier in `disasm/notes/` that cites addresses and measured values and lists open questions.
+   Some dossiers there still carry `(memory: ...)` or `[[...]]` tags: they name the original author's private notes,
+   which are not in the repository, and can be ignored.
 4. **Build** with `python tools/build.py` and trust its artifact check, not the banner. Close any running
    `Belthasar.exe` first: a locked executable is not replaced.
 5. **Run the quick tier**: `python tools/regress.py --quick`. Run the full suite for anything touching shared

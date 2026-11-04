@@ -420,8 +420,8 @@ both state-2 branches). No check grades them yet: they move no frame of any driv
 
 **The clock.** The port's SPC ran 17,088 APU cycles every frame; the console's odd (non-interlaced) frames have line 240 four
 master cycles short (snes.c), 17,087.81 APU cycles. audio.c's CtAudioFrame now takes each frame's own (apuFrameCycles: the
-frame's parity, flipped every frame, seeded from a state's ppu->evenFrame, power-on even; CtAudioFrameSkip flips it for a frame a
-translated stage's bus ran). Measured: the ending's `FF 2A` logic exact for 11956 frames (5 frames a frame early before), the
+frame's parity, flipped every frame, seeded from a state's ppu->evenFrame, power-on even; a frame a translated stage's bus ran
+flipped it too, through a helper, CtAudioFrameSkip, since removed with the translated stages: it had no caller left). Measured: the ending's `FF 2A` logic exact for 11956 frames (5 frames a frame early before), the
 scene-8 vmdiff's long upload returns on line 137 (oracle 139, before 149). The attract moved a frame or two from its first
 long song handshakes on (its SPC's phase luck: a cold-booted port against the captured cartridge); those checks were
 renumbered with their content unchanged.
