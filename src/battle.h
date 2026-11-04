@@ -489,6 +489,7 @@ typedef struct CtBattleHost {
                              //   post (18 frames); the ROM keeps this inside the C2 bank
   int fleeTriggered;         // one-shot for the flee-trigger trace (C1/81F3 reads $99CD every tick; stage 1 only traces)
   int fleeHeldPrev;          // the previous frame's L+R level, for the hold/release trace edges
+  unsigned fleeMaskPrev, demoMaskPrev;   // CT_HOLDBTN's mask of the frame before (the run-away counter, the demo button)
   uint16_t joyAutoRead;      // $4218 | $4219 << 8 as the auto-joypad read left them at this frame's vblank (the host's
                              //   pad of the frame before) -- CF/E6E0 reads the hardware itself. 0 headless.
   int resetReq;              // CF/E702 `JML C0:FF00` was taken (the attract's demo battle, a button): the host reboots

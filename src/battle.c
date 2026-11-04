@@ -3958,9 +3958,8 @@ static unsigned battleHoldBtnMask(const CtBattleHost* h) {
 static void battleDemoAbortFrame(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (!(s[0x2989] & 0x20)) return;                             // FE6D9
-  static unsigned prevMask = 0;
-  unsigned held = h->joyAutoRead | prevMask;                   // FE6E0-FE6E8
-  prevMask = battleHoldBtnMask(h);
+  unsigned held = h->joyAutoRead | h->demoMaskPrev;            // FE6E0-FE6E8
+  h->demoMaskPrev = battleHoldBtnMask(h);
   if (held) s[0xA097] = 0x01;                                  // FE6EA
   if (!s[0xA097]) return;                                      // FE6EF
   s[0xBB00] = (uint8_t)(s[0xBB00] - 1);                        // FE6F4-FE6F8
@@ -3975,11 +3974,9 @@ static void battleFleeCounterFrame(CtBattleHost* h, int input) {
   // (CF/E6E0) does: h->joyAutoRead, the previous frame's word (on a route drive under CT_WS_BATTLE_LEAD the frame's
   // own, which is the cartridge's previous one). CT_HOLDBTN (battle frames, headless) keeps its frame of history.
   // The hold / release trace follows this frame's pad level; the count follows the register.
-  static unsigned prevMask = 0;
-  if (h->frames == 0) prevMask = 0;
   unsigned maskNow = battleHoldBtnMask(h);
-  int held = (h->joyAutoRead & 0x0030) == 0x0030 || (prevMask & 0x30) == 0x30;
-  prevMask = maskNow;
+  int held = (h->joyAutoRead & 0x0030) == 0x0030 || (h->fleeMaskPrev & 0x30) == 0x30;
+  h->fleeMaskPrev = maskNow;
   int padNow = (input & CT_BIN_LRH) != 0 || (maskNow & 0x30) == 0x30;
   if (padNow != h->fleeHeldPrev) { h->fleeHeldPrev = padNow; battleFleeTrace(h, padNow ? "hold" : "release"); }
   if (s[0xA013]) return;                                       // FE706
@@ -15281,7 +15278,7 @@ void CtBattleBegin(CtBattleHost* h) {
       uint16_t b = kPcBlock[seat]; h->mem[b + 0x2D] = 2; h->mem[b + 0x2E] = 0; } }
   h->frames = 0; h->pcAttacks = 0; h->enemyAttacks = 0; h->pcMisses = 0; h->missReported = 0; h->missPopupSpawned = 0; h->endReason = 0;
   h->aiTurnMsg = 0; h->nameBoxT = -1;                           // no name box in flight (CD/0295)
-  h->sysMsgOpenT = 0; h->fleeTriggered = 0; h->fleeHeldPrev = 0; h->resetReq = 0;   // the run-away counter's host-side scratch (its bytes are WRAM)
+  h->sysMsgOpenT = 0; h->fleeTriggered = 0; h->fleeHeldPrev = 0; h->fleeMaskPrev = 0; h->demoMaskPrev = 0; h->resetReq = 0;   // the run-away counter's host-side scratch (its bytes are WRAM)
   h->fleeStage = 0; h->fleeT = 0; h->fleeExitT = 0; h->actEndByScript = 0; h->actEndRel = 0; h->actScriptEnd = 0; h->actEndHold = 0; h->actCloseWiped = 0; h->actOpenWiped = 0; h->exitDemo = 0; h->exitCd0c = 0;
   h->fxTeardownT = 0; h->fxTeardownLong = 0; h->fxTeardownRuns = 0;
   for (int k = 0; k < 16; k++) { h->palK[k] = -1; h->palKind[k] = 0; }   // the live CGRAM page = the base page
