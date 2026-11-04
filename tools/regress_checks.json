@@ -359,7 +359,7 @@
       "mutations": [
         {
           "file": "src/title_intro.c",
-          "find": "  ctSndMail(t, 0, 0xF0);                             // $34D5: the command byte alone\r",
+          "find": "  ctSndMail(t, 0, 0xF0);                             // $34D5: the command byte alone",
           "replace": "  /* MUT */",
           "why": "$7E:34D5 is the second half of the exit -- the command that stops the music once the brightness reaches zero. Without it the fade ends in silence that never arrives, and the second staged line disappears."
         },
@@ -680,7 +680,7 @@
         },
         {
           "file": "src/move.c",
-          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete\r",
+          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete",
           "replace": "        if (st == 1 && 0) {                               // MUT: a 0xAB/0xB7 that never completes",
           "why": "without the completion arm obj1 parks on its AB forever: the divergence comes back at f85 as before"
         }
@@ -1434,8 +1434,8 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "                       h->schedItemTgt[h->schedN] = itemTgt; h->schedVoid[h->schedN] = 0; h->schedN++; }   // sec. 2.6: carry tech/item id + PC target\r",
-          "replace": "                       h->schedItemTgt[h->schedN] = itemTgt; h->schedVoid[h->schedN] = 0; } /* MUT: the committed action is never counted into the schedule FIFO */   // sec. 2.6: carry tech/item id + PC target\r",
+          "find": "                       h->schedItemTgt[h->schedN] = itemTgt; h->schedVoid[h->schedN] = 0; h->schedN++; }   // sec. 2.6: carry tech/item id + PC target",
+          "replace": "                       h->schedItemTgt[h->schedN] = itemTgt; h->schedVoid[h->schedN] = 0; } /* MUT: the committed action is never counted into the schedule FIFO */   // sec. 2.6: carry tech/item id + PC target",
           "why": "battleCommitPcAction is the C1/1626-1735 confirm: it closes target-select and pushes {atk,slot} for battleDispatchScheduled to animate when the engine is free. A dropped schedN++ is the 'A does nothing' regression this check exists for: the confirm at f572 never dispatches, Crono never attacks, and neither the f685 act-end (gatoHP=60 pcAtk=1) nor the f714 strike line appears."
         }
       ]
@@ -2387,8 +2387,8 @@
         {
           "why": "the same-world skip comes back at the overworld-entry site (there is now only ONE -- the two-site `edits` list this mutation used to need went away with the unification)",
           "file": "src/field.c",
-          "find": "          haveWorld = worldInit(&assets, &wd, destWorld);          // not a field ChangeLocation; applies to any\r",
-          "replace": "          if (!wd;have || wd;world != destWorld) haveWorld = worldInit(&assets, &wd, destWorld);  // MUT: same-world skip"
+          "find": "          haveWorld = worldInit(&assets, &wd, destWorld);          // not a field ChangeLocation; applies to any",
+          "replace": "          if (!wd.have || wd.world != destWorld) haveWorld = worldInit(&assets, &wd, destWorld);  // MUT: same-world skip"
         }
       ]
     },
@@ -4449,7 +4449,7 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "      u += 8;                                                           // 0F33, 0F3F, four sheets, the map's two: eight\r",
+          "find": "      u += 8;                                                           // 0F33, 0F3F, four sheets, the map's two: eight",
           "replace": "      u += 0;   /* MUT: the effect load costs nothing */",
           "why": "re-derived 2026-09-18 (u 9 -> 8): CD/0EBD's eight packets are part of the song's pre-roll -- without them the script starts eight frames early and its sound op 78 moves"
         },
@@ -4899,8 +4899,8 @@
         },
         {
           "file": "src/battle.c",
-          "find": "  memset(h->mem + 0xA0DC, 0, 11);                                   // CC/F097: the digit rows' second-curve flags (C1/5BA1's)\r",
-          "replace": "  /* MUT: no $A0DC clear */                                          // CC/F097: the digit rows' second-curve flags (C1/5BA1's)\r",
+          "find": "  memset(h->mem + 0xA0DC, 0, 11);                                   // CC/F097: the digit rows' second-curve flags (C1/5BA1's)",
+          "replace": "  /* MUT: no $A0DC clear */                                          // CC/F097: the digit rows' second-curve flags (C1/5BA1's)",
           "why": "CC/F097 `STZ $A0DC,X`: the flag clears at the close wipe (rel 197, oracle CC:F09A); without it it stays set for the fight"
         },
         {
@@ -4984,8 +4984,8 @@
         },
         {
           "file": "src/battle.c",
-          "find": "  memset(h->mem + 0xA0DC, 0, 11);                                   // CC/F097: the digit rows' second-curve flags (C1/5BA1's)\r",
-          "replace": "  /* MUT: no $A0DC clear */                                          // CC/F097: the digit rows' second-curve flags (C1/5BA1's)\r",
+          "find": "  memset(h->mem + 0xA0DC, 0, 11);                                   // CC/F097: the digit rows' second-curve flags (C1/5BA1's)",
+          "replace": "  /* MUT: no $A0DC clear */                                          // CC/F097: the digit rows' second-curve flags (C1/5BA1's)",
           "why": "the close wipe's CC/F097 clears the flag at rel 138; without it the memmon line never shows A0DC=0000"
         }
       ]
@@ -8191,8 +8191,8 @@
       "mutations": [
         {
           "file": "src/menu.c",
-          "find": "    mPartyPanels(h, fb, 24, -1);                     // char select: the Tech screen dims no panel\r",
-          "replace": "    mPartyPanels(h, fb, 24, charId & 7);             // char select: the Tech screen dims no panel\r",
+          "find": "    mPartyPanels(h, fb, 24, -1);                     // char select: the Tech screen dims no panel",
+          "replace": "    mPartyPanels(h, fb, 24, charId & 7);             // char select: the Tech screen dims no panel",
           "why": "restores the Tech char-select's invented panel dim"
         },
         {
@@ -8260,8 +8260,8 @@
         },
         {
           "file": "src/menu.c",
-          "find": "#define MSPR_D     1   /* the D (facing-down) column of a {U,D,L,R,delay} record, the menu's facing */\r",
-          "replace": "#define MSPR_D     0   /* the D (facing-down) column of a {U,D,L,R,delay} record, the menu's facing */\r",
+          "find": "#define MSPR_D     1   /* the D (facing-down) column of a {U,D,L,R,delay} record, the menu's facing */",
+          "replace": "#define MSPR_D     0   /* the D (facing-down) column of a {U,D,L,R,delay} record, the menu's facing */",
           "why": "reads the U column of the animation record where the menu's sprites face DOWN"
         },
         {
@@ -8583,7 +8583,7 @@
         },
         {
           "file": "src/ct_vm.c",
-          "find": "    int prevAddr = 0x01AB + member - 1;                 // ...measured against the one in front\r",
+          "find": "    int prevAddr = 0x01AB + member - 1;                 // ...measured against the one in front",
           "replace": "    int prevAddr = 0x01AB;   /* MUT: every member measured off the HEAD */",
           "why": "The conga is a CHAIN: C0/A2CE (member 3) measures its gap against member 2's CURSOR -- `A2E0 LDA $AC / SEC / SBC $AD` -- not against the head $AB that C0/A26B uses. Off the head, member 3 would start moving at the same frame as member 2 instead of 23 frames later. Measured on party3_field: member 2 advances at f24, member 3 at f47, and $01AD's gap is against $01AC at both."
         }
@@ -13159,7 +13159,7 @@
         },
         {
           "file": "src/move.c",
-          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete\r",
+          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete",
           "replace": "        if (st == 1 && 0) {                               // MUT: a 0xAB/0xB7 that never completes",
           "why": "without the completion arm obj1 parks on its AB forever: the divergence comes back at f85 as before"
         }
@@ -13617,8 +13617,8 @@
         },
         {
           "file": "src/move.c",
-          "find": "  r[0x1001 + t] = 0;                                   // 31AA STZ $1001,X -- the scheduler delay, so\r",
-          "replace": "  (void)0;                                   // 31AA STZ $1001,X -- the scheduler delay, so\r",
+          "find": "  r[0x1001 + t] = 0;                                   // 31AA STZ $1001,X -- the scheduler delay, so",
+          "replace": "  (void)0;                                   // 31AA STZ $1001,X -- the scheduler delay, so",
           "why": "31AA's `STZ $1001,X` clears the SCHEDULER DELAY so the preempted object runs on the very next pass instead of waiting out its cadence. Without it the redirect lands frames late."
         }
       ]
@@ -13943,8 +13943,8 @@
       "mutations": [
         {
           "file": "src/move.c",
-          "find": "  if (r[0x1100 + idx] & 0x80) return 0;                   // CADE BPL: bit 7 set = destroyed/inactive\r",
-          "replace": "  if (r[0x1100 + idx] & 0x40) return 0;                   // CADE BPL: bit 7 set = destroyed/inactive\r",
+          "find": "  if (r[0x1100 + idx] & 0x80) return 0;                   // CADE BPL: bit 7 set = destroyed/inactive",
+          "replace": "  if (r[0x1100 + idx] & 0x40) return 0;                   // CADE BPL: bit 7 set = destroyed/inactive",
           "why": "CADE tests BIT 7 of the actor state -- destroyed or inactive. All four of this routine's gates return CLC, which is what makes C0/CA76 POP the object; a gate on the wrong bit drains the wrong objects."
         },
         {
@@ -13961,8 +13961,8 @@
         },
         {
           "file": "src/move.c",
-          "find": "  switch (r[0x1201 + idx] & 3) {                          // CAEE-CAFD: the sprite's piece count\r",
-          "replace": "  switch (r[0x1201 + idx] & 2) {                          // CAEE-CAFD: the sprite's piece count\r",
+          "find": "  switch (r[0x1201 + idx] & 3) {                          // CAEE-CAFD: the sprite's piece count",
+          "replace": "  switch (r[0x1201 + idx] & 2) {                          // CAEE-CAFD: the sprite's piece count",
           "why": "CAEE-CAFD dispatches on the sprite's PIECE CLASS, the low TWO bits of $1201,X. A narrower mask sends class 1 down class 0's emitter and class 3 down class 2's."
         },
         {
@@ -14215,8 +14215,8 @@
       "mutations": [
         {
           "file": "src/move.c",
-          "find": "    int bucket = (r[0x0A80 + idx] >> 1) & 0xFE;            // A998-A99E (8-bit: the low byte only)\r",
-          "replace": "    int bucket = (r[0x0A80 + idx] >> 1) & 0xFF;            // A998-A99E (8-bit: the low byte only)\r",
+          "find": "    int bucket = (r[0x0A80 + idx] >> 1) & 0xFE;            // A998-A99E (8-bit: the low byte only)",
+          "replace": "    int bucket = (r[0x0A80 + idx] >> 1) & 0xFF;            // A998-A99E (8-bit: the low byte only)",
           "why": "A998-A99E computes the bucket from the screen Y as an EIGHT-BIT value masked even -- the list heads are word-spaced. An odd bucket indexes half of one head and half of the next."
         },
         {
@@ -14261,14 +14261,14 @@
       "mutations": [
         {
           "file": "src/move.c",
-          "find": "  for (k = 0; k < 0x1E; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free\r",
-          "replace": "  for (k = 0; k < 0x1D; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free\r",
+          "find": "  for (k = 0; k < 0x1E; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free",
+          "replace": "  for (k = 0; k < 0x1D; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free",
           "why": "C0/6F79 frees THIRTY OBJ slots. One short leaves the last slot reading as owned by whichever object held it in the previous scene, so the allocator never hands it out again."
         },
         {
           "file": "src/move.c",
-          "find": "  for (k = 0; k < 8;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes\r",
-          "replace": "  for (k = 0; k < 4;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes\r",
+          "find": "  for (k = 0; k < 8;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes",
+          "replace": "  for (k = 0; k < 4;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes",
           "why": "C0/E935 clears EIGHT bytes of the arena owner table even though C0/E952 only ever hands out the first four -- the sweep compares the ROM's writes, not the ones we think matter."
         },
         {
@@ -14307,8 +14307,8 @@
       "mutations": [
         {
           "file": "src/move.c",
-          "find": "  if (xs == 0x80 && ys == 0xF0) return 0;                 // 3077 CLC -- centred and on the bottom\r",
-          "replace": "  if (xs == 0x80 || ys == 0xF0) return 0;                 // 3077 CLC -- centred and on the bottom\r",
+          "find": "  if (xs == 0x80 && ys == 0xF0) return 0;                 // 3077 CLC -- centred and on the bottom",
+          "replace": "  if (xs == 0x80 || ys == 0xF0) return 0;                 // 3077 CLC -- centred and on the bottom",
           "why": "C0/3077 returns CLC only when BOTH axes have arrived -- the ROM tests X and, on a match, falls through to the Y test rather than returning. An OR ends the snap the moment either axis lands."
         },
         {
@@ -14331,8 +14331,8 @@
         },
         {
           "file": "src/move.c",
-          "find": "  r[0x1A01 + idx] = 0x01;                                 // 3092 / 30A0 / 30AE: one frame\r",
-          "replace": "  (void)0;                                 // 3092 / 30A0 / 30AE: one frame\r",
+          "find": "  r[0x1A01 + idx] = 0x01;                                 // 3092 / 30A0 / 30AE: one frame",
+          "replace": "  (void)0;                                 // 3092 / 30A0 / 30AE: one frame",
           "why": "the one-frame ticket the ROM arms at all three stores. Without it the velocity the snap just wrote is never consumed, so the object is told to move and never does."
         }
       ]
@@ -14675,8 +14675,8 @@
       "mutations": [
         {
           "file": "src/world.c",
-          "find": "    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4) - 1;    // 2FF7-2FFF -- minus one; the entry\r",
-          "replace": "    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4);        // 2FF7-2FFF -- minus one; the entry\r",
+          "find": "    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4) - 1;    // 2FF7-2FFF -- minus one; the entry",
+          "replace": "    int row = ((ram[0x0285] | (ram[0x0286] << 8)) >> 4);        // 2FF7-2FFF -- minus one; the entry",
           "why": "C2/2FFE's `DEC A` -- the music object samples the region one row ABOVE the player, and the entry path C2/2F15 does NOT. This mutation SURVIVED a clean 2304/2304 twice before the seed positions were moved to EVEN columns; the report's `- 1 is graded` line asserts the discriminating count so it cannot go blind again."
         },
         {
@@ -14693,8 +14693,8 @@
         },
         {
           "file": "src/world.c",
-          "find": "  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; st = 1; }   // 2FA5-2FAC, then falls through\r",
-          "replace": "  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; return 1; } // 2FA5-2FAC, then falls through\r",
+          "find": "  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; st = 1; }   // 2FA5-2FAC, then falls through",
+          "replace": "  if (st == 0) { ram[b + 2] = 1; ram[0x00EB] = 0xFF; return 1; } // 2FA5-2FAC, then falls through",
           "why": "state 0 arms and then FALLS THROUGH into state 1 in the same frame (C2/2FAC has no RTS). Returning instead costs one frame of the compare on the very first frame the object runs."
         },
         {
@@ -15725,8 +15725,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "        // Not in menuPhase 1 -- the C0/1943 fade runs before the mode-3 shell exists.\r\n        fieldMenuSfxTick(s7);\r\n        int closeReq = 0;\r",
-          "replace": "        // Not in menuPhase 1 -- the C0/1943 fade runs before the mode-3 shell exists.\r\n        /* MUT: the NMI never drains $0D76 */\r\n        int closeReq = 0;\r",
+          "find": "        // Not in menuPhase 1 -- the C0/1943 fade runs before the mode-3 shell exists.\n        fieldMenuSfxTick(s7);\n        int closeReq = 0;",
+          "replace": "        // Not in menuPhase 1 -- the C0/1943 fade runs before the mode-3 shell exists.\n        /* MUT: the NMI never drains $0D76 */\n        int closeReq = 0;",
           "why": "C2/8463's per-frame DEC is gone: $0D76 arms to 3 on the first post and never returns to 0, so the screen goes permanently silent after ONE blip"
         }
       ]
@@ -16730,8 +16730,8 @@
         },
         {
           "file": "src/scene.c",
-          "find": "  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);\r",
-          "replace": "  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, NULL, sd->stillBits, sd->stillVx, sd->stillVw);   // MUT\r",
+          "find": "  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);",
+          "replace": "  draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, NULL, sd->stillBits, sd->stillVx, sd->stillVw);   // MUT",
           "why": "a scene whose BG1/BG2 live on the SUB screen loses every foreground pixel again (fgpx back to 0)"
         }
       ]
@@ -16813,7 +16813,7 @@
       "mutations": [
         {
           "file": "src/ct_vm.c",
-          "find": "  if (v & 0x80) {                                                  // AUTO: from the foot tile's properties\r",
+          "find": "  if (v & 0x80) {                                                  // AUTO: from the foot tile's properties",
           "replace": "  if (1) {   // MUT: the foot tile decides for EVERY object again",
           "why": "the barman's head goes back behind the bar's foreground row: op 0x8E (vmOp8E, C0/4C74) takes the AUTO arm's foot tile for every byte, bypassing the non-AUTO nibble decode C0/4CB7-4CC6 that writes $0C00 = 30 / $0C01 = 20 for his 0x23 (the render reads that pair since f4f8e91 made it stored state)"
         }
@@ -22852,7 +22852,7 @@
         },
         {
           "file": "src/menu.c",
-          "find": "  if (ox) *ox = cx - (ix0 + ix1 + 1) / 2;      // X = the sprite centre\r",
+          "find": "  if (ox) *ox = cx - (ix0 + ix1 + 1) / 2;      // X = the sprite centre",
           "replace": "  if (ox) *ox = cx - ix0; /* MUT: the box's LEFT edge, not its centre */",
           "why": "the position word's X is the sprite CENTRE, which is why Crono's 16-wide, Robo's 24-wide and Magus's 18-wide boxes all straddle x 168 while their left edges are 160 / 156 / 159"
         }
@@ -22943,7 +22943,7 @@
       "mutations": [
         {
           "file": "src/move.c",
-          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete\r",
+          "find": "        if (st == 1) {                                    // 2EA2 DEC A / 2EA3 BEQ ->2EB4: complete",
           "replace": "        if (st == 1 && 0) {                               // MUT: a 0xAB/0xB7 that never completes",
           "why": "the completion arm IS the byte test; without it the B7 parks forever and the lockstep diverges at f16 with ours=0 ip-steps, as it did before the delegation"
         },
@@ -24538,14 +24538,14 @@
         },
         {
           "file": "src/battle.c",
-          "find": "    s[0xAECC] = s[0xAED8];                                        // AC24/AC27 -- and no $AD8E copy\r",
-          "replace": "    s[0xAECC] = s[0xAEE5];                                        // AC24/AC27 -- and no $AD8E copy\r",
+          "find": "    s[0xAECC] = s[0xAED8];                                        // AC24/AC27 -- and no $AD8E copy",
+          "replace": "    s[0xAECC] = s[0xAEE5];                                        // AC24/AC27 -- and no $AD8E copy",
           "why": "the literal target's source. $AED8 has exactly one writer in the whole ROM (C1/AF0E `LDA $AECC / AND #0F / STA $AED8`) and one reader, AC24 here. $AEE5 is the decoded targeting byte the OTHER entry path uses -- the plausible confusion, and a different byte."
         },
         {
           "file": "src/battle.c",
-          "find": "    s[0xAECC] = s[0xAED8];                                        // AC24/AC27 -- and no $AD8E copy\r",
-          "replace": "    s[0xAECC] = s[0xAED8]; s[0xAD8E] = s[0xAED8];                 // AC24/AC27 -- and no $AD8E copy\r",
+          "find": "    s[0xAECC] = s[0xAED8];                                        // AC24/AC27 -- and no $AD8E copy",
+          "replace": "    s[0xAECC] = s[0xAED8]; s[0xAD8E] = s[0xAED8];                 // AC24/AC27 -- and no $AD8E copy",
           "why": "THE ASYMMETRY. C1/AC2A's `BRA ->AC3F` jumps PAST the copy loop, so on a bit7 value $AD8E stays all $FF from the clear while $AECC[0] carries the literal. Mirroring it too is the natural tidy-up and it is wrong; only comparing both lists in full can see the difference."
         },
         {
@@ -24823,8 +24823,8 @@
         },
         {
           "file": "src/battle.c",
-          "find": "  int a2E = s[0x2E] | (s[0x2F] << 8);                         // carried in, not cleared\r",
-          "replace": "  int a2E = 0;                         // carried in, not cleared\r",
+          "find": "  int a2E = s[0x2E] | (s[0x2F] << 8);                         // carried in, not cleared",
+          "replace": "  int a2E = 0;                         // carried in, not cleared",
           "why": "C92D/C92F clear $2C and $32 and DELIBERATELY NOT $2E: it is the middle word of a 48-bit register and arrives holding whatever the caller left -- in C1/DC64, the multiply's high half. Zeroing it is the assumption that makes `hit * 100 / evade` in C look equivalent to the chain."
         },
         {
@@ -25059,8 +25059,8 @@
         },
         {
           "file": "src/battle.c",
-          "find": "      if (div == 0xFF) out = r;                      // AF52 / AF54 / AF56 -- raw byte, and no INC $26\r",
-          "replace": "      if (div == 0xFF) { out = r; s[0x26] = (uint8_t)(idx + 1); }                      // AF52 / AF54 / AF56 -- raw byte, and no INC $26\r",
+          "find": "      if (div == 0xFF) out = r;                      // AF52 / AF54 / AF56 -- raw byte, and no INC $26",
+          "replace": "      if (div == 0xFF) { out = r; s[0x26] = (uint8_t)(idx + 1); }                      // AF52 / AF54 / AF56 -- raw byte, and no INC $26",
           "why": "AF56's raw-byte exit READS the table at $26 and branches straight to AF73 -- INC $26 is at AF71, on the divide path only. Three of the five exits leave the cursor where it was, and a stream that advances when the ROM's does not diverges silently and compounds across a whole battle."
         },
         {
@@ -26031,7 +26031,7 @@
       "mutations": [
         {
           "file": "src/ct_vm.c",
-          "find": "    if (!b) continue;                                         // BEQ: the arm is skipped\r",
+          "find": "    if (!b) continue;                                         // BEQ: the arm is skipped",
           "replace": "    continue;   /* MUT: md[2]/md[3] never decoded */",
           "why": "Without the A45D/A4AD arms the layers get no speed and the Blackbird's clouds sit still -- the user's report."
         },
@@ -26495,7 +26495,7 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "      if (s[0x2989] & 0x20) {                                  // C1/8555 `LDA $2989 / BIT #20 / BEQ`: the demo\r",
+          "find": "      if (s[0x2989] & 0x20) {                                  // C1/8555 `LDA $2989 / BIT #20 / BEQ`: the demo",
           "replace": "      if (0 && (s[0x2989] & 0x20)) {   /* MUT: no demo arm */",
           "why": "The old behaviour (C1/8555 `LDA $2989 / BIT #20 / BEQ` in the cursor pass's ready-PC arm, battleDemoTurn not taken): the PC's turn enqueues the menu and chimes, nobody presses anything, no tech is committed and the fight never ends by itself."
         },
@@ -30625,8 +30625,8 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "    // No name or gold seed. The eight name records ($7E:2C23, 6 bytes each) and the starting gold ($7E:2C53 = 400) are\r",
-          "replace": "    s7[0x2C23] = 0xA2; s7[0x2C53] = 0x90;   /* MUT: a load-time seed back */\n    // No name or gold seed. The eight name records ($7E:2C23, 6 bytes each) and the starting gold ($7E:2C53 = 400) are\r",
+          "find": "    // No name or gold seed. The eight name records ($7E:2C23, 6 bytes each) and the starting gold ($7E:2C53 = 400) are",
+          "replace": "    s7[0x2C23] = 0xA2; s7[0x2C53] = 0x90;   /* MUT: a load-time seed back */\n    // No name or gold seed. The eight name records ($7E:2C23, 6 bytes each) and the starting gold ($7E:2C53 = 400) are",
           "why": "Any load-time seed puts a name and gold into the attract, where the cartridge holds zeros and the demo HUD draws no names."
         }
       ],
@@ -33561,7 +33561,7 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "      u += 8;                                                           // 0F33, 0F3F, four sheets, the map's two: eight\r",
+          "find": "      u += 8;                                                           // 0F33, 0F3F, four sheets, the map's two: eight",
           "replace": "      u += 9;                                                           // MUT: the pre-roll's old ninth frame",
           "why": "the ninth frame was the real cartridge's lag frame inside CD/0018: the pre-roll reads 30 against the logical oracle's 29 and the span 252 against 251"
         },
@@ -36613,7 +36613,7 @@
         },
         {
           "file": "src/field.c",
-          "find": "                                                     !(s7[0x0DA0] & 1));                        // Form\r",
+          "find": "                                                     !(s7[0x0DA0] & 1));                        // Form",
           "replace": "                                                     !((menuT >> 2) & 1));   // MUT",
           "why": "the pick's hand on the menu clock instead of C2/8B6E"
         }
@@ -39266,14 +39266,14 @@
       "mutations": [
         {
           "file": "src/ct_vm.c",
-          "find": "    // object's next visit. (The slot-1 runner C0/595C ignores the carry.)\r\n    s->addr = nxt;\r\n    return 1;\r",
-          "replace": "    // object's next visit. (The slot-1 runner C0/595C ignores the carry.)\r\n    s->addr = nxt;\r\n    return 0;   /* MUT: E4 continues the visit */\r",
+          "find": "    // object's next visit. (The slot-1 runner C0/595C ignores the carry.)\n    s->addr = nxt;\n    return 1;",
+          "replace": "    // object's next visit. (The slot-1 runner C0/595C ignores the carry.)\n    s->addr = nxt;\n    return 0;   /* MUT: E4 continues the visit */",
           "why": "the pre-2026-09-26 carry: the op after the E4 runs in the same visit -- control on and the flag written at f95 / f199, a visit early."
         },
         {
           "file": "src/ct_vm.c",
-          "find": "    CtVmTileCopyE4(sc->mem->s, B - sc->header, addr + sc->header);\r\n    // The copy is immediate and the visit ends: `3DC0 LDX $C7 / INX / CLC / RTS`, so the op after E4 runs on the\r",
-          "replace": "    CtVmTileStageE5(sc->mem->s, B - sc->header, addr + sc->header);   /* MUT: E4 staged like E5 */\r\n    // The copy is immediate and the visit ends: `3DC0 LDX $C7 / INX / CLC / RTS`, so the op after E4 runs on the\r",
+          "find": "    CtVmTileCopyE4(sc->mem->s, B - sc->header, addr + sc->header);\n    // The copy is immediate and the visit ends: `3DC0 LDX $C7 / INX / CLC / RTS`, so the op after E4 runs on the",
+          "replace": "    CtVmTileStageE5(sc->mem->s, B - sc->header, addr + sc->header);   /* MUT: E4 staged like E5 */\n    // The copy is immediate and the visit ends: `3DC0 LDX $C7 / INX / CLC / RTS`, so the op after E4 runs on the",
           "why": "E4 as a queued copy (the E5 body): the rect lands a frame late through C0/1770 and its style branch holds the main loop."
         }
       ]
@@ -44918,8 +44918,8 @@
         },
         {
           "file": "src/field.c",
-          "find": "  return (int)((c + 204 + 122) / 357368) + 1;\r",
-          "replace": "  return (int)((c + 204 + 122) / 357368);   /* MUT */\r",
+          "find": "  return (int)((c + 204 + 122) / 357368) + 1;",
+          "replace": "  return (int)((c + 204 + 122) / 357368);   /* MUT */",
           "why": "the opening ends at the vblank $31B0 waits for: the stage's first NMI is the frame after (1DD on the cartridge's f1011)"
         }
       ],
@@ -46615,8 +46615,8 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "    s[0xB1FC] &= (uint8_t)~0x02;\r\n    // C1/BB85 `STA $B2AE` / C1/BB88 JSR C1/C1DD -- the area pass runs before C1/BF79 (the MP, C1/D74F, the effect). A PC's\r",
-          "replace": "    /* MUT */\r\n    // C1/BB85 `STA $B2AE` / C1/BB88 JSR C1/C1DD -- the area pass runs before C1/BF79 (the MP, C1/D74F, the effect). A PC's\r",
+          "find": "    s[0xB1FC] &= (uint8_t)~0x02;\n    // C1/BB85 `STA $B2AE` / C1/BB88 JSR C1/C1DD -- the area pass runs before C1/BF79 (the MP, C1/D74F, the effect). A PC's",
+          "replace": "    /* MUT */\n    // C1/BB85 `STA $B2AE` / C1/BB88 JSR C1/C1DD -- the area pass runs before C1/BF79 (the MP, C1/D74F, the effect). A PC's",
           "why": "No C1/BB66 on the interactive tech (the old port): the Imp's latch stops the Cyclone at its first victim -- both Imps 'took damage ... port no'."
         },
         {
