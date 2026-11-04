@@ -30,17 +30,14 @@ target_compile_definitions(main PRIVATE CT_XLAT_NO_GWARP)   # the gate warp is n
 target_compile_definitions(main PRIVATE CT_AUDIO_SPC_DEFAULT=1)   # the sound machine in C, as the desktop's (no ROM code runs)
 target_link_libraries(main SDL2 m log android)
 
-# The frames between and the higher internal resolution draw on every core (field.c's MSVC /openmp, here libomp,
-# linked statically so the APK carries no extra library).
-set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c PROPERTIES COMPILE_OPTIONS "-fopenmp")
+# The host's pictures at the options draw on every core (CT_OMP_SRC, the root CMakeLists.txt: the desktop's MSVC
+# /openmp, here libomp, linked statically so the APK carries no extra library).
+set_source_files_properties(${CT_OMP_SRC} PROPERTIES COMPILE_OPTIONS "-fopenmp")
 target_link_options(main PRIVATE -fopenmp -static-openmp)
 
-set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
-if(EXISTS ${IMGUI_DIR}/imgui.h)
+if(EXISTS ${IMGUI_DIR}/imgui.h)   # IMGUI_DIR and CT_IMGUI_SRC: the root CMakeLists.txt
   enable_language(CXX)
-  add_library(ct_imgui STATIC ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp
-              ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-              ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+  add_library(ct_imgui STATIC ${CT_IMGUI_SRC})
   target_include_directories(ct_imgui PUBLIC ${IMGUI_DIR} ${SDL2_SRC_DIR}/include)
   target_compile_options(ct_imgui PRIVATE -O2)
   target_link_libraries(ct_imgui PUBLIC SDL2 GLESv3)

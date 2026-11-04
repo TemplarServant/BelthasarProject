@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Oracle core: vendored LakeSnes (snes/*.c). main.c from LakeSnes is NOT included
-# (it pulls in SDL); the M0 harness is headless.
+# (it pulls in SDL); ct and ct_oracle are headless.
 file(GLOB SNES_SRC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/snes/*.c")
 
 # DETERMINISTIC BUILD (MSVC): the same sources link the same code bytes. The suite's oracle cache
@@ -33,9 +33,40 @@ if(MSVC)
   add_compile_options(/we4013 /we4431 /we4047 /we4133 /we4024 /we4020 /we4716 /we4033)
 endif()
 
-# The playable host's sources (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake).
-set(CT_FIELD_SRC src/field.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c src/scene_art.c
-                 src/move.c src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c src/ct_lake_state.c src/touchpad.c ${SNES_SRC})
+# THE PLAYABLE HOST'S SOURCES (Belthasar below; the Android app's libmain.so, android/CMakeLists.cmake), by subsystem.
+# Plain lists, not OBJECT libraries: each target's own defines (CT_DATAFREE, CT_XLAT_NO_GWARP, CT_AUDIO_SPC_DEFAULT)
+# change how the shared files preprocess, so every target compiles them itself.
+# The sequence stages, native (disasm/notes/sequence_table.md): the race, the ending, entries 3 / 4 / 6 / 7, the gate
+# warp, and the compositor that draws their pictures.
+set(CT_SRC_SEQ src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c src/seq_endingpic.c src/seq_entry3.c
+               src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c
+               src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c)
+# The engine: the scene renderer and its data, the field VM, the overworld, the battle, the menus.
+set(CT_SRC_ENGINE src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c
+                  src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c)
+# The host's presentation: the options, the picture (SDL_Renderer / OpenGL / Vulkan), the frames between, the
+# widescreen and its art.
+set(CT_SRC_HOST src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c
+                src/scene_art.c)
+# The sound machine in C (src/audio.c; disasm/notes/audio_spc_driver.md).
+set(CT_SRC_SOUND src/audio.c src/sound/driver.c src/sound/lockstep.c src/sound/machine.c src/sound/coro.c
+                 src/sound/timing.c src/sound/timing_build.c src/sound/mixer.c src/sound/mixer_dsp.c)
+# The rule's CPU infra, the ROM reader and checks, the oracle-state loader.
+set(CT_SRC_ROM src/ct_cpu_infra.c src/rom_verify.c src/rom_census.c src/romview.c src/ct_lake_state.c)
+# The link order is the order below (it lays out the image): the files between the lists stand where they always stood.
+set(CT_FIELD_SRC src/field.c ${CT_SRC_SEQ} ${CT_SRC_ENGINE} ${CT_SRC_HOST} src/move.c ${CT_SRC_SOUND}
+                 src/title_intro.c src/seq_ppu.c src/seq_xlat.c src/hdma_table.c src/wipe.c ${CT_SRC_ROM}
+                 src/touchpad.c ${SNES_SRC})
+# The host's pictures at the options (the title's mode 7 at the internal resolution, the frames between, a stage's
+# wide picture): drawn on every core -- MSVC's /openmp below, Android's -fopenmp (android/CMakeLists.cmake).
+set(CT_OMP_SRC src/title_intro.c src/fieldnative.c src/field.c src/seq_pic.c)
+
+# THE F1 OPTIONS OVERLAY's library (Dear ImGui -- tools/get_imgui.ps1 puts it in third_party/imgui, git-ignored like
+# SDL2): its core and the SDL / SDL_Renderer / OpenGL backends, the same on the desktop and on Android.
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
+set(CT_IMGUI_SRC ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp
+                 ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+                 ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
 
 # CT_DATAFREE=ON: Belthasar loads the generated tables (src/data/*.h) from the player's pack instead of compiling them
 # in (docs/ROM.md). ct.exe and the other tools always compile the real headers.
@@ -47,6 +78,23 @@ if(ANDROID)
   include(${CMAKE_CURRENT_SOURCE_DIR}/android/CMakeLists.cmake)
   return()
 endif()
+
+# Every MSVC target's defaults: the CRT's "secure" warnings off, and /W2 with the benign implicit-conversion warnings
+# the LakeSnes core emits quieted. Extra options (ct_oracle's /wd4505) follow the set.
+function(ct_msvc_defaults tgt)
+  if(MSVC)
+    target_compile_definitions(${tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(${tgt} PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101 ${ARGN})
+  endif()
+endfunction()
+
+# Windows: SDL2.dll next to the exe that links it (CT_SDL_DLL, set below). The system SDL2 of a Unix build has none.
+function(ct_copy_sdl_dll tgt)
+  if(CT_SDL_DLL)
+    add_custom_command(TARGET ${tgt} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:${tgt}>)
+  endif()
+endfunction()
 
 add_executable(ct
   src/main.c
@@ -94,11 +142,7 @@ if(UNIX)
   target_link_libraries(ct m)   # lround (ct_vm.c); MSVC's CRT carries libm itself
 endif()
 
-if(MSVC)
-  target_compile_definitions(ct PRIVATE _CRT_SECURE_NO_WARNINGS)
-  # The LakeSnes core emits many benign implicit-conversion warnings; quiet them.
-  target_compile_options(ct PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
-endif()
+ct_msvc_defaults(ct)
 
 # The ORACLE alone: main.c with only --peek / --monitor / --hdma / --fb dispatched (CT_ORACLE_ONLY, src/main.c). The
 # suite's oracle cache runs it for those modes and keys on its bytes, so a change to the port does not throw the
@@ -115,10 +159,7 @@ target_include_directories(ct_oracle PRIVATE snes src)
 if(UNIX)
   target_link_libraries(ct_oracle m)
 endif()
-if(MSVC)
-  target_compile_definitions(ct_oracle PRIVATE _CRT_SECURE_NO_WARNINGS)
-  target_compile_options(ct_oracle PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101 /wd4505)
-endif()
+ct_msvc_defaults(ct_oracle /wd4505)
 add_dependencies(ct ct_oracle)
 
 # The table pack's byte-for-byte proof (tools/gen/tables_proof.py): the data-free storage filled from a pack, against
@@ -151,19 +192,13 @@ if(CT_SDL_INC)
   add_executable(ct_viewer src/viewer.c src/scene.c src/lz.c src/assets.c src/romview.c)
   target_include_directories(ct_viewer PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_viewer ${CT_SDL_LIB})
-  if(MSVC)
-    target_compile_definitions(ct_viewer PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(ct_viewer PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
-  endif()
-  if(CT_SDL_DLL)
-    add_custom_command(TARGET ct_viewer POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_viewer>)
-  endif()
+  ct_msvc_defaults(ct_viewer)
+  ct_copy_sdl_dll(ct_viewer)
   # Native interactive field: VM scheduler (ct_vm.c) + renderer + sprite compositor + SDL.
-  # Belthasar also links the SOUND system: src/audio.c drives the vendored SPC700/DSP through bank
-  # $C7's driver upload (disasm/notes/audio_boot.md); the whole vendored core (snes/*.c) is linked for
-  # it and for the translated stages in src/xlat/. `snes` goes AFTER `src` on the include path so an
-  # ambiguous name (input.h exists in both) still resolves to the engine's.
+  # Belthasar also links the SOUND system: src/audio.c plays the sound machine in C (src/sound/machine.c), the vendored
+  # SPC700/DSP its reference (CT_AUDIO_SPC=ref / lockstep); the whole vendored core (snes/*.c) is linked for that
+  # and for the files that still reach it (src/ct_cpu_infra.c, src/seq_xlat.c). `snes` goes AFTER `src` on the
+  # include path so an ambiguous name (input.h exists in both) still resolves to the engine's.
   # src/move.c runs live: ct_vm.c drives the ported C0/CAD9 animation tree through it (CtAnimDrainPass,
   # CtAnimDrawPass), the field runner CtFieldRunnerOne (which reaches the object loader CtObjLoad) and
   # most of the VM's op families (CtVm*).
@@ -180,20 +215,21 @@ if(CT_SDL_INC)
     target_compile_definitions(Belthasar PRIVATE CT_DATAFREE)
   endif()
   if(MSVC)
-    # the host's pictures at the options (the title's mode 7 at the internal resolution): drawn on every core
-    set_source_files_properties(src/title_intro.c src/fieldnative.c src/field.c src/seq_pic.c PROPERTIES COMPILE_OPTIONS "/openmp")
+    # the host's pictures at the options: drawn on every core (CT_OMP_SRC)
+    set_source_files_properties(${CT_OMP_SRC} PROPERTIES COMPILE_OPTIONS "/openmp")
     # ...loaded at the first parallel region, after main() has set OMP_WAIT_POLICY (src/field.c, issue #6): the
     # runtime reads it when the DLL loads, before main() when it is a plain import
     target_link_options(Belthasar PRIVATE /DELAYLOAD:vcomp140.dll)
     target_link_libraries(Belthasar delayimp)
-    target_compile_definitions(Belthasar PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(Belthasar PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
+  endif()
+  ct_msvc_defaults(Belthasar)
+  if(MSVC)
     if(DEFINED ENV{CT_ASAN})
       target_compile_options(Belthasar PRIVATE /fsanitize=address /Zi)
     endif()
   endif()
-  # THE F1 OPTIONS OVERLAY (src/overlay.cpp, Dear ImGui -- tools/get_imgui.ps1 puts it in third_party/imgui, git-ignored
-  # like SDL2). Without it Belthasar builds the stub and has no overlay; nothing else changes.
+  # THE F1 OPTIONS OVERLAY (src/overlay.cpp on ct_imgui, CT_IMGUI_SRC above). Without Dear ImGui Belthasar builds the
+  # stub and has no overlay; nothing else changes.
   # THE VULKAN BACKEND (src/present_vk.c): the Khronos headers only (tools/get_vulkan_headers.ps1 -> third_party/vulkan,
   # git-ignored); nothing is linked -- the driver's vulkan-1 is loaded at run time through SDL.
   set(VULKAN_INC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vulkan/include)
@@ -201,12 +237,9 @@ if(CT_SDL_INC)
     target_compile_definitions(Belthasar PRIVATE CT_HAVE_VULKAN)
     target_include_directories(Belthasar PRIVATE ${VULKAN_INC})
   endif()
-  set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
   if(EXISTS ${IMGUI_DIR}/imgui.h)
     enable_language(CXX)
-    add_library(ct_imgui STATIC ${IMGUI_DIR}/imgui.cpp ${IMGUI_DIR}/imgui_draw.cpp ${IMGUI_DIR}/imgui_tables.cpp
-                ${IMGUI_DIR}/imgui_widgets.cpp ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
-                ${IMGUI_DIR}/backends/imgui_impl_sdlrenderer2.cpp ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
+    add_library(ct_imgui STATIC ${CT_IMGUI_SRC})
     target_include_directories(ct_imgui PUBLIC ${IMGUI_DIR} ${CT_SDL_INC})
     if(EXISTS ${VULKAN_INC}/vulkan/vulkan.h)                    # ImGui's Vulkan backend, its functions loaded at run time
       target_sources(ct_imgui PRIVATE ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp)
@@ -218,7 +251,7 @@ if(CT_SDL_INC)
     target_include_directories(Belthasar PRIVATE ${IMGUI_DIR})
     target_link_libraries(Belthasar ct_imgui)
     if(MSVC)
-      set_source_files_properties(src/overlay.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")   # its Portuguese labels
+      set_source_files_properties(src/overlay.cpp PROPERTIES COMPILE_OPTIONS "/utf-8")   # read as UTF-8 (it is ASCII today)
     endif()
   else()
     target_sources(Belthasar PRIVATE src/overlay_stub.c src/launcher_ui_stub.c)
@@ -228,22 +261,13 @@ if(CT_SDL_INC)
   endif()
   # THE PLAYER'S START (src/launcher.h): the data folder, and the ROM screen that makes the game's data from their dump.
   target_sources(Belthasar PRIVATE src/launcher.c)
-  if(CT_SDL_DLL)
-    add_custom_command(TARGET Belthasar POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:Belthasar>)
-  endif()
+  ct_copy_sdl_dll(Belthasar)
   # M3-B: interactive overworld camera viewer (live map from a WRAM/VRAM dump + the byte-exact camera).
   add_executable(ct_world src/ct_world.c src/world.c src/vwf.c src/lz.c src/assets.c src/romview.c)   # lz.c: the world scripts' far call C6/E028
   target_include_directories(ct_world PRIVATE src ${CT_SDL_INC})
   target_link_libraries(ct_world ${CT_SDL_LIB})
-  if(MSVC)
-    target_compile_definitions(ct_world PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(ct_world PRIVATE /W2 /wd4244 /wd4267 /wd4018 /wd4146 /wd4334 /wd4101)
-  endif()
-  if(CT_SDL_DLL)
-    add_custom_command(TARGET ct_world POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CT_SDL_DLL} $<TARGET_FILE_DIR:ct_world>)
-  endif()
+  ct_msvc_defaults(ct_world)
+  ct_copy_sdl_dll(ct_world)
   message(STATUS "SDL2 found: building ct_viewer + Belthasar + ct_world")
 else()
   message(STATUS "SDL2 not in third_party/SDL2 (nor the system's): skipping ct_viewer/Belthasar (headless ct still builds)")
