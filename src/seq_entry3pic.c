@@ -9,9 +9,10 @@
 #include "seq_entry3pic.h"
 #include "seq_racepic.h"
 #include <stdio.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 // $7E:671F-6772 (8-bit A) -- before the script: M7A = $0100, M7B = 1 and a `B -> A` DMA of $280 bytes from $2134 / $2135
 // in turn (mode 1: the product's low and middle bytes, 00 01) fills $7E:1400; $2116 = $6140, a dummy `LDA $213A` (VMAIN 0:

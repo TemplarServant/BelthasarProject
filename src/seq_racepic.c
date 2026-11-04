@@ -9,9 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 #include "lz.h"
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 // $7E:3691 -- a packet of the overlay's table $FE:0000,X (three bytes: its address) into the destination `$0303-$0305`, through
 // C3/0557: `$0300-$0302` = the source, the output streamed through WMADD (`$0303`, bank `$0305` bit 0), `$0306` = its length.

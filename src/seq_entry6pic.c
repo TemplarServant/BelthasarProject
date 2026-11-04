@@ -10,9 +10,10 @@
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
 #include "seq_racepic.h"
 #include <stdio.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 // $7E:89ED -- the packets' destination: `$0303-$0305` = $7F:0200 (two 16-bit stores: $0304 = $7F00, then $0303 = $0200).
 static void dest89ED(uint8_t* w) { ww(w, 0x0304, 0x7F00); ww(w, 0x0303, 0x0200); }

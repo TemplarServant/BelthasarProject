@@ -20,12 +20,13 @@
 #include "objslot.h"
 #include <string.h>
 #include <stdio.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
 // The frames a song's post is still inside C3/09A4's JSL C7/0004 (`$0388` set; the NMIs run on over it: CtSeqStageSongTick).
 static int s_songHold;
 
-static unsigned rd(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rd(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void wr(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 int CtEndingStageHas(uint8_t operand) {
   unsigned e = operand & 0x1F;

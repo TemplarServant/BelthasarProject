@@ -10,9 +10,10 @@
 #include "seq_entry7pic.h"
 #include "seq_racepic.h"
 #include <stdio.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 // $7E:66B0 (D = $2100, X = the tiles): WMADD = `$0303` in the bank C3/0557 left ($7F); each tile's eight rows: two bytes read
 // to $2118 / $2119, then eight zero words -- 2bpp widened to 4bpp.

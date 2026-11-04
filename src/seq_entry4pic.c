@@ -10,9 +10,10 @@
 #include "seq_entry4pic.h"
 #include "seq_racepic.h"
 #include <stdio.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 // $7E:53BB-54B0 (8-bit A) -- the setup before the script.
 void CtEntry4PicSetupA(CtSeqStagePic* sp, uint8_t* w, const CtRaceIo* io) {

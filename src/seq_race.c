@@ -17,11 +17,12 @@
 #include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
 #include "seq_racepic.h"   // the picture, when the host draws it (io->pic)
 #include "seq_entry4.h"    // CtSeqRng02DD8: C3/02DD, the curtain's seed
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
 typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
 
-static unsigned rd(const R* r, unsigned a) { return (unsigned)(r->w[a & 0x1FFFF] | (r->w[(a + 1) & 0x1FFFF] << 8)); }
-static void wr(R* r, unsigned a, unsigned v) { r->w[a & 0x1FFFF] = (uint8_t)v; r->w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rd(const R* r, unsigned a) { return CT_SEQ_W16(r->w, a); }
+static void wr(R* r, unsigned a, unsigned v) { CT_SEQ_W16_PUT(r->w, a, v); }
 static unsigned adc(R* r, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) + (v & 0xFFFF) + (unsigned)r->c; r->c = s > 0xFFFF; return s & 0xFFFF; }
 static unsigned sbc(R* r, unsigned a, unsigned v) { int s = (int)(a & 0xFFFF) - (int)(v & 0xFFFF) - (1 - r->c); r->c = s >= 0; return (unsigned)s & 0xFFFF; }
 static int cmpn(R* r, unsigned a, unsigned v) { r->c = (a & 0xFFFF) >= (v & 0xFFFF); return (((a - v) & 0xFFFF) & 0x8000) != 0; }   // -> N

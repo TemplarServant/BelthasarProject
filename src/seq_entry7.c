@@ -13,9 +13,10 @@
 #include "seq_racepic.h"
 #include "objslot.h"
 #include <string.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rd(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void wr(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rd(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void wr(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 
 int CtEntry7StageHas(uint8_t operand) { return (operand & 0x1F) == 7 && !(operand & 0x40); }
 

@@ -13,9 +13,10 @@
 #include "seq_entry4.h"
 #include <stdio.h>
 #include <string.h>
+#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
-static unsigned rw(const uint8_t* w, unsigned a) { return (unsigned)(w[a & 0x1FFFF] | (w[(a + 1) & 0x1FFFF] << 8)); }
-static void ww(uint8_t* w, unsigned a, unsigned v) { w[a & 0x1FFFF] = (uint8_t)v; w[(a + 1) & 0x1FFFF] = (uint8_t)(v >> 8); }
+static unsigned rw(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
+static void ww(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
 static void mvn7F(uint8_t* w, unsigned dst, unsigned src, unsigned n) {   // MVN $7F,$7F: X / Y wrap in the bank
   for (unsigned i = 0; i < n; i++) w[0x10000 | ((dst + i) & 0xFFFF)] = w[0x10000 | ((src + i) & 0xFFFF)];
 }
