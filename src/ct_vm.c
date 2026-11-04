@@ -489,8 +489,8 @@ int CtWramDoorListApply(CtWram* w) {
 // C0/0D4C: the five door handlers, their $7E:3000 half. `0D4C LDX $5B / LDA $7E3000,X` dispatches on the
 // metatile's value and each handler INCs a fixed block (H below). Every INC is 8-bit except the E6 handler's
 // second cell (0D7D-0D8E), a 16-bit increment of the word at (r-1,c) that carries into (r-1,c+1).
-// Returns 1 when a handler ran, 0 for any other id (C0/0D75 BRL ->16DC). The render's copy of the map is bumped
-// by CtFieldSceneDoorOpen (scene.c); this is the WRAM copy the ROM's readers see.
+// Returns 1 when a handler ran, 0 for any other id (C0/0D75 BRL ->16DC). This bumps the WRAM copy the ROM's readers
+// see; the render's copy takes the bumped cells from it (field.c, CtFieldSceneMapFromWramRect after the call).
 int CtWramDoorOpen(CtWram* w, int tileIndex) {
   Mem* m = (Mem*)w;
   if (!m) return 0;

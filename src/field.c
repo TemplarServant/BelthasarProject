@@ -3553,7 +3553,7 @@ static void drawChoiceBox(uint8_t* fb, const uint8_t* font, const char* s, int l
     // The cursor is the ROM's pointing hand, drawn into the window (the oracle's OAM at the option page holds
     // only the party sprites, so it is no OBJ), and not the menu's hand (src/data/menu_itemdetail.h, OBJ tile
     // 0x20). src/data/dlg_cursor.h is that hand, lifted from an oracle frame by subtracting the window texture
-    // (tools/gen_dlgcursor.py). Its cell sits at window x 16, one glyph cell left of the six-space option indent
+    // (tools/gen/dlg_cursor.py). Its cell sits at window x 16, one glyph cell left of the six-space option indent
     // (x 32), on the option line's own glyph row.
     int cy = y0 + (optFirst + sel) * TB_LINEH;
     for (int r = 0; r < DLGCURSOR_H; r++) {

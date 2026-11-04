@@ -464,7 +464,7 @@ void CtCollisionCommit(uint8_t* ram) {
   CtCollisionShapeDecode(ram);                                      // 9AD3
   if (CtCollisionZGate(ram)) { wr16(d, 0x2E, 0); wr16(d, 0x30, 0); return; }  // 9C96 SOLID -> STZ $2E/$30
   // C0/9D35 door-on-step latch: the tile ahead ($1D71/$1D73, masked by $1D1E/$1D1F) with property byte 1
-  // bit 4 set is stored in $015B and raises $0117 bit 4. C0/0D3E consumes it (CtFieldSceneDoorOpen).
+  // bit 4 set is stored in $015B and raises $0117 bit 4. C0/0D3E consumes it (CtWramDoorOpen).
   {
     uint8_t sx = d[0x67], sy = d[0x69];                  // the fetch hook reads the plane at $67/$69;
     d[0x67] = d[0x71]; d[0x69] = d[0x73];                //   point it at the DOOR tile, read, restore
