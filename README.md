@@ -95,7 +95,7 @@ It is **not yet verified playable from start to finish**.
 ### Not done
 
 - **No check needs a private state any more** (since 2026-10-23). Everything the build needs is made from your ROM, and
-  all 945 regression checks run in a fresh clone from your ROM, the recipes and the public battery saves. See
+  every regression check runs in a fresh clone from your ROM, the recipes and the public battery saves. See
   [docs/ROADMAP.md](docs/ROADMAP.md#1-the-public-release-and-what-it-left-open).
 - **The vendored core stays as the reference.** `Belthasar` runs no emulated hardware: the sound driver, the `$C3`
   sequence stages, the gate warp, the window wipe, the overworld window and the HDMA table builder are native C. The
@@ -104,7 +104,7 @@ It is **not yet verified playable from start to finish**.
 - **Open divergences.** A list of known differences from the cartridge (a few frames of timing in some battle
   exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine).
 - **The playthrough is graded only partway.** `tools/playthrough.py` grades one route against the cartridge leg by
-  leg, from New Game to the prison after the trial (leg 32); the rest of the game is not on it yet.
+  leg from New Game onward; how far it reaches is kept in [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
 
 ## Quick start
 
@@ -117,6 +117,8 @@ For experimental macOS support, see the [local app build guide](docs/MACOS.md).
 - **Windows:** Visual Studio 2022 Build Tools (MSVC, with the bundled CMake and Ninja) and Python 3.
 - **Linux:** gcc or clang, CMake, `libsdl2-dev`, Python 3. The Linux build is a compile-parity build, not the
   reference platform (see [docs/INFRA.md](docs/INFRA.md#build)).
+- **Python packages:** `python -m pip install -r requirements.txt` (numpy, which part of the regression suite needs).
+  `requirements-optional.txt` (Pillow) serves a few tools no check runs, such as the map editor.
 - **Android (experimental):** the Android SDK and NDK, built from Windows with Gradle, with on-screen touch controls;
   see the [Android guide](docs/ANDROID.md).
 - Your own ROM, as described above.
@@ -228,7 +230,8 @@ watch any RAM the cartridge has (`--peek`, `--monitor`, `--read`). Timing is gra
 zelda3's model: lag frames, beam-counter races and CPU cycle counts are removed on both sides, so the comparison is
 deterministic.
 
-`python tools/regress.py` runs the regression suite: 945 checks (612 in the `--quick` tier). A check passes when its
+`python tools/regress.py` runs the regression suite (`--quick` runs its pre-commit tier; `--summary` prints how many
+checks each tier holds). A check passes when its
 expected output lines appear, never because of an exit code, and a check whose inputs are missing is reported as
 SKIP. Most checks also carry mutations: deliberate defects that the check must catch. A check that still passes with
 its mutation applied is treated as a blind spot, not as coverage.
@@ -249,14 +252,14 @@ for the suite.
 | [docs/TESTING.md](docs/TESTING.md) | The suite in detail: tiers, pins, per-check notes |
 | [docs/MUTATION_AUDIT.md](docs/MUTATION_AUDIT.md) | Which checks are proven to grade something, and what is still open |
 | [docs/INFRA.md](docs/INFRA.md) | Build, repository layout, the oracle workflow, state formats |
-| [docs/DEBUG_SURFACE.md](docs/DEBUG_SURFACE.md) | Every `ct.exe` mode and every debug environment variable |
+| [docs/DEBUG_SURFACE.md](docs/DEBUG_SURFACE.md) | The `ct.exe` and `Belthasar` debug modes and environment variables (`tools/doc_surface_check.py` lists any it misses) |
 | [docs/RELEASE.md](docs/RELEASE.md) | The player's release package: how it is built and scanned, the setup screen |
 | [docs/ANDROID.md](docs/ANDROID.md) | The Android build (experimental) |
 | [docs/MACOS.md](docs/MACOS.md) | The macOS build and app bundle (experimental) |
 | [docs/SHADOW_PROPOSAL.md](docs/SHADOW_PROPOSAL.md) | Shadow mode: routine-level validation against the oracle |
 | [docs/CAPTURES_WANTED.md](docs/CAPTURES_WANTED.md) | Historical (2026-08): the snes9x captures once requested, now replaced by recipes |
-| [tools/README.md](tools/README.md) | The tooling index (`dis.py`, `ct.py`, `ctlib`, setup, fixtures, release) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules and workflow for contributors |
+| [tools/README.md](tools/README.md) | The tooling index: where to start, the families of tools, `ctlib`, the conventions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Where a new contributor starts, the ground rules and the workflow |
 | [CLAUDE.md](CLAUDE.md) | The project mandate as given to the coding agents, with the owner's dated decisions |
 | [disasm/notes/](disasm/notes/) | About 280 reverse-engineering dossiers, one per mechanism |
 | [.claude/skills/](.claude/skills/) | Step-by-step playbooks: derive, implement, pin, capture, triage |

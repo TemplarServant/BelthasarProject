@@ -7,8 +7,11 @@ behaviour is derived and checked see [METHODOLOGY.md](METHODOLOGY.md).
 ## The programs
 
 `CMakeLists.txt` builds these executables into `build/`. Two more are not listed: `ct_oracle.exe`, built with `ct.exe`, is
-`src/main.c` with only the oracle modes (`--peek`, `--monitor`, `--hdma`, `--fb`), whose bytes key the suite's oracle cache.
-The optional `ct_tables_proof.exe` is built only when named (`python tools/gen/tables_proof.py`).
+`src/main.c` with only the oracle modes (`--peek`, `--monitor`, `--hdma`, `--fb`, and `--serve`, the oracle kept in one
+process for `tools/ctlib/oracle_session.py`); its bytes key the suite's oracle cache, which caches the first four. The
+optional `ct_tables_proof.exe` (`tests/tables_proof.c`) is built only when named (`python tools/gen/tables_proof.py`).
+The Android app builds the same sources as `Belthasar` into `libmain.so` (`android/CMakeLists.cmake`,
+[ANDROID.md](ANDROID.md)), and a macOS build adds the `src/macos_*.m` files ([MACOS.md](MACOS.md)).
 
 | Program | Sources | What it is |
 |---|---|---|
@@ -28,7 +31,7 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
    +--> assets/extract_assets.py --------------------> ct_assets.dat ----------+
    |       (lz.py, gfx.py, maps.py, sprites.py, text.py, script.py)            |
    |                                                                           v
-   +--> oracle (ct.exe) + recipes --> oracle states --> tools/gen_*.py --> src/data/*.h --> compiled
+   +--> oracle (ct.exe) + recipes --> oracle states --> tools/gen/*.py --> src/data/*.h --> compiled
                                                       \-> tools/gen/xlat.py --> src/xlat/*.c   into the
                                                                                (ct.exe only)   engine
 ```
@@ -41,7 +44,9 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
   rendered from the ROM.
 - **`src/data/*.h`** (48 headers) are tables compiled into the engine: battle animation records and sheets, menu
   chrome, the title sequence's data, the overworld era placard, and so on. Each comes from a generator in
-  `tools/`. They are ROM-derived and are generated locally (see [ROM.md](ROM.md)).
+  `tools/gen/`, run by `tools/setup.py` from the manifests `tools/gen/manifest*.json`. They are ROM-derived and are
+  generated locally (see [ROM.md](ROM.md)). The engine includes each one through `src/tables/` (tracked, no data; see
+  the source layout below), so the data-free `Belthasar` can load them from `ct_tables.dat` instead.
 - **`src/xlat/*.c`** are ROM programs translated into C, compiled into `ct.exe` only as references for the native
   stages (see [Translated stages](#translated-stages)).
 - **Battery saves** go to `ct_sram.srm`, in the cartridge's own 8 KB layout and checksum, so a save made by the
@@ -49,9 +54,10 @@ your ROM (verified: src/rom_verify.c, tools/ctlib/rom.py)
 
 ## Source layout
 
-The C sources in `src/`, one line each (a family of files shares a row). The headers mostly match the `.c` names; two stand alone:
-`ct_vbeam.h` (the virtual beam's constants, shared by the oracle and the engine) and `ct_owobj.h` (the overworld
-ambient-object block layout).
+The C sources in `src/`, one line each (a family of files shares a row). The headers mostly match the `.c` names; a few stand
+alone: `ct_vbeam.h` (the virtual beam's constants, shared by the oracle and the engine), `ct_owobj.h` (the overworld
+ambient-object block layout), `seq_wram.h` (the `$C3` stages' 16-bit WRAM access, one body for every stage file) and
+`macos.h` (the macOS integration's interface).
 
 | File | Role |
 |---|---|
@@ -75,7 +81,7 @@ ambient-object block layout).
 | `field.c` | `Belthasar.exe`: the host. The frame loop, the field compositor, location loads, the battle and menu hand-offs, the overworld bridge, the sound host, the widescreen and frames-between composition, and the headless test modes. |
 | `field_cost.c` | What the field's reload after a menu costs, priced from the ROM's control flow (`C0/01A5`, `C0/286C`). |
 | `world.c` | The overworld: camera and scroll engine (bank `$C2`), mover, tilemap streaming, the ambient-object VM, party followers. |
-| `battle.c` | The battle module: boot and staging, the ATB and menu pass, the action pipeline, techs and items, the enemy AI, status, effects, rendering, rewards, the exit back to the field. |
+| `battle.c` | The battle module: boot and staging, the ATB and menu pass, the action pipeline, techs and items, the enemy AI, status, effects, rewards, the exit back to the field. The battle's picture (combatants, HUD strip, results box, popups) is drawn in `field.c`. |
 | `menu.c` | The X-menu screens, shops and the load screen; the save write and load (`FF/FA..`). |
 | `menu_cost.c` | What the menu's open costs, priced instruction by instruction. |
 | `title_intro.c` | The title sequence as the overlay's own machine (the `$C3` script interpreter and its NMI hooks), not a recording. |
@@ -89,11 +95,12 @@ ambient-object block layout).
 | `wipe.c` | The window wipe `C3/01E4` with its seed `C3/02DD`, and the overworld's window object `C6/E241` / `E27E`, native. |
 | `hdma_table.c` | The field's HDMA table builder `FD/C2C1`, native. |
 | `vwf.c` | Bank `$C2`'s proportional-text engine (`C2/57DF`, `C2/5823`). |
-| `seq_xlat.c`, `seq_ppu.c` | `ct.exe`'s references: a `src/xlat/*.c` program run over the vendored 65816, DMA and PPU (`--xlatcmp`), and a stage's picture on the vendored PPU (`--seqppucmp`). |
+| `seq_xlat.c`, `seq_ppu.c` | `ct.exe`'s references: a `src/xlat/*.c` program run over the vendored 65816, DMA and PPU (`--xlatcmp`), and a stage's picture on the vendored PPU (`--seqppucmp`). `CMakeLists.txt`'s `CT_FIELD_SRC` compiles both into `Belthasar` too, where nothing calls them. |
 | `romview.c`, `rom_census.c` | ROM-free reads: each ROM read served from `ct_assets.dat`'s tables, and `CT_ROM_CENSUS`, which records which code reads which ROM page. |
 | `datapack.c` | The data-free build's loader of `ct_tables.dat` ([ROM.md](ROM.md#the-data-free-belthasar)). |
 | `launcher.c`, `launcher_ui.cpp`, `launcher_ui_stub.c` | The player's first start: the ROM screen that runs the setup (Windows and Linux). |
-| `macos_paths.m`, `android.c`, `touchpad.c` | The macOS bundle's data folder, the Android host, the on-screen gamepad. |
+| `macos_paths.m`, `macos_window.m`, `macos_menu.m` | macOS only (`macos.h`): the bundle's data folder and writable Application Support paths, the window's aspect constraint, the app menu's Settings item (it opens the F1 overlay). |
+| `android.c`, `touchpad.c` | The Android host, the on-screen gamepad. |
 | `ct_shadow.c` | `ct.exe --shadow`: routine-level validation against the oracle ([SHADOW_PROPOSAL.md](SHADOW_PROPOSAL.md)). |
 | `settings.c` | `ct_settings.ini`: the player's options. Headless runs never read it. |
 | `overlay.cpp` | The F1 options overlay (Dear ImGui) over the paused game. |
@@ -102,18 +109,32 @@ ambient-object block layout).
 | `present_vk.c` | The Vulkan backend (headers only; the driver's loader is reached through SDL at run time). |
 | `motion.c` | Mods: what each pixel of the picture moves with (its owner), and the redraw at a higher internal scale or between two frames. |
 | `fieldnative.c` | Mods: the field's frames between drawn natively from the map's layers and the sprites' own pixels. |
+| `widext.c` | Mods: the loader of `ct_wide.dat`, the Steam release's widescreen margins, read from the player's own copy by `tools/steam_wide.py` ([WIDESCREEN.md](WIDESCREEN.md)). |
+| `scene_art.c`, `art/entry3_sides.h` | Mods: the scene adjustments' new art for the special scenes; `art/entry3_sides.h` is generated by `tools/scene_art_entry3.py` and holds no ROM pixel ([WIDESCREEN.md](WIDESCREEN.md)). |
 | `ct_world.c` | `ct_world.exe`. |
 | `viewer.c` | `ct_viewer.exe`. |
+| `tables/` | Generated, no data, tracked (`python tools/gen/pack_tables.py headers`, from the shapes): the header the engine includes for each `src/data/*.h` table (the real header in a normal build, its declarations in a data-free one), the data-free storage `tables_storage.c` with its layout asserts, and `tables_real.c` for `ct_tables_proof` ([ROM.md](ROM.md#the-data-free-belthasar)). |
+| `data/`, `xlat/` | Generated from your ROM by `tools/setup.py`, never committed: the tables above and the translated stages ([Translated stages](#translated-stages)). |
 
 Other top-level directories:
 
 | Path | Contents |
 |---|---|
 | `snes/` | Vendored LakeSnes (MIT): the oracle's 65816, PPU, DMA, SPC700 and DSP, with the timing rule's hooks added. Every check's ground truth runs on it, so change it with care. A change to its state layout invalidates every `.state` file. |
-| `assets/` | The Python asset pipeline (no dependencies outside the standard library). |
-| `tools/` | Build, the regression suite, the disassembler, the oracle wrapper `ct.py` + `ctlib`, generators, and about 130 `*_cmp.py` comparison tools that grade one behaviour against the oracle. Index: [tools/README.md](../tools/README.md). |
+| `assets/` | The Python asset pipeline, ROM -> `ct_assets.dat` (`extract_assets.py` and its modules; standard library only). `bridge.py` is a debugging bridge, not part of the pipeline. |
+| `tools/` | Build, the regression suite, the disassembler, the oracle wrapper `ct.py` + `ctlib`, the generators (`gen/`), the recipes and fixtures, and about 130 `*_cmp.py` comparison tools that grade one behaviour against the oracle. Index: [tools/README.md](../tools/README.md). Python packages: [requirements.txt](../requirements.txt). |
+| `tests/` | Tests outside the suite: `test_host_tools.py` (the build driver and the macOS packager, ROM-free; the CI runs `python -m unittest discover -s tests`), `tables_proof.c` (the `ct_tables_proof` target) and `spc700_lengths.c` (`tools/spc700dis.py`'s opcode lengths against `snes/spc.c`). |
 | `disasm/notes/` | The reverse-engineering dossiers. |
 | `docs/` | This documentation. |
+| `android/` | The Android app's Gradle project and `CMakeLists.cmake` ([ANDROID.md](ANDROID.md)). |
+| `platform/macos/` | The macOS bundle's `Info.plist` ([MACOS.md](MACOS.md)). |
+| `.github/` | The CI (`workflows/ci.yml`: the ROM-free build and suite on Linux, Windows and macOS; [TESTING.md](TESTING.md#the-github-ci-githubworkflowsciyml)), the release workflow, the issue and pull request templates. |
+| `.claude/` | The playbooks (`skills/`), the attract audit agent (`agents/`), the no-invention mandate and the cloud session hook, for the coding agents and for humans ([CONTRIBUTING.md](../CONTRIBUTING.md#workflow)). |
+
+Not tracked, made on your machine: `build/` (the CMake output; `CT_BUILD_DIR` names another tree), `third_party/` (SDL2,
+Dear ImGui and the Vulkan headers, fetched by `tools/get_*`), `saves/` (the suite's states, from `tools/fetch_saves.py`
+and `tools/fixtures.py make all`), and at the root the ROM, `ct_assets.dat`, `ct_tables.dat` and the scratch that oracle
+work leaves there (all ignored by `.gitignore`).
 
 ## The field
 
@@ -124,12 +145,16 @@ The field is the bulk of the game and of the engine.
   through the jump table at `C0/5D6E`, with the direct page at `$0100`. The engine reproduces the queue, the
   visits and the yields, and keeps the scripts' state in the same WRAM addresses the ROM uses, so the oracle's RAM
   and the engine's can be compared byte for byte.
-- **Two runners.** `ct_vm.c`'s `step()` is the VM the game runs. `move.c`'s `CtFieldRunnerOne` is a second
-  implementation that `--sweepops` grades against micro-execution of each ROM handler (211 opcodes, 12,660 of
-  12,660 cases byte-exact over the whole 128 KB of work RAM). Op bodies are being moved into shared families
-  called by both (`vmSharedOp`), so that what the sweep grades is what the game runs
-  ([disasm/notes/vm_two_implementations.md](../disasm/notes/vm_two_implementations.md),
-  [disasm/notes/live_vm_op_gaps.md](../disasm/notes/live_vm_op_gaps.md)).
+- **Who runs the ops.** The live VM in `ct_vm.c` enters scripts three ways: the init pass `runFunc` (`C0/58ED`, each
+  object's init on a location load), the event runner `step()` (`C0/5A46`, with `applyEffect()` and `moveOp()` for
+  the effect and movement ops), and `CtSceneRunObj0Slot1` (`C0/595C`, obj0's slot-1 function after a load, a menu
+  exit or a battle return). Many op bodies are shared families in `move.c` (`CtVm*Family`), which the live VM calls
+  through `vmSharedOp` and which `move.c`'s graded runner `CtFieldRunnerOne` calls too. `--sweepops` grades
+  `CtFieldRunnerOne` against micro-execution of each ROM handler (211 opcodes, 12,660 of 12,660 cases byte-exact over
+  the whole 128 KB of work RAM), and `ct.exe --shadow` grades it against the oracle's own calls. A fix to an op in a
+  shared family reaches both; an op whose live arm is still private to `ct_vm.c` has to be changed there and is not
+  graded by the sweep ([disasm/notes/live_vm_op_gaps.md](../disasm/notes/live_vm_op_gaps.md); the history:
+  [disasm/notes/vm_two_implementations.md](../disasm/notes/vm_two_implementations.md)).
 - **Location loads** follow the ROM's own sequence: the default fill of every object (`C0/571A`), the init pass,
   the four WRAM clears (all DMA), the map and collision planes. Work RAM is process-lifetime, as on the console
   ([disasm/notes/wram_load_census.md](../disasm/notes/wram_load_census.md)).

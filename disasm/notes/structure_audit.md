@@ -1,5 +1,9 @@
 # Structural audit — modularising the monoliths (BEHAVIOR-PRESERVING ONLY)
 
+> **Historical.** This audit measured an older tree (`src/field.c` at 7,359 lines, `src/main.c` at 5,154), so its line
+> ranges, file sizes and split plan no longer match the sources; sec. 1.4's plan for `main.c` (around a
+> `src/harness_cli.c` that does not exist) is superseded. The current layout is [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#source-layout).
+
 **Scope.** This is a *structure* front, not an RE front. Nothing here proposes a behavioral change:
 every move below is "cut a contiguous, self-contained group of definitions from A into new file B,
 add header C, add B to the target's source list". No constant, no gate, no RAM read changes.

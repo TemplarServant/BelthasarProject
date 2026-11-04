@@ -10,6 +10,7 @@ is [TESTING.md](TESTING.md). How a behaviour gets a check in the first place is 
 python tools/regress.py --quick          # the quick tier, before every commit
 python tools/regress.py                  # everything
 python tools/regress.py --only NAME ...  # some checks
+python tools/regress.py --summary        # the counts below, from the JSON (nothing runs)
 python tools/regress.py --failed         # what failed last time
 python tools/regress.py --check-inputs   # are the inputs present, with the right hashes?
 python tools/preflight.py [--full]       # build, then inputs, then the suite; writes build/preflight.json
@@ -19,19 +20,22 @@ Every check is data in [`tools/regress_checks.json`](../tools/regress_checks.jso
 environment, the input files it needs, the lines its output must contain, a tier, a timeout, notes, and usually
 mutations. `tools/regress.py` has no per-check logic.
 
-### Current numbers (2026-10-22)
+### Current numbers
 
-| | |
+This is the one place the documentation keeps the suite's counts. They come from
+`python tools/regress.py --summary`, which reads `tools/regress_checks.json`; rerun it for today's numbers.
+
+| As of 2026-11-03 | |
 |---|---|
-| Checks | **945** (2026-10-24: every one PASS with the ROM; 9 removed that day, docs/MUTATION_AUDIT.md) |
+| Checks | **950** |
 | Quick tier | 612 (the pre-commit tier, chosen by measured runtime) |
-| Full tier | 312 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
+| Full tier | 317 (long oracle drives, the 512 x 3 asset verification, whole-demo comparisons) |
 | Untiered | 21 (run only in the full run) |
-| Excluded candidates | 3, each with the reason it has no stable signature |
-| Checks with mutations | 927, carrying 2,198 mutations in all; none STALE (2026-10-24, [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |
+| Excluded candidates | 12, each with the reason it has no stable signature |
+| Checks with mutations | 931, carrying 2,205 mutations in all (the audit: [MUTATION_AUDIT.md](MUTATION_AUDIT.md)) |
 | Checks that must run alone | 60 (`exclusive`: one at a time in declared order, in one worker beside the parallel batch) |
 
-By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest single check sets the floor.
+By default the suite runs max(4, min(12, CPUs - 2)) checks in parallel. The slowest single check sets the floor.
 
 ## How a check passes
 
@@ -69,8 +73,8 @@ By default the suite runs min(12, CPUs - 2) checks in parallel. The slowest sing
 
 | Class | What it needs | Checks (2026-10-22) |
 |---|---|---|
-| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | 953, together with B1 and B3 |
-| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 233 fixture entries in 10 domain files; 228 of the 239 state files the checks read. `make all` builds the recipe chains side by side (`--jobs`, default the CPU count): 16 min in a clean clone, the longest chain (the playthrough's legs) the floor; a recipe is locked while it builds, so two checks asking for it at once build it once. | (counted in the 953) |
+| **A: ROM only** | The verified ROM, `ct_assets.dat`, the built programs, and the files `tools/setup.py` generates. These boot from power-on, sweep ROM routines, render scenes, or drive the engine headless. | all of them, together with B1 and B3 |
+| **B1: recipe fixtures** | An oracle state at a game moment (a fight, a cutscene, a menu with a given party), made on your machine by `python tools/fixtures.py make all` from a recipe (`tools/fixtures/<domain>.json` -> `tools/recipes/`). 233 fixture entries in 10 domain files; 228 of the 239 state files the checks read. `make all` builds the recipe chains side by side (`--jobs`, default the CPU count): 16 min in a clean clone, the longest chain (the playthrough's legs) the floor; a recipe is locked while it builds, so two checks asking for it at once build it once. | (counted with A) |
 | **B2: private captures** | A state captured from the owner's own playthrough that no recipe reproduces yet, listed in `tools/private_captures.json`: empty since 2026-10-23 (the last, `saves/field_re/pre_scene_19f.{state,lakewram}`, is made by the recipe `lg_ocean_palace_19f`); a check on one would SKIP with its name in a fresh clone. The list only shrinks: `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`) fails on a check reading a state file from none of A / B1 / B2 / B3. | 0 |
 | **B3: public battery saves** | Other players' 8 KB `.srm` files (zdiemer's set and Jackie's Game Saves: 78 files), downloaded by pinned URL and verified by SHA-256 by `python tools/fetch_saves.py` from `tools/third_party_saves.json`; Jackie's loaded states are recipes (`tools/recipes/jackie_*.json`). | (with B1) |
 

@@ -4,6 +4,32 @@ Thank you for helping. BelthasarProject has a few firm rules, because a port tha
 at all. Read this page before your first change. [docs/METHODOLOGY.md](docs/METHODOLOGY.md) explains the reasons
 behind the rules.
 
+## Start here
+
+A path through the project for a first contribution, in this order:
+
+1. **The project.** [README.md](README.md) (what it is, the status, the controls), then [docs/ROM.md](docs/ROM.md)
+   (the dump the programs accept, and what is never distributed).
+2. **Set up.** `python -m pip install -r requirements.txt`, then `python tools/setup.py --rom <your dump>`
+   ([README.md](README.md#2-set-up-from-your-rom)), then `python tools/fetch_saves.py` and
+   `python tools/fixtures.py make all` for the suite's states.
+3. **The method.** The ground rules below, then [docs/METHODOLOGY.md](docs/METHODOLOGY.md) sec. 1-3 (the oracle,
+   comparing against it, the zero-invention mandate) and sec. 5 (from a report to a pinned check).
+4. **The code.** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): "The programs" and "Source layout".
+5. **A small routine with its dossier.** Read one short port beside the ROM routine and the notes it cites:
+   `src/input.c` (the joypad read `C2/8500`, checked by `ct.exe --checkjoy`), `src/player.c` (the controller
+   `C0/881E`) and `src/collision.c` (both described in
+   [disasm/notes/collision.md](disasm/notes/collision.md)), or `src/lz.c` (the LZ decompressor; its cost model is
+   [disasm/notes/field_load_cost.md](disasm/notes/field_load_cost.md) sec. 2). Then the event VM: `src/ct_vm.c`'s
+   `step()` with [disasm/notes/events.md](disasm/notes/events.md) and
+   [disasm/notes/field_tick.md](disasm/notes/field_tick.md).
+6. **The suite.** `python tools/regress.py --quick`, then `python tools/regress.py --mutate <a check>` on one check
+   you read, to see what it means for a check to grade something ([docs/TESTING_OVERVIEW.md](docs/TESTING_OVERVIEW.md)).
+7. **Pick an item.** A small (S) item in [docs/ROADMAP.md](docs/ROADMAP.md), then follow the [Workflow](#workflow).
+
+The tools are indexed in [tools/README.md](tools/README.md), the debug modes and environment variables in
+[docs/DEBUG_SURFACE.md](docs/DEBUG_SURFACE.md).
+
 ## Ground rules
 
 ### 1. Never commit anything from the game
@@ -80,9 +106,10 @@ run the full suite. Any cached oracle output, including your own tools' caches, 
 
 ## Code style
 
-- **Match the surrounding code.** C11 in `src/`, Python 3 (standard library only) in `tools/` and `assets/`. Follow
-  the indentation, naming (`CtSomething` for engine entry points, `g_name` for globals) and line length of the file
-  you are in.
+- **Match the surrounding code.** C11 in `src/`; Python 3 in `tools/` and `assets/`, with the standard library plus
+  numpy ([requirements.txt](requirements.txt)). Keep a new tool standard-library only where you can, and add any new
+  package to `requirements.txt` (or to `requirements-optional.txt` if no check needs it). Follow the indentation,
+  naming (`CtSomething` for engine entry points, `g_name` for globals) and line length of the file you are in.
 - **Cite the ROM in comments.** A block that ports a routine names it in bank/address form (`C0/5A46`, `CD/0340`)
   and, where one exists, the dossier (`disasm/notes/field_tick.md`). State what RAM it reads and writes.
 - **Keep comments short and useful.** See [Comments](#comments) below.

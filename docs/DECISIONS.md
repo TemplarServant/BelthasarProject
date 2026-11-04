@@ -31,6 +31,25 @@ The binding text of the rules is in [CLAUDE.md](../CLAUDE.md). The timing model 
 
 **Where:** [WIDESCREEN.md](WIDESCREEN.md); ROADMAP X4-X11.
 
+## 2026-10-22: Nothing may depend on one machine only
+
+**Decision (owner).** "Nothing may depend on one machine only." Every state a check reads, and every input the build
+needs, is made on any machine from the player's own ROM: by a recipe that drives the oracle from power-on
+(`tools/fixtures/`, `tools/recipes/`), or downloaded from a public source and verified by SHA-256
+(`tools/third_party_saves.json`, `python tools/fetch_saves.py`). A capture that exists only on the owner's machine is
+not an input.
+
+**Why.** A check that reads a local capture SKIPs in every other clone, a cloud session included, so it tests nothing
+there, and the capture cannot be published.
+
+**Consequences.** On 2026-10-22 the five largest families of private captures became recipes (the cathedral's party,
+the attract's first cut, the rest family and the late game, GATO's fight); the last capture followed on 2026-10-23, so
+`tools/private_captures.json` is empty. `tools/input_provenance.py` (the check `inputs-come-from-recipes-or-sources`)
+fails on a check that reads a state from none of those sources, and the list of private captures only shrinks.
+
+**Where:** [CLAUDE.md](../CLAUDE.md) (Infrastructure), [CONTRIBUTING.md](../CONTRIBUTING.md#workflow) step 6,
+[TESTING_OVERVIEW.md](TESTING_OVERVIEW.md#where-a-checks-state-comes-from).
+
 ## 2026-10-21: The attract vehicle plays the power-on
 
 **Decision.** The suite's attract vehicle, a cold `Belthasar --scene 433` with no seed, had been recorded as the owner's

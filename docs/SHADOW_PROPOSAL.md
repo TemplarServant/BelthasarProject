@@ -1,5 +1,8 @@
 # Shadow mode: routine-level validation against the oracle (proposal)
 
+> The status and the counts on this page are as of 2026-10-12; the suite's current numbers are in
+> [TESTING_OVERVIEW.md](TESTING_OVERVIEW.md#current-numbers).
+
 Status (2026-10-12): **S0 done; S1 done but for the menus; S2 under way** -- the harness, the `--shadow` mode,
 C1/AF22, C0/ACFD, C1/DC64, the 211 field-script opcode handlers and the battle AI (walk, 41 conditions, commit); the
 routes from a public battery save (the Magus fight; the X-menu's Item and Equip screens) and the inventory routines

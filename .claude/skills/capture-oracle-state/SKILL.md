@@ -1,6 +1,6 @@
 ---
 name: capture-oracle-state
-description: Turn a snes9x savestate (from the user's emulator, e.g. on the Desktop "aux crono decompile" folder) into a runnable LakeSnes oracle state, or capture new mid-scenario oracle states/dumps. Use when the user provides a .state repro, or when RE work needs a state at a specific moment.
+description: Turn a snes9x savestate (from your emulator) into a runnable LakeSnes oracle state, or capture new mid-scenario oracle states/dumps. Use when the user provides a .state repro, or when RE work needs a state at a specific moment.
 ---
 
 # capture-oracle-state — s9x → lake, and scenario captures

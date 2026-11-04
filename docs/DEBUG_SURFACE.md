@@ -3,6 +3,9 @@
 > Maintained by hand. It began as the output of a harness/engine audit (src/main.c + the
 > engine modules; the audit's maps are not in the repo). Verify an entry against the source
 > before relying on it or editing it.
+>
+> It is not complete by construction: `python tools/doc_surface_check.py` lists the flags and environment variables
+> the sources read that no document names, and sec. 4 holds the rows added from it.
 
 ## 1. `ct.exe` CLI modes
 
@@ -523,7 +526,7 @@ Carried verbatim-in-substance from the harness audit (`fragilities`):
 - Mode dispatch is a fixed first-match if-chain (portcheck > bootcheck > read > monitor > followscene > followvm > followtest > teleport > lz > cgram > fb > vram > peek > ow* > savestate > loadstate > ... > scene > trace > default M0); combining mode flags silently runs only the first one.
 - Savestate on disk: new writes are **CTLS** (magic + version + length + CRC-32 over the raw `snes_handleState` payload — see `src/ct_lake_state.c` / `docs/INFRA.md`). Legacy raw streams still load (first-11-bools sniff). Truncated/CRC-bad CTLS and non-Lake files hard-FAIL instead of loading as silent zeros. Layout changes inside the payload still require re-capture (CRC only detects bit-rot / truncation, not a new field order).
 - All ROM-boot validators (check*/port*/watch*/trace*/playerframe etc.) depend on ctDriveScript — a hardcoded ~90s timed input script (CT_PLAY_SCRIPT + a 22-round A-mash) that must land in **Crono's bedroom (loc $0100 == 0x002)**. On failure it prints `SETUP FAIL: ctDriveScript landed loc=…` and the caller exits 4. DRIVE_CAP truncates the script and **skips** the landing assert (debug only).
-- State-based validators are pinned to SPECIFIC savestates and hardcoded walk scripts: --checkowentry/--checkowreturn assume the Truce overworld/market states and exact waypoint frame counts; --checkfieldcam walks a fixed button script and hard-fails unless it lands in loc 0x00C; A 'FAIL/mismatch' on the wrong state is a false negative (memory: verify-negatives-on-proper-state).
+- State-based validators are pinned to SPECIFIC savestates and hardcoded walk scripts: --checkowentry/--checkowreturn assume the Truce overworld/market states and exact waypoint frame counts; --checkfieldcam walks a fixed button script and hard-fails unless it lands in loc 0x00C; A 'FAIL/mismatch' on the wrong state is a false negative.
 - **--vmdiff's CT_BTN now translates `$00F2` → serial order properly (FIXED).** It used to do `currentState = (injBtn & 0x80) ? 0x0080 : 0`, commented "A=$00F2 bit7 → SNES joypad bit7". Both halves were the same layout confusion: `$00F2` bit7 *is* A, but `currentState` 0x0080 is **Right**. So `CT_BTN=80` held **A on our VM and RIGHT on the oracle** — two different, mutually exclusive inputs, in the one tool whose whole purpose is that both sides get identical input; every other button was dropped on the oracle side entirely. Measured on the oracle's own bytes (`--monitor 7E00F2:2 --from saves/truce_market.state`): `currentState` 0x0080 → `$00F2=00 $00F3=01` (Right, no button); 0x0100 → `$00F2=80` (A); 0x0040 → `$00F3=02` (Left). **CT_BTN stays in the `$00F2` layout** (A=0x80 X=0x40 L=0x20 R=0x10 B=0x08 Y=0x04 Sel=0x02 St=0x01), **plus the `$00F3` D-PAD in bits 8..11** (Right=0x100 Left=0x200 Down=0x400 Up=0x800). **Walking scenarios are now lockstep-diffable**: the direction is forwarded to the oracle, and our lead is synced to the oracle's lead each frame (the `--followtest` technique) rather than run through a player controller — so this mode never silently grades `CtPlayerControl` (that is `--playermove`'s job), and any divergence it reports is the **scheduler's**. Example: `CT_BTN=200 --vmdiff saves/battle_re/party3_field.state --frames 130` walks the Manoria corridor, stays clean for 122 frames, and then reports exactly one field — `obj32 prio ours=0007 oracle=0002` at f123, the unported C0/3154 touch preempt. Pinned as `vmdiff-walk-touch-preempt`.
 - Two different button-bit grammars coexist: LakeSnes currentState serial-order bits (B=0x01 Y=0x02 Sel=0x04 Start=0x08 Up=0x10 Down=0x20 **Left=0x40 Right=0x80 A=0x100** X=0x200 L=0x400 R=0x800) for --input/--btnscript/--btn, vs the $00F2 layout used by CtSceneSetButtons; and the SNES auto-joypad is pipelined 1 frame (documented gotcha in runCheckJoy/runCheckOwMove). **`A` is 0x100 here, NOT 0x80** — 0x80 is Right. Reaching for the `$00F2`/SNES-hardware habit of "A = bit 7" writes a script that silently walks the party sideways for the whole run and never presses anything; combined with the (now fixed) silent truncation that is two independent ways to produce a confident "nothing happens".
 - --monitor caps at 32 watch regions x 0x400 bytes each. **Button/input scripts are no longer capped** — all five drive sites (`ctStream` for --monitor/--followscene/--followvm, `runMonitor`, `runFollowTest`, `runPpuRegs`, `runPeek`) share the streaming `ctBtnNext` cursor and parse straight off argv. Until then `--peek` stopped at **128 phases** and the others `strncpy`'d into **256/512-char** buffers, both **silently**: a long drive script ran its opening tokens and then fed the oracle zero input for the rest of the run, which is indistinguishable from the game freezing. That trap cost a false "the only 3-PC battle capture wedges" (it does not — it wins in ~1830 frames once the whole mash script actually reaches the emulator), and a `--peek` fixture dumped 1280 frames in instead of the requested 2600. Both were listed in this very gotcha table before they were fixed; a *documented* silent truncation is the expensive kind, because the note gets read after the false negative is believed.
@@ -1297,3 +1300,125 @@ and the script (ct_lz_return_cost, priced on the load's clock) around three C0/0
 does not tick while the hold runs (2026-09-28: the tail used to be counted in the hold, after the ack).
 Measured: the demo's second battle, `$0117 = 0` f651, the runner back f675 (disasm/notes/sequence_table.md 11.10).
 The synchronous `--selftest` battle path does not print it (its return runs on the end frame).
+
+## 4. The rest of the surface (added 2026-11-03)
+
+The sections above were written by hand as the modes appeared, and some flags and variables never got a row. This
+section holds those, one row each, taken from the comment where the source reads them. `python tools/doc_surface_check.py`
+lists every `--flag` of `src/main.c` and `src/field.c` and every `getenv` name of `src/` and `snes/` that no
+`docs/*.md` names; it reported 0 missing in each group when this section was written. Read the source before relying
+on a row.
+
+### `ct.exe` micro-execution sweeps and checks
+
+Each sweep runs a ROM routine in the oracle over seeded inputs and compares it with the C function named. The
+function's header comment in `src/main.c` (`runSweep*`, `runSheetCheck`) lists what is seeded, compared and excused.
+One check pins each.
+
+| Flag | ROM routine | C function graded | Check |
+|---|---|---|---|
+| `--sheetcheck` | The enemy-sheet decompressor and pointer chain, end to end (disasm/notes/battle_sheet_decomp.md): each listed enemy's gfx id resolved and decompressed by `lz.c`, its source, size and FNV printed; GATO's sheet diffed against the baked fixture | `lz.c` and the chain | `battle-enemy-sheet-decomp` |
+| `--sweepa88d` | `C0/A88D`, the object activation gate: the carry, `$01C3-$01C6`, the latch `$0F00,X` | `CtObjActiveGate` | `sweepa88d-activation-gate` |
+| `--sweepaba2` | `C0/ABA2`, the field heading builder, over the four staged bytes `$01F0-$01F3`; the whole 128 KB compared | `CtMoveDirAngle` | `sweepaba2-heading-builder` |
+| `--sweepact` | `C0/5AC5`, the activate invoke's four guards and its commit | the live VM's invoke | `sweepact-invoke-prologue-guards` |
+| `--sweepaitarget` | `C1/B8BB`'s targeting resolvers, in bank `$C1` (disasm/notes/battle_enemy_move_target.md sec. H) | the battle AI's resolvers | `sweepaitarget-b8bb-resolvers` |
+| `--sweepanim` | `C0/9E84`, the PC's facing selector, over a cross-product of its inputs | `CtPlayerAnimSelect` | `sweepanim-9e84-facing` |
+| `--sweepdeadflag` | `C1/B279`, the per-combatant dead-flag refresh, as `C1/A452` and `C1/B223` call it | `CtBattleDeadFlagProbe` | `sweepdeadflag-b279-refresh` |
+| `--sweephitroll` | `C1/DC64`, the physical to-hit roll, with the RNG cursor `$26` swept | `battleHitCore` | `sweephitroll-dc64` |
+| `--sweepinit` | The scene-entry init chain `C0/6F79`, `C0/E935`, `C0/B204`, `C0/A7E9` (four of the eight routines `C0/56B0` runs) | `CtObjSceneInit` | `sweepinit-scene-entry-tables` |
+| `--sweeplist` | The Y-sorted sprite list: `C0/A98A` (unlink) and `C0/A9CD` (link), with seeds that include incoherent states | `CtObjListUnlink` / `CtObjListLink` | `sweeplist-y-sorted-sprites` |
+| `--sweeploader` | The object loader `C0/4557` + `C0/4590`, in two spans (disasm/notes/object_loader.md) | the object loader | `sweeploader-obj-descriptor` |
+| `--sweepmoveclass` | `C1/3760`'s enemy move classes 2, 3, 7 and 8, in bank `$C1` | the battle mover's classes | `sweepmoveclass-3760-classes-2378` |
+| `--sweepmuldiv` | `C1/C90B` and `C1/C92A`, the battle software multiply and divide, with both carry-in values | `battleMul16` / `battleDiv32` | `sweepmuldiv-c90b-c92a` |
+| `--sweepop02` | VM op `0x02` (`C0/5FB6`, the priority call): the returned X and the carry as well as memory | the op's handler | `sweepop02-vm-priority-call` |
+| `--sweepredirect` | `FD/B223` and `C1/C8F7`, the `$AE6D` per-seat forwarding table and the hop that reads it | the battle's redirect | `sweepredirect-ae6d-c8f7` |
+| `--sweeprevalidate` | `C1/D63F-D68E` and `C1/AD09`, the target re-validation and its bitmask | `battleTargetRevalidate` / `battleTargetMask` | `sweeprevalidate-d63f-ad09` |
+| `--sweepscreen` | `C0/AB45`, the per-object screen position, over its six inputs | `CtObjScreenPos` | `sweepscreen-obj-position` |
+| `--sweepslot` | The OBJ slot allocator `C0/6F9A` and its release `C0/7056` | `CtObjSlotAlloc` / `CtObjSlotFree` | `sweepslot-obj-allocator` |
+| `--sweepsnap` | `C0/305D`, the arrival snap (taken on arrival when `$1C81,X` bit 0 is set) | `ctArriveSnap305D` | `sweepsnap-arrival-305d` |
+| `--sweepstatfetch` | `C1/E9A8`, `C1/E9C5` (the staged block bases) and `C1/D174` (the stat fetch) | `battleStageBase` / `battleStatFetch` | `sweepstatfetch-e9a8-d174` |
+| `--sweeptouch` | The player's touch redirect: `C0/5B8D`'s gate and `C0/3154`'s body | the field's touch redirect | `sweeptouch-player-redirect` |
+| `--sweepvram` | `C0/B1B2`, the VRAM upload: all 64 KB after the oracle's channel-7 DMAs | the port's upload buffer | `sweepvram-b1b2-upload` |
+
+`--wwatch "ADDR:LEN,..."` is an argument of `--lifetrace` (`src/main.c` `runLifeTrace`): the WRAM ranges whose writes
+the ordered intra-frame trace reports, beside `--pcwatch`'s PCs.
+
+### `Belthasar` headless modes and modifiers
+
+`src/field.c` parses these in `main()`; a mode prints and exits before the window opens. Most regression checks drive
+`Belthasar` this way (`--selftest`, `--battletest`, `--menutest`, `--walkscript` and the others have rows in sec. 1).
+
+| Flag | Args | Purpose | Check |
+|---|---|---|---|
+| `--sramcheck` | `<srm>` | Runs the ROM's checksum (`FF/FBE7`) over an SRAM image and compares it, per slot, with the word stored at `$30:7FF0+slot*2`. | `field-save-checksum-vs-real-rom-save` |
+| `--loadcheck` | `<srm>` | Runs the ROM's load (`FF/FAA3`, `CtMenuSaveLoad`) over an SRAM image and prints fields of the unpacked WRAM. | `boot-sram-load-fields-vs-cartridge` |
+| `--techtest` | -- | Prints `C2/8ECC`'s amount for a fixed sweep of (`$0DBF`, `$0DC0`, `$7E:0D00`); the check holds the cartridge's numbers (disasm/notes/menu2_tech_effect.md). | `field-menu-tech-amount-vs-rom` |
+| `--equiptest` | `<wram> [<wram2> ...]` | Recomputes each char sheet's derived block (`C2/916E` / `C2/9137`, +0x36..+0x40) from 128 KB oracle WRAM images and compares it with the ROM's. | `field-menu-equip-recalc-vs-rom` |
+| `--itemtest` | `<player.wram> <used.wram>` | Loads the oracle's target-select state, applies Use (slot 1, Crono) and byte-compares the inventory (`$2400`/`$2500`) and Crono's HP with the oracle's post-use state. | -- |
+| `--sprtest` | -- | For every char id, the menu standing sprite the host composes and where it lands (asset, assembly frame, opaque crop, placed box under both anchors); printed after the assets load. | `menu-party-sprites-all-seven` |
+| `--wingradtest` | -- | Prints the window gradient the HDMA generator `C2/86DD` makes for each of the six ribbon options, in the bands `ct.exe --hdma` prints from the oracle. | `menu-window-gradient-vs-hdma` |
+| `--owop05` | -- | Runs overworld object-VM op `$05` (`C2/1100`) on the oracle's measured inputs and prints every cell it writes, to diff with `ct.exe --callrom C21100 --writes`. | `ow-objvm-op05-vs-rom` |
+| `--itemdemo` | -- | Seeds a wounded party and items at char init, to try the item menu (also `CT_ITEMDEMO`). | -- |
+| `--gotoexit` | -- | `--selftest`: drops the lead on the scene's first exit (a headless door test). | -- |
+| `--tframes` | `<N>` | `--selftest`: frames before the capture (the same as `--frames`). | `camera-reenter-scene5` |
+| `--page` | `<N>` | `--selftest`: auto-advances the textbox to page N before the capture. | -- |
+| `--choose` | `<N>` | `--selftest`: puts a choice box's cursor on option N. | `ow-ferry-clears-its-direction-after-the-crossing` |
+| `--select` | -- | `--selftest`: picks the option `--choose` set, once, on the box's wait state. | `ow-ferry-clears-its-direction-after-the-crossing` |
+| `--showprio` | -- | Debug: tints the foreground (priority) tiles red. | -- |
+
+### Environment variables
+
+| Variable | Meaning | Read by |
+|---|---|---|
+| `CT_SRAM_FRESH` | `1`: boot from an erased cart and ignore `ct_sram.srm`, so a save-write check is idempotent. | src/field.c |
+| `CT_ANIMENG_ATKTRACE` | `1`: `animengpose` lines on stderr: GATO's pose index, facing and foot each time the pose engine picks an E3 assembly. | src/field.c |
+| `CT_ANIMENG_PCTRACE` | `1`: `pcatk` lines on stderr: a PC attack's pose, E3 index, foot, arrival and the three facings. | src/field.c |
+| `CT_ATBSELSHOT_AT` | Read into the host's debug options and used nowhere: the ATB-select shot it timed (`CT_ATBSELSHOT`) is gone (docs/TESTING.md). | src/field.c |
+| `CT_BATTLESHOT_FIELD_AT` | With `CT_BATTLESHOT_FIELD`: the battle frame at which the field-camera composite is written (every frame when unset). | src/field.c |
+| `CT_BATTLESHOT_HUD` | Battle shots also composite the HUD strip (the command-box queue, target select). | src/field.c |
+| `CT_BATTLESHOT_RESULTS` | Battle shots also composite the victory results box (disasm/notes/battle_results_box_timing.md). | src/field.c |
+| `CT_BATTLE_ANCHORDBG` | Prints the computed formation anchor per slot against the baked absolute. | src/field.c |
+| `CT_BATTLE_ATBTRACE` | Prints the ATB's initial load (`atbload ...`: `$B158`, `$AFAB`) before any tick. | src/battle.c |
+| `CT_BATTLE_CHARMTEST` | `<chance>`: forces the charm roll (`C1/E9D5`) on a PC physical hit; the natural gate is not ported. | src/battle.c |
+| `CT_BATTLE_CRONOHP` | `<n>`: Crono's staged battle HP (`$5E30`) := n, to reach the PC-death path headless. | src/battle.c |
+| `CT_BATTLE_MVSWEEP` | `<n>`: the render-from-WRAM host seeds the battle mover from the WRAM and steps it and the mode machine n frames with the idle walk. | src/field.c |
+| `CT_BATTLE_MVTRACE` | `1`: `mvseg` lines on stderr, one per enemy mover segment start and phase step. | src/battle.c |
+| `CT_BATTLE_PCBLITTRACE` | `1`: the four OAM cells a PC seat's pose puts on screen, when the pose or the foot changes. | src/field.c |
+| `CT_BATTLE_PCPALTRACE` | `1`: the sixteen colours a PC seat is drawn with, when they change. | src/field.c |
+| `CT_BATTLE_RENDERFRAME` | `<n>`: the render-from-WRAM host's battle frame counter, which gates the combat layers. | src/field.c |
+| `CT_BATTLE_RENDEROUT` | `<file>`: the render-from-WRAM host writes its frame there (`[u32 w][u32 h][RGB]`). | src/field.c |
+| `CT_BATTLE_RENDER_SETACT` | `<seat>`: the render-from-WRAM host makes that seat the active one (a driven-state fixture). | src/field.c |
+| `CT_BATTLE_SCANTRACE` | `1`: `scan` lines on stderr from the battle's turn scan (cursor, combatant, `$AFAB`, `$B03A`, mode). | src/battle.c |
+| `CT_BATTLE_SCHEDTRACE` | `1`: `schedwrap` on stderr each time the scheduler counter `$A4` wraps to 0. | src/battle.c |
+| `CT_BATTLE_STATUSTEST` | `<accuracy>`: forces the status rider (`C1/D338`, mask 04) on every landed physical. | src/battle.c |
+| `CT_BATTLE_WAITMODE` | `1`: forces Wait mode by clearing `$2990` bit 6, as the new-game ATB-mode selector does (disasm/notes/battle_atbmode.md). | src/battle.c |
+| `CT_BATTLE_WIPEAUDIT` | `1`: lists the nonzero bytes in `$2D01..$ACEC` before the battle boot's wipe. | src/battle.c |
+| `CT_BYTEWATCH` | `<hex>[,<hex>..]` (flat WRAM offsets, `$7F` at 0x10000): `bytewatch f<N> $<adr> <old> -> <new>` on each frame one of them changed -- the port's side of an oracle `--monitor ... --diff`. | src/field.c |
+| `CT_DRIVEDBG` | `1`: every term of the field's movement gate and the direction asked for, when the gate changes, so a refused drive can be told from an idle one. | src/field.c |
+| `CT_ENEMY_STAGE_SELFCHECK` | Runs the ROM-driven pose staging resolver against the oracle's staging for GATO, Naga-ette, Hetake and Diablos (disasm/notes/battle_pose_staging.md), then exits. | src/field.c |
+| `CT_FIELDLOCK_CENSUS` | `<f>`: with `CT_FIELDLOCK`, the write-mask census on the host's own `$7E` image at frame f. | src/field.c |
+| `CT_FX_DEBUG` | `[fxpopup]` lines on stderr: each battle damage popup's slot, value, age and placement. | src/field.c |
+| `CT_INTROSHOT` | `<path>`: writes the composed title swing frame (mode 7; disasm/notes/title_intro.md sec. 3). | src/field.c |
+| `CT_INTROSHOT_AT` | With `CT_INTROSHOT`: the swing frame to write (every frame when unset). | src/field.c |
+| `CT_LOCALDBG` | The intra-frame order probe: prints the script local obj0 mirrors the lead's tile into, against the lead's position. | src/field.c |
+| `CT_MENUSFX_COUNT` | At the end of a headless menu drive, prints the menus' cursor-sound tally (`menusfx-count: N post(s) from M row change(s)`) and where the drive navigated to (`menusfx-menu: phase=... screen=...`). | src/field.c |
+| `CT_MENUSHOT_AT` | With `CT_MENUSHOT`: the menu frame to write (default 20). | src/field.c |
+| `CT_ORACLE_PADLOG` | `<file>`: the oracle writes the pad it was given, as run-length `button:frames` pairs. | src/ct_cpu_infra.c |
+| `CT_OWBOOTSTRAP` | `<world>`: runs the overworld's object bootstrap on the port's VM for that world and prints what it builds. | src/field.c |
+| `CT_OWBOOTSTRAP_ARRIVAL` | `<hex>`: with `CT_OWBOOTSTRAP`, the arrival-flags cell `$0104` the bootstrap scripts branch on. | src/field.c |
+| `CT_OWBOOTSTRAP_FRAMES` | `<n>`: with `CT_OWBOOTSTRAP`, the frames run after it (default 16). | src/field.c |
+| `CT_OWDIRTY` | `1`: scribbles the span a battle leaves in `$7E` just before an overworld entry, so "a re-entry reloads the world" is testable without a fight. | src/field.c |
+| `CT_OWOBJTRACE` | `1`: `obrun` lines, one per overworld object-VM opcode executed. | src/world.c |
+| `CT_SOLIDLIVE` | `--battletest`: prints `solidlive: ... entered / gated / reached / deflected`, the solid scan's liveness counters. | src/field.c |
+| `CT_STAGE_LISTDBG` | Every `C0/0617` predicate term per object, and the two arrays the fill produces, when a battle stages its combatants. | src/field.c |
+| `CT_TBBG3TRACE` | `tbbg3:` the BG3 rows of the textbox, as ranges. | src/field.c |
+| `CT_TECHDEMO` | Seeds the party and tech bits of `saves/tech_double.state` (Crono, Marle, Lucca; Aura and Aura Whirl known) so the tech screen shows a Dual list. | src/field.c |
+| `CT_WIDE_EXT_DXL`, `CT_WIDE_EXT_DXR`, `CT_WIDE_EXT_DY` | Pixels added to the Steam margins' place (left side, right side, vertical), beside `CT_WIDE_EXT_DX`: study knobs of the widescreen mod. | src/field.c |
+| `PORTRUN_CLAIMS` | `--portrun`: prints each object the port claims and each trap on an unported opcode. | src/main.c |
+| `PORTRUN_OPTRACE` | `--portrun`: `<hex obj idx>` tallies every VM opcode the oracle dispatches for that object. | src/main.c |
+| `PORTRUN_PDISP` | `--portrun`: `<hex obj idx>` prints the port's dispatch sequence, to read against the oracle's `DISP` lines. | src/main.c |
+| `RACEPICCMP_OAM` | `--racepiccmp`: the OAM words and high-table bytes that differ on the first differing frame. | src/main.c |
+| `VMDIFF_ACT` | `--vmdiff`: also compares the `$0F00` activation latch (the `C0/A810` pass). | src/ct_vm.c |
+| `VMDIFF_ANIMDBG` | `--vmdiff`: `<obj>` prints that object's per-frame animation mirror state. | src/main.c |
+| `VMDIFF_CENSUS` | `--vmdiff`: lists the unmodelled bytes behind the `[wmask]` line's `unmodelled` count. | src/main.c |
+| `VMDIFF_SETTLE` | `--vmdiff`: frames the oracle runs before the seed (default 1, the frame boundary; 0 seeds mid-frame). | src/main.c |

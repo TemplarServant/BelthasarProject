@@ -17,9 +17,8 @@ Never guess, never approximate, never invent.
    ```
    cp build/ct.exe "$TMP/ct_probe.exe"     # NEVER probe with build/ct.exe directly
    ```
-3. Read `docs/DEBUG_SURFACE.md` (all oracle modes + env vars) and skim
-   `disasm/notes/` (and the agent's memory index `MEMORY.md`, outside the
-   repository, when you have one) for prior work on your topic. Do not redo pinned RE.
+3. Read `docs/DEBUG_SURFACE.md` (the oracle modes + env vars) and skim
+   `disasm/notes/` and `docs/ROADMAP.md` for prior work on your topic. Do not redo pinned RE.
 
 ## The probe cookbook (exact commands)
 
@@ -44,8 +43,9 @@ Down=0x20 Left=0x40 Right=0x80 A=0x100 X=0x200. Input script = `"hexbtn:frames,.
 
 ## Standard derivation procedure
 
-1. **Reproduce in the oracle.** Load the closest state (repo root / saves/; see the
-   memory index for which state exercises what). Watch the behavior happen with
+1. **Reproduce in the oracle.** Load the closest state (repo root / saves/; the recipes in
+   `tools/fixtures/*.json` and the checks' `inputs` in `tools/regress_checks.json` say which
+   state exercises what). Watch the behavior happen with
    --monitor/--followvm/--peek. Record the FRAME TIMELINE (f-numbers of each event).
 2. **Find the RAM.** Wide --monitor windows with --diff to find what flips; narrow
    down; then --writer to get the writer PC.
@@ -65,15 +65,16 @@ Down=0x20 Left=0x40 Right=0x80 A=0x100 X=0x200. Input script = `"hexbtn:frames,.
 
 - **A "doesn't exist" verdict needs a proper state.** A broken/wrong state gives a
   false negative. Confirm the state exercises the feature; report "couldn't
-  reproduce under X", never "absent". (memory: verify-negatives-on-proper-state)
+  reproduce under X", never "absent".
 - **Dossier tables can be wrong.** Before "fixing" code to match a dossier table,
   re-verify the table with fresh dis.py at the cited address (an op-0x16 cmp table
   in a dossier had entries 3/4 swapped; the code was right).
 - **--vmdiff button injection forwards only A** to the oracle; other buttons are
   asymmetric. Use --peek/--monitor for multi-button scenarios.
 - **Trust the render, not simulations.** If reconstructing graphics, compare real
-  framebuffers (fb2png), not simulated layouts. (memory: ct-overworld-bg3-vram-addr)
+  framebuffers (fb2png), not simulated layouts.
 - s9x-vs-lake state formats differ; `python tools/ct.py objs` auto-detects. To make
   a runnable oracle state from a snes9x save, use the `capture-oracle-state` skill.
 - The scheduler yields on the RASTER, not an op count; cadence defaults differ by
-  loader (memory: ct-field-scheduler-re) — do not infer timing from op counts.
+  loader (disasm/notes/field_tick.md: the gate is `C0/5A46`'s, between actors) — do not
+  infer timing from op counts.

@@ -54,7 +54,7 @@ under `build/_divergence/`. Write scripts with the Write tool: `python - <<EOF` 
      saves/attract_cena_inicial_rule.state <tmp.raw> --frames <cartridge frame - 20>` (the recipe-made start the tool reads).
    * **Find the port's side**: the relevant `CT_*TRACE` variable in docs/DEBUG_SURFACE.md, or the port's own
      WRAM via `CT_SHOTS_PAL`/`CT_OWCAMTRACE`/`CT_BATTLE_*TRACE`.
-   * **Check it is not already known**: grep `disasm/notes/` and the memory index for the location and the
+   * **Check it is not already known**: grep `disasm/notes/` and `docs/ROADMAP.md` for the location and the
      symptom. Report a known item as known, with the note that covers it.
 6. Report.
 

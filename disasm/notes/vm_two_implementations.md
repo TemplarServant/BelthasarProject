@@ -1,5 +1,10 @@
 # THE TREE HAS TWO FIELD-VM OPCODE IMPLEMENTATIONS, AND THE GAME RUNS THE UNGRADED ONE
 
+> **Historical (sec. 2-4 superseded).** Written before most op bodies moved into the shared families of `src/move.c`
+> that both the live VM and the graded runner call; its call-site line numbers have moved, and op `0xFF`'s parking subs
+> `0x92`-`0x95` are in `ct_vm.c` now. How the ops are run today: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#the-field);
+> what the live VM still runs privately: [live_vm_op_gaps.md](live_vm_op_gaps.md).
+
 Surfaced by the scene-254 A/B campaign. This is an architectural fact, not a defect report — but it
 changes how every future opcode fix should be scoped, so it is written down before it is acted on.
 

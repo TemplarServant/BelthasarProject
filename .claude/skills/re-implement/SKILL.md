@@ -5,7 +5,7 @@ description: Implement a derived Chrono Trigger mechanism in the C engine, manda
 
 # re-implement — from dossier to byte-validated C
 
-**Precondition:** a dossier in `disasm/notes/` (or MEMORY note) with ROM/oracle
+**Precondition:** a dossier in `disasm/notes/` with ROM/oracle
 citations covers the mechanism. If any part you need is in its "Open questions",
 go back to `re-derive` for that part first. If it cannot be derived: STOP and
 report the boundary — do NOT approximate.

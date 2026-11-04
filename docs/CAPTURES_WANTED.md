@@ -129,7 +129,8 @@ the wrong thing.
 - **Condition**: the vehicle table `$7E:8300` populated / an active vehicle record.
 - **Unblocks**: the vehicle layer, and specifically the retirement of the **disembark tile
   heuristic** — a walkable-scan stand-in that is flagged as a mandate violation in
-  `[[ct-overworld-boat-ride]]`.
+  the agents' notes of the time (not in the repository; the vehicles are now in
+  `disasm/notes/ow_vehicle.md` and `disasm/notes/ow_ferry.md`).
 
 ---
 

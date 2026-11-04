@@ -1,9 +1,10 @@
 # TESTING — the one-command regression suite
 
 ```
-python tools/regress.py               # full suite, min(12, CPUs-2) parallel jobs
+python tools/regress.py               # full suite, max(4, min(12, CPUs-2)) parallel jobs
 python tools/regress.py --quick       # tier "quick" only
 python tools/regress.py --list        # list every check + tier + command
+python tools/regress.py --summary     # the suite's counts: checks per tier, excluded, mutations (nothing runs)
 python tools/regress.py --only vmdiff-bedslide render-scene1-snapshot
 python tools/regress.py --jobs 8      # more parallelism (checks are read-only)
 python tools/regress.py --build       # tools/build.py first (honest artifact check)
@@ -40,7 +41,8 @@ every check from the repo root. Exit status is 1 iff any check FAILed (SKIPs don
   `build/_oracle_cache`, zlib-compressed, LRU-capped at `CT_ORACLE_CACHE_GB` (default 24; it was 8 and sat full).
 - **The oracle alone, `build/ct_oracle.exe`** (2026-10-16). The cache used to key on ct.exe's sha256, and ct.exe links
   nearly the whole port (battle.c, ct_vm.c, menu.c ...) -- so EVERY port edit threw every cartridge run away. ct_oracle
-  is ct.exe's own main.c built with `CT_ORACLE_ONLY`: only `--peek / --monitor / --hdma / --fb` are dispatched, every
+  is ct.exe's own main.c built with `CT_ORACLE_ONLY`: only `--peek / --monitor / --hdma / --fb` (and `--serve`, the
+  one-process oracle of tools/ctlib/oracle_session.py, which the cache does not use) are dispatched, every
   other mode answers 97 + `ct_oracle: not an oracle mode`, and the linker decides its sources (main.c, ct_cpu_infra.c,
   rom_verify.c, ct_lake_state.c, harness_drive.c, snes/*.c). The cache RUNS ct_oracle for those calls and keys on it;
   on the refusal it runs ct.exe itself, uncached. `ct` depends on `ct_oracle`, so they are always built together.
@@ -156,14 +158,16 @@ running `Belthasar.exe`/`ct.exe` before `--build`.
 ## Tiers
 
 Tier assignment is by **measured runtime**: roughly <20 s → quick, else full.
-Timeouts are ~5× observed time (minimum 30 s). Counts from `tools/regress_checks.json`
-(2026-10-24: **945** checks, **12** excluded; `--list` prints the current set).
+Timeouts are ~5× observed time (minimum 30 s). `python tools/regress.py --summary` prints the
+current counts from `tools/regress_checks.json` (the dated table is in
+[TESTING_OVERVIEW.md](TESTING_OVERVIEW.md#current-numbers)); `--list` prints the set, with `?` as the tier
+of an untiered check.
 
-- **quick** (**613** checks, about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
+- **quick** (about 4 minutes on 20 cores): the micro-execution sweeps of ROM routines, the
   `--vmdiff` / field / battle / menu lockstep checks against the oracle, scene renders, and the engine's pinned
   behaviours. Pre-commit tier.
-- **full** (all of them): adds **316** slower checks — whole fights and attract legs against the logical oracle, the
-  long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the **21** with
+- **full** (all of them): adds the slower checks — whole fights and attract legs against the logical oracle, the
+  long menu and shop audits, the widescreen and other mod checks, the ROM-boot drive validators — and the ones with
   no tier, which run only here: the two lockstep checks (`lockstep-talk-box-machine-clean`,
   `lockstep-scene120-stairs-entry-lucca`), the race / ending / Lavos / Tyranno / panorama chains,
   `jackie-saves-census-vs-oracle`, `ocean-palace-aftermath-chain-vs-oracle` and the four `battle-*-feet-vs-oracle`
@@ -184,7 +188,7 @@ The repository is public and the ROM never comes near it, so GitHub's runners te
 - **The build on Linux, Windows and macOS** (`ubuntu-24.04` gcc, `windows-2022` MSVC, `macos-15` clang): the shapes
   (`tools/gen/shapes.py install`) in place of the generated files, then `tools/build.py` (every target, its artifact
   check), and last the data-free `Belthasar` (`CT_DATAFREE=1`), the game a release ships.
-- **The suite without the ROM**: `tools/regress.py` (2026-10-24: 5 pass, 0 fail, 941 skip) and
+- **The suite without the ROM**: `tools/regress.py` (the few ROM-free checks pass, every other one SKIPs) and
   `python -m unittest discover -s tests`. The job fails if a check FAILs or if none PASSes. Every SKIP is a check the run
   has not tested: a check that grades the game declares the ROM or a state made from it among its `inputs`, so it never
   runs on the shapes' zeros. The Android build (the NDK, SDL2's source) is not in the CI yet.
@@ -1722,7 +1726,7 @@ after re-deriving from `C0/37B1` and `$C1:D126`; a changed item id is a red flag
 `python tools/title_intro_cmp.py <swing frame> ...` runs the engine to a frame of the title
 sequence, runs the ORACLE to the boot frame that swing frame IS (k + 141), and diffs all 57344
 pixels of the composed 256x224 frame. It is graded against the cartridge, not against itself -- a
-hash of our own output only grades our agreement with ourselves (memory: check-vs-own-reference).
+hash of our own output only grades our agreement with ourselves.
 
 The two checks split the sequence by cost, not by kind. `title-intro-swing-vs-oracle` (quick, ~18 s)
 takes frames 0/10/100/150/400/500/588/620/745: the mode-7 pendulum, the copyright block, the clock

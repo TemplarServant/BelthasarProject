@@ -1,8 +1,10 @@
 # Infrastructure guide
 
-How this repo is built, tested, laid out, and validated against the oracle. Companion
-references: [`DEBUG_SURFACE.md`](DEBUG_SURFACE.md) (every ct.exe CLI mode + every debug
-env var) and [`TESTING.md`](TESTING.md) (regression tiers and pinned baselines).
+How this repo is built, tested, and validated against the oracle. Companion
+references: [`ARCHITECTURE.md`](ARCHITECTURE.md) (the programs and the source layout),
+[`DEBUG_SURFACE.md`](DEBUG_SURFACE.md) (the ct.exe and Belthasar debug modes and env vars;
+`tools/doc_surface_check.py` lists any it misses) and [`TESTING.md`](TESTING.md) (regression
+tiers and pinned baselines).
 
 ---
 
@@ -37,9 +39,7 @@ SDL2 is present — on Windows fetch it once with `tools\get_sdl2.ps1`).
 - **The three historical false-"Build OK" traps it catches** (all observed in this
   project; `build.py`'s own header is authoritative):
   1. **Locked exe.** With `Belthasar.exe` still running, the link cannot replace the
-     binary — yet "Build OK" was printed while the on-disk exe stayed the OLD build
-     (documented in the project memory: *"build.bat 'Build OK' LIES when Belthasar.exe
-     is locked"*).
+     binary — yet "Build OK" was printed while the on-disk exe stayed the OLD build.
   2. **SDL2 silently absent.** Without `third_party/SDL2`, CMake *configures the SDL
      targets away* (`STATUS "SDL2 not in third_party/SDL2: skipping..."`) — the build
      "succeeds" but `Belthasar.exe`/`ct_world.exe`/`ct_viewer.exe` are stale or missing.
@@ -75,7 +75,7 @@ committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
   agent then runs `python3 tools/setup.py --rom <that path>` (it verifies the hash and copies the ROM to the root,
   where `.gitignore` keeps it out of every commit) and `python3 tools/fixtures.py make all`. The container is new each
   time, so the attachment and that cost recur per container. Without the
-  ROM only the shapes build exists: `python3 tools/regress.py` gives 5 pass, 0 fail, 941 skip (`--quick`: 608 skip), the
+  ROM only the shapes build exists: `python3 tools/regress.py` passes the few ROM-free checks and SKIPs the rest, the
   same as the GitHub CI ([TESTING.md](TESTING.md#the-github-ci-githubworkflowsciyml)). Engine work that changes behaviour cannot be
   validated without the ROM (the mandate's `--vmdiff` / `--vm` and the suite need the oracle on it).
 - **Network.** The environment's policy decides which hosts answer. Under the default policy `fantasyanime.com` is
@@ -86,8 +86,8 @@ committed and pushed. Measured 2026-10-23 (Ubuntu 24.04, gcc, Python 3.13):
   there by its file name -- verified by the same SHA-256, so a wrong copy is refused, not used.
 - **Time, measured on a 4-core container (2026-10-23).** `tools/setup.py` 21 min; `tools/fixtures.py make all` 64 min
   more (one recipe at a time). Both reuse what is already made (a second `make all`: 0.04 s), so a resumed container
-  pays nothing; a new one pays both. With the ROM and the 78 saves, `python3 tools/regress.py` graded all 953 checks
-  PASS on that container (2026-10-23; the 954th, `tree-tracks-no-game-file`, came after and passes too); the one check `playthrough-legs-vs-rule-cartridge` alone takes 72 min there,
+  pays nothing; a new one pays both. With the ROM and the 78 saves, `python3 tools/regress.py` graded every check
+  PASS on that container (2026-10-23); the one check `playthrough-legs-vs-rule-cartridge` alone takes 72 min there,
   so `--quick` (or `--only`) is the tier to iterate with. A container restart keeps the working tree (the ROM, the
   generated files, `saves/`) but stops background jobs: commit before a long run.
 - **Windows-only pieces.** `tools\build.bat` and the `tools/*.ps1` fetchers do not run here: `python3 tools/build.py`
@@ -107,8 +107,9 @@ the oracle inputs in the repo root.
   a check PASSes iff every literal substring in its `expect` list appears in the
   combined stdout+stderr.
 - **Tiers.** `--quick` runs only the `tier: "quick"` checks; the default run is the
-  full suite (min(12, CPUs-2) parallel jobs, `--jobs N` to change; `exclusive` checks run one at a time in
-  their own lane beside the batch).
+  full suite (max(4, min(12, CPUs-2)) parallel jobs, `--jobs N` to change; `exclusive` checks run one at a time in
+  their own lane beside the batch). `--summary` prints the suite's counts (checks per tier, excluded, mutations)
+  from `regress_checks.json` without running anything.
 - **Pinning.** `--pin <check>` re-derives a check's `expect` lines from the current
   output (deterministic hashes like the `--lz`/`--datonly` FNV-32 make good pins).
 - Missing inputs → **SKIP** (named), not FAIL; the suite exits 1 iff any check FAILed.
@@ -119,27 +120,25 @@ the oracle inputs in the repo root.
 - **Preflight gate.** `python tools/preflight.py` (or `tools\preflight.ps1`) runs
   build (every target; `--target ct` for one) → `--check-inputs` → `regress --quick` (or `--full`) and writes
   `build/preflight.json`. Soft-MISSes on optional captures do not hard-fail the
-  gate; hash mismatches and regress FAILs do. No CI service is required — this is
-  the local/agent one-command gate.
+  gate; hash mismatches and regress FAILs do. It is the local one-command gate; the
+  GitHub CI ([TESTING.md](TESTING.md#the-github-ci-githubworkflowsciyml)) runs the part that
+  needs no ROM on every push and pull request.
 - `--list`, `--only <names>`, `--build` (drive the build first) round out the surface.
 
 Tier contents and the meaning of each pinned baseline: [`docs/TESTING.md`](TESTING.md).
 
 ## Repo layout
 
-| Path | What it is |
-|---|---|
-| `src/` | The C engine + harness. `scene.c` field-scene renderer (load ROM/.dat → one compose path); `ct_vm.c` event VM + scheduler + movers + textbox/naming; `collision.c`/`player.c`/`move.c` byte-exact ROM routine ports; `world.c` overworld camera/mover/streamer/ambient VM; `field.c` the interactive app (`Belthasar.exe`); `ct_world.c`/`viewer.c` SDL viewers; `main.c` the ct.exe oracle harness; `assets.c` ct_assets.dat loader; `lz.c` the LZ decompressor. |
-| `src/tables/` | Generated, no data (`tools/gen/pack_tables.py headers`, from the shapes): the header the engine includes for each `src/data/*.h` table (the real header in a normal build, its declarations in a data-free one), the data-free storage `tables_storage.c` with its layout asserts, and `tables_real.c` for the proof. `src/datapack.c` loads `ct_tables.dat` into the storage. |
-| `snes/` | Vendored **LakeSnes** oracle core (the embedded emulator). Do not edit casually — every validator's ground truth runs on it, and any change to its state serialization silently invalidates every `.state` on disk. |
-| `assets/` | Build-time extraction pipeline (Python, dependency-free): ROM → `ct_assets.dat` (`extract_assets.py`, `lz.py`, `gfx.py`, `palettes.py`, `sprites.py`, `maps.py`, `text.py`, `script.py`...). The engine is ROM-independent at runtime; `ct.exe --datverify` proves the bridge byte-identical. |
-| `disasm/`, `disasm/notes/` | The RE substrate: annotated 65816 traces, per-subsystem notes (`events.md`, `scenes.md`, `sprites.md`, `collision.md`...). Trace/dialogue artifacts are gitignored (ROM-derived, regenerable). |
-| `tools/` | Canonical tooling: `build.bat`/`build.py`, `regress.py` + `regress_checks.json`, `dis.py`, `s9x_to_lake.py`, `disasm65816.py`, `get_sdl2.ps1`, `ct.py` (agent-facing wrapper), and the `ctlib/` helper library. One-off probe scripts use the `tools/_*.py` underscore convention and are gitignored (tracked exceptions like `tools/owbpal0.py` stay tracked). |
-| `build/` | CMake/Ninja output (gitignored): `ct.exe`, `Belthasar.exe`, `ct_world.exe`, `ct_viewer.exe`. |
-| `saves/` | ROM-derived savestates/captures (gitignored; the regenerable ones come from recipes: `python tools/fetch_saves.py`, then `python tools/fixtures.py make all`). |
-| repo root | **Scratch capture convention:** oracle work dumps its debris at the root — `.state` savestates, `.bin`/`.oam`/`.vram` WRAM/OAM/VRAM captures, `.raw` framebuffers, `.png` probe shots, `SHOT*`, probe `.txt`/`.json`. All root-anchored-gitignored; the ROM (`Chrono_Trigger_USA_SNES.sfc`, user-supplied) also lives here. |
-| `third_party/SDL2/` | SDL2 dev libs (auto-fetched, gitignored). |
-| `docs/` | This guide, `DEBUG_SURFACE.md`, `TESTING.md`. |
+The programs, the source files and the top-level directories are described in one place,
+[ARCHITECTURE.md](ARCHITECTURE.md#source-layout). Two conventions of the oracle workflow:
+
+- **Scratch at the root.** Oracle work leaves its debris at the repository root: `.state`
+  savestates, `.bin`/`.oam`/`.vram` WRAM/OAM/VRAM captures, `.raw` framebuffers, `.png` probe
+  shots, `SHOT*`, probe `.txt`/`.json`. Root-anchored `.gitignore` rules keep all of it out of
+  every commit, as they do the ROM (`Chrono_Trigger_USA_SNES.sfc`, user-supplied), which lives
+  there too.
+- **Probe scripts.** One-off probe scripts are named `tools/_*.py`; `.gitignore` ignores them,
+  so a fresh clone has none.
 
 ## Oracle workflow summary
 
@@ -203,8 +202,10 @@ Python: `tools/ctlib/lake.py` (`unwrap` / `wrap` / `read_payload` / `write_wrapp
 
 **`tools/dis.py <hexaddr> <len> [m] [x]`** — the ROM disassembler for the
 required-before-any-change step: disassemble the routine that produces the behavior.
-`m`/`x` set the 65816 register-width flags. Gotcha (project memory): it prints `C0/`
-for **all** JSR targets — a `JSR $1CDA` seen in bank C2 is really `C2/1CDA`.
+`m`/`x` set the 65816 register-width flags. JSR/JMP absolute targets are labelled with
+the bank being decoded (a `JSR $1CDA` in bank C2 prints as `C2/1CDA`); JSL/JML use their
+operand's bank. It decodes linearly and does not follow branches, so the widths can
+desync after one.
 
 Savestate formats (there are two distinct ones — the LakeSnes emulator `.state` and
 Belthasar's own `CTFS` CtScene state) are documented in
