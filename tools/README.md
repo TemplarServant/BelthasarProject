@@ -84,7 +84,7 @@ New work goes through `ctlib`/`ct.py`.
 |---|---|---|
 | s9x block split: `_decode`, `_rdscript`, `_taban`, `_rdstate`, `_rdraw`, `_rdglb`, `_rendmore`, `assets/snes9x_extract` | `parse_ppu_state.py` (imported) | `ctlib.s9x` |
 | LakeSnes .state layout | `s9x_to_lake.py` constants | `ctlib.lake` |
-| fb decode + PNG: `_fbpng`, `_bg3img`, `_hudcheck`, `_isohud`, `gen_namemsg`/`gen_namewin` (inline copies) | `_fbpng.py` | `ctlib.fb` / `ct.py fb2png` |
+| fb decode + PNG: `_fbpng`, `_bg3img`, `_hudcheck`, `_isohud`, `gen_namemsg`/`gen_namewin` (inline copies; removed, now `gen/ct_namemsg.py`/`gen/ct_namewin.py`) | `_fbpng.py` | `ctlib.fb` / `ct.py fb2png` |
 | OAM decode: `_oambird`, `_oamdump`, `_oamhud`, `_oamhud2`, `_gullcount`, `_gulls2` | `_oambird.py` (size-bit printf bug FIXED: raw bit reported) | `ctlib.oam` / `ct.py oam` |
 | WRAM object peek: `_rdstate`, `_rdraw`, `_rdglb`, `_wdiff`, `_scriptdump`, `_sd2` | `_rdstate.py` | `ctlib.wram.objs` / `ct.py objs` |
 | OW ambient blocks: `_oracleamb`, `_boatprio` | `_oracleamb.py` | `ctlib.wram.ow_ambient` / `ct.py owamb` |
@@ -98,7 +98,8 @@ New work goes through `ctlib`/`ct.py`.
 Recipe kept from `_jt.py`: the event-op jump table is at `C0/5D6E`
 (handler ptr = word at `0x5D6E + op*2`; see `JSR ($5D6E,X)` at `C0/5AB1`).
 
-Other notable single-purpose keepers: `gen_namemsg.py` / `gen_namewin.py` /
-`owbpal0.py` (asset-pipeline regenerators, tracked); and, local only,
+Other notable single-purpose keepers: `owbpal0.py` (an asset-pipeline
+regenerator, tracked; the naming-screen ones are `gen/ct_namemsg.py` /
+`gen/ct_namewin.py`, run by `setup.py`); and, local only,
 `_sprdump.py` (the only decoder of `saves/*.spr`) and `_taban.py` (a live
 `$7F2000` runtime-script walker).

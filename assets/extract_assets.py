@@ -766,7 +766,7 @@ def pack_world(rom, T):
     if os.path.exists(nw):                            #   alone by the oracle (PEEK_ISOBG=1): the weave
         yield (T_NAMEWIN, 0, open(nw, 'rb').read())   #   + HDMA gradient, no content
     nm = 'saves/ct_namemsg.bin'                       # the "Enter a name..." prompt box (new-game Crono);
-    if os.path.exists(nm):                            #   a crop from the oracle (tools/gen_namemsg.py)
+    if os.path.exists(nm):                            #   a crop from the oracle (tools/gen/ct_namemsg.py)
         yield (T_NAMEMSG, 0, open(nm, 'rb').read())
 
 PACKERS = [pack_scene_palettes, pack_sprite_palettes, pack_scene_headers,

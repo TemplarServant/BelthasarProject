@@ -137,7 +137,7 @@ which the VM port already had right. Two RENDER defects, both measured at Norste
    oracle's OAM at the option page holds only the party sprites, so it is no OBJ, and it is not the
    MENU's hand either — `src/data/menu_itemdetail.h` (OBJ tile 0x20) agrees on only 63 of 138 opaque
    pixels. `src/data/dlg_cursor.h` is the real one, lifted from an oracle frame by subtracting the
-   window texture (`tools/gen_dlgcursor.py` — the same fb-lift method `T_WINDOW` itself uses). Its
+   window texture (`tools/gen/dlg_cursor.py` — the same fb-lift method `T_WINDOW` itself uses). Its
    cell is 16x12 at window (16,10): x 16 is one glyph cell left of the six-space option indent,
    which lands at x 32.
 
@@ -156,7 +156,7 @@ ct.exe --peek o200.state o200.raw --btnscript "0:60" ; python tools/ct.py oam o2
 # decision box
 ct.exe --teleport 434 8 8 0 --from saves/truce_market.state --out o434.state --frames 240
 ct.exe --peek o434.state o434e.raw --btnscript "10:8,0:6,100:6,0:180,100:6,0:60,100:6,0:60,100:6,0:120,100:6,0:120"
-python tools/gen_dlgcursor.py o434e.png saves/ct_window.bin src/data/dlg_cursor.h
+python tools/gen/dlg_cursor.py --state saves/truce_market.state   # runs the two steps above itself, then lifts the hand
 ```
 Checks: `field-scene4-door-opens-on-step`, `field-scene200-prio0-occluder-order`,
 `field-scene434-decision-box` — five mutations, all killed.

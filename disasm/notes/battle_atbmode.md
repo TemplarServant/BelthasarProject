@@ -281,7 +281,7 @@ disassembly quoted in §1.4 (`C2/E258 TRB $2990`) is authoritative for the clear
 
 ### The bake (`src/data/atbsel.h`, `tools/_gen_atbsel.py`)
 
-Unlike the naming screen (dynamic typed content → font/tile composite, `gen_namewin.py` + `drawNameScreen`),
+Unlike the naming screen (dynamic typed content → font/tile composite, `tools/gen/ct_namewin.py` + `drawNameScreen`),
 this screen has exactly **two static states** (cursor row 0 or 1), so it bakes as a literal indexed-color
 **full-frame capture** — guaranteed byte-exact because it IS the oracle's own composited framebuffer, not a
 re-derivation. Measured: only **76 distinct RGB colours** across both frames, and only a **168×81 rect**

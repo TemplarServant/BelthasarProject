@@ -387,7 +387,8 @@ CT_HOOK_CYCLES=1 ct.exe ROM --hookpc C281E8 --from <same> ...                (ha
 ct.exe ROM --monitor ... --from saves/field_re/shop90_lake.state --btnscript "0:10,100:2,0:418,1:2,0:80"
 ct.exe ROM --monitor "7E027C:1,7E001C:2,..." --from saves/ow_w0.state --btnscript "0:10,200:2,0:78,1:2,0:80"
 ct.exe ROM --monitor ... --from build/_menuloader_saved.state --btnscript "0:1600,8:6,0:124,100:2,0:150"
-  (_menuloader_saved = frame-1 state + saves/ct_real_save.srm, made by tools/gen_menuloader.py)
+  (_menuloader_saved = frame-1 state + saves/ct_real_save.srm, made by the old tools/gen_menuloader.py; its successor
+   tools/gen/menu_loader.py powers on with the battery through CT_ORACLE_SRAM instead)
 ct.exe ROM --loadcost 130 --from saves/battle_re/party3_field.state        -> 12/12 packets, 36.47 load frames
 ```
 Per-frame luma: scratchpad `shell_re/lumaseq.py` (one `--peek` per frame, mean Rec.601 luma of the 256x240
