@@ -10528,13 +10528,20 @@ int CtBattleModeMachineProbe(uint8_t* mem) {
 // returns) and C1/881C's eval, which runs for him because the turn cleared his $B2B6 (battleAiTurn). Also the
 // tail of a turn with no action (stepped in battleAiTurn) and of a reactive counter (C1/8780's C1/8CF9 clears
 // $B2B6 too and skips the step). The eval walks the conditions with their RNG draws.
+// C1/864B `LDA $B2C0 / BEQ`: a turn whose victims armed their counters goes to the counter loop (C1/8650-8814) and reaches
+// C1/881C only at its end -- the eval (and its RNG draws) waits for every counter, decoded or acted (leg 109: enemy 9's
+// eval drew before enemy 7's counter picked its target, and the counter hit Marle instead of Crono).
+static int battleCountersPending(const CtBattleHost* h) {
+  for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
+  return 0;
+}
 static void battleSpanEndArm(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
   if (slot < 0 || slot >= 8) return;
   if (h->aiTurnAdv[slot]) { h->aiTurnAdv[slot] = 0; battleAiAdvance(h, slot); }   // C1/8E4A-8E72
   // C1/8822 `LDA $24 / BNE ->8829`: no eval once C1/B223 has found every PC down (B274 `$24 = 1`), so no RNG draw
   // is spent there.
-  if (!s[0x24]) battleAiEvalAll(h);                      // C1/8826 JSR C1/8C09 -- every slot whose $B2B6 is 0
+  if (!s[0x24] && !battleCountersPending(h)) battleAiEvalAll(h);   // C1/8826 JSR C1/8C09 -- every slot whose $B2B6 is 0
 }
 // The PC entry facing (C1/350F, disasm/notes/battle_facing_engine.md sec. 2): ctBattleFaceTab[atan2] toward the
 // nearest live, present enemy (cmb 3..10, |dx|^2 + |dy|^2 on the live feet: C1/2A43 loop, C1/2B37 metric).
@@ -15107,7 +15114,7 @@ static int battleDeadFlagSweep(CtBattleHost* h, int from, int cont) {
 // when the sweep stopped on a lifeline revive: the eval then waits for it (battleLifelineResume).
 static void battleH12TailRest(CtBattleHost* h, int slot) {
   if (slot >= 0) battleSpanEndArm(h, slot);                                 // C1/8E4A (the turn's) + C1/881C
-  else if (slot == -1 && !h->mem[0x24]) battleAiEvalAll(h);                 // C1/8822-8826 (-2: it ran already)
+  else if (slot == -1 && !h->mem[0x24] && !battleCountersPending(h)) battleAiEvalAll(h);   // C1/8822-8826 (-2: ran already)
 }
 static int battleH12Tail(CtBattleHost* h, int cont, int slot) {
   uint8_t* s = h->mem;
