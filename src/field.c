@@ -11263,7 +11263,7 @@ int main(int argc, char** argv) {
   // The time gauge's phases ($027C = 8, C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): 1 the world fading out (C2:2EC1,
   // 18 NMIs), 2 the NMI-off load (C2/2E23 + C2/6A34's half), 3 the gauge live (its own 18 NMIs, then a check after each),
   // 4 its fade-out (C2:74B3, 18 NMIs), 5 the NMI-off return (C2/2E72 + C2/2C93), 6 the world fading in (C2:2EC4, 17 NMIs).
-  int owGaugePh = 0, owGaugeT = 0, owGaugeN = 0, owGaugeEarly = 0;
+  int owGaugePh = 0, owGaugeT = 0, owGaugeN = 0, owGaugeEarly = 0, owGaugeTrip = 0;
   // The world map's phases ($027C = 6, C2/258D -> C2/631F, disasm/notes/ow_world_map.md), the same shape: 1 the world's mosaic
   // and fade (C2:2EC7, 34 NMIs), 2 the NMI-off load (the stash + C2/631F's half), 3 the map live (a check after each NMI),
   // 4 its last 17 NMIs, 5 the NMI-off return (the stash back, C2/03EF, C2/2C93), 6 the world coming back (C2:2ED0, 41 NMIs).
@@ -12581,7 +12581,10 @@ int main(int argc, char** argv) {
       if (owGaugePh == 2 || owGaugePh == 5) {
         if (owGaugeT > 0) { owGaugeT--; owGaugeBlack = 1; }
         else if (owGaugePh == 2) { owGaugePh = 3; owGaugeN = -owGaugeEarly; }   // C2/6A91 NMI on: the gauge's first pass
-        else {                                                         // C2/2671 / 2683: the world's fade-in, NMI on
+        else if (owGaugeTrip) {                                        // C2/2681 `TSB $4C` #03, NMI on: the trip goes on
+          wd.wram[0x4C] |= 0x03;
+          owGaugePh = 0; owGaugeTrip = 0;
+        } else {                                                       // C2/2671 / 2683: the world's fade-in, NMI on
           CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC4);
           wd.wram[0x4C] |= 0x03;
           owGaugePh = 6; owGaugeT = 0x11 + owGaugeEarly;
@@ -12863,12 +12866,12 @@ int main(int argc, char** argv) {
           wr[0x1E] = 0x09;
           { size_t o = 0; for (int k = 0; k < 6; k++) { memcpy(wr + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; } }
           wr[0x5E] = 0; wr[0x5F] = 0; wr[0xE0] = 0x00; wr[0xE1] = 0xF0; wr[0xE2] = 0x7E; memset(wr + 0x60, 0, 0x80);
-          if ((wr[0x101F4] & 0x0A) || (wr[0x101F5] & 0x02)) {
-            static int said = 0;
-            if (!said) { said = 1; printf("owgauge: UNDERIVED the trip's flags ($7F01F4 & 0A / $7F01F5 & 02) -- the world is rebuilt anyway\n"); }
-          }
-          if (haveWorld) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
-          long cyc = owRebuildCycles(haveWorld ? wd.world : 0);
+          // C2/265E-266C: with `$7F01F4 & 0A` or `$7F01F5 & 02` (the Epoch's trip: $7F01F5 bit 1 is set by the time the gauge
+          // returns on another era) the ROM branches to C2/2681 -- no C2/2C93, no C2:2EC4 fade-in, no 0x11 NMIs, no
+          // `$027C = 1`: only `LDA #03 / TSB $4C` and the NMI back on, the trip's `$027C = 7` kept for the Epoch's state 6.
+          owGaugeTrip = (wr[0x101F4] & 0x0A) || (wr[0x101F5] & 0x02);
+          if (haveWorld && !owGaugeTrip) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
+          long cyc = owGaugeTrip ? 0 : owRebuildCycles(haveWorld ? wd.world : 0);
           for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
           owGaugePh = 5; owGaugeT = owNmiOffFrames(cyc, &owGaugeEarly);
           if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);

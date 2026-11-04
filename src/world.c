@@ -1913,6 +1913,18 @@ void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op) {
     // `13 00 00 0D` / `34 D1 7B`).
     case 0xC6E63D: ram[0x101ED] = 0x01; break;
     case 0xC6E644: ram[0x101ED] = 0x00; break;
+    // $C6:EE23 `REP #20 / LDX $4E / CLC / LDA $08 / ADC $0022,X / STA $0022,X / RTL`: the word $08 added to the object's +22.
+    case 0xC6EE23: {
+      unsigned X = ram[0x4E] | (ram[0x4F] << 8);
+      unsigned v = (unsigned)(ram[0x08] | (ram[0x09] << 8)) + (ram[(X + 0x22) & 0xFFFF] | (ram[(X + 0x23) & 0xFFFF] << 8));
+      ram[(X + 0x22) & 0xFFFF] = (uint8_t)v; ram[(X + 0x23) & 0xFFFF] = (uint8_t)(v >> 8);
+      break;
+    }
+    // $C6:EE31 `LDA $00 / STA $7F00CD / RTL` (M = 8): the byte the script staged in $00 into $7F:00CD. The Epoch's trip
+    // from the 2300 A.D. dome (world 1F2) stores 01 here as it hands over to loc 0F3 (cartridge, leg 109 f11617).
+    case 0xC6EE31: ram[0x100CD] = ram[0x00]; break;
+    // $C6:EE38 `LDA $7F01F5 / AND #FE / STA $7F01F5 / RTL`.
+    case 0xC6EE38: ram[0x101F5] &= (uint8_t)~0x01; break;
     default: {
       static int said = 0;
       if (!said) { said = 1;
