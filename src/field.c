@@ -6164,21 +6164,12 @@ static int fieldChestPrebumpWram(uint8_t* s, const uint8_t* glb, int loc, int cw
   }
   return bumped;
 }
-// C1/D005 (the AddItem leaf of JSL C1/8003, A=1): the $2400 id array is 0x00-terminated with the
-// $2500 counts parallel to it; an id already held bumps its count (cap 99), else the first empty
-// slot takes it. Same shape as the battle drop apply (C1/D010) further down this file -- one leaf.
+// C1/D005 (the AddItem leaf of JSL C1/8003, A=1), move.c's literal port: the scan covers all 0x100 slots, the first
+// empty slot is kept in $AEF9 (with $AEFB its flag) and the id in $AEF7; an id already held bumps its count (cap 99),
+// else the first empty slot takes it -- and on a full bag slot 0 (the ROM's $AEF9 = 0 default).
 static void fieldAddItem(uint8_t* s7, int itemId) {
   if (!s7 || itemId <= 0 || itemId > 0xFF) return;
-  int slot = -1, matched = -1;
-  for (int i = 0; i < 0xF2; i++) {
-    if (s7[0x2400 + i] == itemId) { matched = i; break; }
-    if (s7[0x2400 + i] == 0x00 && slot < 0) slot = i;
-  }
-  int i = (matched >= 0) ? matched : slot;
-  if (i < 0) return;
-  int cnt = (matched >= 0) ? s7[0x2500 + i] : 0;
-  if (++cnt > 99) cnt = 99;
-  s7[0x2400 + i] = (uint8_t)itemId; s7[0x2500 + i] = (uint8_t)cnt;
+  (void)ctVmC1Gate(s7, 1, itemId);                       // 1E70 LDA #01 / JSL C1/8003 -> C1/D005
 }
 // C1/D0A2 (the AddGold leaf, A=4): $2C53 is a 24-bit total, writer C1:D0B6, clamped at $98FFFF.
 static void fieldAddGold(uint8_t* s7, int amount) {
