@@ -11,31 +11,16 @@
 // variable threaded in program order. N is derived where a branch reads it (bit 15 of the result, M = 16).
 #include "seq_race.h"
 #include "romview.h"     // the ROM's tables from ct_assets.dat (CT_ASSET_TABLE)
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <stddef.h>   // NULL
 #include "seq_racepic.h"   // the picture, when the host draws it (io->pic)
-#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
+#include "seq_stage_int.h"   // R, rd / wr / neg, the task-list library, pgw16 (shared with seq_stage.c)
 
-typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
-
-static unsigned rd(const R* r, unsigned a) { return CT_SEQ_W16(r->w, a); }
-static void wr(R* r, unsigned a, unsigned v) { CT_SEQ_W16_PUT(r->w, a, v); }
 static unsigned adc(R* r, unsigned a, unsigned v) { unsigned s = (a & 0xFFFF) + (v & 0xFFFF) + (unsigned)r->c; r->c = s > 0xFFFF; return s & 0xFFFF; }
 static unsigned sbc(R* r, unsigned a, unsigned v) { int s = (int)(a & 0xFFFF) - (int)(v & 0xFFFF) - (1 - r->c); r->c = s >= 0; return (unsigned)s & 0xFFFF; }
 static int cmpn(R* r, unsigned a, unsigned v) { r->c = (a & 0xFFFF) >= (v & 0xFFFF); return (((a - v) & 0xFFFF) & 0x8000) != 0; }   // -> N
 static unsigned lsr(R* r, unsigned a) { r->c = (int)(a & 1); return (a & 0xFFFF) >> 1; }
 static unsigned ror(R* r, unsigned a) { int nc = (int)(a & 1); a = ((a & 0xFFFF) >> 1) | ((unsigned)r->c << 15); r->c = nc; return a; }
 static unsigned asl(R* r, unsigned a) { r->c = (int)((a >> 15) & 1); return (a << 1) & 0xFFFF; }
-static int neg(unsigned v) { return (v & 0x8000) != 0; }
-
-// The task-list library (C3 overlay): $3934 removes X from the task list $0920, $395E adds it at the first free slot,
-// $3974 adds a vblank hook at the first free slot of $0940. Each is `PHP ... PLP`: the caller's flags survive the call.
-// Note: none of the three has a bound. `LDA $0920,X / BEQ / INX / INX / BRA` walks past the sixteen slots until it meets a
-// zero (the task list runs into the hook list at $0940, that one into $0960). Kept; the cap only stops a runaway.
-static void taskDel(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (rd(r, 0x0920 + i) == x) { wr(r, 0x0920 + i, 0); return; } }
-static void taskAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0920 + i)) { wr(r, 0x0920 + i, x); return; } }
-static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0940 + i)) { wr(r, 0x0940 + i, x); return; } }
 
 // $4C3F / $4C84: a bump from behind / ahead -- the two positions pushed apart, then $4CC7 swaps the speeds.
 static void bumpSwap(R* r) { unsigned x = rd(r, 0x4A); wr(r, 0x4A, rd(r, 0x6F)); wr(r, 0x6F, x); }   // 4CC7 LDX $4A / LDA $6F / STA $4A / STX $6F
@@ -322,8 +307,8 @@ void CtRaceTask4339(uint8_t* w) {
   }
 }
 
-// The script interpreter is the stage machine's (CtSeqScript, seq_stage.c); the race's one inline call sets the page's IP.
-static void pgw16(R* r, unsigned page, unsigned off, unsigned v) { wr(r, page + off, v); }
+// The script interpreter is the stage machine's (CtSeqScript, seq_stage.c); the race's one inline call sets the page's IP
+// (pgw16, seq_stage_int.h).
 
 // $7E:3F59 -- the race's one inline call: `JSR $3448 / AND #0002 / TAX / LDA $3F66,X / STA $20 / RTS`. $3448 is the overlay's
 // RNG: `$039B` + 1 (8-bit), then the byte at $C0:FE00 + it. Which camera intro page A plays.

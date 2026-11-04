@@ -14,21 +14,7 @@
 #include <stdlib.h>
 #include "lz.h"       // the overlay: C3:0000 decompresses it with C3/0557
 #include "seq_entry4.h"    // CtSeqRng02DD8: C3/02DD, the curtain's seed (seq_stagelib.c)
-#include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
-
-typedef struct { uint8_t* w; int c; const CtRaceIo* io; } R;
-
-static unsigned rd(const R* r, unsigned a) { return CT_SEQ_W16(r->w, a); }
-static void wr(R* r, unsigned a, unsigned v) { CT_SEQ_W16_PUT(r->w, a, v); }
-static int neg(unsigned v) { return (v & 0x8000) != 0; }
-
-// The task-list library (C3 overlay): $3934 removes X from the task list $0920, $395E adds it at the first free slot,
-// $3974 adds a vblank hook at the first free slot of $0940. Each is `PHP ... PLP`: the caller's flags survive the call.
-// Note: none of the three has a bound. `LDA $0920,X / BEQ / INX / INX / BRA` walks past the sixteen slots until it meets a
-// zero (the task list runs into the hook list at $0940, that one into $0960). Kept; the cap only stops a runaway.
-static void taskDel(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (rd(r, 0x0920 + i) == x) { wr(r, 0x0920 + i, 0); return; } }
-static void taskAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0920 + i)) { wr(r, 0x0920 + i, x); return; } }
-static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) if (!rd(r, 0x0940 + i)) { wr(r, 0x0940 + i, x); return; } }
+#include "seq_stage_int.h"   // R, rd / wr / neg, the task-list library, pgw16 (shared with seq_race.c)
 
 // ---- The $C3 script interpreter (C3/0AFF -> C3/0B03), over its register page in WRAM ----
 // The same machine title_intro.c runs for the title (sequence_table.md sec. 8.1), here over the page itself, because the
@@ -37,7 +23,6 @@ static void vblAdd(R* r, unsigned x) { for (unsigned i = 0; i < 0x1000; i += 2) 
 // immediate, set when it is 0 and added otherwise; bit 5 set = a register named by the next byte, set when $20 and added
 // otherwise); $8n / $9n = loop n; anything else dispatches on its low nibble through C3:0B74.
 static unsigned pg16(const R* r, unsigned page, unsigned off) { return rd(r, page + off); }
-static void pgw16(R* r, unsigned page, unsigned off, unsigned v) { wr(r, page + off, v); }
 
 int CtSeqScript(uint8_t* w, unsigned page, const CtRaceIo* io, CtSeqCall call) {
   R rr = { w, 0, io }, *r = &rr;
