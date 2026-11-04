@@ -8151,6 +8151,7 @@ static void battleDeathPalCopy(CtBattleHost* h, int slot);       // CF/FE4F-FE72
 static void battleDeathRoutineStart(CtBattleHost* h, int slot) {   // CF/FE20's pass for this corpse, then CD/0043's entry
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   h->dissolveRunning = slot;
+  if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "deathroutine f%d slot=%d cmb=%d A013=%d\n", h->frames, slot, 3 + slot, h->mem[0xA013]);
   battleDeathScanStores(h, 3 + slot);                             // CF/FE2D-FE33
   h->mem[0xCD00] = (uint8_t)(3 + slot);                           // CD/0043 `STA $CD00` (the corpse; program op 80 0F reads it)
   battleDeathPalCopy(h, slot);                                    // CF/FE4F-FE72
@@ -8227,6 +8228,7 @@ static int battleDeathFxFrame(CtBattleHost* h) {
   return s[0x5D9B] ? 1 : 0;                                       // CD/0E14-0E17
 }
 static void battleDeathScanNext(CtBattleHost* h);              // (below: C1/881C -> C1/AC5E)
+static void battleKilledLatchAC5E(uint8_t* s);                // (below, with the scan's stores)
 static void battleAdvanceDissolves(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (h->dissolveRunning >= 0 && !h->dissolveActive[h->dissolveRunning]) h->dissolveRunning = -1;
@@ -8268,8 +8270,30 @@ static int battleCounterPhase(const CtBattleHost* h) {
 }
 static void battleDeathScanNext(CtBattleHost* h) {
   if (h->dissolveRunning >= 0 || battleCounterPhase(h)) return;  // C1/881C not reached yet
-  for (int slot = 7; slot >= 0; slot--)                           // CF/FE20's loop goes on: highest combatant index first,
-    if (h->dissolveActive[slot]) { battleDeathRoutineStart(h, slot); return; }   //   the next routine on this frame
+  uint8_t* s = h->mem;
+  for (int slot = 7; slot >= 0; slot--) {                         // CF/FE20's loop goes on: highest combatant index first,
+    if (!h->dissolveActive[slot]) continue;                       //   the next routine on this frame
+    // The gates are read as the scan reaches the corpse, after the counters: a fallen enemy's own block-2 counter can
+    // set `$9FF7,X` (leg 113: the Bantam Imp's 7C, $9FFA = 81 at f1395) and then the corpse has no routine at all.
+    int cmb = 3 + slot;
+    if (s[0x9FF7 + cmb]) {                                        // CF/FE28 `LDA $9FF7,X / BNE ->FE7B`
+      battleKilledLatchAC5E(s);
+      h->dissolveActive[slot] = 0; s[0x96F5 + cmb] = 0;           // FE7B STZ $96F5,X
+      continue;
+    }
+    if (!s[0x99B5 + cmb]) {                                       // CF/FE36 `LDA $99B5,X / BEQ ->FE7B`, after FE2D-FE33
+      battleDeathScanStores(h, cmb);
+      h->dissolveActive[slot] = 0; s[0x96F5 + cmb] = 0;
+      continue;
+    }
+    if (s[0x29C6 + slot * 12] & 0x40) {                           // CF/FE48 `LDA $29C6,Y / AND #40 / BNE ->FE7E`
+      battleDeathScanStores(h, cmb);
+      h->dissolveActive[slot] = 0; h->deadStanding[slot] = 1;
+      h->deadStandFrame[slot] = (uint32_t)CtBattleRenderClock(h);
+      continue;
+    }
+    battleDeathRoutineStart(h, slot); return;
+  }
   if (h->headPend) {                                              // the scan returns into the loop: C1/8120's head
     h->headPend = 0; h->deathHeadF = h->frames;                   //   (`$A0FD = 00` and `$0027`++ on the frame of the
     battleIterHead(h);                                            //   last `$96F5` clear)
@@ -11056,8 +11080,9 @@ static void battleDispatchScheduled(CtBattleHost* h) {
   // An empty record (C1/85C2-85C8, `LDA $93EE,X / EOR $B188,X / BPL -> C1/860D`): the seat stays in the confirm FIFO
   // $99D4 when its command record is zeroed -- FD/A8FE (the sweep C1/883D: dead, berserk, stop, sleep, chaos) or a death --
   // and the executor pops it with nothing to run: that pass opens no action, the next command waits for the next odd pass.
+  if (atk >= 0 && atk < 3) s[0xB18B] = (uint8_t)atk;               // C1/8597-859A `LDA $99D4 / STA $B18B`: every pop,
+                                                                   //   before C1/85B1's record test (an item's turn too)
   if (voidRec || (atk >= 0 && atk < 3 && !battleAlive(s, atk))) {
-    if (atk >= 0 && atk < 3) s[0xB18B] = (uint8_t)atk;             // C1/8597-859A `LDA $99D4 / STA $B18B`
     battleTrace(h, "sched-pop-empty"); return; }
   // C1/B9B8-BA30, the executor's own check before it runs a PC command: the actor (and a dual/triple tech's co-actors, the
   // $93F3 nibbles) through FD/A8A5 -- any one berserk, or stop / sleep / chaos (+1E & 86) -> FD/A93C: FD/A8CE for each (the
