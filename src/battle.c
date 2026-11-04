@@ -10798,15 +10798,18 @@ static void battleMoveInit(CtBattleHost* h) {
   }
   for (int slot = 0; slot < 8; slot++) {                           // enemies: $29BF + 12*slot -> foot
     int cmb = slot + 3;
-    if (!battlePresent(s, cmb)) continue;
+    // CC/EA5B-EA67: `LDA $29C5,X / BPL` -- the record's id high byte is the only gate: a slot hidden at the start ($29C6
+    // bit 7, an enemy that appears later) is loaded like the others, and its id word lands in $9853 for C1/4497.
     const uint8_t* r = s + 0x29BF + slot * 12;
-    if (r[6] != 0) continue;                                       // invalid staged record
+    if (r[6] & 0x80) continue;                                     // an empty slot (id FFFF)
     BT_LIVEX(h, cmb) = 16 * r[0] + r[2]; BT_LIVEY(h, cmb) = 16 * r[1] + r[3];
     BT_MIRX(h, cmb) = BT_LIVEX(h, cmb); BT_MIRY(h, cmb) = BT_LIVEY(h, cmb);
-    BT_MVEXTENT(h, cmb) = battleMoveExtent(cmb, s[battleBlock(cmb) + 0]);
-    BT_MVEXTENTY(h, cmb) = battleMoveExtentY(cmb, s[battleBlock(cmb) + 0]);
+    s[0x9FF7 + cmb] = (uint8_t)(r[7] & 0x80);                      // CC/EAB5-EABA `LDA $29C6,X / AND #80 / STA $9FF7,Y`:
+                                                                   //   hidden from the start (out of the target lists)
+    BT_MVEXTENT(h, cmb) = battleMoveExtent(cmb, r[5]);
+    BT_MVEXTENTY(h, cmb) = battleMoveExtentY(cmb, r[5]);
     { const uint8_t* fer = CtBattleFieldEnemyRecs();               // E4/F600 + id*10, byte +9 (CC/EBCC-EBE0):
-      int id = s[battleBlock(cmb) + 0];                              //   & 7 -> $98C2,Y the phase step per wrap,
+      int id = r[5];                                                 //   & 7 -> $98C2,Y the phase step per wrap,
       int b9 = fer ? fer[(size_t)id * 10 + 9] : 0x41;                //   >> 4 -> $9742,Y the reload, also seeded into
       BT_MVPHASESTEP(h, slot) = b9 & 7; BT_MVSEGPERIOD(h, slot) = b9 >> 4; //   $9819,Y (CC/EBE0). Hetake/Avian 0x41 = 4/+1,
       BT_MVSEGCAD(h, slot) = BT_MVSEGPERIOD(h, slot);                      //   Beetle 0x61 = 6/+1
@@ -10815,7 +10818,7 @@ static void battleMoveInit(CtBattleHost* h) {
       // Hetake 0x41 -> 0x20, Yakra 0x21 -> 0x10.
       // CC/EBFD-EC0B: `LDA $80 / ASL / TAX / LDA $8C / STA $9853,X / LDA $8D / STA $9854,X` -- the enemy's id as a word
       // (the loader's $8C, zero-extended), which C1/4497 indexes by.
-      s[0x9853 + slot * 2] = (uint8_t)id; s[0x9854 + slot * 2] = 0;
+      s[0x9853 + slot * 2] = (uint8_t)id; s[0x9854 + slot * 2] = r[6];   // $8C / $8D = the record's word (CC/EAD2)
       // CC/EC0B-EC1E, right after: `BNE ->EC21` (the id's high byte), `LDA $9853,X / CMP #D8 / BEQ / CMP #94 / BEQ / CMP #AD /
       // BNE ->EC21`, then `LDX $80 / INC $1D26,X`: these three enemies stand one pixel lower than their staged record.
       if (id == 0xD8 || id == 0x94 || id == 0xAD) { BT_LIVEY(h, cmb) = (BT_LIVEY(h, cmb) + 1) & 0xFF; BT_MIRY(h, cmb) = BT_LIVEY(h, cmb); }
@@ -17031,6 +17034,9 @@ static void battleFxStageCfg(CtBattleHost* h) {
       long a = (long)ROM_D1_ANIM_WORD_TBL + s[0x987E] * 2;     s[0x987F] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9880] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/450A-4515
       a = (long)ROM_ENEMY_TEC_WORD_TBL2 + s[0x9881] * 2;      s[0x9882] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9883] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/4518-4521
       a = (long)ROM_ENEMY_TEC_WORD_TBL3 + s[0x9884] * 2;      s[0x9885] = CtRomByte(rom, 0x400000L, (long)(a)); s[0x9886] = CtRomByte(rom, 0x400000L, (long)(a + 1));   // C1/4524-452D
+      if (getenv("CT_BATTLE_ASCTRACE"))
+        fprintf(stderr, "fxstage f%d enemy-phys atk=%d AE91=%02X %02X %02X 9884=%02X 9885=%02X%02X\n", h->frames, h->actAttacker,
+                s[0xAE91], s[0xAE92], s[0xAE93], s[0x9884], s[0x9886], s[0x9885]);
       return;
     }
     cfg = (long)ROM_ENEMY_ACT_CFG + (long)s[0xAE93] * 7; t2 = ROM_ENEMY_TEC_WORD_TBL2; t3 = ROM_ENEMY_TEC_WORD_TBL3;
