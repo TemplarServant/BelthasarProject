@@ -763,9 +763,31 @@ def save_run(checks, results):
         json.dump({"when": time.strftime("%Y-%m-%d %H:%M:%S"), "failed": failed}, f)
 
 
+def do_summary(data):
+    """--summary: the suite's counts, read from tools/regress_checks.json alone (nothing runs). The numbers the docs
+    quote come from here (docs/TESTING_OVERVIEW.md)."""
+    checks = data["checks"]
+    tiers = {}
+    for c in checks:
+        tiers[c.get("tier")] = tiers.get(c.get("tier"), 0) + 1
+    print("checks: %d" % len(checks))
+    print("  quick: %d" % tiers.pop("quick", 0))
+    print("  full: %d" % tiers.pop("full", 0))
+    print("  untiered (run in the full run only): %d" % tiers.pop(None, 0))
+    for t in sorted(tiers):
+        print("  tier %r: %d" % (t, tiers[t]))
+    print("excluded candidates: %d" % len(data.get("excluded", [])))
+    print("exclusive (run one at a time): %d" % sum(1 for c in checks if c.get("exclusive")))
+    print("checks with mutations: %d" % sum(1 for c in checks if c.get("mutations")))
+    print("mutations: %d" % sum(len(c.get("mutations") or []) for c in checks))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="CT decomp regression suite")
     ap.add_argument("--list", action="store_true", help="list checks, don't run")
+    ap.add_argument("--summary", action="store_true",
+                    help="print the suite's counts (checks, tiers, excluded, mutations) from the JSON and exit")
     ap.add_argument("--quick", action="store_true", help="tier 'quick' checks only")
     ap.add_argument("--only", nargs="+", metavar="NAME", help="run only these checks")
     # Default parallelism: the checks are independent subprocesses, so the suite is bound by the
@@ -773,7 +795,7 @@ def main():
     # little left to overlap; cpu_count-2 keeps the box usable while a run is going. --jobs overrides.
     _cpus = os.cpu_count() or 4
     ap.add_argument("--jobs", type=int, default=max(4, min(12, _cpus - 2)),
-                    help="parallel subprocesses (default: min(12, CPUs-2))")
+                    help="parallel subprocesses (default: max(4, min(12, CPUs-2)))")
     ap.add_argument("--pin", nargs="+", metavar="NAME", help="run NAME(s) in parallel and rewrite their expect "
                     "lines from their pin regexes (baseline re-pin)")
     ap.add_argument("--repin-failed", action="store_true",
@@ -820,6 +842,8 @@ def main():
     data = load_checks()
     checks = data["checks"]
 
+    if args.summary:
+        sys.exit(do_summary(data))
     if args.repin_failed:
         sys.exit(do_repin_failed(data))
     if args.pin:

@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Python packages
-        run: python -m pip install --disable-pip-version-check numpy
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
 
       - name: Toolchain and SDL2 (Linux)
         if: runner.os == 'Linux'

@@ -1,0 +1,4 @@
+# Optional Python packages, for tools no regression check runs: python -m pip install -r requirements-optional.txt
+# Pillow: the map editor (tools/map_editor.py), the README's pictures (tools/release/make_media.py), the scene
+# adjustments' art (tools/scene_art_entry3.py) and the attract survey's pictures (tools/attract_survey.py).
+Pillow
