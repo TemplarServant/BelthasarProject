@@ -121,7 +121,10 @@ def compose(old_find, new_find, old_repl):
 def substitute(old_find, new_find, old_repl):
     """The new replace when the mutation edits tokens the refactor rewrote: the drift's token substitutions
     (`h -> pcDefer [` -> `BT_PCDEFER ( h ,`) applied to the old replace. Only when the same substitutions turn the old
-    find into the new find exactly -- they explain the whole drift -- else None."""
+    find into the new find exactly -- they explain the whole drift -- else None. In the old replace a substitution is
+    made only where the replace still holds the find's own text at a spot where the drift made it: a comment's
+    `ChangeLocation. Applies` -> `ChangeLocation; applies` is a `.` -> `;` substitution, and applied to every `.` of the
+    replace it turned the mutation's `wd.have` into `wd;have`, which does not build."""
     T, U = tokens(old_find), tokens(new_find)
     subs = [(tuple(T[i1:i2]), tuple(U[j1:j2])) for tag, i1, i2, j1, j2
             in difflib.SequenceMatcher(None, T, U, autojunk=False).get_opcodes() if tag == 'replace']
@@ -131,21 +134,31 @@ def substitute(old_find, new_find, old_repl):
     if len({a for a, _ in subs}) != len(subs):           # one old run rewritten two ways: not a substitution
         return None
 
-    def apply(toks):
-        out, i = [], 0
+    def apply(toks, allowed):
+        """toks with the substitutions made, at the token indices allowed(i, a) accepts; the indices they fired at."""
+        out, i, fired = [], 0, set()
         while i < len(toks):
             for a, b in subs:
-                if tuple(toks[i:i + len(a)]) == a:
+                if tuple(toks[i:i + len(a)]) == a and allowed(i, a):
                     out.extend(b)
+                    fired.add((i, a))
                     i += len(a)
                     break
             else:
                 out.append(toks[i])
                 i += 1
-        return out
-    if ''.join(apply(T)) != new_find:
+        return out, fired
+    U2, in_find = apply(T, lambda i, a: True)
+    if ''.join(U2) != new_find:
         return None
-    return ''.join(apply(tokens(old_repl)))
+    R = tokens(old_repl)
+    r2t = {}                                          # a replace token -> the same token of the find, where they align
+    for x, y, size in difflib.SequenceMatcher(None, T, R, autojunk=False).get_matching_blocks():
+        for d in range(size):
+            r2t[y + d] = x + d
+    out, _ = apply(R, lambda i, a: all(i + d in r2t and r2t[i + d] == r2t[i] + d for d in range(len(a)))
+                   and (r2t[i], a) in in_find)
+    return ''.join(out)
 
 
 def family(f):
@@ -279,6 +292,12 @@ def retarget(data, text, pool, cross=False, write=False, stamp='', out=print):
     return stale, moved, manual, names
 
 
+def lf(s):
+    """A source as the finds are written: LF. A find must match an LF checkout too (the CI, Linux, a cloud session);
+    regress.py fits an LF find to a CRLF working copy, but never strips the \\r a find copied from one carries."""
+    return s.replace('\r\n', '\n') if s is not None else None
+
+
 def self_test():
     """Both passes on synthetic files in memory: a function moved verbatim to a new file (CRLF there, an LF find), a
     find that two files now hold, a function moved AND re-worded, an edit whose file is gone; then the re-targeted
@@ -335,8 +354,14 @@ def self_test():
           all(edit(plain, n)['file'] == edit(data, n)['file'] for n in ('t-moved', 't-reworded', 't-gone')))
     moved = copy.deepcopy(data)
     print('self-test: with --cross-file')
-    stale, nmoved, manual, names = retarget(moved, texts.get, pool, cross=True, write=True, stamp='TEST',
-                                            out=lambda l: print('    ' + l))
+    stale, nmoved, manual, names = retarget(moved, lambda f: lf(texts.get(f)), pool, cross=True, write=True,
+                                            stamp='TEST', out=lambda l: print('    ' + l))
+    check('no re-targeted find or replace carries a CR (src/b.c is CRLF)',
+          not any('\r' in e[k] for n in ('t-moved', 't-reworded', 't-gone') for e in [edit(moved, n)]
+                  for k in ('find', 'replace')))
+    check('a comment-only drift does not rewrite the replace\'s code (`.` -> `;` would make wd;have)',
+          substitute('  init(&w);   // a ChangeLocation. Applies', '  init(&w);   // a ChangeLocation; applies',
+                     '  if (!w.have) init(&w);   // MUT') == '  if (!w.have) init(&w);   // MUT')
     e = edit(moved, 't-moved')
     check('moved verbatim: file src/a.c -> src/b.c, find and replace unchanged',
           e['file'] == 'src/b.c' and e['find'] == find1 and e['replace'] == find1.replace('0x40', '0x41'))
@@ -380,7 +405,7 @@ def main():
     def text(f):
         if f not in texts:
             p = os.path.join(regress.ROOT, f)
-            texts[f] = open(p, encoding='utf-8', errors='replace', newline='').read() if os.path.exists(p) else None
+            texts[f] = lf(open(p, encoding='utf-8', errors='replace', newline='').read() if os.path.exists(p) else None)
         return texts[f]
 
     pool = source_pool(regress.ROOT, data) if a.cross_file else []
