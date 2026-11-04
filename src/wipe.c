@@ -68,7 +68,7 @@ uint8_t CtWipeSeed(uint8_t* wram128, uint8_t a, int carry, uint16_t x, uint8_t d
 int CtWipeRoutine(const uint8_t* rom, long romLen, uint8_t* w, uint16_t callerX, uint8_t callerDb) {
   if (!rom || !w || romLen < 0x10000) return -1;
   WipeBus b = { w, rom, romLen };
-  if (!DP(0x50)) return 0;                                             // 01F2 LDA $50 / BEQ -> 023B: STZ $51 / STZ $50
+  if (!DP(0x50)) { DP(0x51) = 0; return 0; }                           // 01F2 LDA $50 / BEQ -> 023B: STZ $51 / STZ $50
   uint16_t x = callerX;
   uint8_t cnt;
   if (!DP(0x51)) {                                                     // 01F6 LDA $51 / BNE
