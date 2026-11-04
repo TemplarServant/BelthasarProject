@@ -16,6 +16,10 @@ on 1F6 (the cartridge's f3073), then Right 40 frames, Down 16, A (the landing). 
 the cartridge -- its field scenes in between run a few frames apart, so its world is 358 behind there, and the presses are
 placed on the world's clock. Graded: every change of `$027C $027E $0294`, the Epoch's position `$0290/$0292` and its state,
 from the first step; three pictures (steps, the turn, the landing).
+
+`--walk-map` / `--walk-exchange`: the party on foot (the same save before the boarding, a step down first), Select -> the
+world map and Y -> the party exchange from the lead's own poll C2/3567 (GitHub issue #7): the timeline from `$027C` = 6 / 9
+and pictures through the screen and back.
 """
 import os
 import re
@@ -304,7 +308,7 @@ MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3
 MAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
 
 
-def world_map():
+def world_map(tag='map', MAP_O=MAP_O, MAP_SEL=MAP_SEL, MAP_B=MAP_B, MAP_SHIFT=MAP_SHIFT, MAP_SHOTS=MAP_SHOTS, MAP_P=MAP_P):
     """The world map from the free flight (C2/258D -> C2/631F, disasm/notes/ow_world_map.md): Select (the cartridge's f3082,
     CT_HOLDBTN Sel on the port's world clock), the mosaic and the fade, the map zooming out, B 242 frames on (the zoom back), the
     world rebuilt and back. Every change of `$0100 $027C $1C $1D $1F $1B48` and of the controller's state ($0C30 = 666C, +2),
@@ -335,14 +339,14 @@ def world_map():
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_OWGAUGETRACE='1',
                CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1',
                CT_HOLDBTN='02@%d:2,08@%d:2' % (MAP_SEL + MAP_SHIFT + 1 + lost_by(MAP_SEL), MAP_B + MAP_SHIFT + 1 + lost_by(MAP_B)),
-               CT_SHOTS=os.path.join(OUT, 'map'),
+               CT_SHOTS=os.path.join(OUT, tag),
                CT_SHOTS_AT=','.join(str(f + MAP_SHIFT + lost_by(f)) for f in MAP_SHOTS + [frames]),
                CT_SHOTS_EXIT='1')
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(MAP_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
     pe = []
     for l in r.stdout.splitlines():
-        if l.startswith('owmap:'): print('map: port says ' + l)
+        if l.startswith('owmap:'): print(tag + ': port says ' + l)
         m = re.match(r'owveh: pass \d+ f(\d+) 027C=(..) .* 0100=(....) .* 1C=(....) 1F=(..) 1B48=(..) \|(.*)', l)
         if m:
             c = re.search(r':666C/(..)', m.group(7))
@@ -364,25 +368,25 @@ def world_map():
     o, ot = rel(oe)
     p, pt = rel(pe)
     o = [(d + lost_by(ot + d), v) for d, v in o]                 # the cartridge's events on the console's clock
-    print('map: the cartridge lost %d picture(s) to a long DMA (monitor %s)' % (len([x for x in lost if x >= (ot or 0)]),
+    print(tag + ': the cartridge lost %d picture(s) to a long DMA (monitor %s)' % (len([x for x in lost if x >= (ot or 0)]),
           ', '.join('f%d' % x for x in lost if x >= (ot or 0)) or '-'))
     hor = frames - (ot or 0) + lost_by(frames)
     o = [e for e in o if e[0] <= hor]; p = [e for e in p if e[0] <= hor]
-    print('map: timeline %s -- %d changes from `$027C = 6` (cartridge f%s, port f%s; %d in the port)' % (
+    print(tag + ': timeline %s -- %d changes from `$027C = 6` (cartridge f%s, port f%s; %d in the port)' % (
         'same' if o == p else 'DIFFERENT', len(o), ot, pt, len(p)))
     if o != p:
         for a, b in zip(o, p):
-            if a != b: print('map:   first difference cartridge +%d:%s port +%d:%s' % (a[0], '/'.join(a[1]), b[0], '/'.join(b[1]))); break
+            if a != b: print(tag + ':   first difference cartridge +%d:%s port +%d:%s' % (a[0], '/'.join(a[1]), b[0], '/'.join(b[1]))); break
     t7o = next((d for d, v in o if v[1] == '07'), None); t7p = next((d for d, v in p if v[1] == '07'), None)
     t1o = next((d for d, v in o if v[1] == '01' and t7o is not None and d > t7o), None)
     t1p = next((d for d, v in p if v[1] == '01' and t7p is not None and d > t7p), None)
-    print('map: `$027C = 7` at +%s on the cartridge, +%s in the port; `$027C = 1` at +%s / +%s' % (t7o, t7p, t1o, t1p))
+    print(tag + ': `$027C = 7` at +%s on the cartridge, +%s in the port; `$027C = 1` at +%s / +%s' % (t7o, t7p, t1o, t1p))
     if os.environ.get('EPOCH_DUMP'):
         oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
         for d in sorted(set(oi) | set(pi)):
-            print('map:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
+            print(tag + ':   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
     for f in MAP_SHOTS:
-        o_raw = os.path.join(OUT, 'map_o%d.raw' % f)
+        o_raw = os.path.join(OUT, tag + '_o%d.raw' % f)
         bs, t = [], 0
         for it in MAP_O:
             b, n = it.split(':'); n = int(n)
@@ -391,13 +395,84 @@ def world_map():
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
         q = f + MAP_SHIFT + lost_by(f)
-        pp = os.path.join(OUT, 'map_f%d.raw' % q)
+        pp = os.path.join(OUT, tag + '_f%d.raw' % q)
         if not os.path.exists(pp):
-            print('map: picture port f%d MISSING' % q); continue
+            print(tag + ': picture port f%d MISSING' % q); continue
         po = raw_rgb(pp, False)
         oo = raw_rgb(o_raw, True)
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
-        print("map: picture port f%d / cartridge f%d %d px differ" % (q, f + 1, n))
+        print(tag + ": picture port f%d / cartridge f%d %d px differ" % (q, f + 1, n))
+    return 0
+
+
+# The same from the party on foot (ch24 before the boarding, $027E = 0): the lead's own poll C2/3567, Select -> C2/35FC
+# `$027C = 6` (GitHub issue #7). Select at the cartridge's f60, B 242 frames on; the port presses on the boarding's clock
+# (PRESS_P - PRESS_O), the shots at the flight's offsets from the press. A step down first (f30, 8 frames) on both sides:
+# the state's idle counter $02B1 (B9, the fidget at F0 before f60) and placard counter $1BF7 (78) are the capture's, the
+# port's start at 0 from the load, and an issued step zeroes both (C2/3697 STZ $02B1, C2/36E7 STZ $1BF7).
+WALKMAP_O = ['0:30', '20:8', '0:22', '4:2', '0:240', '1:2', '0:250']
+WALKMAP_SHOTS = [f - MAP_SEL + 60 for f in MAP_SHOTS]
+WALKMAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:130', 'd:8', 'n:900']
+
+
+# The party exchange from the party on foot (GitHub issue #7): the same step, then Y at the cartridge's f60 -> C2/3605-3614
+# `$027C = 9` (the storyline D3 >= 0x49), C2/23DB -> C2/251E, C2/2545-2552 `JSL C2/8000` with A = 5 (screen $07), B 120
+# frames on (the screen's exit), the world back and `$027C = 1`.
+WALKEX_O = ['0:30', '20:8', '0:22', '2:2', '0:120', '1:2', '0:200']
+WALKEX_Y, WALKEX_B = 60, 182
+WALKEX_SHOTS = [70, 80, 100, 130, 170, 190, 210, 240, 300, 380]
+WALKEX_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:130', 'd:8', 'n:144', 'b:2', 'n:900']   # (the menu reads the drive, not CT_HOLDBTN)
+
+
+def walk_exchange():
+    """`$027C` and the menu's screen byte `$0067` from the frame `$027C` becomes 9, both sides, and pictures at WALKEX_SHOTS
+    (the port's P + PRESS_P - PRESS_O against the cartridge's --peek P + 1, walk_map's alignment)."""
+    os.makedirs(OUT, exist_ok=True)
+    shift = PRESS_P - PRESS_O
+    frames = WALKEX_SHOTS[-1] + 2
+    r = subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--monitor', '7E027C:1', '--from',
+                        os.path.join(JK, 'states', 'ch24.state'), '--btnscript', ','.join(WALKEX_O), '--frames', str(frames),
+                        '--diff'], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True, text=True,
+                       errors='replace')
+    oe = [(int(m.group(1)), m.group(2)) for m in (re.match(r'\s+f(\d+)\s+7E027C=(..)', l) for l in r.stdout.splitlines()) if m]
+    env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_OWVEHTRACE='1', CT_SHOPTRACE='1',
+               CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'),
+               CT_HOLDBTN='04@%d:2' % (WALKEX_Y + shift + 1),
+               CT_SHOTS=os.path.join(OUT, 'walkex'), CT_SHOTS_AT=','.join(str(f + shift) for f in WALKEX_SHOTS), CT_SHOTS_EXIT='1')
+    r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
+                        ','.join(WALKEX_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
+    pe = []
+    for l in r.stdout.splitlines():
+        m = re.match(r'owveh: pass \d+ f(\d+) 027C=(..)', l)
+        if m: pe.append((int(m.group(1)), m.group(2)))
+        if l.startswith('exchange:'): print('walkex: port says ' + l)
+    def rel(ev):
+        t0 = next((f for f, v in ev if v == '09'), None)
+        out, last = [], None
+        for f, v in ev:
+            if t0 is None or f < t0 or v == last: continue
+            out.append((f - t0, v)); last = v
+        return out, t0
+    o, ot = rel(oe)
+    p, pt = rel(pe)
+    print('walkex: timeline %s -- `$027C` %s on the cartridge (f%s), %s in the port (f%s)' % (
+        'same' if o == p and o else 'DIFFERENT', ' '.join('+%d:%s' % e for e in o), ot,
+        ' '.join('+%d:%s' % e for e in p), pt))
+    for f in WALKEX_SHOTS:
+        o_raw = os.path.join(OUT, 'walkex_o%d.raw' % f)
+        bs, t = [], 0
+        for it in WALKEX_O:
+            b, n = it.split(':'); n = int(n)
+            if t + n >= f + 1: bs.append('%s:%d' % (b, f + 1 - t)); break
+            bs.append(it); t += n
+        subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
+                        '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
+        pp = os.path.join(OUT, 'walkex_f%d.raw' % (f + shift))
+        if not os.path.exists(pp):
+            print('walkex: picture port f%d MISSING' % (f + shift)); continue
+        po, oo = raw_rgb(pp, False), raw_rgb(o_raw, True)
+        n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
+        print('walkex: picture port f%d / cartridge f%d %d px differ' % (f + shift, f + 1, n))
     return 0
 
 
@@ -481,6 +556,10 @@ def dactyl():
 def main():
     if '--map' in sys.argv:
         return world_map()
+    if '--walk-exchange' in sys.argv:
+        return walk_exchange()
+    if '--walk-map' in sys.argv:
+        return world_map('walkmap', WALKMAP_O, 60, 302, PRESS_P - PRESS_O, WALKMAP_SHOTS, WALKMAP_P)
     if '--dactyl' in sys.argv:
         return dactyl()
     if '--gauge' in sys.argv:

@@ -817,6 +817,15 @@ block (its frame counter and the port's +3E left out), 0 in VRAM `$1E00-$1FFF`, 
 text's box. Four mutations (all glyphs in one call, no centring, no WRAM descriptors, no arrival test `$0282`) are killed.
 Re-pin only against a fresh oracle measurement of the same route. Dossier: `disasm/notes/vwf_engine.md` sec. 6.
 
+### ow-world-map-on-foot-vs-oracle / ow-party-exchange-on-foot-vs-oracle (`tools/epoch_board_cmp.py --walk-map / --walk-exchange`)
+
+Select and Y on foot on the overworld (GitHub issue #7): the lead's poll C2/3567 stores `$027C = 6` (the world map) or,
+from storyline 0x49, `$027C = 9` (the party exchange, C2/251E with mode 5). Jackie's ch24 on foot, a step down on both
+sides first (it zeroes the capture's idle and placard counters, `$02B1` / `$1BF7`), then the press; graded the timeline
+from the store and pictures through the screen and back, all 0 px. Each pins a one-frame residual on the way back, named
+in its notes (the map's rebuild priced with world 0's rest; the exchange's song-down handshake on the SPC's tick phase).
+Re-pin only against a fresh oracle measurement.
+
 ### field-scene5-bottom-edge-draw-window (`--scene 5 --at 376 488`)
 
 Pins that the draw list is the ROM's camera window and NOTHING narrower. `placed` is

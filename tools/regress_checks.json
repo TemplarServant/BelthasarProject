@@ -44440,6 +44440,109 @@
       "notes": "THE WORLD MAP (disasm/notes/ow_world_map.md; ROADMAP G1a item 3). Jackie's ch24 driven to the free flight on 1F6 (as ow-epoch-flight-vs-oracle), then Select (the cartridge's f3082) and B 242 frames on. C2/258D: script C2:2EC7 (mosaic up, fade out) and 34 NMIs; NMI off, the direct page and the object array stashed, C2/631F's set-up (VRAM cleared, the world's chars decompressed, one colour a tile, the map one pixel a 16 x 16 cell, the markers, the backdrop's HDMA ramp); NMI on; the controller $666C zooms out (32 steps), waits for B, zooms back; 17 NMIs; NMI off, the stash back, C2/2C93 rebuilds the world; script C2:2ED0 and 41 NMIs; `$027C = 1`. The port's stretches are priced as the ROM's (the decompressor model plus rests measured with --callrom, graded by the oracle's own stretches) and end with the NMI's return rule (owNmiOffFrames: a stretch ending inside the vblank it crossed gets its NMI at once, uncounted by C2/0454). The tool reads the cartridge's LOST PICTURES (CT_ORACLE_RUNFRAME_TRACE: C2/26A8's 64 KB DMA ends inside the next vblank, one snes_runFrame call for two frames) and puts the cartridge's events and the presses on the console's clock; the port's world runs 359 frames behind from the free flight (the world VM in $0C30 ends at f3074 / f3433), and its pictures (the NMI's shadows, latched before the pass) are the cartridge's --peek P + 1 there. The era's label: C2/6965's text through the proportional-text engine C2/57DF / 5823 (vwf.c, disasm/notes/vwf_engine.md), its strip byte for byte the cartridge's $7E:8621; the engine's calls are also graded by the shadow. | RE-PINNED 2026-10-22 (the power-on, disasm/notes/boot_loader.md sec. 10 and field_load_cost.md sec. 12): --boot and a cold --scene 433 start at the reset now -- the SPC in its boot ROM, C0/0053's driver upload on the loader clock, the cartridge's 33 black frames before loc 0, the title's opening priced (74 frames), the overlay's END in its own frame; --scene 433 numbers the power-on run from frame 91 (ATTRACT_FRAME0). UNVERIFIED HERE (its saves are not in this checkout): the Start press moves to the power-on's title (n:133 -> n:198) and every port frame after it +65 (the tools' port offsets with it); to be confirmed on a machine with the inputs. RE-PINNED 2026-10-29 (the port's frames only, -1; every picture 0 px as before): the drive's story panorama (FF 23) opens in the cartridge's 17 frames on the port now (field.c seqOpeningHold), so the world runs 358 frames behind the cartridge's clock from the free flight, not 359 (tools/epoch_board_cmp.py MAP_SHIFT)."
     },
     {
+      "name": "ow-world-map-on-foot-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--walk-map"
+      ],
+      "env": {},
+      "pin": [
+        "^walkmap: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "expect": [
+        "walkmap: port says owmap: f520 load, 24313210 cycles = 69 frame(s)",
+        "walkmap: port says owmap: f777 return, 11107718 cycles = 31 frame(s)",
+        "walkmap: the cartridge lost 1 picture(s) to a long DMA (monitor f95)",
+        "walkmap: timeline DIFFERENT -- 90 changes from `$027C = 6` (cartridge f61, port f486; 90 in the port)",
+        "walkmap:   first difference cartridge +363:01F6/01/000F/07/01/-- port +364:01F6/01/000F/07/01/--",
+        "walkmap: `$027C = 7` at +274 on the cartridge, +274 in the port; `$027C = 1` at +363 / +364",
+        "walkmap: picture port f503 / cartridge f79 0 px differ",
+        "walkmap: picture port f508 / cartridge f84 0 px differ",
+        "walkmap: picture port f604 / cartridge f179 0 px differ",
+        "walkmap: picture port f619 / cartridge f194 0 px differ",
+        "walkmap: picture port f654 / cartridge f229 0 px differ",
+        "walkmap: picture port f704 / cartridge f279 0 px differ",
+        "walkmap: picture port f744 / cartridge f319 0 px differ",
+        "walkmap: picture port f759 / cartridge f334 0 px differ",
+        "walkmap: picture port f816 / cartridge f391 0 px differ",
+        "walkmap: picture port f834 / cartridge f409 0 px differ",
+        "walkmap: picture port f849 / cartridge f424 0 px differ",
+        "walkmap: picture port f874 / cartridge f449 0 px differ"
+      ],
+      "note_pass": "Select on foot opens the world map from the lead's own poll (C2/3567 -> C2/35FC `$027C = 6`): the mosaic, the zoom, the map and the way back, pixel for pixel",
+      "notes": "GitHub issue #7 (2026-11-04): on the overworld the lead's poll C2/3567 reads, after A and X, Y (0x0001, storyline >= 0x49 -> `$027C = 9`) and Select (0x0004 -> `$027C = 6`); the port read only A, X and the d-pad there, so Select and Y did nothing on foot (the Epoch's own C2/44B7 had its Select). Jackie's ch24 before the boarding (loc 1F6, on foot), a step down at f30 on both sides (the capture's idle counter $02B1 = B9 and placard counter $1BF7 = 78 against the load's 0: an issued step zeroes both, C2/3697 / C2/36E7), Select at f60, B 242 frames on. Same machine as ow-world-map-vs-oracle (field.c owMapPh). RESIDUAL, pinned: `$027C = 1` comes back at +364 in the port, +363 on the cartridge on foot (+364 aboard the Epoch on both): the return's NMI-off stretch (C2/25D2-25F3 + C2/2C93) is priced with world 0's measured rest (owRebuildCycles), 11,107,718 cycles, which lands 6,930 cycles past a frame boundary -- a CPU-cost timing artefact of an NMI-off load (the 2026-10-09 rule: not reproduced unless it changes the game). All twelve pictures are 0 px.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                       : (f8 & 0x0004) ? 0x06 : 0;                                          // 358E BIT #0004",
+          "replace": "                       : 0;   /* MUT */",
+          "why": "C2/358E: Select on foot stores `$027C = 6`, the world map"
+        }
+      ]
+    },
+    {
+      "name": "ow-party-exchange-on-foot-vs-oracle",
+      "argv": [
+        "python",
+        "tools/epoch_board_cmp.py",
+        "--walk-exchange"
+      ],
+      "env": {},
+      "pin": [
+        "^walkex: "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/downloaded/ctjackie/states/ch24.state",
+        "saves/downloaded/ctjackie/srm/ch24.srm",
+        "tools/epoch_board_cmp.py"
+      ],
+      "expect": [
+        "walkex: port says exchange: f487 overworld Y ($027C = 9) -> mode 5, screen $07",
+        "walkex: port says exchange: f523 S0, roster 000102030607808080 free 3 reserve 3, P = S0 + 2",
+        "walkex: timeline DIFFERENT -- `$027C` +0:09 +234:01 on the cartridge (f61), +0:09 +235:01 in the port (f486)",
+        "walkex: picture port f495 / cartridge f71 0 px differ",
+        "walkex: picture port f505 / cartridge f81 0 px differ",
+        "walkex: picture port f525 / cartridge f101 0 px differ",
+        "walkex: picture port f555 / cartridge f131 0 px differ",
+        "walkex: picture port f595 / cartridge f171 0 px differ",
+        "walkex: picture port f615 / cartridge f191 34421 px differ",
+        "walkex: picture port f635 / cartridge f211 0 px differ",
+        "walkex: picture port f665 / cartridge f241 0 px differ",
+        "walkex: picture port f725 / cartridge f301 0 px differ",
+        "walkex: picture port f805 / cartridge f381 0 px differ"
+      ],
+      "note_pass": "Y on foot opens the party exchange from the lead's own poll (C2/3605-3614 `$027C = 9` -> C2/251E, mode 5): the overworld's fade, the screen and the way back, pixel for pixel",
+      "notes": "GitHub issue #7 (2026-11-04). Jackie's ch24 on foot (storyline D3), the step of ow-world-map-on-foot-vs-oracle, Y at f60 (CT_HOLDBTN), B 120 frames on (the walkscript's `b`: the menu reads the drive, not CT_HOLDBTN). C2/23DB sends `$027C = 9` to C2/251E, the X menu's block; C2/2545-2552 picks mode 5 for it: the overworld's fade and stash (no C0/011B, no $0407), screen $07 (field.c menuExchOn 3). RESIDUAL, pinned: the close is one frame off (`$027C = 1` at +235 in the port, +234 on the cartridge; the picture at the close's first fade frame). The exit posts the exchange's song down (C2/CC0E `81 08 01 01`) and waits on the SPC, whose driver tick phase is the capture's on the cartridge and the boot's in the port: the cartridge's return moves in pairs of B frames (181/182 -> f295, 183/184 -> f297), the port's on the other parity. Every other picture is 0 px.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            uint8_t to = ((f8 & 0x0001) && CtWramGlb(fieldWram())[0x0000] >= 0x49) ? 0x09   // 3584 / 3607 CMP #49",
+          "replace": "            uint8_t to = 0 ? 0x09   /* MUT */",
+          "why": "C2/3584 / 3605: Y on foot (storyline >= 0x49) stores `$027C = 9`, the exchange"
+        },
+        {
+          "file": "src/field.c",
+          "find": "      menuPhase = 1; menuT = fieldMenuFadeT0(NULL, inWorld); menuScreen = 0x07; menuExchOn = 3; menuExch68 = 0;",
+          "replace": "      menuPhase = 1; menuT = fieldMenuFadeT0(NULL, inWorld); menuScreen = 0; menuExchOn = 0; menuExch68 = 0;   /* MUT */",
+          "why": "C2/2545-2552: `$027C = 9` is mode 5, screen $07, not the ribbon"
+        }
+      ]
+    },
+    {
       "name": "ow-event-cell-600ad-scene097-vs-oracle",
       "argv": [
         "python",
@@ -50281,7 +50384,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 629 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 631 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

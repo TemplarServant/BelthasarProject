@@ -12356,8 +12356,14 @@ int main(int argc, char** argv) {
     // tick); with none, C0/198E-19A5's gates (the storyline $7F0000 >= 0x49 (SBC #49 / BCS), $011F != 0, $0162 == 0,
     // $0110 == 0), then C0/19A7-19BF, the X path's own fade (`$0407 = FF`, DEC $19 / JSL FD/C2C1 / C0/EC60), C0/19C1 JSR
     // C0/0B4E, C0/19C4 JSR C0/011B and C0/19C7-19CE `LDX #0000 / TDC / XBA / LDA #05 / JSL C2/8000`: mode 5, screen $07,
-    // with the X path's conventions (the press on its own frame, the fade's first DEC on it). Not ported: the
-    // overworld's own poll (C2/2552's `$027C == 5 ? 1 : 5`).
+    // with the X path's conventions (the press on its own frame, the fade's first DEC on it).
+    // On the overworld the lead's poll writes `$027C = 9` instead (C2/3605-3614, in the world's frame below), and the main
+    // loop's dispatch C2/23DB sends 9 to C2/251E, the X menu's own block, whose C2/2545-2552 picks mode 5 for it
+    // (`$027C == 5 ? 1 : 5`): the overworld's fade and stash, no C0/011B and no $0407 (menuExchOn 3).
+    if (inWorld && s7[0x027C] == 9 && menuPhase == 0 && !battlePhase && !gameOver && menuFb && !fade && !pendKind) {
+      menuPhase = 1; menuT = fieldMenuFadeT0(NULL, inWorld); menuScreen = 0x07; menuExchOn = 3; menuExch68 = 0;
+      if (getenv("CT_SHOPTRACE")) printf("exchange: f%d overworld Y ($027C = 9) -> mode 5, screen $07\n", frameNo);
+    }
     {
       int yHeld = (padSerial & 0x002) ? 1 : 0;
       int yEdge = yHeld && !prevYBtn;
@@ -12739,6 +12745,20 @@ int main(int argc, char** argv) {
           }
         }
         uint8_t ph0 = wd.mv.phase;
+        // C2/3567's other arms (disasm/notes/menu2_overworld_entry.md sec. 2.3): on the input frame (the mover's phase 1)
+        // of free roam the lead reads the held remapped word $00F8 -- A (0x0080, unless `$1B32` is negative: C2/35E5) and
+        // X (0x0040, C2/35F3: the menu poll above) first, then Y (0x0001) with the storyline >= 0x49 -> `$027C = 9`
+        // (C2/3605-3614, the exchange), then Select (0x0004) -> `$027C = 6` (C2/35FC, the world map), then the d-pad.
+        // Both stores branch to the idle path C2/35B3, so the lead takes no step that frame.
+        if (ph0 == 1 && wd.wram[0x027C] == 1 && !fade && !menuPhase && !owExitWait) {
+          uint16_t f8 = (uint16_t)(wd.wram[0x00F8] | (wd.wram[0x00F9] << 8));
+          int aArm = (f8 & 0x0080) && !(wd.entryLatch & 0x8000);     // 3577 BIT #0080 / 35E5 LDA $1B32 / BMI
+          if (f8 && !aArm && !(f8 & 0x0040)) {
+            uint8_t to = ((f8 & 0x0001) && CtWramGlb(fieldWram())[0x0000] >= 0x49) ? 0x09   // 3584 / 3607 CMP #49
+                       : (f8 & 0x0004) ? 0x06 : 0;                                          // 358E BIT #0004
+            if (to) { wd.wram[0x027C] = to; wUp = wDown = wLeft = wRight = 0; }
+          }
+        }
         CtWorldMoverFrame(&wd.mv, wd.wram, wUp, wDown, wLeft, wRight, &wdx, &wdy);
         CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, wdx, wdy);
         // Mirror the camera back into $7E:00E3..$00EA. The ROM keeps the two BGs' tile scrolls there
