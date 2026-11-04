@@ -2918,10 +2918,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // i.e. the operand in Y, a leaf index in A, and the gate, which is move.c's ctVmC1Gate (shared body,
     // disasm/notes/vm_two_implementations.md). `mem->s` is the flat 128 KB image it indexes.
     // Carry is set on every exit of all seven, so the visit continues. Lengths and branch arms live in the body.
-    int ni = addr;
-    CtVmItemFamily(sc->mem->s, B, addr, &ni);
+    // The IP is the ROM's, counted from $7F:2001 (pointer table included), as runFunc passes it: `STX $C7` spills it.
+    int ni = addr + sc->header;
+    CtVmItemFamily(sc->mem->s, B - sc->header, addr + sc->header, &ni);
     g_ctVmItemOps++;              // liveness counter for CT_BAGDUMP
-    s->addr = ni; return 0;
+    s->addr = ni - sc->header; return 0;
   }
   if (op >= 0x4A && op <= 0x4D) {
     // ---- The poke family: C0/67D7 (0x4A byte), C0/67FB (0x4B word), C0/680C (0x4C local byte), C0/6829 (0x4D
@@ -3019,8 +3020,9 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     // decides the visit is the last `CMP $D9` that ran; with every slot empty (`3998 BMI ->39B1`) it stays the entry
     // 0 and each D4 ends its visit.
     // 0xD2 is not routed here: it has its own arm below.
-    CtHRet pg; pg.ip = addr; pg.carry = 1; pg.ok = 0;
-    CtVmPartyGateFamily(sc->mem->s, gRomImg, (int)gRomImgLen, B, addr, &pg);
+    CtHRet pg; pg.ip = addr + sc->header; pg.carry = 1; pg.ok = 0;     // the ROM's IP, as runFunc passes it
+    CtVmPartyGateFamily(sc->mem->s, gRomImg, (int)gRomImgLen, B - sc->header, addr + sc->header, &pg);
+    pg.ip -= sc->header;
     g_ctVmPartyOps++;
     // CT_SLOTTRACE also prints each distinct (op, operand, resulting IP), so an operand read from the wrong source
     // (the ROM's $7F:2001 instead of this runner's body-relative script) shows. Deduped.
