@@ -944,6 +944,49 @@ static const uint8_t* worldRomPacket(const uint8_t* rom, long romLen, uint32_t t
   *len = ct_lz_decompress_bounded(rom, (size_t)romLen, out, cap, ct_lz_hirom_offset(a));   // JSL C3:0002 = C3/0557
   return *len ? out : NULL;
 }
+// C2/2D91, from the loader's OBJ half (C2/2D6A, the entry's and the rebuild's): from story D4 ($7F:0000 >= D4) the Black
+// Omen's picture on four worlds ($0100 = 1F0 / 1F1 / 1F2 / 1F6, M 8-bit, X 16-bit):
+//   2DB1 (1F0) / 2DCD (1F1) / 2DF3 (1F2) / 2E0F (1F6)  JSR C2/7B5A: C6:FDF0's entry 3 (C5:C6ED) through C3/0002 into $7F:9000
+//        REP #20 / LDX #9000 / LDY #0C00 (1F6: #0000) / LDA #0800 / JSR C2/2D70: $800 bytes of it to VRAM word $0C00
+//   1F0 / 1F2: LDA #00 / LDX #0A40 / JSR C2/7B7F; 1F1: X = 0A80, or 0A60 with `$1BA8` bit 7 (2DDE-2DE8): C6:FEA0's entry 3
+//        (C3:CFF5) into $00:X -- the CGRAM shadow's OBJ palette 1 (or 3 / 2), which the first NMI uploads (C2/01A6, $4C bit 1)
+//   JMP C2/7B9F: C6:FEA0's entry 18 (C3:DF3E) into $7E:C600.
+// All of it runs in the load's NMI-off stretch (leg 133: C2/2D6A f40 line 214 -> C2/2D6D f41 line 185, 317,562 master
+// cycles), so its cycles are the load's: returned when `cyc` is given (the price, nothing written), else performed.
+static long owBlackOmenArt(World* w, const uint8_t* rom, long romLen, long* cyc) {
+  if (!w || !w->wram || !rom) return 0;
+  const uint8_t* f7 = w->wram + 0x10000;
+  int loc = (w->wram[0x0100] | (w->wram[0x0101] << 8)) & 0x1FF;
+  if (f7[0x0000] < 0xD4 || (loc != 0x1F0 && loc != 0x1F1 && loc != 0x1F2 && loc != 0x1F6)) return 0;   // 2D91-2DB0
+  struct { uint32_t tbl; int idx; uint8_t bank; uint16_t dst; } pk[3];
+  int np = 0;
+  pk[np].tbl = 0xC6FDF0; pk[np].idx = 3; pk[np].bank = 0x7F; pk[np].dst = 0x9000; np++;          // C2/7B5A
+  if (loc != 0x1F6) {                                                                             // C2/7B7F
+    pk[np].tbl = 0xC6FEA0; pk[np].idx = 3; pk[np].bank = 0x00;
+    pk[np].dst = (loc == 0x1F1) ? ((w->wram[0x1BA8] & 0x80) ? 0x0A60 : 0x0A80) : 0x0A40; np++;
+  }
+  pk[np].tbl = 0xC6FEA0; pk[np].idx = 18; pk[np].bank = 0x7E; pk[np].dst = 0xC600; np++;         // C2/7B9F
+  long c = 0;
+  static uint8_t buf[0x10000];
+  for (int k = 0; k < np; k++) {
+    size_t e = ct_lz_hirom_offset(pk[k].tbl) + (size_t)pk[k].idx * 3;
+    if (e + 3 > (size_t)romLen) continue;
+    uint32_t src = CtRomByte(rom, romLen, (long)e) | (CtRomByte(rom, romLen, (long)e + 1) << 8) | ((uint32_t)CtRomByte(rom, romLen, (long)e + 2) << 16);
+    if (cyc) { c += ct_lz_rom_cycles(rom, (size_t)romLen, ct_lz_hirom_offset(src), pk[k].bank == 0x7F) + 18; continue; }
+    size_t n = ct_lz_decompress_bounded(rom, (size_t)romLen, buf, sizeof buf, ct_lz_hirom_offset(src));
+    uint32_t base = (pk[k].bank == 0x7F ? 0x10000u : 0u) + pk[k].dst;                    // $00 / $7E share the low WRAM
+    if (base + n > 0x20000u) n = 0x20000u - base;
+    memcpy(w->wram + base, buf, n);
+    if (k == 0 && w->vram) memcpy(w->vram + 2u * (loc == 0x1F6 ? 0x0000u : 0x0C00u), w->wram + 0x19000, 0x800);   // C2/2D70
+  }
+  if (cyc) *cyc = c + 0x800L * 8;                                                         // + C2/2D70's DMA, 8 cycles a byte
+  return cyc ? *cyc : 0;
+}
+static long owBlackOmenCyc(World* w) {
+  long rl = 0; const uint8_t* r = CtBattleRom(&rl); long c = 0;
+  owBlackOmenArt(w, r, rl, &c);
+  return c;
+}
 static void worldLoadObjFromRom(World* w) {
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
   if (!rom || !w->wram || !w->vram) return;
@@ -993,6 +1036,8 @@ static void worldLoadObjFromRom(World* w) {
   // at $C000/$C020/$C040/$C060. The same routine family's C2/2902 ([$ED+7], $C6:FE20 -> $7E:B800) is not made here.
   if (!(E[0x0B] & 0x80) && worldRomPacket(rom, romLen, 0xC6FEA0, E[0x0B], buf, sizeof buf, &n))
     memcpy(w->wram + 0xC000, buf, n > 0x4000 ? 0x4000 : n);
+  // C2/2D6A JSR C2/2D91 (owBlackOmenArt).
+  owBlackOmenArt(w, rom, romLen, NULL);
   // C2/2D6D `JMP C2/27BC`, the loader's last step: `LDX #C800 / STX $0303 / LDA #7E / STA $0305` and the $C6:FDF0 table's
   // entry 1 (`LDA $C6FDF3` / `$C6FDF5` = $C5:B114) through C3/0002 into $7E:C800 -- unconditional. It is the sheet the
   // objects' anim op 6 uploads from (the attract 1F0's Epoch: `$7E:C940` -> VRAM word $1800).
@@ -1667,9 +1712,11 @@ static int owNmiOffFrames(long cyc, int* early) {
 }
 // C2/03EF + C2/2C93, the world rebuilt after a screen of its own (the time gauge's C2/2665, the world map's C2/25F0): C2/03EF's
 // 7,338 cycles (`--callrom`), C2/2C93's decompressions by ct_lz_world_return_cost, and the rest of C2/2C93 as measured on
-// world 0 (`--callrom C2/2C93`: 11,766,764 cycles less 345,080 of refresh and 9,688,210 of decompression).
+// world 0 (`--callrom C2/2C93`: 11,766,764 cycles less 345,080 of refresh and 9,688,210 of decompression), less C2/2D91's
+// 302,324 (owBlackOmenArt's price): that state (saves/epoch_re/epoch_user.state) is 1F0 at story D6, so its rebuild ran the
+// Black Omen's packets, which the callers now add for the worlds and stories that run them (owBlackOmenCyc).
 #ifndef CT_OW_2C93_REST
-#define CT_OW_2C93_REST 1733474L
+#define CT_OW_2C93_REST (1733474L - 302324L)
 #endif
 static long owRebuildCycles(int world) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
@@ -11367,6 +11414,10 @@ int main(int argc, char** argv) {
     if (haveWorld) {
       g_owCaptureStart = 1; worldEnterAt(&wd, wpx, wpy); g_owCaptureStart = 0;
       memcpy(hw, keepCap, sizeof keepCap);
+      // ...and its colours: the capture's CGRAM is its shadow $0920 as the NMI last uploaded it (C2/01A6), which the
+      // loader's writes past its own CGRAM DMA reach only that way (C2/2D91's OBJ palette 1 at $0A40).
+      for (int c = 0; c < 256; c++) wd.cgw[c] = (uint16_t)(hw[0x0920 + c * 2] | (hw[0x0921 + c * 2] << 8));
+      worldPalRefresh(&wd, 0, 256);
       wd.mv.posX = wd.mv.probeX = (uint16_t)wpx; wd.mv.posY = wd.mv.probeY = (uint16_t)wpy;   // the exact pixel (the
       wd.cam.bg1h = wd.cam.bg2h = (uint16_t)(hw[0x20] | (hw[0x21] << 8));                  //   entry rounds to the
       wd.cam.bg1v = wd.cam.bg2v = (uint16_t)(hw[0x26] | (hw[0x27] << 8));                  //   8-px cell)
@@ -11894,13 +11945,16 @@ int main(int argc, char** argv) {
             uint16_t e7[2] = { (uint16_t)(wd.cam.bg1v >> 3), (uint16_t)(wd.cam.bg2v >> 3) };
             long owW = ct_lz_world_load_cycles(rimg, (size_t)rl, haveWorld ? wd.world : 0, e3, e7, &owN, &owWhy);
             if (owW >= 0) {
+              { long bo = owBlackOmenCyc(&wd);          // C2/2D91 (C2/2D6A), story D4 on 1F0 / 1F1 / 1F2 / 1F6
+                if (bo && getenv("CT_LOADCOST")) printf("loadwalk: world %d -- C2/2D91 %ld cycles\n", haveWorld ? wd.world : 0, bo);
+                owW += bo; }
               lcCyc = owW;
               loadHold = ct_nmi_wait_frames(owW) - 1;
               if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- %ld cycles, %d packet(s), cells %02X/%02X %02X/%02X\n",
                                                 haveWorld ? wd.world : 0, owW, owN, e3[0], e7[0], e3[1], e7[1]);
             } else {
               if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- NOT WALKED: %s\n", haveWorld ? wd.world : 0, owWhy ? owWhy : "?");
-              lcCyc = ct_lz_world_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, &owN) + CT_OW_LOAD_REST;
+              lcCyc = ct_lz_world_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, &owN) + CT_OW_LOAD_REST + owBlackOmenCyc(&wd);
               loadHold = (int)((lcCyc + CT_LOAD_FRAME_CYCLES - 1) / CT_LOAD_FRAME_CYCLES);
               // Under the rule (NMI-on work never costs frames; CLAUDE.md, see docs/DECISIONS.md) the window's last frame
               // is not the load's: C2's loader turns the NMI on at C2/23CC (`LDA #81 / STA $4200`) and waits (C2/23CF JSR
@@ -12896,7 +12950,7 @@ int main(int argc, char** argv) {
           // `$027C = 1`: only `LDA #03 / TSB $4C` and the NMI back on, the trip's `$027C = 7` kept for the Epoch's state 6.
           owGaugeTrip = (wr[0x101F4] & 0x0A) || (wr[0x101F5] & 0x02);
           if (haveWorld && !owGaugeTrip) { worldReloadMenuScratch(&assets, &wd); worldReloadVram(&assets, &wd); }
-          long cyc = owGaugeTrip ? 0 : owRebuildCycles(haveWorld ? wd.world : 0);
+          long cyc = owGaugeTrip ? 0 : (owRebuildCycles(haveWorld ? wd.world : 0) + owBlackOmenCyc(&wd));
           for (int k = 0; k < 6; k++) cyc += (long)kOwStash[k].len * 46;
           owGaugePh = 5; owGaugeT = owNmiOffFrames(cyc, &owGaugeEarly);
           if (getenv("CT_OWGAUGETRACE")) printf("owgauge: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owGaugeT);
@@ -12935,7 +12989,7 @@ int main(int argc, char** argv) {
           CtWorldSpawnVm(wr, 0xC2, 0x2ED0);
           if (wr[0x1B58]) wr[0x1B59]++;
           wr[0x4C] |= 0x03;
-          long cyc = (long)sizeof owMapStash * 46 + owRebuildCycles(haveWorld ? wd.world : 0);
+          long cyc = (long)sizeof owMapStash * 46 + (owRebuildCycles(haveWorld ? wd.world : 0) + owBlackOmenCyc(&wd));
           owMapPh = 5; owMapT = owNmiOffFrames(cyc, &owMapEarly);
           if (getenv("CT_OWGAUGETRACE")) printf("owmap: f%d return, %ld cycles = %d frame(s)\n", frameNo, cyc, owMapT);
         } else if (owMapPh == 6 && --owMapT == 0) {
@@ -13040,12 +13094,12 @@ int main(int argc, char** argv) {
       // C2/32CD, forced to $FFFF while $0282 bit 1 is clear), and the bootstrap spawns it on the interactive branch
       // only. With no scanner the latch keeps the world load's value (C2/2C44 `LDX #FFFF / STX $1B32`), and so does
       // $1B58, the name the banner object shows (C2/2C32 `STZ $1B58`; C2/3349 -> C2/6263 is its only writer).
+      // With one, C2/35E5 reads what it wrote: the latch is `$1B32`. (A stand-in here re-scanned the mover's cell on every
+      // boundary frame from its top pair's bit 2; the scanner only looks when `$0282` bit 0 says the lead arrived -- C2/3550's
+      // lead init or C2/375F's step, CtWorldLeadArrive -- so a lead set down on an entrance another way, the Epoch's party off
+      // at Death Peak (props 8 / 0 above it, `$0282` = 02, `$1B32` = 007E), kept the cartridge's latch and lost the port's.)
       if (!(wd.wram && CtWorldHasObjClass(wd.wram, OWOBJ_CLASS_ENTRYSCAN))) wd.entryLatch = 0xFFFF;
-      else if (wd.mv.phase == 1) {                   // boundary: refresh the entry latch
-        int ecx = wd.mv.posX >> 3, ecy = wd.mv.posY >> 3;
-        int ep = (CtWorldProp(wd.wram, ecx - 1, ecy - 1) & CtWorldProp(wd.wram, ecx, ecy - 1) & 4) != 0;
-        wd.entryLatch = ep ? CtWorldEntryScan(wd.wram, wd.mv.posX, wd.mv.posY) : 0xFFFF;
-      }
+      else wd.entryLatch = (uint16_t)(wd.wram[0x1B32] | (wd.wram[0x1B33] << 8));
       if (!fade) worldTick++;                        // the overworld is paused while a transition fades
       // (The sea's colour cycle is the world script's own op 0x04 rows, uploaded by the NMI above, not the host's.)
       if (owEnterCd > 0) owEnterCd--;
