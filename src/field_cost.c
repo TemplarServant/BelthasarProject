@@ -676,11 +676,17 @@ static long hdmaCh7Arm(Walk* c) {
 static long pass286C(Walk* c, int loc) {
   // The configuration the traces cover: every arm below is the ROM's, taken on the flags it reads.
   if (b8(c, 0x0126) != 0)   { unpriced(c, "pass: $0126 != 0 (the FD:C2DF/C2E5 handlers 1-2)"); return -1; }
-  if (b8(c, 0x1DF9) || b8(c, 0x1DFD)) { unpriced(c, "pass: $1DF9 / $1DFD (the HDMA handlers' effect arms)"); return -1; }
+  if (b8(c, 0x1DFD)) { unpriced(c, "pass: $1DFD (the HDMA handlers' channel-2 wave arm)"); return -1; }
+  // `$1DF9` (the window wave on channel 3, 8-bit at C32B / C887 and 16-bit at C5C5): C0/0B28's FD:C2C1 takes the wave's
+  // arms -- channel 3's band, the tail's sixteen-dword wave step C5E2 / C732 -- where PASS_REST holds the plain ones.
+  // Measured with `ct.exe --callrom FDC2C1 --long --regdp 0100 --regdb 7F` on Death Peak 0F6's load (leg 137 f14943,
+  // $1DF9 = 01, $0126 = 0): 9,504 master cycles (280 refresh) against 3,426 (120) with $1DF9 / $1DFA poked to 0, the same
+  // state: +5,918.
+  long waveArm = b8(c, 0x1DF9) ? 5918 : 0;
   // $0153 bit 7 is FD/C3F8's battle-exit arm (C0/0AFF sets it around its own two calls): no trace of a pass ran it
   if (b8(c, 0x0153) & 0x80) { unpriced(c, "pass: $0153 bit 7 (FD/C3F8's battle-exit arm)"); return -1; }
   int n = b8(c, 0x12000);
-  long k = PASS_REST, d0, d1, d2, d3;
+  long k = PASS_REST + waveArm, d0, d1, d2, d3;
   // C0/0AF6 `LDA $0BE9 / BEQ`: op 0x29's plane size (C0/3EA6 / 3EB1, the only writers besides C0/0C6D's clear) goes to
   // BG3SC's size byte -- the BEQ not taken and `STA $1D86` for the taken BEQ PASS_REST holds: 12 + 26 - 18. C0/0AF6 is
   // $0BE9's only reader (an absolute-operand scan of banks C0 / C2 / FD).
