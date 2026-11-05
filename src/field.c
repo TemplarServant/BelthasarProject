@@ -13472,6 +13472,15 @@ int main(int argc, char** argv) {
       // init chain (C..C+15) and through the field's reload (phase 5); live from S0 on and during the field fade-in.
       if (!(menuPhase == 2 && menuShellF < menuShellS0) && menuPhase != 5)
         CtMenuClockTick(s7);
+      // The bag hidden while the items are confiscated ($0D7E = FF, C2/9875): the Equip and Item screens' substates C2/A11A /
+      // C2/ADD0 `JSR C2/90FC` -- `$2400-$25FF -> $7E:9B96` (MVN, $200 bytes), then the ids `$2400-$24FF` zeroed (STZ / MVN
+      // $FD) -- and their exits C2/A101 / C2/ADC3 (C2/9B71's dispatch by $0411) `JSR C2/9121`, the $200 bytes back. Here a frame
+      // after the screen's entry (the cartridge: $67 = 2 at f67421, the clear at f67422; leg 125) and at its exit.
+      { static int bagHidden = 0;
+        int inBag = menuPhase == 2 && (menuScreen == 1 || menuScreen == 2);
+        if (inBag && !bagHidden && s7[0x0D7E]) {
+          memcpy(s7 + 0x9B96, s7 + 0x2400, 0x200); memset(s7 + 0x2400, 0, 0x100); bagHidden = 1;
+        } else if (!inBag && bagHidden) { memcpy(s7 + 0x2400, s7 + 0x9B96, 0x200); bagHidden = 0; } }
       // The exchange's BG3 wave task (C2/CECE -> FF/F716): every second frame from P, through the close's fade and its `$2141`
       // wait, until the `11` post's JSLs hold the CPU.
       // (On the frame the close posts `11` -- the fade done, the driver free -- its JSLs come first: no step there.)
@@ -16077,6 +16086,10 @@ int main(int argc, char** argv) {
     // the VM's visit, so none of the loop's legs run: the lead stands, the d-pad and A are not read (otherwise the lead
     // would walk with a frozen animation while the tick and its drain, C0/CA76, stand still).
     if (f.vm && CtSceneMainLoopParked(f.vm)) { mlHead = 0; mlBody = 0; }
+    // ...and on the frame a location loads (its black hold begins, fade 3): C0/000E's load is all the CPU does there, so
+    // neither the player controller nor its door test runs in the new scene (leg 134: the pad's down step on 0F5's arrival
+    // tile, its exit 0, sent the port straight back to 0F4).
+    if (fade == 3) { mlHead = 0; mlBody = 0; }
 
     // ---- The defeat sequence, C0/02A0 (disasm/notes/battle_gameover_reboot.md) ----
     //   (a) C0/02A0-02AD  LDA $00F6 / BNE ; LDA $00F0 / BNE ; JSR C0/00EB ; BRA: spin on any button edge (the
@@ -16944,6 +16957,7 @@ int main(int argc, char** argv) {
     // px/py, synced to the lead actor every frame (the actor's $1800 lags a frame and is (0,0) before the first
     // SetActorPos).
     int camReqX = 0, camReqY = 0, leadStartX = (int)px, leadStartY = (int)py;
+    double doorFromX = px, doorFromY = py;            // the step this frame, for the door test (C0/9C5C -> 9CA1, below)
     // CT_DRIVEDBG=1: why the player is (not) moving this frame: every term of the movement gate below,
     // plus the direction the driver asked for, so a refused drive can be told from an idle one.
     { static int dd = -1; if (dd < 0) { const char* e = getenv("CT_DRIVEDBG"); dd = (e && *e) ? 1 : 0; }
@@ -17126,9 +17140,11 @@ int main(int argc, char** argv) {
     // scan: C0/9C5C computes the step's destination cell and only an accepted step reaches the test (`9C93 JSR
     // C0/9C37 / 9C96 BCC ->9CA1`; the blocked arm at 9C98 zeroes the velocity and returns). 9CA1's one guard is the
     // pending-transfer latch: `LDA $0117 / BIT #80 / BEQ ->9CAB / BRL ->9D2C`.
-    // Not ported: the test on the accepted-step path against the destination cell; the port scans the foot tile
-    // every frame (gating on fieldPlayerCollide's return stops the harness's scripted walks on an exit tile).
-    // The latch is what stops the re-trigger.
+    // The port scans the foot tile on a frame the player's own step moved the lead (C0/9C5C is the controller's, reached
+    // only on an accepted step): a lead the load set down on an exit tile tests nothing until it steps, and a move that is
+    // not the player's (a script's, the load ramp's, which runs C0/881E with $1F = 0) never tests (leg 134: 0F4's gust
+    // lands the party on 0F5's arrival tile above exit 0, and a 1-px settle in the ramp sent the port back to 0F4). Not
+    // ported: the test against the step's destination cell rather than the foot's. The latch stops the re-trigger.
     { const uint8_t* w17 = f.vm ? CtSceneMem7E(f.vm) : NULL;
     // A textbox does not block the door: C0/9CA1 tests only the latch, and a plain box never touches the d-pad
     // gate ($0162 stays 0 for op 0xBB; only a decision raises it), so the player can walk out while an NPC talks.
@@ -17136,7 +17152,7 @@ int main(int argc, char** argv) {
     // and `ctlLocked` for "the player controller is not running": C0/9C5C is reached from the player's own step
     // (C0/881E -> 8A6D -> 9C5C), closed whenever the d-pad gate is ($011F / $0162 / $0138, or the lead's own fn
     // running). A lead the script walks is moved by the VM mover (op 0x96 -> C0/A810), which never tests a door.
-    if (!battlePhase && !ctlLocked && !(w17 && (w17[0x0117] & 0x80)) && mlBody) {
+    if (!battlePhase && !ctlLocked && !(w17 && (w17[0x0117] & 0x80)) && mlBody && (dx || dy) && (px != doorFromX || py != doorFromY)) {
       for (int i = 0; i < f.nexits; i++) {
         const uint8_t* p = f.exits + 1 + (size_t)i * 16;
         int ex = p[0] | (p[1] << 8), ey = p[2] | (p[3] << 8), ew = p[4] | (p[5] << 8), eh = p[6] | (p[7] << 8);

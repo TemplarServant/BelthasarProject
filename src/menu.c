@@ -1450,6 +1450,13 @@ void CtMenuEquipWriteBack(uint8_t* mem, int charId) {
 // sets it to $71).
 void CtMenuOpenFlags(uint8_t* mem, const uint8_t* glb) {
   if (!mem) return;
+  // C2/987B-9892: `STZ $0D7C / STZ $0D7E`, then with $7F00BA bit 0 `DEC $0D7C` and, bit 1 clear, `DEC $0D7E` -- FFFF: the
+  // items confiscated (the Blackbird), which hides the bag in the Equip and Item screens (C2/90FC, field.c).
+  mem[0x0D7C] = mem[0x0D7D] = 0; mem[0x0D7E] = mem[0x0D7F] = 0;
+  if (glb && (glb[0x00BA] & 0x01)) {
+    mem[0x0D7C] = mem[0x0D7D] = 0xFF;
+    if (!(glb[0x00BA] & 0x02)) mem[0x0D7E] = mem[0x0D7F] = 0xFF;
+  }
   mem[0x0D32] = mem[0x0D33] = 0; mem[0x0D34] = mem[0x0D35] = 0;      // 29895 / 29898
   mem[0x0D36] = mem[0x0D37] = 0xFF;                                 // 2989B-2989E
   if (((mem[0x0100] | (mem[0x0101] << 8)) & 0xFFFF) < 0x01F0) {    // 298A1-298A7
