@@ -7415,7 +7415,8 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     nm[n] = 0;
     if (kind == 4) snprintf(line, sizeof line, "%s level up!", nm);                       // CE/EF68 "{11} level up!"
     else { char tn[16] = ""; CtMenuTechName(rom, romLen, val & 0xFF, tn, sizeof tn);      // CE/EF74 "{11} learns {12}"
-           snprintf(line, sizeof line, "%s learned %s!", nm, tn); }                       //   (ASCII approx, see dossier)
+           snprintf(line, sizeof line, "%s learns %s!", nm, tn); }                        //   (ASCII approx, see dossier;
+                                                                                          //   the cartridge: "Ayla learns Dino Tail!")
   }
   // The message box sits opposite the HUD strip: both are placed by the same HDMA band presets
   // (battle_hud_strip_position.md). D1/FE5E indexes CE/EE6E with `$CA25 + $CA22 + $CCEC`, where $CA22 is the strip side
