@@ -488,7 +488,7 @@ int CtVmItemFamily(uint8_t* r, const uint8_t* script, int ip, int* outIp) {
 
 // ---- The $C2 party gate, C2/8C36 ($C2:8004 = BRA -> JSR C2/8C36) ----
 // Used by 0xD2 (489 sites), 0xD3 (127), 0xD4 (127), 0xD0 (66), 0xCF (44), 0xF8 (25), 0xD7 (12), 0xD1 (4), and
-// 0xF9/0xFA (1 each). Not ported: 0xD5 (no sites in the 504 scenes). No hardware or waits; the only long accesses
+// 0xF9/0xFA (1 each), 0xD5 (leaf 10, equip: the Blackbird's confiscation). No hardware or waits; the only long accesses
 // are three ROM table reads and two MVN blocks.
 // The prologue sets DB = $7E and DP = $0400 ($C0 = $7E:04C0); SEP #30 makes A/X/Y 8-bit, so STY $C0 / STX $C9
 // truncate.
@@ -612,6 +612,87 @@ static int ctVmC2Leaf12(uint8_t* r) {
   return 0x00;                                           // 880C SEC -> 8E23 LDA #00 / 8E25 BCS
 }
 
+// C2/87FA: the bag slot of item `id` -- the first $2400 id that matches with a non-zero $2500 count (carry clear,
+// `STX $04C7 / STZ $04C8`); none -> -1 (8809 INX wraps X to 0, 880C SEC).
+static int ctVmC2_87FA(uint8_t* r, int id) {
+  int x = 0;                                             // 87FA LDX #00
+  do {
+    if (r[0x2400 + x] == id && r[0x2500 + x] != 0) {     // 87FC CMP $2400,X / 8801 LDA $2500,X / 8804 BNE
+      r[0x04C7] = (uint8_t)x; r[0x04C8] = 0x00;          // 880E STX $04C7 / 8811 STZ $04C8
+      return x;
+    }
+    x = (x + 1) & 0xFF;                                  // 8809 INX / 880A BNE
+  } while (x != 0);
+  return -1;
+}
+
+// C2/8791: put $04CB of item $04C9 into the bag -- not the four empty-slot ids 00/5A/7B/94; a new id takes the
+// first $2400 slot holding 00 (none: A = FF, nothing stored); the count stops at 99 (87C7 CMP #63 / BCC).
+static void ctVmC2_8791(uint8_t* r) {
+  int id = r[0x04C9];                                    // 8795 LDA $04C9
+  if (id == 0x00 || id == 0x5A || id == 0x7B || id == 0x94) return;   // 8798-87A4 BEQ ->87D2
+  int x = ctVmC2_87FA(r, id);                            // 87A6 JSR C2/87FA / 87A9 BCC ->87C0
+  if (x < 0) {
+    for (x = 0; r[0x2400 + x] != 0; ) {                  // 87AB LDA $2400,X / 87AE BEQ ->87B7
+      x = (x + 1) & 0xFF;                                // 87B0 INX / 87B1 BNE
+      if (x == 0) return;                                // 87B3 LDA #FF
+    }
+    r[0x2400 + x] = (uint8_t)id;                         // 87B7 LDA $04C9 / 87BA STA $2400,X
+    r[0x2500 + x] = 0x00;                                // 87BD STZ $2500,X
+  }
+  int n = (r[0x2500 + x] + r[0x04CB]) & 0xFF;            // 87C0 LDA $2500,X / 87C3 CLC / 87C4 ADC $04CB
+  r[0x2500 + x] = (uint8_t)(n < 0x63 ? n : 0x63);        // 87C7 CMP #63 / 87C9 BCC / 87CB LDA #63 / 87CD STA
+}
+
+// C2/87D5: take $04CB of item $04C9 out of the bag; the slot's id goes to 00 when the count reaches 0. Not held, or
+// fewer than $04CB held (87EC BCC -> A = FE): nothing changes.
+static void ctVmC2_87D5(uint8_t* r) {
+  int id = r[0x04C9];                                    // 87D9 LDA $04C9 / 87DC BEQ ->87F7
+  if (id == 0) return;
+  int x = ctVmC2_87FA(r, id);                            // 87DE JSR C2/87FA / 87E3 BCS ->87F7
+  if (x < 0) return;
+  int n = r[0x2500 + x] - r[0x04CB];                     // 87E5 LDA $2500,X / 87E8 SEC / 87E9 SBC $04CB
+  if (n < 0) return;                                     // 87EC BCC ->87F5
+  if (n == 0) r[0x2400 + x] = 0x00;                      // 87EE BNE ->87CD / 87F0 STZ $2400,X
+  r[0x2500 + x] = (uint8_t)n;                            // 87CD STA $2500,X
+}
+
+// C2/8D8F (leaf 10, op 0xD5 `D5 pc item`): equip. Item 0 puts the PC's four slots back to the empty ids, C2:8DDF
+// 00/5A/7B/94 into the record's +29/+28/+27/+2A (C2:894F), Ayla's record ($2790) keeping her weapon (8DB3 CMP #2790
+// -> INC $CC); any other item goes to the slot C2/8881 finds for it (the bounds C2:88A8 5A/7B/94/BC: weapon, armor,
+// helmet, accessory; past BC nothing), the slot's old item into the bag (C2/8791) and the new one out of it (C2/87D5).
+// Both arms end in C2/8D1C (max HP) with REP #30 left on, so the gate's STA $C1 is 16-bit: `wide`.
+static int ctVmC2Leaf10(uint8_t* r, const uint8_t* rom, int romLen) {
+  int pc = r[0x04C0], item = r[0x04C9];
+  int rec = (0x2600 + pc * 0x50) & 0xFFFF;               // 8D91 $4202 = $C0 / 8D97 $4203 = 50 -> 8DA9 $4216 + 2600
+  r[0x04CB] = 0x01;                                      // 8D9B LDA #01 / 8D9D STA $CB
+  r[0x04C5] = (uint8_t)item;                             // 8D9F LDA $C9 / 8DA1 STA $C5
+  int ok = (size_t)romLen > 0x28DE2;
+  if (item == 0) {                                       // 8DA5 BNE ->8DE3
+    int k = (rec == 0x2790) ? 1 : 0;                     // 8DA7 STZ $CC / 8DB3 CMP #2790 / 8DB8 INC $CC
+    r[0x04C3] = (uint8_t)rec; r[0x04C4] = (uint8_t)(rec >> 8);       // 8DB1 STA $C3
+    for (; k < 4; k++)                                   // 8DBA-8DD8
+      r[(rec + (ok ? MR(0x2894F + k) : 0)) & 0xFFFF] = ok ? MR(0x28DDF + k) : 0;   // 8DBC / 8DC9 / 8DCD STA $0000,Y
+    r[0x04CC] = 0x04; r[0x04CD] = 0x00;
+    ctVmC28D1C(r, rec);                                  // 8DDA LDY $C3 / 8DDC JMP C2/8D1C
+    return r[rec + 3] | (r[rec + 4] << 8);
+  }
+  int x = 0;                                             // 8DE3 JSR C2/8881
+  while (x < 4 && item >= (ok ? MR(0x288A8 + x) : 0xFF)) x++;     // 8887 CMP $C288A8,X / BCC / INX / CPX #04
+  r[0x04CE] = (uint8_t)(item - (ok ? MR(0x288A7 + x) : 0)); r[0x04CF] = 0x00;   // 8892 SEC / SBC $C288A7,X
+  r[0x04CC] = (uint8_t)x; r[0x04CD] = 0x00;              // 889D TXA / STA $04CC / STZ $04CD
+  if (x >= 4) return 0x0004;                             // 8DE6 LDX $CC / CPX #0004 / BCS ->8E1D (A = 8881's TXA)
+  r[0x04C3] = (uint8_t)rec; r[0x04C4] = (uint8_t)(rec >> 8);         // 8DF5 STA $C3
+  int slot = (rec + MR(0x2894F + x)) & 0xFFFF;           // 8DF7 LDA $C2894F,X / ADC $C3 / TAX
+  r[0x04C9] = r[slot];                                   // 8E04 LDA $0000,X / 8E07 STA $C9
+  ctVmC2_8791(r);                                        // 8E09 JSR C2/8791
+  r[0x04C9] = r[0x04C5];                                 // 8E0C LDA $C5 / 8E0E STA $C9
+  r[slot] = r[0x04C5];                                   // 8E10 STA $0000,X
+  ctVmC2_87D5(r);                                        // 8E13 JSR C2/87D5
+  ctVmC28D1C(r, rec);                                    // 8E18 LDY $C3 / 8E1A JSR C2/8D1C
+  return r[rec + 3] | (r[rec + 4] << 8);
+}
+
 // C2/F5ED -- map a PC id to its equipped weapon's three-colour palette block in bank $D1. The
 // hardware multiplier does pc*$50; $7E:2629 + that is the weapon slot of the record.
 static int ctVmC2F5ED(uint8_t* r, const uint8_t* rom, int romLen, int pc) {
@@ -714,12 +795,13 @@ static int ctVmC2Gate(uint8_t* r, const uint8_t* rom, int romLen, int leaf, int 
     case 5:  a = ctVmC2Leaf5(r); break;                  // 8CF7
     case 6:  ctVmC2Leaf6(r); a = 0; wide = 1; break;     // 8D05
     case 7:  ctVmC2Leaf7(r); a = 0; wide = 1; break;     // 8D45
+    case 10: a = ctVmC2Leaf10(r, rom, romLen); wide = 1; break;   // 8D8F
     case 11: a = (leaf << 1) & 0xFF; break;             // 8C5A: a bare RTS -- A is still the 8-bit `ASL A` of the
                                                        //   leaf (8C48), so $04C1 = $16; only the epilogue runs
-    default: a = ctVmC2Leaf12(r); break;                 // 8E1E (leaf 12). Not ported: leaves 8-10 (8D63/8D6A/8D8F)
+    default: a = ctVmC2Leaf12(r); break;                 // 8E1E (leaf 12). Not ported: leaves 8-9 (8D63/8D6A)
   }
   r[0x04C1] = (uint8_t)a;                                // 8C4D STA $C1
-  // Leaves 6 and 7 open with REP #30 and return without restoring it, so the gate's STA $C1 runs 16-bit and also
+  // Leaves 6, 7 and 10 open with REP #30 and return without restoring it, so the gate's STA $C1 runs 16-bit and also
   // zeroes $04C2 (the scan limit of leaves 0 and 3).
   if (wide) r[0x04C2] = (uint8_t)(a >> 8);
   int ey = ctVmC2Epilogue(r, rom, romLen);               // 8C4F JSR C2/834D
@@ -1876,7 +1958,7 @@ static void ctVmPcLoad(uint8_t* r, const uint8_t* rom, int romLen, int idx, int 
 
 
 // ---- The $C2 party / roster / inventory-count family: C0/388D (0xCF), 38BE (0xD0), 38D3 (0xD1), 38E8 (0xD2),
-// 37F9 (0xD7), 3919 (0xD3), 394E (0xD4), 3E5C/3E6E/3E75 (0xF8/0xF9/0xFA) ----
+// 37F9 (0xD7), 3919 (0xD3), 394E (0xD4), 3A68 (0xD5), 3E5C/3E6E/3E75 (0xF8/0xF9/0xFA) ----
 // Ten ops over 896 static sites, all reaching JSL $C2:8004 with a leaf index. Shared with the live VM (ct_vm.c),
 // see disasm/notes/vm_two_implementations.md.
 // The carry varies: 0xD0/0xD1/0xD3 end the visit (no SEC/CLC, entry carry 0), 0xD4's is its last CMP $D9, the rest
@@ -1914,6 +1996,15 @@ int CtVmPartyGateFamily(uint8_t* r, const uint8_t* rom, int romLen,
         int disp = script[spill];                                // 3905 / 38AA
         r[0x01D9] = (uint8_t)disp; r[0x01DA] = 0x00;                  // 390E STA $D9, 16-bit after
         out->ip = (spill + disp) & 0xFFFF; out->carry = 1; out->ok = 1; return 1; //   AND #00FF; 3912 ADC $D9
+      }
+      case 0xD5: {
+        // C0/3A68: equip, `D5 pc item`. TYX / INX / TDC / XBA / LDA $7F2001,X / INX / TAY (Y = the PC) / LDA $7F2001,X
+        // / INX / STX $C7 / TAX (X = the item) / LDA #0A / JSL C2/8004 (leaf 10) / LDX $C7 / RTS: no SEC or CLC, so the
+        // gate's PHP/PLP hands back the entry carry 0 and the visit ends, as 0xD0/0xD1's.
+        int spill = (ip + 3) & 0xFFFF;
+        r[0x01C7] = (uint8_t)spill; r[0x01C8] = (uint8_t)(spill >> 8);   // 3A77 STX $C7, 16-bit
+        ctVmC2Gate(r, rom, romLen, 10, script[(ip + 1) & 0xFFFF], script[(ip + 2) & 0xFFFF], 0);
+        out->ip = spill; out->carry = 0; out->ok = 1; return 1;
       }
       case 0xD3: {
         // C0/3919: join. Leaf 1 puts the char id in the active party; then $018D + charid (that PC's object index)
@@ -4066,7 +4157,7 @@ int CtFieldRunnerOne(uint8_t* r, const uint8_t* rom, int romLen, int idx, int ip
         h.ip = ni & 0xFFFF; h.carry = 1; h.ok = 1; break;
       }
       case 0xCF: case 0xD0: case 0xD1: case 0xD2: case 0xD7:
-      case 0xD3: case 0xD4:
+      case 0xD3: case 0xD4: case 0xD5:
       case 0xF8: case 0xF9: case 0xFA:
         // The $C2 party family; the body (CtVmPartyGateFamily) is shared with the live VM and sets ip, carry and ok
         // itself (the carry varies).

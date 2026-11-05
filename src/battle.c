@@ -702,24 +702,29 @@ static void battleStatBonusRes(uint8_t* s, const uint8_t* rom, long romLen, unsi
   for (int k = 0; k < 4; k++, f = (f << 1) & 0xFF)
     if (f & 0x80) s[blk + 0x3F + k] = (uint8_t)(s[blk + 0x3F + k] + amt);
 }
-static void battlePcEquipDerive(uint8_t* s, const uint8_t* rom, long romLen, unsigned blk) {
+static void battlePcEquipDerive(uint8_t* s, const uint8_t* rom, long romLen, unsigned blk, int aeff) {
   if (!s || !rom) return;
-  // C1/CE3A (for the three seats at C1/FBF3-FBFD, before the C1/FC00 copies below): the sheet's base stats
-  // +0B..+11 become the battle stats +36..+3C, then the weapon ($29), armor ($28-$5A) and helmet ($27-$7B)
-  // each add their 6-byte record's bonuses (CC/06A4, CC/08C0, CC/0986 + id*6): FD/B141 for +36..+3C and
-  // C1/CF69 for +3F..+42. This matters where the sheets come straight from CC:0000 (FD/B2DE, the demo
-  // battle), whose +36.. are FF placeholders.
-  s[blk + 0x36] = s[blk + 0x0B]; s[blk + 0x38] = s[blk + 0x0D]; s[blk + 0x37] = s[blk + 0x0C];   // CE59-CE68
-  s[blk + 0x3A] = s[blk + 0x0F]; s[blk + 0x3B] = s[blk + 0x10];                                   // CE6B-CE74
-  s[blk + 0x39] = s[blk + 0x0E]; s[blk + 0x3C] = s[blk + 0x11];                                   // CE77-CE80
-  static const struct { int field, sub, base; } eq[3] = { {0x29, 0x00, 0x06A4}, {0x28, 0x5A, 0x08C0},
-                                                          {0x27, 0x7B, 0x0986} };
-  for (int k = 0; k < 3; k++) {                                  // CE83 / CEB0 / CEE2
-    int id = (s[blk + eq[k].field] - eq[k].sub) & 0xFF;          // `SEC / SBC #sub` in 8 bits (TDC above)
-    long rec = 0x0C0000L + eq[k].base + (long)id * 6;            // C1/C90B: id * 6, `ADC #base`
-    if (rec + 5 >= romLen) continue;
-    if (CtRomByte(rom, 0x400000L, (long)(rec + 4))) battleStatBonusPair(s, rom, romLen, blk, CtRomByte(rom, 0x400000L, (long)(rec + 4)));   // JSL FD/B141 ($0E = $29D7)
-    battleStatBonusRes(s, rom, romLen, blk, rec);                                // JSR C1/CF69
+  // C1/CE40 `LDA $AEFF,X / CMP #FF / BNE / JMP C1/CF14`: the base-stat copy and the equipment bonuses skip a seat
+  // C1/FB06 emptied ($A09B), whose block keeps the sheet's own +36..+42; the C1/CF15 copies and C1/FC5D-FCEC below run
+  // on all three seats.
+  if (aeff != 0xFF) {
+    // C1/CE3A (for the three seats at C1/FBF3-FBFD, before the C1/FC00 copies below): the sheet's base stats
+    // +0B..+11 become the battle stats +36..+3C, then the weapon ($29), armor ($28-$5A) and helmet ($27-$7B)
+    // each add their 6-byte record's bonuses (CC/06A4, CC/08C0, CC/0986 + id*6): FD/B141 for +36..+3C and
+    // C1/CF69 for +3F..+42. This matters where the sheets come straight from CC:0000 (FD/B2DE, the demo
+    // battle), whose +36.. are FF placeholders.
+    s[blk + 0x36] = s[blk + 0x0B]; s[blk + 0x38] = s[blk + 0x0D]; s[blk + 0x37] = s[blk + 0x0C];   // CE59-CE68
+    s[blk + 0x3A] = s[blk + 0x0F]; s[blk + 0x3B] = s[blk + 0x10];                                   // CE6B-CE74
+    s[blk + 0x39] = s[blk + 0x0E]; s[blk + 0x3C] = s[blk + 0x11];                                   // CE77-CE80
+    static const struct { int field, sub, base; } eq[3] = { {0x29, 0x00, 0x06A4}, {0x28, 0x5A, 0x08C0},
+                                                            {0x27, 0x7B, 0x0986} };
+    for (int k = 0; k < 3; k++) {                                  // CE83 / CEB0 / CEE2
+      int id = (s[blk + eq[k].field] - eq[k].sub) & 0xFF;          // `SEC / SBC #sub` in 8 bits (TDC above)
+      long rec = 0x0C0000L + eq[k].base + (long)id * 6;            // C1/C90B: id * 6, `ADC #base`
+      if (rec + 5 >= romLen) continue;
+      if (CtRomByte(rom, 0x400000L, (long)(rec + 4))) battleStatBonusPair(s, rom, romLen, blk, CtRomByte(rom, 0x400000L, (long)(rec + 4)));   // JSL FD/B141 ($0E = $29D7)
+      battleStatBonusRes(s, rom, romLen, blk, rec);                                // JSR C1/CF69
+    }
   }
   battleEquipCopy(s, rom, romLen, blk, 0x29, 0x43, 6);         // 1FC08: weapon
   battleEquipCopy(s, rom, romLen, blk, 0x27, 0x70, 3);         // 1FC17: helmet
@@ -734,7 +739,7 @@ static void battlePcEquipDerive(uint8_t* s, const uint8_t* rom, long romLen, uns
   // Note: the other term is `LDA $CC0000,X` read after 1FCC8/1FCD1 `LDX $12` reloaded X with the block
   // address, so it is the ROM byte at CC:[block]; the weapon-record index 1FCB1 put in X is discarded. The
   // 16-bit `ADC / BCC` cannot carry for two bytes, so the low byte is stored.
-  { int cid = s[blk + 0x00];                                     // (the seat's charId: block +0 is the sheet's)
+  { int cid = aeff;                                              // 1FCBD LDA $AEFF,Y (FF once C1/FB06 emptied it)
     int stat = (cid == 1 || cid == 2) ? s[blk + 0x3A] : s[blk + 0x36];
     long rb = 0x0C0000L + (long)blk;
     if (rb < romLen) s[blk + 0x3D] = (uint8_t)(stat + CtRomByte(rom, 0x400000L, (long)(rb))); }
@@ -977,18 +982,37 @@ static void stageAll(CtBattleHost* h) {
   // the empty test (B2AC BMI) and the hidden test (B2BA BPL), so it runs on all 8 passes of the loop.
   s[0xAEC6] = 8;
   // (iii) PC battle blocks: 0x50-byte copy of the char sheet $7E2600 + charid*0x50 (FD/AE7D-AE8B).
+  int copied[3] = { 0, 0, 0 };
   for (int seat = 0; seat < 3; seat++) {
     uint8_t id = s[0xAEFF + seat];
     if (id == 0xFF || id >= 8) continue;
     memcpy(s + kPcBlock[seat], s + 0x2600 + (size_t)id * 0x50, 0x50);
-    // FD/B3FE -- the four resistance bytes +3F..+42: `LDA #04` into all four, then the sheet's +01 picks one
-    // of them for 05 (`BIT #80/#40/#20/#10` -> +3F/+40/+41/+42; none set -> all stay 04). C1/CF69 later adds
-    // the equipment's nibbles on top.
-    { unsigned b = kPcBlock[seat]; uint8_t e = s[b + 0x01];
+    copied[seat] = 1;
+  }
+  // C1/FB06-FB33: the seats again, `$AEFF,X = $AF0A,X = FF`, then the party's id only where `$A09B,X` is clear (the
+  // per-character flag the boot staged from $7F00B4, CF/FBB8) -- `INC $AEC5` per seat kept, `$AEC7 = $AEC5 + $AEC6`.
+  // A character the scene keeps out of the fight (the Blackbird's guards fight Ayla alone) is copied above, keeps
+  // its block and its $96F5 / $B1BE entries, and takes no seat: no ATB (FD/B7F1), no base stats (C1/CE40).
+  { int n = 0;
+    for (int x = 0; x < 3; x++) {
+      s[0xAEFF + x] = s[0xAF0A + x] = 0xFF;                                                // FB0B-FB10
+      if (s[0xA09B + x] || (s[0x2980 + x] & 0x80)) continue;                               // FB13 / FB1B
+      s[0xAEFF + x] = s[0xAF0A + x] = s[0x2980 + x]; n++;                                  // FB1D-FB23
+    }
+    s[0xAEC5] = (uint8_t)n;
+    s[0xAEC7] = (uint8_t)(s[0xAEC5] + s[0xAEC6]); }                                       // FB2C-FB33
+  for (int seat = 0; seat < 3; seat++) {
+    if (!copied[seat]) continue;
+    uint8_t id = s[0x2980 + seat];
+    // FD/B3FE -- the four resistance bytes +3F..+42 (`LDA $AEFF,X / CMP #FF / BEQ`: a seated character only): `LDA #04`
+    // into all four, then the sheet's +01 picks one of them for 05 (`BIT #80/#40/#20/#10` -> +3F/+40/+41/+42; none set
+    // -> all stay 04). C1/CF69 later adds the equipment's nibbles on top.
+    if (s[0xAEFF + seat] != 0xFF) {
+      unsigned b = kPcBlock[seat]; uint8_t e = s[b + 0x01];
       for (int k = 0; k < 4; k++) s[b + 0x3F + k] = 0x04;                                  // FD/B405-B410
       int k = (e & 0x80) ? 0 : (e & 0x40) ? 1 : (e & 0x20) ? 2 : (e & 0x10) ? 3 : -1;     // FD/B413-B431
       if (k >= 0) s[b + 0x3F + k] = 0x05; }                                                // FD/B432
-    battlePcEquipDerive(s, gRom, gRomLen, kPcBlock[seat]);   // C1/FC00-FC7B (every charId, from the ROM)
+    battlePcEquipDerive(s, gRom, gRomLen, kPcBlock[seat], s[0xAEFF + seat]);   // C1/CE3A + C1/FC00-FCEC
     if (getenv("CT_BATTLE_TRACE")) {   // the derived block, per boot
       const uint8_t* b = s + kPcBlock[seat];
       fprintf(stderr, "pcblock seat=%d cid=%d eq=%02X/%02X/%02X/%02X +36=%02X +37=%02X +3A=%02X"
@@ -1129,6 +1153,7 @@ static void battleDiv32(uint8_t* s, int carryIn);
 static int battleMul16(uint8_t* s, int c);           // fwd: C1/C90B, the multiply (defined beside the divide)
 static void battleStatusTimerStage(uint8_t* s);      // fwd: FD/B0D5 + FD/B4E7 + C1/B093 (the status timers' staging)
 static void battleBootB555(uint8_t* s);              // fwd: FD/B555 (the Hero Medal, the equipment status grants)
+static void battleBootFD27(uint8_t* s);              // fwd: C1/FD27-FD52 (the max HPs kept, FD/B363 per seat)
 static void battleStatusActClose(CtBattleHost* h);   // fwd: C1/AC85 -> C1/EC7F after a status timer's action 7F
 static void battleStatusActOpen(CtBattleHost* h);    // fwd: C1/40A6 for that action (with the run-off's opener)
 static void battleStatusResume(CtBattleHost* h);     // fwd: the rest of the C1/8324 dispatch after that action
@@ -5333,7 +5358,11 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
     { int x = s[0x9F36] | (s[0x9F37] << 8);              //   C1/1685-1688 `LDX $9F36 / DEC $1583,X`
       if (x < 0x500) s[0x1583 + x]--; }
     s[0x9920] = 0xFF;                                     //   C1/168B-168D: the list's next open redraws its arrows
-    s[0x93EF] = 0x40; s[0x93F4] = (uint8_t)itemId;       // sec. 2.5 queue record: $93EF = 0x40 (item marker) + $93F4 = id
+    // C1/1690-169B `$80 = 40 / $84 = $9F35 / $82 = FF`, then C1/16E6-1710 into the chooser's record (X = CC/FAF0[$95D5],
+    // seat x 7): +1 = $80 | $9F38,Y (the item marker), +5 = $82, +6 = $84 (the id) -- not seat 0's: a Revive chosen by
+    // another seat left seat 0's marker for the victory's C1/B6D1 to refund (leg 135).
+    { int r = 0x93EE + atk * 7;
+      s[r + 1] = (uint8_t)(0x40 | s[0x9F38 + atk]); s[r + 5] = 0xFF; s[r + 6] = (uint8_t)itemId; }
     if (!s[0xA0D5]) {                                    //   C1/169D-16A5: with the item cursor memory off ($A0D5 =
       s[0x95E5] = 0; s[0x95E6] = 0;                      //   0) STZ $95E5 / STZ $95E6; with it on the list reopens
                                                          //   where it was
@@ -14808,8 +14837,8 @@ static void battleBuildResults(CtBattleHost* h) {
   // glb = the $7F page for the magic-unlock gate.
   {
     for (int seat = 0; seat < 3; seat++) {
-      uint8_t id = h->mem[0x2980 + seat];
-      if (id == 0xFF || id >= 8) { h->rewLevels[seat] = 0; continue; }
+      uint8_t id = h->mem[0xAEFF + seat];                                        // FD/AD96 `LDA $AEFF,X / CMP #FF`
+      if ((id & 0x80) || id >= 8) { h->rewLevels[seat] = 0; continue; }
       int g = CtBattleLevelUp(h->mem, rr, rl, kPcBlock[seat], id, h->rewXp, 0);   // predict (apply=0) = $B311,seat
       h->rewLevels[seat] = g;
       for (int k = 0; k < g && h->resultN < CT_BATTLE_RESULT_MAX; k++) {
@@ -15477,13 +15506,16 @@ void CtBattleBegin(CtBattleHost* h) {
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.
   battleStatusTimerStage(h->mem);
   battleBootB555(h->mem);                                        // C1/FD0A JSL FD/B555
+  battleBootFD27(h->mem);                                        // C1/FD27-FD52: the max HPs kept, FD/B363 per seat
   // ATB init. Every present combatant gets a speed reload $B158 (FD/B807); absent slots keep the 105 default. Turn
   // order $B163 = present combatants sorted by speed (block+0x38) descending, ties by ascending index (C1/808B).
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
   int bs = s[0x2990] & 7;                                        // battle-speed config ($2990 & 7 = 4 here)
   uint8_t order[11]; int no = 0;
   for (int i = 0; i < 11; i++) {
-    if (battlePresent(s, i)) {
+    // FD/B7F1 `LDA $AEFF,X / CMP #FF / BEQ`: the seats' loop takes the seated characters only -- one C1/FB06 left out
+    // ($A09B) keeps the FF timer and a clear flag.
+    if (battlePresent(s, i) && (i >= 3 || s[0xAEFF + i] != 0xFF)) {
       int sp = s[battleBlock(i) + 0x38];                         // SPEED = block+0x38
       s[0xB158 + i] = (uint8_t)battleReload(rom, sp, bs);
       s[0xAFAB + i] = CT_BATTLE_TMR_INTRO;                       // intro hold: timer == max -> empty bar (see #define)
@@ -15658,6 +15690,39 @@ static void battleBootB555(uint8_t* s) {
       int y = CtRomByte(rom, 0x400000L, (long)(0x0C2A05 + (x & 0xFF)));
       s[(b + y) & 0xFFFF] |= CtRomByte(rom, 0x400000L, (long)(0x0C2A06 + (x & 0xFF)));   // `LDA $5E2D,Y / ORA / STA`
     }
+}
+// C1/FD27-FD38: the three seats' max HP words (block +$05) kept in $B316/$B318/$B31A -- C1/83BB (the victory) and C1/8425
+// (the common exit) put them back -- then C1/FD3E-FD52 `LDY #seat / JSL FD/B363` for seats 0, 1, 2. FD/B363, a seated
+// character only (`LDA $AEFF,Y / CMP #FF / BEQ`): the accessory's status grant -- block +$4C bit 7: block[+$1D + +$4D] |=
+// +$4E (B37D-B39E; Magus's FF into +$23, the status immunity) -- then the accessory (+$2A) A0 / A1: max HP + 1/4 / + 1/2,
+// at most 999 (B3AA-B3E4). The direct page $00-$05 is its scratch: zeroed (B365-B369), $02 = the block offset, $00 / $04 =
+// the grant's mask and index.
+static void battleBootFD27(uint8_t* s) {
+  for (int seat = 0; seat < 3; seat++) {                           // FD27-FD38 (16-bit)
+    s[0xB316 + seat * 2] = s[0x5E32 + seat * 0x80]; s[0xB317 + seat * 2] = s[0x5E33 + seat * 0x80];
+  }
+  for (int seat = 0; seat < 3; seat++) {
+    for (int k = 0; k < 6; k++) s[k] = 0;                          // B363 TDC / TAX / STX $00 / STX $02 / STX $04
+    if (s[0xAEFF + seat] == 0xFF) continue;                        // B36B-B370 -> RTL
+    unsigned b = 0x5E2D + (unsigned)seat * 0x80;
+    s[0x02] = (uint8_t)(seat * 0x80); s[0x03] = (uint8_t)((seat * 0x80) >> 8);   // B374-B378 TYA / XBA / LSR / STA $02
+    if (s[b + 0x4C] & 0x80) {                                      // B37D LDA $5E79,X / BIT #80
+      s[0x00] = s[b + 0x4E]; s[0x04] = s[b + 0x4D];                // B385 / B38A
+      s[(b + 0x1D + s[b + 0x4D]) & 0xFFFF] |= s[b + 0x4E];         // B38F-B39E LDA $5E4A,X / ORA $00 / STA
+    }
+    int acc = s[b + 0x2A], hp = s[b + 0x05] | (s[b + 0x06] << 8);  // B3AA LDA $5E57,X / B3B3 LDA $5E32,X
+    if (acc == 0xA0) hp += hp >> 2;                                // B3AD CMP #A0 / LSR / LSR / ADC
+    else if (acc == 0xA1) hp += hp >> 1;                           // B3CE CMP #A1 / LSR / ADC
+    else continue;
+    if (hp >= 0x03E7) hp = 0x03E7;                                 // B3BC / B3DC CMP #03E7 / BCC
+    s[b + 0x05] = (uint8_t)hp; s[b + 0x06] = (uint8_t)(hp >> 8);   // B3C4 / B3E4 STA $5E32,X
+  }
+}
+// C1/83BB-83CF / C1/8425-8434: the max HPs C1/FD27 kept go back into the blocks.
+static void battleMaxHpRestore(uint8_t* s) {
+  for (int seat = 0; seat < 3; seat++) {
+    s[0x5E32 + seat * 0x80] = s[0xB316 + seat * 2]; s[0x5E33 + seat * 0x80] = s[0xB317 + seat * 2];
+  }
 }
 // ---- The staging, C1/FCFE-FD24: FD/B0D5's first two loops, FD/B4E7, and C1/B093 for the three seats ----
 //   FD/B0D5  TDC / TAX / STA $AFB6,X / INX / CPX #008F / BNE      every flag := 0 (arrays 0-12)
@@ -16755,6 +16820,7 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
   uint8_t* s = h->mem;
   if (h->rewardsApplied) return;
   h->rewardsApplied = 1;
+  battleMaxHpRestore(s);                             // C1/83BB-83CF, before the rewards' level-ups
   // ---- Victory rewards (battle_results_window.md P3.3, sec. S3; ROM C1/F950) ----
   // Applies the accumulated per-kill rewards (h->rewXp/Tp/Gp/Drops, from CC/5E00) to each surviving PC block, the
   // gold ($2C53) and the inventory ($2400/$2500) before the block -> sheet writeback, so the block's XP (+0x13) and
@@ -16768,8 +16834,10 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
       (h->rewXp || h->rewTp || h->rewGp || h->rewDropN)) {
     long rl = 0; const uint8_t* rr = CtBattleRom(&rl);   // ROM growth tables for the level-up (CC bank)
     for (int seat = 0; seat < 3; seat++) {
-      uint8_t id = s[0x2980 + seat];
-      if (id == 0xFF || id >= 8) continue;             // absent party slot
+      // C1/F945 / F97B / F9B1 `LDA $AEFF,seat / BMI`: the seated characters only -- an empty seat, or one C1/FB06 left
+      // out of the fight ($A09B), takes no XP (and, being in $B1BE, no reserve share either).
+      uint8_t id = s[0xAEFF + seat];
+      if ((id & 0x80) || id >= 8) continue;
       uint32_t b = 0x5E2D + (uint32_t)seat * 0x80;
       if (s[b + 0x1D] & 0x80) continue;                // a dead PC gets no reward (block+0x1D bit 7, P3.3)
       battleXpAddF908(s, b, h->rewXp);                 // XP block+0x13 (3B) += total (C1/F908)
@@ -16846,6 +16914,7 @@ static void battleModuleTail(CtBattleHost* h, int path) {
   uint8_t* s = h->mem;
   if (h->moduleTailDone) return;
   h->moduleTailDone = 1;
+  if (path == 1 || path == 3) battleMaxHpRestore(s);             // C1/8423-8434
   if (path == 1 || path == 3) battleStatusClearEA9D(h);          // C1/843A JSR C1/EA9D (the flee: the second time)
   if (path != 2) {
     // C1/EAE8: the dead flag is cleared at battle end for every seat (`TDC / STA $5E4A,X`, the whole block+0x1D byte),
@@ -20981,8 +21050,8 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // other fight `JMP C1/8120`s into the next pass. The demo ends instead: C1/83B8 JSR C1/B3D2 (each present, unhidden
   // enemy slot's staging record +7 = `AND #40 / ORA #40`), and C1/83D2's second bit-5 test skips the victory block
   // straight to the common exit C1/8423. No kill, no victory, no rewards.
-  // Not modelled: C1/83BB-83CF and C1/8425-8434 put back $5E32/$5EB2/$5F32 from $B316/$B318/$B31A (the boot's C1/FD2C
-  // copy of the max-HP words); nothing in this engine changes a max HP during a fight.
+  // C1/83BB-83CF and C1/8425-8434 put back $5E32/$5EB2/$5F32 from $B316/$B318/$B31A (battleMaxHpRestore: the victory's
+  // in CtBattleVictoryRewards, the common exit's in battleModuleTail).
   if (h->demoPass && !h->actActive && h->schedN == 0) { battleDemoEnd(h); return 0; }
   return 0;
 }

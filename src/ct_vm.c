@@ -1184,7 +1184,7 @@ static void runFunc(const uint8_t* B, int blen, int hdr, int obj, int nobj, int 
     else if (op == 0x89 || op == 0x8A) vmSpeedOp(mem, a, NULL, B, hdr, addr, obj);   // fn0 sets it then RETURNs (scene 13's kids `89 28`)
     else if (op == 0xB8) { w8(mem, 0x7E012B, B[addr + 1]); w8(mem, 0x7E012C, B[addr + 2]); w8(mem, 0x7E012D, B[addr + 3]); }   // C0/3557
     else if (op >= 0xC7 && op <= 0xCE && op != 0xC8) { int ni; CtVmItemFamily(mem->s, B - hdr, addr + hdr, &ni); nxt = ni - hdr; }
-    else if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD6 || op == 0xD7 ||
+    else if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD5 || op == 0xD6 || op == 0xD7 ||
              op == 0xF8 || op == 0xF9 || op == 0xFA) {
       CtHRet pg; pg.ip = addr + hdr; pg.carry = 1; pg.ok = 0;
       CtVmPartyGateFamily(mem->s, gRomImg, (int)gRomImgLen, B - hdr, addr + hdr, &pg);
@@ -3007,11 +3007,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     s->addr = cf.ip - sc->header;
     return cf.carry ? 0 : 1;
   }
-  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD6 || op == 0xD7 ||
+  if (op == 0xCF || op == 0xD0 || op == 0xD1 || op == 0xD3 || op == 0xD4 || op == 0xD5 || op == 0xD6 || op == 0xD7 ||
       op == 0xF8 || op == 0xF9 || op == 0xFA) {
     // ---- The $C2 party / roster family: C0/388D (0xCF has-character; jumps when the leaf returns nonzero),
     // C0/38BE (0xD0 add to the reserve roster), C0/38D3 (0xD1 remove from it), C0/3919 (0xD3 join), C0/394E (0xD4
-    // leave), C0/37F9 (0xD7 count an item into a local), C0/3E5C/3E6E/3E75 (0xF8/0xF9/0xFA heal the party); move.c's
+    // leave), C0/3A68 (0xD5 equip, leaf 10), C0/37F9 (0xD7 count an item into a local), C0/3E5C/3E6E/3E75 (0xF8/0xF9/0xFA heal the party); move.c's
     // CtVmPartyGateFamily. With no ROM image every ROM read inside the gate is bounds-checked, so it takes the
     // routine's own zero-fill arm.
     // 0xD3 is leaf 1 (C2/8C79) whole: `JSR C2/8CF7` first (the joiner's reserve entry marked empty, `| 80`), eviction
@@ -3778,7 +3778,8 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   // CtSceneRunObj0Slot1, also called by the menu exit and the battle return.
   if (count > 0) {
     CtSceneRunObj0Slot1(sc, "C0/56C8");
-    sc->st[0].prio = 7;                              // C0/595C leaves $1001 alone: obj0 keeps the load's count
+    sc->st[0].prio = 7;                              // C0/595C leaves $1001 alone: obj0 keeps the load's count, or the
+                                                     //   one an op 0x87 in fn1 re-armed (C0/488B)
   }
   // C0/56CB-56D3, the load's last step: `LDA #0B / JSL C2/8004`, the $C2 party gate's leaf 11 (C2/8C5A RTS), run
   // for its epilogue C2/834D, which repaints the weapon rows $21BA/$21DA/$21FA (move.c CtVmC2LoadTail).
@@ -6184,7 +6185,9 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
   if (tr) ln = snprintf(line, sizeof line, "slot1: %s ops", site ? site : "?");
   CtSS saved = sc->st[0];
   sc->st[0].addr = fn1; sc->st[0].prio = 0; sc->st[0].waitObj = -1; sc->st[0].wait = 0; sc->st[0].nm = 0;
-  ctSetDc(sc, 0, 1);
+  // C0/595C writes no $1001,X (the queue build's countdown, which step() does not read): an op 0x87 inside fn1 re-arms
+  // it (C0/488B `STA $1001,X`) and that count stays -- obj0's first visit after a load waits for it (loc 16B's fn1
+  // `87 01`: obj0 runs a frame after the wing's turrets, out of phase with them).
   const char* why = "guard";
   for (int guard = 0; guard < 600; guard++) {
     int at = sc->st[0].addr;
@@ -6196,7 +6199,8 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (sc->st[0].addr == at) { why = "parked"; break; } // the ROM would never leave C0/595C
   }
   int endAt = sc->st[0].addr;
-  sc->st[0] = saved; ctSetDc(sc, 0, saved.dc);
+  int dc = r8(sc->mem, 0x7E1001u);                      // what fn1's ops left in $1001 (op 0x87), else the saved count
+  sc->st[0] = saved; sc->st[0].dc = dc;
   // obj0 before -> after: the ROM's runner leaves $1180/$1C00 alone, so the two must agree
   if (tr) fprintf(stderr, "%s %s@%04X obj0 @%04X p%d -> @%04X p%d\n", line, why, endAt & 0xFFFF,
                   saved.addr & 0xFFFF, saved.prio, sc->st[0].addr & 0xFFFF, sc->st[0].prio);
