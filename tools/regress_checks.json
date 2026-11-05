@@ -49537,8 +49537,8 @@
         "mixer: menu-jingle: reads 11066 identical / 11066, sound RAM identical at 1 / 1 segment ends",
         "mixer: world-song: 158419 samples identical / 158419",
         "mixer: world-song: reads 13134 identical / 13134, sound RAM identical at 1 / 1 segment ends",
-        "mixer: all: 3287642 samples identical / 3287642",
-        "mixer: all: reads 339402 identical / 339402, sound RAM identical at 12 / 12 segment ends, live chunks 808 / 808",
+        "mixer: all: 3315944 samples identical / 3315944",
+        "mixer: all: reads 342282 identical / 342282, sound RAM identical at 12 / 12 segment ends, live chunks 815 / 815",
         "mixer: verdict: SAMPLE-EXACT",
         "mixfuzz: 1875277 samples identical / 1875277 (200 cases, seed 1)",
         "mixfuzz: reads 1875277 identical / 1875277, sound RAM identical after 200 / 200 cases"
