@@ -3975,6 +3975,11 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
     // that byte on every visit, so a seeded 2 parks and a seeded 1 completes. See ctAnimSyncActor.
     ctAnimSyncActor(&sc->actors[o], w, x);
   }
+  // ...and the lead. CtSceneCreate took $0197 from the party the scene was built with, before this seed; the seed's
+  // $0197 (C0/426A's slot-0 object) is the lead the state carries, the same rule as there. A state whose lead is not
+  // Crono's object (Marle leading after Crono fell) otherwise steers the old object and leaves the lead standing.
+  { int v = w[0x0197];
+    if (!(v & 0x80) && v / 2 < sc->nobj) { sc->playerObj = v / 2; sc->playerLoaded = 1; } }
 }
 
 // How many objects the draw compare graded on the last CtSceneDiffWram call, and out of how many. A check
