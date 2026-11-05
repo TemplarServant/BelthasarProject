@@ -826,6 +826,14 @@ from the store and pictures through the screen and back, all 0 px. Each pins a o
 in its notes (the map's rebuild priced with world 0's rest; the exchange's song-down handshake on the SPC's tick phase).
 Re-pin only against a fresh oracle measurement.
 
+### battle-y-moves-the-windows-to-the-top-vs-oracle (`tools/battle_window_side_cmp.py`)
+
+Y in a battle moves the strip and the windows to the other side (the battle NMI's CD/092F-0972; D1/FE4C installs the
+other preset and copies the side into `$CA22`, which the port's renderer follows). On tools/battle_ab.py's synthetic GATO
+fight, Y at f700 and f800 on both sides: the layout bytes (`$00F8 $EC $CA21 $CA22`) frame for frame, and the pictures'
+differing frames, which must be exactly those of the same run with no press (the fight's own residual). Three mutations:
+no toggle, the toggle on this frame's pad instead of the previous frame's latch, the side from `$2989` instead of `$CA22`.
+
 ### field-scene5-bottom-edge-draw-window (`--scene 5 --at 376 488`)
 
 Pins that the draw list is the ROM's camera window and NOTHING narrower. `placed` is

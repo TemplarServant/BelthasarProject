@@ -3256,11 +3256,15 @@ static int fillBoxDyOf(int top, int h) {
 }
 // ...and in a fight the lines a lowered box leaves -- the top `dy` of its own band, which the SNES never shows as the arena
 // -- show the arena, so they take the arena's shake and its effects as the nearest arena line has them (as the widescreen's
-// sides of the band do): rows[y] = 1 for those lines, both boxes' sides (the HUD's and the message window's, $2989 bit 1).
+// sides of the band do): rows[y] = 1 for those lines, both boxes' sides (the HUD's and the message window's, $CA22).
+// The battle windows' side is the layout installed now, $CA22 (1 = the strip at the bottom): D1/F1DF latches the boot's
+// `$EC = ($2989 & 2) >> 1` into it, and the NMI's Y toggle CD/092F-0972 flips $CA21, which D1/FE4C copies into $CA22 as
+// it installs the other preset (CE/EE6E): the picture follows the tables, not the battle's flags byte.
+static inline int battleWindowsBottom(const uint8_t* mem) { return mem[0xCA22] & 1; }
 static void fillBoxArenaRows(const uint8_t* mem, uint8_t* rows) {
   memset(rows, 0, CAMH);
   if (!g_fillBoxOn || !mem) return;
-  const int bottom = (mem[0x2989] & 0x02) != 0;
+  const int bottom = battleWindowsBottom(mem);
   const int top[2] = { bottom ? CT_BHUD_Y0 : CT_BHUD_Y0_TOP, bottom ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM };
   const int h[2] = { CT_BHUD_H, CT_BRESULT_H };
   for (int k = 0; k < 2; k++)
@@ -6693,7 +6697,7 @@ static void battleHudSeedName7E(uint8_t* s7, int id, const char* nm) {
 // rows (y0..y0+47, the side $2989 bit 1 picks).
 static int ctBattleHudBand(const uint8_t* mem, int* top, int* lines) {
   int acc = 0;
-  int y0 = CT_BHUD_Y0 + ((mem[0x2989] & 0x02) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));
+  int y0 = CT_BHUD_Y0 + (battleWindowsBottom(mem) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));
   for (int a = 0xC867; a + 2 < 0xC867 + 0x1E; a += 3) {           // the 0x1E bytes CE/EE6E's MVN copies
     int c = mem[a];
     if (!c) break;                                                  // the table's end
@@ -6710,9 +6714,9 @@ static void battleHudRenderStrip(uint8_t* fb, const uint8_t* mem, const uint8_t*
   // ---- Strip origin (disasm/notes/battle_hud_strip_position.md) ----
   // The HUD has two resting positions and each battle picks one: CF/FB86 `LDA $2989 / AND #02 / LSR A / STA $EC`
   // ($2989 = field op 0xD8's first immediate, the battle's flags byte), D1/F1DF latches it into $CA22, and D1/FE4C /
-  // CD/05D7 add $CA22 to the HDMA band preset id CE/EE6E installs. $2989 bit 1 set -> renderY 160..207, clear ->
-  // renderY 8..55. It is per battle (the op-0xD8 operand), not per location; the strip is only translated.
-  int bottom = (mem[0x2989] & 0x02) != 0;
+  // CD/05D7 add $CA22 to the HDMA band preset id CE/EE6E installs. $CA22 = 1 -> renderY 160..207, 0 -> renderY 8..55:
+  // the battle's start side (the op-0xD8 operand), then Y flips it (CD/092F); the strip is only translated.
+  int bottom = battleWindowsBottom(mem);
   g_bhudStripDy = bottom ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0);
   // The palettes the strip's BG3 words name (2 = 29xx white, 3 = 2Dxx grey): CGRAM 8..15 as baked (the two phase
   // captures carry the same bytes).
@@ -6820,7 +6824,7 @@ void CtBattleHudRender(uint8_t* fb, const uint8_t* mem, const uint8_t* vram) {
   if (!vram) { CtBattleStripVramSeed(mem, seed); vram = seed; }
   int top = 0, n = 0;
   if (!ctBattleHudBand(mem, &top, &n) || n <= 0) return;  // no strip entry installed: the strip is not on screen
-  int y0 = CT_BHUD_Y0 + ((mem[0x2989] & 0x02) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));   // same origin as the strip
+  int y0 = CT_BHUD_Y0 + (battleWindowsBottom(mem) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));   // same origin as the strip
   int r0 = top - y0, r1 = r0 + n - 1;                      // the band, in strip rows (the centred iris: [23-s, 24+s])
   for (int r = r0 < 0 ? 0 : r0; r <= r1 && r < CT_BHUD_H; r++)   // (the rows it draws, for the widescreen's assembly)
     if (y0 + r + g_fillBoxDy >= 0 && y0 + r + g_fillBoxDy < CAMH) g_bBoxRow[y0 + r + g_fillBoxDy] = 1;
@@ -7424,7 +7428,7 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
   // Both window bands are 24 scanlines.
   int sb = tbAnimBand, sc = tbCream, s0 = tbClipY0, s1 = tbClipY1;
   tbAnimBand = 1 << 20; tbCream = 0; tbClipY0 = -1; tbClipY1 = 1 << 30;                   // full window, grey scheme
-  int boxTop = (h->mem[0x2989] & 0x02) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM;
+  int boxTop = battleWindowsBottom(h->mem) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM;
   drawCtMsgWindow24(fb, boxTop);   // 24 = the band's own cnt=$18: the window is 24 scanlines (8..31 / 184..207),
                                   // as the oracle's rows agree (sec. V1: top border 8, white 9, body 11-25,
                                   // bottom border ~29). A known defect in both positions is pinned separately.
@@ -18941,7 +18945,7 @@ int main(int argc, char** argv) {
       memcpy(g_bWorld, fb, sizeof g_bWorld);           // (the widescreen: what the screen-fixed boxes below cover)
       memset(g_bBoxRow, 0, sizeof g_bBoxRow);
       { long rl = 0; const uint8_t* rr = CtBattleRom(&rl);
-        int fdy = defeatHold ? 0 : fillBoxBegin(fb, (bmem[0x2989] & 0x02) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM, CT_BRESULT_H);
+        int fdy = defeatHold ? 0 : fillBoxBegin(fb, battleWindowsBottom(bmem) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM, CT_BRESULT_H);
         if (!defeatHold) battleResultsRender(fb, &liveHost, font, rr, rl);   // battle_results_window.md sec. V: victory results box (top)
         fillBoxEnd(fb, fdy); }
     }
@@ -18961,7 +18965,7 @@ int main(int argc, char** argv) {
       // therefore the arm frame, instead of hiding both inside a whole-frame hash.
       uint8_t* bpre = getenv("CT_BATTLESHOT_FIELD") ? (uint8_t*)malloc((size_t)CAMW * CAMH * 3) : NULL;
       if (bpre) memcpy(bpre, fb, (size_t)CAMW * CAMH * 3);
-      int fdy = fillBoxBegin(fb, CT_BHUD_Y0 + ((bs2[0x2989] & 0x02) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0)), CT_BHUD_H);
+      int fdy = fillBoxBegin(fb, CT_BHUD_Y0 + (battleWindowsBottom(bs2) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0)), CT_BHUD_H);
       CtBattleHudRender(fb, bs2, CtBattleStripVram(&liveHost));
       fillBoxEnd(fb, fdy);
       if (bpre) {

@@ -42172,6 +42172,53 @@
       ]
     },
     {
+      "name": "battle-y-moves-the-windows-to-the-top-vs-oracle",
+      "argv": [
+        "python",
+        "tools/battle_window_side_cmp.py"
+      ],
+      "env": {},
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/battle_window_side_cmp.py",
+        "tools/battle_ab.py"
+      ],
+      "pin": [
+        "^windowside: "
+      ],
+      "expect": [
+        "windowside: timeline same -- `$00F8/$EC/$CA21/$CA22` from the first press (f700): the cartridge +1:0100/01/01/01 +3:0100/00/00/01 +4:0100/00/00/00 +5:0000/00/00/00 +101:0100/00/00/00 +103:0100/01/01/00 +104:0100/01/01/01 +105:0000/01/01/01; the port +1:0100/01/01/01 +3:0100/00/00/01 +4:0100/00/00/00 +5:0000/00/00/00 +101:0100/00/00/00 +103:0100/01/01/00 +104:0100/01/01/01 +105:0000/01/01/01",
+        "windowside: pictures f700-f839 at lag +2: 24 of 140 frames differ (the worst 412 px at f707); with no press 24 at lag +2",
+        "windowside: frames that differ only with the press: none"
+      ],
+      "note_pass": "Y in a battle moves the strip and the windows to the top and back (CD/092F-0972 -> D1/FE4C) on the cartridge's frames: the layout bytes frame for frame and no picture apart but the fight's own residual",
+      "notes": "GitHub issue #7's follow-up (2026-11-04): the battle NMI's CD/092F-0972 -- on even $7C, no layout open ($CA1E == 0), the held remapped pad $00F8 bit 0 (Y) toggles $CA21 / $EC once per press ($CA23); D1/FE4C copies $CA21 into $CA22 and installs the other HDMA preset. The port had no toggle, and its renderer took the side from the battle's flags byte $2989 bit 1 instead of the installed layout $CA22 (field.c battleWindowsBottom). The toggle reads the PREVIOUS frame's latch: the NMI's own JSL C2/8002 is CD/09C6, after it, while the port latches before the tick (battle.c padF8Prev). tools/battle_ab.py's synthetic GATO fight, Y at f700 and f800 (the port through CT_HOLDBTN a frame later, so $00F8 turns on the same frame both sides). Pinned: the timeline the same; the pictures' differing frames are exactly the no-press run's (the selection bracket's pulse, battle_menu_pass.md), none from the press.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    battleWindowSideFrame(h);                                  // CD/092F-0972: Y moves the battle windows to the other side",
+          "replace": "    /* MUT */",
+          "why": "CD/092F-0972: Y toggles the battle windows' side"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if ((s[0xCD27] & 0x20) || !(h->padF8Prev & 0x01)) { s[0xCA23] = 0; return; }   // CD/094C-0957 -> CD/0970",
+          "replace": "  if ((s[0xCD27] & 0x20) || !(s[0x00F8] & 0x01)) { s[0xCA23] = 0; return; }   /* MUT */",
+          "why": "CD/0953 reads the previous frame's latch: the NMI's JSL C2/8002 is CD/09C6, after it"
+        },
+        {
+          "file": "src/field.c",
+          "find": "static inline int battleWindowsBottom(const uint8_t* mem) { return mem[0xCA22] & 1; }",
+          "replace": "static inline int battleWindowsBottom(const uint8_t* mem) { return (mem[0x2989] >> 1) & 1; }   /* MUT */",
+          "why": "the picture follows the installed layout $CA22, not the battle's flags byte $2989"
+        }
+      ]
+    },
+    {
       "name": "battle-hud-aura-stash-strip-vs-oracle",
       "argv": [
         "python",
@@ -50384,7 +50431,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 631 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 632 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

@@ -15314,7 +15314,7 @@ void CtBattleBegin(CtBattleHost* h) {
       uint16_t b = kPcBlock[seat]; h->mem[b + 0x2D] = 2; h->mem[b + 0x2E] = 0; } }
   h->frames = 0; h->pcAttacks = 0; h->enemyAttacks = 0; h->pcMisses = 0; h->missReported = 0; h->missPopupSpawned = 0; h->endReason = 0;
   h->aiTurnMsg = 0; h->nameBoxT = -1;                           // no name box in flight (CD/0295)
-  h->sysMsgOpenT = 0; h->fleeTriggered = 0; h->fleeHeldPrev = 0; h->fleeMaskPrev = 0; h->demoMaskPrev = 0; h->resetReq = 0;   // the run-away counter's host-side scratch (its bytes are WRAM)
+  h->sysMsgOpenT = 0; h->fleeTriggered = 0; h->fleeHeldPrev = 0; h->fleeMaskPrev = 0; h->demoMaskPrev = 0; h->resetReq = 0; h->padF8Prev = 0;   // the run-away counter's host-side scratch (its bytes are WRAM)
   h->fleeStage = 0; h->fleeT = 0; h->fleeExitT = 0; h->actEndByScript = 0; h->actEndRel = 0; h->actScriptEnd = 0; h->actEndHold = 0; h->actCloseWiped = 0; h->actOpenWiped = 0; h->exitDemo = 0; h->exitCd0c = 0;
   h->fxTeardownT = 0; h->fxTeardownLong = 0; h->fxTeardownRuns = 0;
   for (int k = 0; k < 16; k++) { h->palK[k] = -1; h->palKind[k] = 0; }   // the live CGRAM page = the base page
@@ -17424,6 +17424,23 @@ static void battleFxPalCommit(CtBattleHost* h) {
   if (e & 0x80) { memmove(s + 0x0598, s + 0xCCD9, 0x0C); s[0xCCE5] = (uint8_t)(e & 0x7F); }   // CD/0C4F-0C65 (`LDA #000B`: 12 bytes)
   else          { memmove(s + 0x0580, s + 0xCCC1, 0x18); s[0xCCE5] = (uint8_t)((e & 0xFE) | held); }   // CD/0C69-0C7F
   if (battleFleeProgTraceOn()) fprintf(stderr, "fxpal f%d commit CCE5=%02X -> %02X\n", h->frames, e, s[0xCCE5]);
+}
+// CD/092F-0972 (the NMI, after CD/092C): the battle windows' side. On even $7C, with no layout open ($CA1E == 0): a side
+// byte $EC that differs from the layout's $CA21 takes the next layout (CD/093A-094A); then the held remapped pad $00F8
+// bit 0 (Y on the default config) toggles $CA21 and $EC between 0 and 1, once per press ($CA23 latches it until the
+// button is let go or $CD27 bit 5 is set). D1/FE4C installs the changed $CA21 (battleHdmaPreset) into $CA22.
+// The pad is the previous frame's latch: the battle NMI's own `JSL C2/8002` (C2/84D2) comes after, at CD/09C6, while the
+// port's latch (field.c fieldPadNmi) runs before the tick -- so the tick keeps each frame's $00F8 for the next (padF8Prev).
+static void battleWindowSideFrame(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  if ((s[0x007C] & 1) || s[0xCA1E]) return;                       // CD/092F-0938
+  if (s[0x00EC] != s[0xCA21]) {                                    // CD/093A-094A
+    s[0xCA21] = (uint8_t)((s[0xCA21] + 1) & 1); s[0x00EC] = s[0xCA21];
+  }
+  if ((s[0xCD27] & 0x20) || !(h->padF8Prev & 0x01)) { s[0xCA23] = 0; return; }   // CD/094C-0957 -> CD/0970
+  if (s[0xCA23]) return;                                           // CD/0959-095C
+  s[0xCA21] = (uint8_t)((s[0xCA21] + 1) & 1); s[0x00EC] = s[0xCA21];   // CD/095E-0967
+  s[0xCA23] = 1;                                                   // CD/0969-096B
 }
 // CD/0B1E (after the runner, CD/09B8): while $99D2 is 01..7F, a live record 8..11 whose range runs past $99D3 is cut to it.
 static void battleFxPalClamp(CtBattleHost* h) {
@@ -20623,7 +20640,9 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   if (!h->mem[0xCD02]) {                                       // CD/0902-0905: a system box's NMI skips both (CD/0907-0921)
     battleScrollFill(h);                                       // CD/0929 JSR CD/06B4: the per-line scroll records, shaken
     battleFxPalCommit(h);                                      // CD/092C JSR CD/0B51 -> CD/0C48: the shake, then staged fade records go live
+    battleWindowSideFrame(h);                                  // CD/092F-0972: Y moves the battle windows to the other side
   }
+  h->padF8Prev = (uint16_t)(h->mem[0x00F8] | (h->mem[0x00F9] << 8));   // CD/09C6 / CD/091A: the NMI's pad latch, for the next frame
   // The bank-CD frame service's tail, in its order (CD/09AF-09BF): the background-program runner CD/1609, the effect
   // lock D1/F426, the objslot service FD/E39C (JSL FD/FFF7). The runner is gated on $5D9B (a script's op 34) and $CCEA,
   // the lock on $CFFF (ops 2D/2E, program op E6); the objslot records tick every frame of every fight.
