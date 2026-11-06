@@ -205,15 +205,43 @@ static int hostSyncFree(void) { return g_hostInteractive && CtSettingsGet()->syn
 // song starts with the scene. Off (the default, and always headless): the SNES's timing.
 static int hostSoundInstant(void) { return g_hostInteractive && (CtSettingsGet()->sync == CT_SYNC_FREE || CtSettingsGet()->instantUploads); }
 static int hostWideW(void);                      // (the widescreen's picture width, below)
+// The overscan scale (a mod, settings.h CT_SCALE_OVERSCAN): the lines it cuts at the picture's bottom, for the boxes of
+// "Fill the bottom lines" (fillBoxDyOf); 0 in every other mode and headless.
+static int g_overscanCutBottom;
 static void hostDstRect(CtPresenter* pr, SDL_Rect* r) {
   int ow = CAMW, oh = CAMH;
   CtPresentOutputSize(pr, &ow, &oh);
   const CtSettings* st = CtSettingsGet();
   int pw = hostWideW();                             // the picture's width (the widescreen's, else 256)
-  double aw = (double)pw * (st->aspect == CT_ASPECT_4_3 ? 7.0 / 6.0 : 1.0), ah = (double)CAMH;
+  double par = st->aspect == CT_ASPECT_4_3 ? 7.0 / 6.0 : 1.0;
+  double aw = (double)pw * par, ah = (double)CAMH;
   int w, h;
+  g_overscanCutBottom = 0;
   if (st->scaleMode == CT_SCALE_STRETCH) { r->x = 0; r->y = 0; r->w = ow; r->h = oh; return; }
-  if (st->scaleMode == CT_SCALE_INTEGER) {
+  // Overscan: the integer factor that fills the height, k = ceil(oh / 224), and the lines that do not fit cut where the
+  // game never puts anything -- first the bottom's 13 (211-223: the V-IRQ blanks them on the field and in fights, C0/0B44
+  // VTIME 211, D1/FE97; a menu's are its frame's stone), then the top's 8 (above the dialogue window's top place, TB_TOPY);
+  // the sides lose whole widescreen columns, never the 256 in the middle. The cut is whole lines and columns, so every
+  // backend crops the picture's pixels exactly; what is left over (under one line) stays black. More to cut: the plain
+  // integer scale below.
+  if (st->scaleMode == CT_SCALE_OVERSCAN && oh > CAMH) {
+    const int blankBottom = CAMH - 211, boxTop = 8;
+    int k = (oh + CAMH - 1) / CAMH, lines = oh / k, cut = CAMH - lines;
+    int cutB = cut < blankBottom ? cut : blankBottom, cutT = cut - cutB;
+    double colW = k * par;                          // one column on the screen
+    int cols = (int)(ow / colW);
+    if (cols > pw) cols = pw;
+    cols -= (pw - cols) & 1;                        // (the same number of columns cut on each side)
+    if (cutT <= boxTop && cols >= CAMW) {
+      int cutL = (pw - cols) / 2;
+      r->h = k * CAMH; r->w = (int)(pw * colW + 0.5);
+      r->y = (oh - lines * k) / 2 - cutT * k;
+      r->x = (int)floor((ow - cols * colW) / 2 - cutL * colW + 0.5);
+      g_overscanCutBottom = cutB;
+      return;
+    }
+  }
+  if (st->scaleMode == CT_SCALE_INTEGER || st->scaleMode == CT_SCALE_OVERSCAN) {
     int k = oh / CAMH;
     for (; k > 1; k--) { int kw = (int)(k * CAMH * aw / ah + 0.5); if (kw <= ow) break; }
     if (k < 1) k = 1;
@@ -3295,11 +3323,13 @@ static int drawCtWindowPpu(uint8_t* fb, int top, int y0c, int y1c) {
 // back puts the picture where it was and the box `dy` lines down. g_fillBoxOn is set per frame by the compose (the
 // interactive run with the mod on, where the V-IRQ would have blanked the lines); off, nothing here runs.
 static uint8_t g_fillBoxSave[CAMW * CAMH * 3];
+// The overscan scale (hostDstRect) cuts lines off the bottom: the boxes then share only the 13 lines less the cut, so a
+// box at the bottom ends on the last line shown.
 static int fillBoxDyOf(int top, int h) {
-  const int room = 211 - h;
-  if (!g_fillBoxOn || room <= 0 || top < 0) return 0;
-  int dy = (13 * top + room / 2) / room;
-  return dy > 13 ? 13 : dy;
+  const int room = 211 - h, extra = 13 - g_overscanCutBottom;
+  if (!g_fillBoxOn || room <= 0 || top < 0 || extra <= 0) return 0;
+  int dy = (extra * top + room / 2) / room;
+  return dy > extra ? extra : dy;
 }
 // ...and in a fight the lines a lowered box leaves -- the top `dy` of its own band, which the SNES never shows as the arena
 // -- show the arena, so they take the arena's shake and its effects as the nearest arena line has them (as the widescreen's
@@ -10994,6 +11024,8 @@ int main(int argc, char** argv) {
     hostWindowSize(&pc.w, &pc.h);
     pc.fullscreen = st->fullscreen; pc.backend = st->backend; pc.sdlDriver = st->renderDriver; pc.vsync = st->vsync;
     pc.hidden = getenv("CT_OVERLAY_SHOT") != NULL;     // (the probe: no window on the player's screen)
+    { const char* sz = getenv("CT_OVERLAY_SHOT_SIZE"); int sw = 0, sh = 0;   // (the probe at a screen's size: the scale modes)
+      if (pc.hidden && sz && sscanf(sz, "%dx%d", &sw, &sh) == 2 && sw > 0 && sh > 0) { pc.w = sw; pc.h = sh; pc.fullscreen = 0; } }
   }
   CtPresenter* pr = CtPresentCreate(&pc);
   if (!pr) { printf("FAIL: no window: %s\n", SDL_GetError()); return 4; }

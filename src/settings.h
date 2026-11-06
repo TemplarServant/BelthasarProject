@@ -22,7 +22,8 @@ enum {
 };
 #define CT_BIND_KEYS 2          // keyboard keys per button (SDL scancodes; 0 = none)
 
-enum { CT_SCALE_FIT = 0, CT_SCALE_INTEGER = 1, CT_SCALE_STRETCH = 2 };
+enum { CT_SCALE_FIT = 0, CT_SCALE_INTEGER = 1, CT_SCALE_STRETCH = 2,
+       CT_SCALE_OVERSCAN = 3 };   // a mod: the integer factor that fills the height, the edges the boxes never use cut (field.c)
 enum { CT_ASPECT_PIXEL = 0, CT_ASPECT_4_3 = 1 };          // 256x224 square pixels (8:7) / a 4:3 television
 enum { CT_SYNC_FRAME_PERFECT = 0, CT_SYNC_FREE = 1 };
 enum { CT_WIDE_OFF = 0, CT_WIDE_16_9 = 1, CT_WIDE_16_10 = 2, CT_WIDE_21_9 = 3 };

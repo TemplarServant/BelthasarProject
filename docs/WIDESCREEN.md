@@ -1,4 +1,4 @@
-# The widescreen and the frames between (mods)
+# The widescreen, the scales and the frames between (mods)
 
 Belthasar's widescreen and its "frames between" (60+ fps) are **mods**: player options in the F1 overlay, off by
 default, outside the ROM mandate ([DECISIONS.md](DECISIONS.md#2026-10-10-mods-are-outside-the-rom-mandate)). With every
@@ -12,6 +12,7 @@ says what each option draws that the SNES does not, and why. The history of each
 | Steam margins | `steam_margins` | past a room's edge, the strip the Steam release draws there (needs a Steam copy; greyed without one) |
 | Fill the bottom lines | `fill_bottom_lines` | the field's and the fights' lines 211-223, which the SNES blanks, drawn; the dialogue window, the fight's HUD and its message window lowered in proportion |
 | Frames between (60+ fps) | `interpolation` | pictures between two game frames on a faster display |
+| Scale: Integer, overscan | `scale=overscan` | the next integer scale up, filling the screen's height; only lines the game keeps empty are cut |
 
 ## The camera: the Steam release's
 
@@ -208,6 +209,28 @@ picture, and channel 5's table gives those lines the box's window (one word for 
 the line): with the option on they take the line's own word of the iris buffer (`fieldCh5Rows`), so the gate's BG3
 swirl no longer shows as a strip right across the screen above the box (scene 8, the owner, 2026-10-25; seen
 2026-10-26, check `options-fill-bottom-lines-window-rows-follow-the-picture`).
+
+## The overscan scale
+
+An exact integer scale of the 224 lines leaves a border on most displays: 1080 lines hold 4 x 224 = 896, so 92 lines
+stay black above and below (GitHub issue #9). The overscan scale takes the next factor up, k = ceil(height / 224), and
+cuts what does not fit, as an old TV's border hid it -- but only lines the game never uses: first up to 13 at the bottom
+(211-223, the strip the field's and the fights' V-IRQ blanks; in a menu, the last rows of its stone frame), then up to 8
+at the top (above line 8, the dialogue window's top place, TB_TOPY). The sides lose whole widescreen columns, never the
+256 in the middle. More to cut than that and the scale is the plain integer one, with its border (`hostDstRect`):
+
+| Display | Factor | Cut (SNES lines) |
+|---|---|---|
+| 1920 x 1080, 3840 x 2160 | 5x, 10x | 8 at the bottom; 16:9's 398 columns lose 7 a side |
+| 2560 x 1440 | 7x | 13 at the bottom, 6 at the top (3 pixels left black) |
+| 1280 x 720, 1280 x 800 | 3x | none: 4x would cut 44 / 24 lines, so the integer scale |
+
+The cut is whole lines and columns, so each backend crops the picture's own pixels (the Vulkan blit now cuts its
+source instead of squeezing a rectangle past the screen). With "Fill the bottom lines" the boxes move down only as far as
+the lines still shown (`fillBoxDyOf`: 13 less the bottom cut), so the dialogue window ends on the last line on the
+screen (1080p: 5 lines down instead of 13). Without it, 1080p still shows the 5 lines of the bottom strip the SNES leaves
+black. The overscan scale is the first step of the picture at any resolution (ROADMAP X13), which will show more lines
+instead of cutting them.
 
 ## The frames between
 

@@ -168,8 +168,16 @@ extern "C" int CtOverlayFrame(void) {
       bool fs = s->fullscreen != 0;
       if (ImGui::Checkbox("Fullscreen", &fs)) { s->fullscreen = fs; ch |= CT_OVL_VIDEO; }
 #endif
-      const char* scales[] = { "Fit to window", "Integer scale (sharp pixels)", "Stretch" };
-      if (ImGui::Combo("Scale", &s->scaleMode, scales, 3)) ch |= CT_OVL_VIDEO;
+      const char* scales[] = { "Fit to window", "Integer scale (sharp pixels)", "Stretch", "Integer, overscan (fills the screen)" };
+      if (ImGui::Combo("Scale", &s->scaleMode, scales, 4)) ch |= CT_OVL_VIDEO;
+      if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Integer, overscan (a mod): the next integer scale up, so the picture fills the screen's height with\n"
+                          "sharp, even pixels, and what does not fit is cut, as an old TV's border hid it. Only lines the\n"
+                          "game keeps empty are cut: up to 13 at the bottom (the strip the field and the fights leave black)\n"
+                          "and 8 at the top (above the dialogue window's highest place); the sides lose only widescreen\n"
+                          "columns. When more would go (720p, 800p), it is the plain integer scale. With \"Fill the bottom\n"
+                          "lines\" the boxes move down only as far as the lines still shown. 1080p and 4K cut 8 lines at the\n"
+                          "bottom. Nothing else in the game changes.");
       const char* aspects[] = { "Square pixels (8:7)", "TV 4:3 (as on the console)" };
       if (ImGui::Combo("Aspect ratio", &s->aspect, aspects, 2)) ch |= CT_OVL_VIDEO;
       const char* filters[] = { "Sharp (nearest)", "Smooth (linear)" };

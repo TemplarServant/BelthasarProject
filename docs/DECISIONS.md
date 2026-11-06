@@ -10,6 +10,23 @@ The binding text of the rules is in [CLAUDE.md](../CLAUDE.md). The timing model 
 
 ---
 
+## 2026-11-06: Not only widescreen -- the game at any resolution
+
+**Decision (owner).** "It will not be only widescreen: we will really support the game running at different
+resolutions." The widescreen becomes a picture whose size in SNES pixels follows the display, more lines as well as more
+columns than 256 x 224, shown at an exact integer scale with no border (ROADMAP X13). First, at once: the **overscan
+scale** a player asked for (GitHub issue #9) -- the next integer scale up, cutting only lines the game keeps empty.
+
+**Why.** An exact integer scale of 224 lines leaves a border on every common display (1080 = 4.82 x 224, 2160 = 9.64 x
+224). Cutting fixes it now; more lines fix it everywhere, without cutting.
+
+**Consequences.** The 2026-10-23 entry's "the port keeps 224 lines" was about the Steam release's 192-line crop, which
+stays unported; a picture taller than 224 is now the plan. The ROM's vertical camera still decides the 224 in the middle.
+What fills the extra lines past a room's top and bottom, and the menus' layout, are open (ROADMAP X13).
+
+**Where:** `hostDstRect` in `src/field.c` (the overscan scale), [WIDESCREEN.md](WIDESCREEN.md#the-overscan-scale);
+ROADMAP X13.
+
 ## 2026-10-23 / 2026-10-24: The widescreen follows the Steam release
 
 **Decision (owner).** "All our widescreen must be based on it" -- the Steam release (2018-2023):

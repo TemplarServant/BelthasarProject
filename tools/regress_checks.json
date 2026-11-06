@@ -47157,6 +47157,46 @@
       ]
     },
     {
+      "name": "options-overscan-scale-cuts-only-the-empty-lines",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/overscan_scale_check.py"
+      ],
+      "env": {},
+      "inputs": [
+        "ct_assets.dat",
+        "tools/overscan_scale_check.py"
+      ],
+      "expect": [
+        "overscan: 1920x1080: 5x, cut 8 bottom / 0 top, 7 columns a side: 0 px differ",
+        "overscan: 1920x1080 with the bottom lines filled: 5x, cut 8 bottom / 0 top, 7 columns a side: 0 px differ",
+        "overscan: 1920x1080 with the bottom lines filled: the dialogue window 5 lines down (13 less the 8 cut)",
+        "overscan: 2560x1440: 7x, cut 13 bottom / 6 top, 17 columns a side: 0 px differ",
+        "overscan: 1280x720: 3x, the integer scale (4x would cut 44 lines): 0 px differ"
+      ],
+      "pin": [
+        "^overscan: "
+      ],
+      "timeout_s": 300,
+      "note_pass": "the overscan scale (a mod, scale=overscan): the next integer factor up fills the screen's height, cutting up to 13 lines at the bottom and 8 at the top and widescreen columns only, else the plain integer scale; with the bottom lines filled the dialogue window moves down only to the last line shown",
+      "notes": "2026-11-06 (GitHub issue #9; the owner: do the overscan, first step of the picture at any resolution, ROADMAP X13). tools/overscan_scale_check.py runs the bedroom intro (scene 2, the mother's dialogue window) at 16:9 under the dummy video driver with CT_OVERLAY_SHOT_SIZE (a hidden window of 1920x1080, 2560x1440, 1280x720), restates the rule (k = ceil(h / 224); up to 13 lines cut at the bottom -- 211-223, the V-IRQ's blank -- then up to 8 at the top, above TB_TOPY; columns in pairs, never the 256) and compares the window with the CT_WIDESHOTS picture scaled and placed so. docs/WIDESCREEN.md \"The overscan scale\".",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    int cutB = cut < blankBottom ? cut : blankBottom, cutT = cut - cutB;",
+          "replace": "    int cutT = cut < boxTop ? cut : boxTop, cutB = cut - cutT;   /* MUT: the top cut first */",
+          "why": "the lines the game keeps empty are the bottom's 13 first: cut at the top first, 1080p loses the 8 lines above the top window's place and keeps the black strip"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  const int room = 211 - h, extra = 13 - g_overscanCutBottom;",
+          "replace": "  const int room = 211 - h, extra = 13;   /* MUT: the boxes ignore the overscan's cut */",
+          "why": "with the bottom lines filled the window moves 13 lines down, past the 1080p screen's last line: its bottom 8 lines cut"
+        }
+      ]
+    },
+    {
       "name": "options-free-sync-skips-the-hardware-waits",
       "tier": "full",
       "argv": [

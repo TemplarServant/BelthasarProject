@@ -201,6 +201,63 @@ Mods are outside the ROM mandate but must leave the vanilla game byte-identical 
 | X10 | **Copies past a room's edge.** A room as wide as its map showed the map wrapping in the sides (the option "Narrow rooms", on by default), and a layer merely offset from BG1 was taken for a backdrop and repeated: the attract's 0DB, where the machine falls on the party, stood three times side by side. | **Done 2026-10-23 (the owner): the option is removed** (`wide_room_wrap` read and ignored) -- such a room ends at its edge like any other -- and **only a background goes on past an edge**: a layer the ROM detaches from the camera or scrolls at a speed of its own (C0/A33B's `$1D36` / `$1D35`: the skywalk's sky 01C, Flea's stars 0AD, Death Peak's snow 104), not one merely offset (0DB, shaken by the fall, `$1D35` = `$1D36` = 0). The still backdrop's mirror (X4b) stays: the owner keeps backgrounds expanding. | `fieldWideMask`, `fieldBeyondLayers` in `src/field.c` | -- |
 | X11 | **The owner's widescreen round of 2026-10-23** (six reports). (1) The Steam margins scrolled at the logic's rate under the frames between (60+ fps), a step behind the middle. (2) Lavos falling on the overworld: black past the map's right edge. (3) Magus's castle (attract): a black band at the top at the maximum upward scroll. (4) The attract's robot attack: Crono vanished while he stood in a side. (5) The Lavos panorama (sequence entry 3, after the Blackbird / the attract's FF 63): the machinery repeated in both sides. (6) Zombor: a dark line in the sides under the opening HUD, moving down with it. | **Done 2026-10-24 (branch `claude/steam-wide-x4`):** (1) the margins are world pixels (`CtMotFrame.world`) and the native drawer takes them at their map place at t; (2) not a bug of the port: the Steam release has no world-map margins (no `mapext` for the world maps, whose maps are the SNES's own size), so past the map's edge only new art can fill it; (3) the margins' last fallback continues the room's BG2 (`fieldBeyondPixel`), else the backdrop CGRAM 0, never palette 0's black; (4) the side-objects pass draws the lead too; (5) entry 3's BG1 is the field's machinery laid out as one screen (BG1SC 00), so the sides leave it out (`g_seqPicWideSkip`) and show BG2's ocean and sky -- a seam remains where BG1's own ocean pieces end at the 256; (6) `btFxCompose` tells a band's edge line by its whole math setup (TM, CGWSEL, CGADSUB) and undoes the line's own math before the arena's. Follow-ups 2026-10-24: 01C's shake under the frames between left a column of the sky at the picture's left edge (a side column one map column past what the frame drew) -- it takes the frame's nearest margin column now (`fieldnative.c` fcT); Magus's castle top at the maximum scroll: its 5 grey lines are the cartridge's own (the middle matches the oracle pixel for pixel; 32 flat rows at the top of BG2's map, over the sky) -- with the widescreen on the sky is drawn 5 lines higher for the whole visit (`fieldWideBg2Dy`, art direction: the owner, 2026-10-24, after a fill and a camera held above the band were both rejected -- the held camera stopped the sky while the castle still moved); the Black Omen panorama (entry 3): the Steam release's art for it is in the margins of 06B, the location the story calls `FF 23` from (`mapext_107` over the sheets `cgext107_0`-`2`: the wings' ends, the glow, the planet) -- drawn with the Steam margins on since 2026-10-25 (WIDESCREEN.md; this row first said there was none). Later the same day: frames between with the camera and the objects at continuous places (a pan under a pixel a frame: the Blackbird's 16E, the trial); a background the room covers everywhere (008's warp swirl) not carried past the edge; and without the Steam margins drawn, a side where the Steam release draws scenery over the background (42 locations, `kSteamCovers` in `src/field.c`: location numbers only, from an analysis of that release -- the owner, 2026-10-24) ends black past the edge (01C past its tower). Open: "the scene before Zombor repeating a side" was not reproduced. | `src/fieldnative.c`, `fieldBackdropRgb` in `src/field.c`, `btFxCompose` in `src/battle.c`, `g_seqPicWideSkip` in `src/seq_pic.c` | -- |
 | X12 | **Objects that pop in the sides.** Some scripts show, hide or place an object just past the 256 columns, where the SNES never let it be seen; in the sides it pops out of nothing (the owner's report: 070's bird). `CT_WIDEPOP=1` lists them (docs/DEBUG_SURFACE.md); over the playthrough's 75 legs at 16:9 it found 23 (2026-10-29): 015 the arrest's four soldiers (objs 29-32), 02F objs 14-17, 070 obj 11 (the bird, its `90` at 04C4), 087 objs 21-23 (Ozzie's creatures, shows 0A39 / 0ADC / 0B72) and 25-28 (the skeletons), 091 obj 9 (its `91` at 0308), 0D4 obj 13 (`91` at 0641), 07A obj 16 (a teleport inside the ROM's band), and a few idle ones (077, 083, 087). How the Steam release handles them (build/_steamre, local): at 16:9 its side is 24 px, inside the ROM's own two-tile latch band, so its picture shows few; its widened latch and its moved entrances (015 objs 31/32, 0DF, 0E1) turn on only past an aspect of ~1.9; at any width it changes the script's ops for 070 (skips the bird's hide / show / walk-back, entered from 071), 087 (holds the three shows to its next load's end), 091 (skips the hide) and 089 (a nudge for its own art). A picture-only version of those three (drawn while hidden, the picture sliding over the script's jump; not drawn in the sides from the show to the next fight) was built and reverted (06cf078, reverted by the owner's decision 2026-10-29: for later). | Open: the owner's call on the approach. | `sidePlay` in `src/field.c`, the probe CT_WIDEPOP beside it; 06cf078 for the reverted table | M |
+| X13 | **The picture at any resolution** (the owner, 2026-11-06: "not only widescreen: the game running at different resolutions"). The widescreen grows into a picture whose size in SNES pixels follows the display -- more columns AND more lines than 256 x 224 -- shown at an exact integer scale with no border. The plan, its phases and its open decisions: [below](#the-picture-at-any-resolution-x13). Its first step, the **overscan scale** (GitHub issue #9), is done. | Planned; R0 done 2026-11-06. | `hostDstRect`, `hostWideW`, `CAMH` in `src/field.c`; [WIDESCREEN.md](WIDESCREEN.md) | XL |
+
+### The picture at any resolution (X13)
+
+**The goal.** Today the picture is W x 224: W = 256, or the widescreen's 398 / 358 / 522 columns for a fixed aspect
+(16:9, 16:10, 21:9), and the scale modes fit it to the screen -- an exact integer scale leaves a border on all four sides
+(1080 = 4.82 x 224). The plan makes the height a variable too: the picture is W x H, H >= 224, picked from the display
+so that an integer factor k fills it exactly:
+
+    k = floor(screen height / 224),  H = screen height / k,  W = screen width / k
+
+| Display | k | Picture (SNES pixels) |
+|---|---|---|
+| 1920 x 1080 | 4 | 480 x 270 |
+| 2560 x 1440, 3840 x 2160 | 6, 9 | 426 x 240 |
+| 1280 x 800 (Steam Deck) | 3 | 426 x 266 |
+| 1280 x 720 | 3 | 426 x 240 |
+
+(a remainder under one pixel stays black). The 256 x 224 the ROM draws stays the middle of the picture and keeps every
+rule of the mandate: everything past it is a mod's, drawn by the same rules the widescreen's sides follow today
+([WIDESCREEN.md](WIDESCREEN.md)). Off (the default, and every headless run) the game is the cartridge's.
+
+**The phases.** Each lands on its own, behind its option, and leaves the vanilla game byte-identical:
+
+- **R0, the overscan scale -- done 2026-11-06** (issue #9). `scale=overscan`: k = ceil(height / 224), the lines that do
+  not fit cut where the game draws nothing -- up to 13 at the bottom (211-223, blanked by the field's and the fights' V-IRQ)
+  and 8 at the top (above the dialogue window's top place); the sides lose widescreen columns only. 1080p and 4K: 5x / 10x,
+  8 lines cut at the bottom; 1440p: 7x, 13 + 6; 720p / 800p (more to cut): the plain integer scale. It is the answer
+  until R1-R6 land, and stays as a choice after them.
+- **R1, the picture's height as a variable.** One W x H through the host: the composition buffers (`FIELD_WMAX`,
+  `CT_MOT_W`, the `CAMH` of `field.c`'s 318 uses and the 224s of `battle.c`, `seq_pic.c`, `world.c`, the title), the
+  presenters, the internal resolution, the frames between (`motion.c`, `fieldnative.c`), and the probes' raw format
+  (`CT_SHOTS`, `CT_WIDESHOTS`). The option: the widescreen's aspect list gains "the display's" (W and H from the screen).
+  Nothing new is drawn yet: the extra lines are black, centred on the 224.
+- **R2, the field's extra lines.** The view's vertical place in the taller picture, as `fieldWideViewX` places it
+  horizontally: the 224 centred on the ROM's camera and clamped to the room, so a room's top and bottom stand at the
+  screen's edges (the Steam release's horizontal clamp, turned vertical); the map's rows above and below drawn from the
+  map, as the sides draw columns; past a room's top or bottom what the sides show past an edge (backgrounds go on;
+  otherwise black). A room exactly one screen tall (most interiors) then shows black bands inside the picture: what fills
+  them is open (below).
+- **R3, objects in the extra lines.** The ROM only latches and animates an object inside its own window (C0/A88D's view
+  and band); one seen only in the extra lines is drawn by the picture-only pass the sides use (`sidePlay`), with the same
+  pops (X12) vertically.
+- **R4, the per-line effects.** The tables the SNES applies line by line hold 224 entries: the windows and the iris
+  (channel 5), the wipes, the wave on channel 3, the colour gradients, the fights' per-line records (the line-64 cut). Each
+  needs a rule for the lines past 224 -- the nearest line's entry, as the sides take the nearest column's -- checked per
+  effect, like X5.
+- **R5, the boxes and the HUD.** The dialogue window, the fights' HUD strip and message window placed in proportion of the
+  taller picture: "Fill the bottom lines"' rule (`fillBoxDyOf`) with the extra height for its 13 lines.
+- **R6, the other composers.** The world map (its rows past the view, its era label), the fights (arena layers are 32
+  tile rows: past 256 lines they wrap), the special sequences and the title, each with its own height. The screens drawn
+  for 256 x 224 (menus, shops, naming, loading) stay centred with a border around them until X3 gives them a layout.
+
+**Open decisions (the owner's).** (1) What fills the extra lines past a room's top and bottom: black, the room's own
+tiles continued, or new art -- the Steam release has no reference (it shows fewer lines, 192, not more), and its
+margins (`mapext`) are drawn for its own width; whether they hold rows past the scroll mask is to be read. (2) Whether
+"the display's" picture replaces the fixed aspect list or joins it. (3) The menus' layout (X3).
 
 ---
 

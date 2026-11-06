@@ -331,13 +331,25 @@ void CtVkDraw(CtVk* v, const SDL_Rect* dst, int linear) {
   VkImageSubresourceRange rr = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
   vkCmdClearColorImage(c, im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &black, 1, &rr);
   SDL_Rect d = dst ? *dst : (SDL_Rect){ 0, 0, (int)v->ext.width, (int)v->ext.height };
+  // A rectangle past the target's edges (the overscan scale) is cut, not squeezed: the blit's offsets must lie inside both
+  // images, so the picture's part off the screen is left out of the source in proportion (exact when the cut is whole
+  // picture pixels, as the overscan's is).
+  int sx0 = 0, sy0 = 0, sx1 = v->picW, sy1 = v->picH;
+  if (d.w > 0 && d.h > 0) {
+    int dx1 = d.x + d.w, dy1 = d.y + d.h, ew = (int)v->ext.width, eh = (int)v->ext.height;
+    if (d.x < 0) sx0 = (int)((int64_t)-d.x * v->picW / d.w);
+    if (d.y < 0) sy0 = (int)((int64_t)-d.y * v->picH / d.h);
+    if (dx1 > ew) sx1 = v->picW - (int)((int64_t)(dx1 - ew) * v->picW / d.w);
+    if (dy1 > eh) sy1 = v->picH - (int)((int64_t)(dy1 - eh) * v->picH / d.h);
+  }
   if (d.x < 0) { d.w += d.x; d.x = 0; } if (d.y < 0) { d.h += d.y; d.y = 0; }
   if (d.x + d.w > (int)v->ext.width) d.w = (int)v->ext.width - d.x;
   if (d.y + d.h > (int)v->ext.height) d.h = (int)v->ext.height - d.y;
-  if (d.w > 0 && d.h > 0) {
+  if (d.w > 0 && d.h > 0 && sx1 > sx0 && sy1 > sy0) {
     VkImageBlit b = { 0 };
     b.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; b.srcSubresource.layerCount = 1;
-    b.srcOffsets[1].x = v->picW; b.srcOffsets[1].y = v->picH; b.srcOffsets[1].z = 1;
+    b.srcOffsets[0].x = sx0; b.srcOffsets[0].y = sy0;
+    b.srcOffsets[1].x = sx1; b.srcOffsets[1].y = sy1; b.srcOffsets[1].z = 1;
     b.dstSubresource = b.srcSubresource;
     b.dstOffsets[0].x = d.x; b.dstOffsets[0].y = d.y; b.dstOffsets[1].x = d.x + d.w; b.dstOffsets[1].y = d.y + d.h; b.dstOffsets[1].z = 1;
     barrier(c, im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,

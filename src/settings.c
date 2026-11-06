@@ -81,7 +81,8 @@ static void setKey(CtSettings* s, const char* sec, const char* key, const char* 
   if (!strcmp(sec, "video")) {
     if (!strcmp(key, "fullscreen")) s->fullscreen = iv != 0;
     else if (!strcmp(key, "window_scale")) s->windowScale = clampi(iv, 1, 8);
-    else if (!strcmp(key, "scale")) s->scaleMode = !strcmp(val, "integer") ? CT_SCALE_INTEGER : !strcmp(val, "stretch") ? CT_SCALE_STRETCH : CT_SCALE_FIT;
+    else if (!strcmp(key, "scale")) s->scaleMode = !strcmp(val, "integer") ? CT_SCALE_INTEGER : !strcmp(val, "stretch") ? CT_SCALE_STRETCH
+                                                 : !strcmp(val, "overscan") ? CT_SCALE_OVERSCAN : CT_SCALE_FIT;
     else if (!strcmp(key, "aspect")) s->aspect = !strcmp(val, "4:3") ? CT_ASPECT_4_3 : CT_ASPECT_PIXEL;
     else if (!strcmp(key, "filter")) s->linearFilter = !strcmp(val, "linear");
     else if (!strcmp(key, "render_scale")) s->renderScale = clampi(iv, 1, 4);
@@ -145,7 +146,8 @@ int CtSettingsSave(void) {
   fprintf(f, "; Belthasar -- options. Edited by the F1 overlay; safe to edit by hand.\n\n");
   fprintf(f, "[video]\nbackend=%s\nfullscreen=%d\nwindow_scale=%d\nscale=%s\naspect=%s\nfilter=%s\nwidescreen=%s\nsteam_margins=%d\nfill_bottom_lines=%d\nscene_adjustments=%d\nrender_scale=%d\ninterpolation=%d\nvsync=%d\nrender_driver=%s\n\n",
           s->backend == 1 ? "opengl" : s->backend == 2 ? "vulkan" : "sdl", s->fullscreen, s->windowScale,
-          s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch" : "fit",
+          s->scaleMode == CT_SCALE_INTEGER ? "integer" : s->scaleMode == CT_SCALE_STRETCH ? "stretch"
+          : s->scaleMode == CT_SCALE_OVERSCAN ? "overscan" : "fit",
           s->aspect == CT_ASPECT_4_3 ? "4:3" : "pixel", s->linearFilter ? "linear" : "nearest",
           s->widescreen == CT_WIDE_16_9 ? "16:9" : s->widescreen == CT_WIDE_16_10 ? "16:10" : s->widescreen == CT_WIDE_21_9 ? "21:9" : "off",
           s->wideSteamMargins, s->fillBottomLines, s->sceneAdjust, s->renderScale, s->interpolate, s->vsync,
