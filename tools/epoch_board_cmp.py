@@ -204,7 +204,12 @@ def omen():
 
 GAUGE_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '2:2', '0:98', '10:2', '0:88', '100:2', '0:520']
 GAUGE_SHOTS = [3182, 3202, 3242, 3580, 3610]   # the gauge (needle turning, turning, still), the arrival on 1F1 (P+2)
-GAUGE_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:143', 'u:2', 'n:88', 'a:2', 'n:600']
+# From the 1F6 load at story D4 (the cartridge's f3003, before the free flight) the port is one frame further behind: that load
+# runs C2/2D91 (the Black Omen's art), 38 frames on both sides (the cartridge's NMI-off stretch, calls 3003-3041, 13,743,004
+# cycles; the same load at story D3, calls 2159-2196, is 37), which the port charges since c9e939d. Every press and picture
+# placed after it on the port's absolute frame moves with it (the free flight's FLIGHT_SHIFT predates that load's price).
+WORLD_D4_SHIFT = FLIGHT_SHIFT + 1
+GAUGE_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:144', 'u:2', 'n:88', 'a:2', 'n:600']
 
 
 def gauge():
@@ -226,8 +231,8 @@ def gauge():
             q = m.group(5)
             oe.append((int(m.group(1)), (w(m.group(2)), m.group(3), m.group(4), w(q[0:4]), w(q[4:8]), w(m.group(6)), m.group(7))))
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
-               CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_HOLDBTN='04@%d:2' % (3082 + FLIGHT_SHIFT + 1),   # (CT_HOLDBTN reaches the latch a frame before the walkscript)
-               CT_SHOTS=os.path.join(OUT, 'gauge'), CT_SHOTS_AT=','.join(str(f + FLIGHT_SHIFT) for f in GAUGE_SHOTS + [3820]),
+               CT_SRAM=os.path.join(JK, 'srm', 'ch24.srm'), CT_OWVEHTRACE='1', CT_HOLDBTN='04@%d:2' % (3082 + WORLD_D4_SHIFT + 1),   # (CT_HOLDBTN reaches the latch a frame before the walkscript)
+               CT_SHOTS=os.path.join(OUT, 'gauge'), CT_SHOTS_AT=','.join(str(f + WORLD_D4_SHIFT) for f in GAUGE_SHOTS + [3820]),
                CT_SHOTS_EXIT='1')
     r = subprocess.run([os.path.join(ROOT, 'build', 'Belthasar.exe'), '--assets', 'ct_assets.dat', '--boot', '--walkscript',
                         ','.join(GAUGE_P)], cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')
@@ -293,17 +298,17 @@ def gauge():
             bs.append(it); t += n
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
-        po = raw_rgb(os.path.join(OUT, 'gauge_f%d.raw' % (f + FLIGHT_SHIFT)), False)
+        po = raw_rgb(os.path.join(OUT, 'gauge_f%d.raw' % (f + WORLD_D4_SHIFT)), False)
         oo = raw_rgb(o_raw, True)
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
         nl = sum(po(x, 223) != oo(x, 223) for x in range(256))
-        print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + FLIGHT_SHIFT, f + 2, n, nl))
+        print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + WORLD_D4_SHIFT, f + 2, n, nl))
     return 0
 
 
 MAP_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '4:2', '0:240', '1:2', '0:250']
 MAP_SEL, MAP_B = 3082, 3324                       # Select and B on the cartridge's clock
-MAP_SHIFT = 358 + 65    # the world's own scripts run 358 frames behind from the free flight (+65: the power-on title)
+MAP_SHIFT = WORLD_D4_SHIFT   # the world's own scripts run 359 frames behind from the free flight (+65: the power-on title)
 MAP_SHOTS = [3100, 3105, 3200, 3215, 3250, 3300, 3340, 3355, 3412, 3430, 3445, 3470]   # the mosaic and fade, the zoom, the map, B, the way back
 MAP_P = ['n:198', 's:1', 'n:125', 'a:1', 'n:160', 'a:2'] + ['n:30', 'a:2'] * 93 + ['n:600']
 
