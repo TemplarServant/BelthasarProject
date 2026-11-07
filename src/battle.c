@@ -6723,7 +6723,9 @@ static int battleD2DE(CtBattleHost* h, int atk, int tgt) {
     // C1/D335 JSR C1/DCAD -- the target's `+0x1E &= F9`, the cut, + $B2BE, 0 -> 1.
     int defsel = battleIsPc(atk) ? (rom ? CtRomByte(rom, 0x400000L, (long)(ROM_PC_ATK_REC + pcRec * 12 + 6)) : 0x3E) : s[0xAEEC];
     base = (int)battleE575(h, atk, (unsigned)base);
-    def = (int)battleDefenceE65F(s, tgt, defsel);
+    // D332 JSR C1/E65F runs whole here too: every arm falls into E6A9, the target's status scaling, and E741's $AE4E & 3
+    // (leg 92: an enemy's magic on two seats with +0x1E bit 82 -- the cartridge's cut uses 41 x16/20 = 32, 52 -> 41).
+    def = (int)battleDefenceE65Fx(s, tgt, defsel);
   }
   // The bonus range is per pipeline and per formula. PC tails: type 1 C1/E15E rand(0 .. +0x36/3); type 2 C1/E1E3
   // rand(0 .. (+0x3A*77)>>8), C1/C063 being the shift chain v*77 >> 8; type 5 C1/E34D rand(0 .. +0x12/3). Enemy C1/E2B9:
