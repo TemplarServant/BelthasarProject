@@ -7,6 +7,7 @@
 // shadows $26/$28, wrap 1024) and is posted in $1BF1/$1BF3 for the BG3 (ocean) animator (C2/75CE-75FC,
 // counter $0D12): ctr++; BG3H-- every 4th frame, BG3V++ every 8th; then BG3H += $1BF1, BG3V += $1BF3.
 // The NMI copies $20-$2B to BG1/2/3 HOFS/VOFS (C2/01D8-0211). The overworld is a torus: no edge clamps.
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct CtWorldCam {
