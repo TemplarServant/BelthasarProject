@@ -112,7 +112,8 @@ void CtWorldLocationStores(uint8_t* ram, const uint8_t* op);   // C2/1100's stor
 void CtWorldSetRom(const uint8_t* rom, long len);            // the ROM image, for VM objects running bank-$C2 scripts
 void CtWorldSetIrisCircle(void (*fn)(uint8_t* wram128, uint8_t arg));   // C3/0077 for $C6:E498 / E4BE (the field's port)
 void CtWorldSpawnVm(uint8_t* ram, uint8_t bank, uint16_t pc); // C2/04D9 -- a VM object started from outside the pass
-void CtWorldLoadTriggers(uint8_t* ram, int world);     // C2/2A44: the event / transition cells and the event scripts
+size_t CtWorldLoadTriggers(uint8_t* ram, int world);   // C2/2A44: the packet at $7F:0400, its event / transition cells; its length
+size_t CtWorldLoadScripts(uint8_t* ram, int world);    // C2/2A16: the script packet over it at $7F:0400; its length
 void CtWorldObjOp4E(uint8_t* ram, const uint8_t* op);                  // C2/181C: indirect far call, advance 4
 typedef int (*CtWorldOp4EHook)(uint8_t* ram128, uint32_t target);   // op 4E -> $C6:E241 / $C6:E27E: 0 = ran
 void CtWorldSetOp4EHook(CtWorldOp4EHook fn);

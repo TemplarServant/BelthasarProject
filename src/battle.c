@@ -6973,6 +6973,7 @@ static void battleTechSpendMp(CtBattleHost* h, int techId) {
 //               `AND #3F`, bit 6 -> -2, then $AD89 = $AD89 * 4 / $B2CE   (Ice: 07 -> 0A 00 00)
 // The other ported routines are below. Not ported: any routine not handled here (traced, damage left as computed).
 static int battleExtraEffect(CtBattleHost* h, int b2cc, int el, int tgt, int dmg);
+void CtMenuClockTick(uint8_t* mem);                     // player.c: C2/85AE (routine 5's C2/8002)
 static int battleStatusInflict(CtBattleHost* h, int tgt, int cat, int mask);   // (C1/DBAA, below)
 static int battleExtraEffect(CtBattleHost* h, int b2cc, int el, int tgt, int dmg) {
   uint8_t* s = h->mem; const uint8_t* rom = CtBattleRom(NULL);
@@ -7094,6 +7095,100 @@ static int battleExtraEffect(CtBattleHost* h, int b2cc, int el, int tgt, int dmg
     int x = m1e ? (s[0xB1F6] | (s[0xB1F7] << 8)) : (s[0xB1F4] | (s[0xB1F5] << 8));
     if (m1e) { int y = ((x * 2) >> 8) & 0xFF; s[0xAEB0 + y] = 1; s[0xAEB2] = 1; }
     if (x + 0x5E31 < 0x10000) { s[0x5E30 + x] = 0; s[0x5E31 + x] = 0; }
+    return dmg;
+  }
+  if (routine == 3) {                                                     // C1/EDDA: more damage to a kind of target
+    // `LDX $B1F6 / LDA $5E47,X / AND $1C / BEQ ->RTS`: the target's block byte +$1A sharing a bit with $1C -> $28 = $AD89,
+    // $2A = $1E, C1/C90B ($2C = $28 * $2A), `REP #20 / LDA $2C / LSR A / STA $AD89`: the damage * $1E / 2 (16 bits).
+    // (CC:2A05[0C] = `03 08 03`: x1.5 on the bit-3 kind -- leg 117's Crono, f1332 in loc 196.)
+    if (tgt < 0 || tgt >= 11) return dmg;
+    if (!(s[battleBlock(tgt) + 0x1A] & m1c)) return dmg;                  // EDDA-EDE2
+    s[0x28] = (uint8_t)dmg; s[0x29] = (uint8_t)(dmg >> 8);               // EDE4-EDE7 LDX $AD89 / STX $28
+    s[0x2A] = (uint8_t)m1e; s[0x2B] = 0;                                  // EDE9-EDEC LDA $1E / TAX / STX $2A
+    battleMul16(s, 0);                                                    // EDEE JSR C1/C90B
+    return (s[0x2C] | (s[0x2D] << 8)) >> 1;                               // EDF1-EDF6 REP #20 / LDA $2C / LSR A
+  }
+  if (routine == 1) return dmg;                                           // C1/EDB9: RTS
+  if (routine == 5) {                                                     // C1/EE27: by the play clock's seconds (Wondershot)
+    // `JSL C2/8002` = C2/84D2: the pad latch (C2/84EC + C2/8545, $F0-$FF: not kept by this host's battle, whose NMI
+    // decodes only $F8 -- CtJoypadHeldWord) and C2/85AE, the play clock, one tick more. It saves P and the whole A, so
+    // `LDA $0401 / TAX` takes the dispatcher's B = 0 (C1/EB1C TDC; C1/C90B ends TDC): `$28` = the seconds, `$2A = 10`,
+    // C1/C92A; by the remainder `$32`: 0 -> C1/C1B2 (about a tenth), 1-2 -> half, 3-4 -> as it is, 5-6 -> the word at
+    // $0000 halved + the damage (EE6C `LDA $0000`, the direct page's scratch), 7-8 -> double, 9 -> triple (16 bits).
+    CtMenuClockTick(s);                                                   // EE27 JSL C2/8002 -> C2/85AE
+    s[0x28] = s[0x0401]; s[0x29] = 0;                                     // EE2B-EE2F
+    s[0x2A] = 0x0A; s[0x2B] = 0;                                          // EE31-EE34
+    battleDiv32(s, 0);                                                    // EE36 JSR C1/C92A
+    int rem = s[0x32], d = dmg & 0xFFFF;                                  // EE39 LDA $32 (8-bit)
+    if (rem == 0) {                                                       // EE3B BNE -> EE3D-EE49: C1/C1B2
+      int y = d >> 3, t = y >> 3;                                         // C1B4-C1BB
+      y = (y - t) & 0xFFFF; t >>= 1;                                      // C1BD-C1C5
+      y = (y - t) & 0xFFFF; t >>= 3;                                      // C1C7-C1D1
+      s[0x08] = (uint8_t)t; s[0x09] = (uint8_t)(t >> 8);                 // C1D1 STA $08
+      y = (y - t) & 0xFFFF;                                               // C1D3-C1D5
+      s[0x30] = (uint8_t)y; s[0x31] = (uint8_t)(y >> 8);                 // C1D7 STA $30
+      return y;                                                           // EE47-EE49 LDX $30 / STX $AD89
+    }
+    if (rem < 3) return d >> 1;                                           // EE4E-EE58
+    if (rem < 5) return d;                                                // EE60-EE64
+    if (rem < 7) return (((s[0x00] | (s[0x01] << 8)) >> 1) + d) & 0xFFFF; // EE66-EE74
+    if (rem < 9) return (d << 1) & 0xFFFF;                                // EE7C-EE86
+    return (d * 3) & 0xFFFF;                                              // EE8E-EE98
+  }
+  if (routine == 4) {                                                     // C1/EDFD: more damage per empty seat
+    // `$AD9A` = the seats 0-2 whose `$AEFF,X` is FF; `$28 = $AD9A + 1`, `$2A = $AD89`, C1/C90B, `$AD89 = $2C`.
+    int n = 0;
+    for (int x = 0; x < 3; x++) if (s[0xAEFF + x] == 0xFF) n++;           // EDFD-EE10
+    s[0xAD9A] = (uint8_t)n;
+    s[0x28] = (uint8_t)(n + 1); s[0x29] = 0;                              // EE12-EE17
+    s[0x2A] = (uint8_t)dmg; s[0x2B] = (uint8_t)(dmg >> 8);               // EE19-EE1C
+    battleMul16(s, 0);                                                    // EE1E JSR C1/C90B
+    return s[0x2C] | (s[0x2D] << 8);                                      // EE21-EE23
+  }
+  if (routine == 7) {                                                     // C1/EED0: a status on a kind of target
+    // `$16 = $18 = 0` (16 bits), `LDA #64 / JSR C1/AF22 / CMP #50 / BEQ / BCS`: a roll of 0..99 at or below 80, then the
+    // target's block byte +$1A sharing a bit with $1C -> `$16 = 1`, `$18 = $1E`, C1/DBAA. The damage stands.
+    s[0x16] = 0; s[0x17] = 0; s[0x18] = 0; s[0x19] = 0;                   // EED0-EED4
+    if (tgt < 0 || tgt >= 11) return dmg;
+    int roll = battleRng(s, rom, 99);                                     // EED6-EED8
+    if (roll > 0x50) return dmg;                                          // EEDB-EEDF
+    if (!(s[battleBlock(tgt) + 0x1A] & m1c)) return dmg;                  // EEE1-EEE9
+    s[0x16] = 1; s[0x18] = (uint8_t)m1e;                                  // EEEB-EEF1
+    battleStatusInflict(h, tgt, 1, m1e);                                  // EEF3 JSR C1/DBAA
+    return dmg;
+  }
+  if (routine == 0x13) {                                                  // C1/F1C7: more on a critical
+    // `LDA $AE9B / BIT #80 / BEQ`: the hit is a critical (C1/ED89's flag) -> $1E == 1 ? `$AD89 = 270F` : the damage * 2
+    // (C1/C90B, `$2A = 2`).
+    if (!(s[0xAE9B] & 0x80)) return dmg;                                  // F1C7-F1CC
+    if (m1e == 1) return 0x270F;                                          // F1CE-F1D2 -> F1E8
+    s[0x28] = (uint8_t)dmg; s[0x29] = (uint8_t)(dmg >> 8);               // F1D4-F1D7
+    s[0x2A] = 2; s[0x2B] = 0;                                             // F1D9-F1DC
+    battleMul16(s, 0);                                                    // F1DE JSR C1/C90B
+    return s[0x2C] | (s[0x2D] << 8);                                      // F1E1-F1E3
+  }
+  if (routine == 0x10) {                                                  // C1/F0D9: by the attacker's HP
+    // `$28` = the attacker's curHP (`LDX $B1F4 / LDA $5E30,X`), `$2A = 10`, C1/C92A; `$28` = its remainder `$32`,
+    // `$2A = $AD89`, C1/C90B; `$28 = $2C`, `$2A = $1E`, C1/C92A; `$AD89 = $2C`.
+    int x = s[0xB1F4] | (s[0xB1F5] << 8);
+    if (x + 0x5E31 >= 0x10000) return dmg;
+    s[0x28] = s[0x5E30 + x]; s[0x29] = s[0x5E31 + x];                    // F0DA-F0E2
+    s[0x2A] = 0x0A; s[0x2B] = 0;                                          // F0E7-F0EA
+    battleDiv32(s, 0);                                                    // F0EC JSR C1/C92A
+    s[0x28] = s[0x32]; s[0x29] = s[0x33];                                 // F0EF-F0F1 LDX $32 / STX $28
+    s[0x2A] = (uint8_t)dmg; s[0x2B] = (uint8_t)(dmg >> 8);               // F0F3-F0F6
+    battleMul16(s, 0);                                                    // F0F8 JSR C1/C90B
+    s[0x28] = s[0x2C]; s[0x29] = s[0x2D];                                 // F0FB-F0FD
+    s[0x2A] = (uint8_t)m1e; s[0x2B] = 0;                                  // F0FF-F102
+    battleDiv32(s, 0);                                                    // F104 JSR C1/C92A
+    return s[0x2C] | (s[0x2D] << 8);                                      // F107-F109
+  }
+  if (routine == 0x0D && !(m1c & 0x80)) {                                 // C1/F036 without its bit-7 arm (below: traced)
+    // `LDA $1C / BIT #40 / BEQ`: the target's block bytes +$1D &= C0, +$1E = 0, +$1F &= C2 (statuses cleared). The
+    // damage stands.
+    if (!(m1c & 0x40) || tgt < 0 || tgt >= 11) return dmg;               // F073-F077
+    int tb = battleBlock(tgt);
+    s[tb + 0x1D] &= 0xC0; s[tb + 0x1E] = 0; s[tb + 0x1F] &= 0xC2;         // F079-F091
     return dmg;
   }
   if (routine == 2) {                                                     // C1/EDBA
@@ -20608,7 +20703,9 @@ static void battleTurnHandler12(CtBattleHost* h) {
 static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   if (!h || !h->mem || !h->glb) return 1;
   uint8_t* s = h->mem;
-  int cap = h->maxFrames > 0 ? h->maxFrames : 36000;
+  // No cap of the game's own: the ROM's fight runs until it resolves (a boss grind past 36000 frames, leg 122's Golem
+  // Twins, ended here with no victory). A harness may still set one (maxFrames > 0).
+  int cap = h->maxFrames > 0 ? h->maxFrames : 0x7FFFFFFF;
   h->frames++;
   // The rule's frame NMI, as the main thread will find it (battleSndPostJsl): the action frame's line wait CD/09AA (the
   // program's op C1 adds its own, battleFleeProgOp), and the pad latch from the band's arm on ($7E = 1/2).

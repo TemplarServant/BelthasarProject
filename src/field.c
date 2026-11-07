@@ -717,13 +717,16 @@ static int worldInit(CtAssets* a, World* w, int id) {
   memcpy(w->wram + 0x7E00, p, (size_t)nrec * 7); p += (size_t)nrec * 7;
   { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
   CtWorldLoadTriggers(w->wram, id);                     // ...and the event / transition cells beside them (C2/2A44)
+  size_t scrLen = CtWorldLoadScripts(w->wram, id);     // ...then the script packet over it at $7F:0400 (C2/2A16)
   memcpy(w->vram + 0x4000, p, 28672); p += 28672;
   if (b[0] >= 2 && p + 0x1000 + 0x1600 <= b + blen) {   // fmt 2: ambient-object VM inputs
     // The object blocks land in objSnap, not WRAM; worldEnterAt puts them at $0B30. The ROM first writes
     // $0B30..$1B2F one frame after the location flip (C2/0471), while worldInit runs at the start of the fade,
     // and that span holds the field's live $0E00..$0EFF draw list.
     memcpy(w->objSnap, p, 0x1000); p += 0x1000;         // base seed (the interactive snapshot)
-    memcpy(w->wram + 0x10400, p, 0x1600); p += 0x1600;  // the $7F:0400+ script blob
+    // the $7F:0400+ script blob: the asset's first 0x1600 bytes, only without the ROM's script packet (C2/2A16, above)
+    if (!scrLen) memcpy(w->wram + 0x10400, p, 0x1600);
+    p += 0x1600;
   }
   {                                                     // new-game intro object-block override (optional):
     uint32_t il = 0;                                    // the flock+fair spawner-master seed (pc=06CD),

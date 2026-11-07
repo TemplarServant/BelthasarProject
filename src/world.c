@@ -4164,17 +4164,21 @@ static int obNameBanner(uint8_t* ram, uint8_t* B) {
 // of its low byte arms it -- and the script's index, `$1B39`), the transition cells ($7E:8180, 3 bytes, `$1B3A`) and the event
 // scripts' pointers ($7E:8480, words). The entrances come with the world's own blob (worldInit); the rest is read here. The ROM
 // copies each list with `DEY / BNE`, so a count of 0 would copy 65536 records: no world has one (all eight read 1 or more).
-void CtWorldLoadTriggers(uint8_t* ram, int world) {
+// The packet itself stays at $7F:0400 (2A44-2A6D: $0303 = 0400, $0305 = 7F, JSL C3/0002): its tail holds the event scripts
+// the pointers name (world 4's skyway, $7F:1A0D, leg 105). Returns the packet's length (0: none written).
+size_t CtWorldLoadTriggers(uint8_t* ram, int world) {
   static uint8_t pk[0x10000];
-  if (!g_owRom || world < 0 || world > 7) return;
+  if (!g_owRom || world < 0 || world > 7) return 0;
   long hp = 0x060000L + 0xFD00 + 2 * world;
   unsigned hdr = (unsigned)(owRB(hp) | (owRB(hp + 1) << 8));
   uint8_t idx = owRB(0x060000L + hdr + 0x15);
-  if (idx & 0x80) return;                                              // 2A55 BMI: no packet
+  if (idx & 0x80) return 0;                                            // 2A55 BMI: no packet
   long e = 0x060000L + 0xFFC0 + 3L * idx;
   uint32_t src = (uint32_t)(owRB(e) | (owRB(e + 1) << 8) | ((uint32_t)owRB(e + 2) << 16));
   memset(pk, 0, sizeof pk);
-  if (!ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, pk, 0xFC00u, ct_lz_hirom_offset(src))) return;
+  size_t plen = ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, pk, 0xFC00u, ct_lz_hirom_offset(src));
+  if (!plen) return 0;
+  memcpy(ram + 0x10400, pk, plen);                                     // C3/0002 -> $7F:0400
   unsigned x = 1u + 7u * (pk[0] ? pk[0] : 0x10000u);                  // past the entrances (2A8B-2AC7)
   static const struct { uint16_t at, cnt; uint8_t rec; } L[3] = { { 0x8300, 0x1B39, 3 }, { 0x8180, 0x1B3A, 3 }, { 0x8480, 0, 2 } };
   for (int k = 0; k < 3; k++) {
@@ -4184,6 +4188,24 @@ void CtWorldLoadTriggers(uint8_t* ram, int world) {
     for (unsigned i = 0; i < len; i++) ram[(L[k].at + i) & 0xFFFF] = pk[(x + i) & 0xFFFF];   // via $2180, bank $7E
     x += len;
   }
+  return plen;
+}
+// C2/2A16 -- right after C2/2A44 (C2/2C6E / C2/2C71): the world's script packet C6:FFE0[header +16] decompressed over the
+// trigger packet at $7F:0400 (`$0303 = 0400`, `$0305 = 7F`, JSL C3/0002); header +16 bit 7 = none (2A27 BMI). The VM objects
+// run from it, the event scripts the pointers $7E:8480 name included (world 4's skyway at $7F:1A0D, leg 105: past the 0x1600
+// bytes the asset's capture keeps). Returns the packet's length (0: none written).
+size_t CtWorldLoadScripts(uint8_t* ram, int world) {
+  static uint8_t pk[0x10000];
+  if (!g_owRom || world < 0 || world > 7) return 0;
+  long hp = 0x060000L + 0xFD00 + 2 * world;
+  unsigned hdr = (unsigned)(owRB(hp) | (owRB(hp + 1) << 8));
+  uint8_t idx = owRB(0x060000L + hdr + 0x16);                         // 2A21-2A25
+  if (idx & 0x80) return 0;                                            // 2A27 BMI
+  long e = 0x060000L + 0xFFE0 + 3L * idx;                              // 2A29-2A3C
+  uint32_t src = (uint32_t)(owRB(e) | (owRB(e + 1) << 8) | ((uint32_t)owRB(e + 2) << 16));
+  size_t plen = ct_lz_decompress_bounded(g_owRom, (size_t)g_owRomLen, pk, 0xFC00u, ct_lz_hirom_offset(src));
+  if (plen) memcpy(ram + 0x10400, pk, plen);                           // 2A3F JSL C3/0002 -> $7F:0400
+  return plen;
 }
 int CtWorldEntryDecode(const uint8_t* ram, uint16_t off, CtWorldEntry* out) {
   if (off == 0xFFFF) return 0;

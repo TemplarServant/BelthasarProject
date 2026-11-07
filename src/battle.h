@@ -184,7 +184,7 @@ typedef struct CtBattleHost {
   void* ctx;
   int debugEndAfter;         // >= 0: auto-fire the debug end after N module frames (CT_BATTLE_DEBUGEND);
                              // < 0: only an endRequest can end the battle
-  int maxFrames;             // hard safety cap on the module loop (0 = default 36000)
+  int maxFrames;             // a harness's cap on the module loop (0 = none: the fight runs until it resolves)
   int frames;                // module render frames elapsed (CtBattleBegin resets to 0; CtBattleTick +1/frame).
                              // Real-frame clock: drives the intro delay (CT_BATTLE_INTRO) + the HUD settle
                              // (field.c `frames>=82`), which battle_hud Q6 / addendum 2 count in real frames.
