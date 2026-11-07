@@ -26,7 +26,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CT = os.path.join(ROOT, 'build', 'ct.exe')
+CT = os.environ.get('CT_STAGE_CT') or os.path.join(ROOT, 'build', 'ct.exe')   # CT_STAGE_CT: another build's ct.exe
 ROM = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
 STATE = os.path.join(ROOT, 'saves', 'ending_re', 'ending_pre_ff2b.state')
 # Each drive: the operand, the state the cartridge runs from and the frame of the hand-off in it (the op runs on the next), the
@@ -85,6 +85,16 @@ DRIVES = {
                hstate=os.path.join(ROOT, 'saves', 'lavos_re', 'ff26_handoff_f10.state'),
                shift=42, hold=33, total=1700, tag='seqstage',
                extra=[(0x0520, 0x18), (0x0A30, 6), (0x0B38, 2)], skip={0x0B0A, 0x0B0B, 0x0387}),
+    # entry 5 (C0/260E's `LDA #85 / JML C3:0000`, scene 0AC after Magus: the vortex) -- the playthrough's leg 95 at f83960
+    # (made here from the leg's start state and its pad: tools/playthrough/route.txt; the leg's A at f6 closes the last line): obj9's `FF 9B` at f20 ($0139 = 0B), the jump on
+    # f23-24; the hand-off state at f23. The task $737E draws from C3/02DD ($0386, the field's afterwards) for `$4D`; $7193's
+    # counters `$4A` / `$4C` and page B's `$49` / `$4B` are graded with it.
+    '85': dict(state=os.path.join(ROOT, 'build', '_stage', 'e5_pre_leg95_f83960.state'), handoff=23,
+               hstate=os.path.join(ROOT, 'build', '_stage', 'e5_handoff_leg95_f83983.state'), leg=('95_', 83960),
+               shift=26, hold=4, total=1250, tag='seqstage', press=[(6, 0x100, 2)],
+               extra=[(0x0386, 1), (0x0049, 5), (0x0051, 0x5A), (0x00A9, 2), (0x00F0, 6)], unskip={0x0386},
+               # (the records' positions `$54` / `$55` and radius `$5D`, and the OAM cursors -- the picture's)
+               skip={0x51 + k * 0x16 + o for k in range(4) for o in (3, 4, 0xC)}),
 }
 REGIONS = [(0x0000, 2), (0x0380, 0x1C), (0x0920, 0x20), (0x0A00, 0x30), (0x0B00, 0x30)]
 # the picture's bytes inside them: the credits pointer (task $9B4F) and the overlay's RNG $039B ($7E:3448), which only the
@@ -139,6 +149,20 @@ def run(op, d, verbose):
     spec = ','.join('7E%04X:%d' % r for r in REGIONS + d.get('extra', []))
     skip = (SKIP - d.get('unskip', set())) | d.get('skip', set())
     env = dict(os.environ, CT_ORACLE_LOGICAL='1')
+    if d.get('leg') and not os.path.exists(d['state']):
+        # a playthrough leg's frame (the route's own states and pads, from the ROM: tools/playthrough.py), cached under build/
+        sys.path.insert(0, os.path.join(ROOT, 'tools'))
+        import playthrough as P
+        legs = P.route()
+        i = next(k for k, lg in enumerate(legs) if lg['name'].startswith(d['leg'][0]))
+        os.makedirs(os.path.dirname(d['state']), exist_ok=True)
+        for path, upto in ((d['state'], d['leg'][1]), (d['hstate'], d['leg'][1] + d['handoff'])):
+            pad, c = [], 0
+            for b, k in legs[i]['pad']:
+                if c >= upto:
+                    break
+                pad.append((b, min(k, upto - c))); c += min(k, upto - c)
+            P.oracle_play(P.start_of(legs, i), pad, path)
     if not os.path.exists(d['hstate']):
         subprocess.run([CT, ROM, '--peek', d['state'], os.path.join(ROOT, 'build', '_ending_h.raw'), '--btnscript',
                         '0:%d' % d['handoff']], cwd=ROOT, env=dict(env, PEEK_SAVE=d['hstate']), capture_output=True)

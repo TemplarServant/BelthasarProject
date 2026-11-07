@@ -37,10 +37,10 @@ endif()
 # Plain lists, not OBJECT libraries: each target's own defines (CT_DATAFREE, CT_XLAT_NO_GWARP, CT_AUDIO_SPC_DEFAULT)
 # change how the shared files preprocess, so every target compiles them itself.
 # The sequence stages, native (disasm/notes/sequence_table.md): the $C3 stage machine they share, the race, the ending,
-# entries 3 / 4 / 6 / 7, the gate warp, and the compositor that draws their pictures.
+# entries 3 / 4 / 5 / 6 / 7, the gate warp, and the compositor that draws their pictures.
 set(CT_SRC_SEQ src/seq_stage.c src/seq_stagelib.c src/seq_race.c src/seq_racepic.c src/seq_pic.c src/seq_ending.c
                src/seq_endingpic.c src/seq_entry3.c src/seq_entry3pic.c src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c
-               src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_gwarp.c)
+               src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_entry5.c src/seq_gwarp.c)
 # The engine: the scene renderer and its data, the field VM, the overworld, the battle, the menus.
 set(CT_SRC_ENGINE src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c
                   src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c)
@@ -132,7 +132,7 @@ add_executable(ct
   src/seq_race.c src/seq_racepic.c # --racestep: the race's tasks, native (sequence_table.md sec. 12)
   src/seq_ending.c src/seq_endingpic.c # --seqstage: the ending's stage, native (sequence_table.md sec. 13)
   src/seq_entry3.c src/seq_entry3pic.c # --seqstage: entry 3 from the story (FF 23), native (sequence_table.md sec. 14)
-  src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c # --seqstage: entry 4 (FF 24, the Tyranno Lair: Lavos falls), native (sequence_table.md sec. 15)
+  src/seq_entry4.c src/seq_entry4pic.c src/seq_entry6.c src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_entry5.c # --seqstage: entry 4 (FF 24, the Tyranno Lair: Lavos falls), native (sequence_table.md sec. 15)
   src/seq_ppu.c  # --seqppucmp: the sequence stages' vendored-PPU picture, graded against the oracle's own frame
   src/seq_gwarp.c  # --gwarpcmp: the gate warp, native (seq_gwarp.c), lockstepped against the oracle
   src/seq_pic.c  # --seqpiccmp: the sequence stages' NATIVE picture, graded against the oracle's own frame

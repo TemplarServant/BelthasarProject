@@ -7158,6 +7158,7 @@ static void racestagePost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }   // --racesta
 #include "seq_entry4.h"   // --seqstage: entry 4 (FF 24, the Tyranno Lair), native
 #include "seq_entry6.h"   // --seqstage: entry 6 (FF 26, the Epoch into Lavos), native
 #include "seq_entry7.h"   // --seqstage: entry 7 (FF 07, the Day of Lavos after the lost final battle), native
+#include "seq_entry5.h"   // --seqstage: entry 5 (A = 85 from C0/260E, the vortex after Magus), native
 // --seqstage's sound: the stage's posts go to the port's SPC (seeded from the state), the script's `F5` reads its port.
 static uint8_t* g_seqstageWram;
 static void seqstagePost(void* c) { CtAudioService((CtAudio*)c, g_seqstageWram); }
@@ -7761,9 +7762,10 @@ static int runSeqStage(int argc, char** argv) {
       if (p == p0) break;                            // malformed region: stop, no zero-filled slots
       if (*p == ':') p++;
       rl[nr] = (unsigned)strtoul(p, (char**)&p, 10); nr++; if (*p == ',') p++; } }
-  int ending = CtEndingStageHas(op), e3 = CtEntry3StageHas(op), e4 = CtEntry4StageHas(op), e7 = CtEntry7StageHas(op), e6 = CtEntry6StageHas(op);
+  int ending = CtEndingStageHas(op), e3 = CtEntry3StageHas(op), e4 = CtEntry4StageHas(op), e7 = CtEntry7StageHas(op), e6 = CtEntry6StageHas(op), e5 = CtEntry5StageHas(op);
   if ((ending ? CtEndingStageOpen(w, op, &io) : e3 ? CtEntry3StageOpen(w, op, &io) : e4 ? CtEntry4StageOpen(w, op, &io)
-              : e7 ? CtEntry7StageOpen(w, op, &io) : e6 ? CtEntry6StageOpen(w, op, &io) : CtRaceStageOpen(w, op, &io)) < 0) {
+              : e7 ? CtEntry7StageOpen(w, op, &io) : e6 ? CtEntry6StageOpen(w, op, &io) : e5 ? CtEntry5StageOpen(w, op, &io)
+              : CtRaceStageOpen(w, op, &io)) < 0) {
     printf("seqstage: open failed\n"); return 1; }
   for (int k = 0; k < hold; k++) CtAudioFrame(sa);
   g_seqstageField = (ss->ppu->evenFrame ? 1 : 0) ^ ((hold - 1) & 1);   // the frames started from the hand-off to frame 0
@@ -7774,7 +7776,7 @@ static int runSeqStage(int argc, char** argv) {
              st = ending ? CtEndingStageFrame(w, pads[f], &io) : e3 ? CtEntry3StageFrame(w, pads[f], &io)
                 : e4 ? CtEntry4StageFrame(w, pads[f], &io)
                 : e7 ? CtEntry7StageFrame(w, pads[f], &io) : e6 ? CtEntry6StageFrame(w, pads[f], &io)
-                : CtRaceStageFrame(w, pads[f], &io);
+                : e5 ? CtEntry5StageFrame(w, pads[f], &io) : CtRaceStageFrame(w, pads[f], &io);
              CtAudioFrame(sa); }
     int ch = first; for (int k = 0; k < nr && !ch; k++) for (unsigned b = 0; b < rl[k]; b++) { unsigned a = (ra[k] + b) & 0x1FFFF; if (w[a] != last[a]) { ch = 1; break; } }
     if (ch) {
@@ -7786,7 +7788,8 @@ static int runSeqStage(int argc, char** argv) {
     }
     if (st == 1) { printf("seqstage: END at frame %d\n", f);
                    if (ending) CtEndingStageClose(w, &io); else if (e3) CtEntry3StageClose(w, &io);
-                   else if (e4) CtEntry4StageClose(w, &io); else if (e6) CtEntry6StageClose(w, &io); else CtRaceStageClose(w, &io); break; }
+                   else if (e4) CtEntry4StageClose(w, &io); else if (e6) CtEntry6StageClose(w, &io);
+                   else if (e5) CtEntry5StageClose(w, &io); else CtRaceStageClose(w, &io); break; }
     if (st == 2) { printf("seqstage: soft reset at frame %d\n", f); if (e7) CtEntry7StageClose(w, &io); break; }
   }
   free(pads);

@@ -2732,3 +2732,46 @@ $3D64 and leaves `$2126` = 80 where the port's walks $3D6B (00). Invisible (INID
 
 **Before**, the play path ran src/xlat/seq_c3.c on the vendored CPU (sec. 11); that translation is ct.exe's now (--xlatcmp,
 `CT_XLAT_SEQ_C3`), and Belthasar.exe links no translated $C3 program.
+
+## 17. ENTRY 5 (`$7E:7092`, A = 85): the vortex after Magus -- derivation in progress (2026-11-07)
+
+**Where the story calls it.** Not from an `FF` op (sec. 2's "no site"): scene 0AC (Magus's castle) obj9, after the fight,
+runs `DD 0F 03 08 08` (C0/3B1B: `$0100` = 10F, no load), `E8 C3`, `FF 9B` (C0/41BC: `$0139 = 0B`). The next main-loop
+C0/21E1 takes entry 0B = **C0/260E**: `PHD / D = 1D00 / JSR C0/75E9 / PLD`, `JSR C0/74D4`, `JSR C0/00DE`, `$46 = 1`,
+`JSR C0/EC60`, `JSR C0/024C`, `JSR C0/00DE`, `JSR C0/EC60`, `$4200 = 81`, `$420C = 0`, `$010F = 80`, `LDX #9AFF`... `TDC /
+XBA / LDA #85 / JML C3:0000`. Measured on the playthrough's leg 95 (states build/_pt77/s95_83960 / s95_85100): `$0139 = 0B`
+at f83980, C3:003B writes `$0384 = 85` at f83984, the END (`$7E:0000 = 1`) at f85144, the reboot into loc 10F at f85146
+(C0:0BF2 clears `$0139`), then 002 at f86447 and 113 at f88608. **The port has neither 21E1 entry 0B (ROADMAP F19) nor
+entry 5, so the castle's script parks on `FF 9B` for good: the port cannot pass the Magus fight.**
+
+**The setup** `$7E:7092` (m8 x16 at entry): `$0350 = 80`, `$0352 = 70`, `$0358 = 7E`; two `MVN $00,$7E` of $800 from
+$7E:C800 to $0C00 and to $1400; `$038E = 0202`; `$0B20 = 71A5`, `$0A20 = 7157`; pages A and B once ($3749 / $3754);
+**`$3024 = 7441`** -- the common main loop `$3023 JSR $xxxx / LDA $00 / BEQ` now calls $7441 (a self-modifying renderer
+into the $1400 buffer: the main thread never waits, which is why the logical oracle reports "worked 21442082 cycles with no
+wait at 7E:74B7 -- released"); `JSR $36CC` with Y = 7354, `$038D = 0F`, `JSR $74F5`, a VRAM DMA (channel 7, $7E:0C00 ->
+word 6800, $800), the PPU (BG3SC 70, BG1SC 60, CGWSEL/CGADSUB 4202, W12SEL..0C8B, mode 1, `$003D = $003F = 1`, `$038C = 0F`,
+TM 0116 / TMW 0117).
+
+**Page A** (`$7157`): adds the tasks 3749 3754 7325 76A5 7721 73C6 73AA; r0 = 20, r5 = 200, r1 = r2 = FFF0, r6 = 1; the
+VBL hooks 783C 388B 380B 3843 7868 78AB; then `F0 7286` (JSL $37F3 with `$0AF0 = 7286`) every frame.
+**Page B** (`$71A5`) is the timeline: r0 = 0, r6 = 88, r8 = 4, tasks 7193 and 737E; `$4A = $49 = 14`, four 60-frame waits
+with `$49` = 14 / 0A / 08 / 04; drop 7193; `$4C = FF`, `$4B = 1`, 120 frames; 32 x (9 frames, r0 += 1, r2 -= 1), 16 x (3
+frames, r0 += 1), `$038A = 3A`, 48 x (3 frames, r0 += 1), 40 frames, task 72FF, 20 frames, `$2125 = 0C`, `$4B = 0`, 32 x
+(r0 -= 3); r0 = r2 = 0, `$4C` = 06 .. 00 with 6 / 8 / 10 / 16 / 20 / 20 / 20 frames; drop 737E; task 34E3 (the fade that
+ENDs), `JUMP 7282` (yield).
+**The RNG.** Task `$737E` draws every fourth frame (`AND #03 / BNE`): `JSR $3443` (C3/02DD), `AND #30 / ADC #20`, redrawn
+while equal to `$4D`, then `$4D` = it, `ORA #01`... -- it advances `$0386`, which the field keeps after the reboot.
+**Ported (stage 1, the logic), 2026-11-07: src/seq_entry5.c, C0/21E1 entry 0B in ct_vm.c, the host in field.c.**
+- The common init with A's bit 7 (`30BD BIT #80 / BEQ`): only the clear from `$0920`, then `30D7 RTS` -- no `STZ $038A`, no
+  driver reset, no OAM shadow, no `$13`, no PPU reset (the field's song 2C plays on). seq_stage.c had no such arm.
+- C3:003B with bit 7 turns the NMI back on before C3/0557 (`$4200 = A1`, INIDISP 0F, CLI): the opening is NMI-on work and costs
+  no frames; the host holds only the four waits (C0/260E's two C0/EC60, the setup's and the common init's `$31B0`).
+- The RNG's scratch: C3/02DD folds `$00F0` / `$00F2` / `$00F4` in, and the task $7721 (before $737E) leaves them -- `$F0` 0
+  ($701E counts it down for each record), `$F2` / `$F4` from the animation step $77E7. So the four records are the logic's:
+  $74F5's setup (the angle $5872: (|dy| & FF) << 8 over |dx| - 1, the table $58F8, the quadrant), $76A5's facing (`$A9` +=
+  page B's r2, `$65` = $771D[...]), $77AE / $77E7's lists in bank E4 (E4:2600 / 2602 / 2800).
+- Graded (magus-vortex-entry5-stage-logic-vs-oracle): 1158 frames, END on the same frame, the RNG, `$4D`, the records and the
+  pages equal; 11 frames differ in `$0388` (page B's song post `$038A = 3A`: 25 frames held on the logical cartridge, 14 on the
+  port's SPC -- the main loop's endless renderer never waits, and the logical oracle only releases it by its safety valve).
+- In play: leg 95 SYNC-ONLY (7 warps; the reboot into 10F, then 002 three frames apart). Open: the picture (stage 2), and
+  C0/260E's own work before the jump (C0/75E9, 74D4, 00DE, 024C: the camera's and the HDMA's) beyond `$0146` / `$010F`.

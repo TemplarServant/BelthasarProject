@@ -88,6 +88,7 @@
 #include "seq_endingpic.h"   // its picture (entries 11, 14, 15)
 #include "seq_entry3.h"   // entry 3 (FF 23, after the Blackbird)
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls)
+#include "seq_entry5.h"   // entry 5 (C0/260E's A = 85: the vortex after Magus)
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell)
 #include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle)
 #include "scene_art.h"     // scene adjustments' art past a stage's edge (a mod)
@@ -16542,6 +16543,28 @@ int main(int argc, char** argv) {
           }
         } else printf("sequence: entry %d -- the native entry 4 declined (CtEntry4StageOpen)\n", seqEntry);
       }
+      // Entry 5 (stage 1: its logic). Not an `FF` op: scene 0AC's `FF 9B` after Magus's fight sets `$0139 = 0B`, C0/21E1's
+      // entry 0B (C0/260E, ct_vm.c) requests A = 85 -- the vortex: the two scripts to their END, the teardown's reboot into the
+      // 10F the script's `DD` staged. Its picture is not ported (black). Its opening is NOT the others' NMI-off load: C3:003B
+      // `BIT #80` (A = 85) turns the NMI back on before the overlay's C3/0557 (`$4200 = A1`, INIDISP 0F, CLI), so the
+      // decompression and the setup cost no frames (CLAUDE.md, NMI-on work); the frames are the waits alone: C0/260E's two
+      // C0/EC60 before its JML, the setup's and the common init's `JSR $31B0` (sequence_table.md sec. 17).
+      if (seqId != 2 && !seqOpen && CtEntry5StageHas((uint8_t)seqId)) {
+        CtRaceIo rio = raceIoFor(w);
+        g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        if (CtEntry5StageOpen(w, (uint8_t)seqId, &rio) == 0) {
+          seqOpen = seqEntry + 1; endOn = 6; endEnded = 0;
+          long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
+          if (orb && orl > 0x3E0005) {
+            uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
+            long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
+            long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry5StageSetupCycles();
+            seqHold = 2 + 2;                                         // 260E's two EC60, then 710F and 3010 JSR $31B0
+            printf("sequence: entry %d (the vortex after Magus) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
+                   seqEntry, frameNo, oc, od, os, seqHold);
+          }
+        } else printf("sequence: entry %d -- the native entry 5 declined (CtEntry5StageOpen)\n", seqEntry);
+      }
       // Entry 7 (stage 1: its logic). `FF 07` in scene 476 (loc 1DC, the Day of Lavos after the lost final battle; obj1's
       // loop with glb[170] bit 5 set): the script runs to its endless yield, task $63D5 waits for a pad press, and 128 frames
       // after it $63F5 resets the console (`JML $00FF00` -> C0/FF00 -> FD/C000: the cold init, back to the title). Priced like
@@ -19321,6 +19344,7 @@ int main(int argc, char** argv) {
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 5 ? CtEntry6StageFrame(CtWramSys(fieldWram()), joy, &rio)
+                 : endOn == 6 ? CtEntry5StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
           else if (stagePic) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
@@ -19465,6 +19489,7 @@ int main(int argc, char** argv) {
       if (raceOn) CtRaceStageClose(w, &rio);
       else if (endOn == 2) CtEntry3StageClose(w, &rio); else if (endOn == 3) CtEntry4StageClose(w, &rio);
       else if (endOn == 5) CtEntry6StageClose(w, &rio);
+      else if (endOn == 6) CtEntry5StageClose(w, &rio);
       else CtEndingStageClose(w, &rio);
       CtSceneSequenceDone(f.vm);
       // One VRAM: what the stage left in the PPU is what the field's next load finds (sequence_table.md 11.11: the credits'

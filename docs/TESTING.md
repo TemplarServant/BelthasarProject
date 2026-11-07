@@ -1057,6 +1057,18 @@ markers on the same frames. The port runs `ct.exe --seqstage` from the cartridge
 PPU's field bit seeded from it). The picture's bytes (the hooks' scratch in page A, the HDMA shadow $038C, the two RNGs)
 are not graded (stage 2). Untiered (full run only, ~2 min). Inputs made by recipes (tools/fixtures/lategame.json).
 
+### magus-vortex-entry5-stage-logic-vs-oracle (`tools/ending_stage_cmp.py --drives 85`)
+
+$C3 entry 5 (`$7E:7092`, A = 85), the vortex after Magus's fight -- reached from no `FF` op: scene 0AC's `FF 9B` sets `$0139 =
+0B` and C0/21E1's entry 0B (C0/260E) jumps to C3:0000 (sequence_table.md sec. 17). Its LOGIC native (src/seq_entry5.c): the
+common init's bit-7 arm (the clear from `$0920`, no song test and no driver reset), the setup's writes, the two pages, the
+call $7286 (page A's random jump on the overlay RNG `$039B`), the spin $7193, the flash $737E (C3/02DD: `$0386`, which the
+field inherits) and the party's four animation records ($74F5 / $76A5 / $7721 / $77AE), whose scratch `$F0` / `$F2` / `$F4` the
+RNG folds in. The drive's two states are made from the playthrough route (leg 95 at f83960 and f83983, cached in build/_stage:
+~13 min the first time). Pinned: 1158 frames, the END on the same frame, 11 frames differing -- the `$0388` hold of page B's
+song post (25 frames on the logical cartridge, whose main loop never waits there, 14 on the port's SPC); re-pin only with that
+residual measured away.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, gitignored; fetched by `python tools/fetch_saves.py`

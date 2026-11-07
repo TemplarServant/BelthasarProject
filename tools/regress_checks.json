@@ -50547,6 +50547,60 @@
           "why": "the README's pictures in docs/media/ are binaries: with their allowance gone the check must report them, which proves it tells a binary from a text file at all"
         }
       ]
+    },
+    {
+      "name": "magus-vortex-entry5-stage-logic-vs-oracle",
+      "argv": [
+        "python",
+        "tools/ending_stage_cmp.py",
+        "--drives",
+        "85"
+      ],
+      "env": {},
+      "expect": [
+        "seqstage: FF 85 1158 frames compared, 11 differing, END cartridge f1184 port f1184 (same)",
+        "  first: f784 0388 o=1 p=0"
+      ],
+      "pin": [
+        "^seqstage: FF 85 ",
+        "^  first: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "tools/ending_stage_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "entry 5 (C0/260E's A = 85, the vortex after Magus) runs natively with the cartridge frame for frame to the same END; the RNG `$0386`, the flash `$4D` and the party records graded",
+      "mutations": [
+        {
+          "file": "src/seq_stage.c",
+          "find": "  if (operand & 0x80) { memset(w + 0x0920, 0, 0x14E0); return 0; }",
+          "replace": "  if (0) { memset(w + 0x0920, 0, 0x14E0); return 0; }   /* MUT: bit 7's early RTS dropped */",
+          "why": "30D7 RTS: with A = 85 the common init stops after the $0920 clear -- dropped, it zeroes $038A and resets the driver (the cartridge keeps the field's song 2C)"
+        },
+        {
+          "file": "src/seq_entry5.c",
+          "find": "  uint8_t a = 0; int c = 1;                                           // (A = $08 & 3 = 0, the carry from CMP #FF)",
+          "replace": "  uint8_t a = 0; int c = 0;   /* MUT: the CMP #FF carry forgotten */",
+          "why": "C3/02DD rotates the carry in: the flash's first draw takes CMP #FF's set carry -- clear, `$0386` and `$4D` part at the first draw (f269)"
+        },
+        {
+          "file": "src/seq_entry5.c",
+          "find": "  wr(w, 0x0A20, rd(w, 0x729C + x));                                   // 7295 LDA $729C,X / STA $0A20",
+          "replace": "  (void)x;   /* MUT: page A's jump dropped */",
+          "why": "the call $7286 sends page A to one of $729C's four scripts once `$4B` is set: without it `$0A20` and r0 / r5 part"
+        },
+        {
+          "file": "src/seq_entry5.c",
+          "find": "  unsigned f2 = ((rd(w, 0x5E + x) & 0xFF) << 2) & 0xFFFF; wr(w, 0x00F2, f2);   // 77F5-77FC",
+          "replace": "  unsigned f2 = ((rd(w, 0x5E + x) & 0xFF) << 1) & 0xFFFF; wr(w, 0x00F2, f2);   /* MUT: x2 not x4 */",
+          "why": "$77E7's `$F2` = `$5E` x 4 is the RNG's EOR operand and the list's base: x2, `$0386` / `$4D` and the records part"
+        }
+      ],
+      "notes": "2026-11-07, sequence_table.md sec. 17: leg 95 of the playthrough parked on scene 0AC's `FF 9B` after Magus because C0/21E1's entry 0B (C0/260E -> JML C3:0000, A = 85) and $C3 entry 5 had no port. The drive's states are made from the playthrough route (leg 95 at f83960 / f83983, cached in build/_stage). PINNED RESIDUAL (11 frames, `$0388`): the song post of page B's `$038A = 3A` holds 25 frames on the logical cartridge and 14 on the port's SPC -- entry 5's main loop ($7441) never waits, and the logical oracle's infinitely fast CPU releases it only by its safety valve ('worked 21442082 cycles with no wait at 7E:74B7'), which stalls the cartridge's SPC against the picture; the END and every graded byte else are equal. Do not re-pin it away without a measured cause."
     }
   ],
   "excluded": [

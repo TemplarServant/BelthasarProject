@@ -5430,9 +5430,17 @@ void CtSceneTick(CtScene* sc) {
   // C0/00B1 JSR C0/21E1, before the pass: `LDA $39 / BEQ / DEC / ASL / TAX / JSR ($21EE,X)`: 1 the iris opening (C0/220E),
   // 2 closing (C0/2269), 3 the window wipe (C0/22D8), 4 / 5 the circle as the colour window (C0/232A / 238A), 6 the quad
   // window (C0/2409) and 0E its teardown (C0/23E2), 7-0A the fixed circles (C0/2514 / 2589).
-  // Not ported: entries 0B-0D (C0/260E, 264F, 2329).
+  // 0B is C0/260E: its screen work (C0/75E9 with D = $1D00, C0/74D4, C0/00DE, C0/024C: the camera's and the HDMA's, which the
+  // stage's common init clears from $0920 on), `$46 = 1`, two C0/EC60 waits, NMI on, `$010F = 80`, then `LDA #85 / JML
+  // C3:0000`: $C3 entry 5 (seq_entry5.c; sequence_table.md sec. 17). The stage is requested here; the host prices the two
+  // waits into its opening (field.c). Not ported: entries 0C-0D (C0/264F, 2329).
   if (!sc->sndFrozenTick && !sc->loadFadeIn && body) {
     int st39 = r8(sc->mem, 0x7E0139);
+    if (st39 == 0x0B && !sc->seqHas) {
+      w8(sc->mem, 0x7E0146, 0x01);                                           // 2621 LDA #01 / STA $46 (D = $0100)
+      w8(sc->mem, 0x7E010F, 0x80);                                           // 263D LDA #80 / STA $00010F
+      sc->seqReq = 0x85; sc->seqHas = 1;                                     // 2649 LDA #85 / JML C3:0000
+    }
     if (st39 == 1 || st39 == 2) ctIrisFrame(sc);
     else if (st39 == 4 || st39 == 5) ctColCircleFrame(sc);
     else if (st39 >= 7 && st39 <= 0x0A) ctFixedCircleFrame(sc);

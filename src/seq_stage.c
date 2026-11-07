@@ -167,7 +167,10 @@ int CtSeqStageBegin(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   static const uint16_t z[] = { 0x0380, 0x0381, 0x0390, 0x0392, 0x0394, 0x0391, 0x0393, 0x0395, 0x0396, 0x0388, 0x038D, 0x038C, 0x0366 };
   for (unsigned k = 0; k < sizeof z / sizeof z[0]; k++) w[z[k]] = 0;
   memset(w + 0x0000, 0, 0x100);
-  if (!(operand & 0x80)) memset(w + 0x0900, 0, 0x1500); else memset(w + 0x0920, 0, 0x14E0);
+  // 30BD LDA $0384 / BIT #80 / BEQ: with bit 7 (entry 5's A = 85, C0/260E) the clear starts at $0920 and the init ENDS there
+  // (30D7 RTS): no song test, no driver reset, no OAM shadow, no $13, no PPU reset -- the field's song plays on.
+  if (operand & 0x80) { memset(w + 0x0920, 0, 0x14E0); return 0; }
+  memset(w + 0x0900, 0, 0x1500);
   if (!(operand & 0x20)) { w[0x038A] = 0; seqDriverReset(r, io); }   // 30E9 BIT #20 / BNE / STZ $038A / JSR $3177
   memset(w + 0x0700, 0xE0, 0x200);                                    // JSR $3843: the OAM shadow, every sprite off screen
   wr(r, 0x13, 0x0900);                                                // 30F9 LDX #0900 / STX $13
