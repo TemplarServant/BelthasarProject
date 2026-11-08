@@ -3981,11 +3981,14 @@ static unsigned battleHoldBtnMask(const CtBattleHost* h) {
 //     LDA #80 / STA $BB80 / JML C0:FF00                   at zero: reset (SEI / CLC / XCE / JML FD:C000 -> C0/000E)
 // The pad is the auto-read's, so it is the host's controller of the frame before (h->joyAutoRead); headless,
 // CT_HOLDBTN's mask in battle frames stands in for it, one frame late like the run-away counter's.
-static void battleDemoAbortFrame(CtBattleHost* h) {
+// `live`: the pass runs (from the band's arm on, as its CF/E5AD and CF/E73E: all three start the same frame on the
+// cartridge, leg 85's fled fight f4869); the mask history follows every frame, as the auto-read does.
+static void battleDemoAbortFrame(CtBattleHost* h, int live) {
   uint8_t* s = h->mem;
   if (!(s[0x2989] & 0x20)) return;                             // FE6D9
   unsigned held = h->joyAutoRead | h->demoMaskPrev;            // FE6E0-FE6E8
   h->demoMaskPrev = battleHoldBtnMask(h);
+  if (!live) return;
   if (held) s[0xA097] = 0x01;                                  // FE6EA
   if (!s[0xA097]) return;                                      // FE6EF
   s[0xBB00] = (uint8_t)(s[0xBB00] - 1);                        // FE6F4-FE6F8
@@ -3993,7 +3996,7 @@ static void battleDemoAbortFrame(CtBattleHost* h) {
   s[0xBB80] = 0x80;                                            // FE6FD
   h->resetReq = 1;                                             // FE702 JML C0:FF00
 }
-static void battleFleeCounterFrame(CtBattleHost* h, int input) {
+static void battleFleeCounterFrame(CtBattleHost* h, int input, int live) {
   uint8_t* s = h->mem;
   // $4218 is the auto-read joypad: the NMI that opens frame N latches the pad as it stood during frame N-1, so the
   // service counts this frame what was held last frame. CF/E70B reads the register itself, as the demo button
@@ -4005,6 +4008,7 @@ static void battleFleeCounterFrame(CtBattleHost* h, int input) {
   h->fleeMaskPrev = maskNow;
   int padNow = (input & CT_BIN_LRH) != 0 || (maskNow & 0x30) == 0x30;
   if (padNow != h->fleeHeldPrev) { h->fleeHeldPrev = padNow; battleFleeTrace(h, padNow ? "hold" : "release"); }
+  if (!live) return;                                           // the pass has not started (see battleDemoAbortFrame)
   if (s[0xA013]) return;                                       // FE706
   if (held) {
     uint16_t c = (uint16_t)((s[0x99CF] | (s[0x99D0] << 8)) + 1);   // FE715-FE717 (16-bit INC)
@@ -20703,6 +20707,7 @@ static void battleTurnHandler12(CtBattleHost* h) {
   else battleH12Tail(h, LL_CONT_DISPATCH, tookTurn ? -2 : -1);   // (-2: a no-action turn ran its C1/881C already)
 }
 static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
+  int mvDefer = -1;                                               // the frame-B C1/3714 kept for after the menu pass (below)
   if (!h || !h->mem || !h->glb) return 1;
   uint8_t* s = h->mem;
   // No cap of the game's own: the ROM's fight runs until it resolves (a boss grind past 36000 frames, leg 122's Golem
@@ -20795,10 +20800,11 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // after the arm, so the arm frame itself does not tick. It is placed ahead of every gate below because the ROM's loop
   // blocks the boot (pre-combat) or the end-of-fight code (the victory/defeat arms): nothing else runs while it steps.
   CtBattlePcLadderTick(h);                                     // C1/3686-3693: frame-wait / service / C1/369A
-  battleDemoAbortFrame(h);                                     // CF/E6D9-E705: the demo battle's button -> RESET
+  int cfPass = h->frames >= battleBootBandArm(h);              // the bank-CF frame-service pass, from the band's arm on
+  battleDemoAbortFrame(h, cfPass);                             // CF/E6D9-E705: the demo battle's button -> RESET
   if (h->resetReq) return 0;                                   //   ...and nothing after the JML runs (the host reboots)
-  battleFleeCounterFrame(h, input);                            // CF/E706-E73A: the run-away counter, every frame, !$A013
-  if (h->frames >= battleBootBandArm(h)) {                     // the same pass, from the band's arm on:
+  battleFleeCounterFrame(h, input, cfPass);                    // CF/E706-E73A: the run-away counter, every pass, !$A013
+  if (cfPass) {                                                // the same pass:
     battleRebuildReqFrame(h);                                  //   CF/E73B-E745: $9931 -> the $993A rebuild request
     battlePulseFrame(h);                                       //   CF/E5AA-E5DB: $A4EF -> the bracket's grey
     battleFxPalRotateFrame(h);                                 //   CF/E602: op 6B's rotation, right after it
@@ -20920,13 +20926,25 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it.
   if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
   battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
+  // The idle loop's two frames call C1/3714 at different places: frame A after the walk dispatch (C1/10A9 -> C1/10B5),
+  // frame B AFTER the menu pass (C1/10C4 INC $E5, C1/10C6-10DA, then C1/10DC). On frame B the pass can confirm a command
+  // -- $99E0 back to 0 (the Wait submenu's freeze, C1/3714's own `LDA $99E0 / BNE`) and the turn picked -- and the mode
+  // machine runs right after it in the same frame, before the turn's handler holds it from the next iteration on (leg 91,
+  // Flea: the cartridge's $9897 steps at the confirm f30969, the port's did not, so her next walk started a frame late,
+  // ended a step short, and every later Flea action slid from a point 2 px off). So a frame that will be a frame B
+  // (iterPh odd now: the gate below increments it) keeps its C1/3714 for after the menu pass; every return before that
+  // runs it where it stood (mvDefer), so no frame loses its pass. `handlers` is read here, before the confirm.
+#define BT_MV_FLUSH() do { if (mvDefer >= 0) { battleMoveTick(h, mvDefer); mvDefer = -1; } } while (0)
   if (!battleDeathHold(h) && !fxTd) {
-    if (!wasFrozen && !h->victoryHold)   // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
+    if (!wasFrozen && !h->victoryHold) {  // (the victory is C1/8186's blocking chain: no idle tick, no C1/3714)
                                // (the action's last frame: the NMI's CF/F978 saw $A013 = 1; inside it, $A0FD (C1/4058)
                                //   stops the walkers and a turn inside its handler the C1/3714 pass)
-    battleMoveTick(h, !battleThinkPending(h));   // battle_enemy_move_target.md sec. A: advance any enemy walk (approach /
+      int mvHandlers = !battleThinkPending(h);
+      if (h->iterPh & 1) mvDefer = mvHandlers;                     // frame B: C1/10DC, after the menu pass (below)
+      else battleMoveTick(h, mvHandlers);   // battle_enemy_move_target.md sec. A: advance any enemy walk (approach /
                                 //   return), paced per render frame, self-gated outside the action span ($A013 == 0).
                                 //   Fires the deferred walk-in dispatch on arrival; inert until a walk is armed.
+    }
     battleThinkTick(h);        // battle_pacing_v2.md fix B: drain the enemy think handshake (arrival/ready -> window
                                 //   open); fires battleArrive on expiry.
     battleReactiveCounterTick(h, 0); // battle_counter_gating.md fix C: drain and dispatch the reactive when-hit counter
@@ -20957,7 +20975,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     // waits), CD/0516 (`$CE16 = 1`, a wait, `$CA25 = 0C`, a wait, the 23-step close), the band's poll, `$CA25 = 0E`,
     // `$CA25 = 08`, the APU handshake.
     h->fleeStage = 2; h->fleeExitT = 5; h->exitCd0c = 0;         // e == 5: CD/03B4's first frame (CF/FCCF's)
-    return battleFleeStageTick(h);
+    BT_MV_FLUSH(); return battleFleeStageTick(h);
   }
   // The results message machine (CD/01B3), paced per render frame here beside victoryHold, because CD/3E75 spins on the
   // NMI's $CA20 and not on the $993A logic tick. The dwell's A gate is the ROM's held copy ($00F8 bit 7, CD/01F2
@@ -20992,7 +21010,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
         if (!s[0xA013] && !battleThinkPending(h) && h->demoDispatchAt < 0) battleIterHead(h);
       }
     }
-    return 0;
+    BT_MV_FLUSH(); return 0;
   }  // sec. C.3: wasFrozen (frame-top), not live s[0xA013]: it owns the span-end frame's confirm
 
   // ===== The death-routine freeze (disasm/notes/battle_death_dissolve_order.md addendum). While any corpse is still
@@ -21001,22 +21019,22 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   //       different owner. It is per death, not per kill event: the tick resumes the frame after the last $96F5
   //       clears. dissolveRunning is held while corpses are queued (battleAdvanceDissolves), so this one test covers
   //       the whole sequence, and the victory entry lands where the ROM's scan does. The render-frame work above goes on.
-  if (battleDeathHold(h)) return 0;
+  if (battleDeathHold(h)) { BT_MV_FLUSH(); return 0; }
   // ...and the same hold while the demo's C1/B967 is on its way to C1/40A6 (battleCommitDemoTech): the main loop that
   // would run the next pass is the caller of that call. The logic-tick accumulator holds, as in the freeze above.
-  if (h->demoDispatchAt >= 0) return 0;
+  if (h->demoDispatchAt >= 0) { BT_MV_FLUSH(); return 0; }
   // ...and while the main loop's CD/0009 is inside the effect teardown CD/0453 (battleFxTeardown): no iteration at all.
-  if (fxTd) return 0;
+  if (fxTd) { BT_MV_FLUSH(); return 0; }
 
   // ===== The iteration gate. On a frame with no iteration the post-intro scheduler is frozen (the ROM's `LDA $993A /
   //       BEQ` skip) and the HUD holds the previous state; h->frames still advances, so the render-frame clocks go on.
-  if (s[0xA013] || battleThinkPending(h)) return 0;             // the handler is inside C1/4058 / C1/4090: no iteration
-  if (h->msgHoldEndF == h->frames) return 0;                    // ...or its message box returned this frame (the head ran)
+  if (s[0xA013] || battleThinkPending(h)) { BT_MV_FLUSH(); return 0; }             // the handler is inside C1/4058 / C1/4090: no iteration
+  if (h->msgHoldEndF == h->frames) { BT_MV_FLUSH(); return 0; }                    // ...or its message box returned this frame (the head ran)
   // The victory is a blocking chain (C1/8186 #08 -> C1/356D's copier -> C1/83BB -> FD/AD17's messages -> C1/83F9 ->
   // CF/FBE5): no idle tick runs in it; its $E5 is the copier's (C1/369A) and then CF/FBE5's.
-  if (h->victoryHold) return 0;
+  if (h->victoryHold) { BT_MV_FLUSH(); return 0; }
   h->iterPh++;
-  if (h->iterPh & 1) { s[0x00E5] = 0; return 0; }               // frame A ends: C1/10BB STZ $E5 / C1/10BD's wait
+  if (h->iterPh & 1) { s[0x00E5] = 0; BT_MV_FLUSH(); return 0; }               // frame A ends: C1/10BB STZ $E5 / C1/10BD's wait
   s[0x00E5]++;                                                  // frame B: C1/10C4 INC $E5, then the tail below
   h->iterHead = 1;                                              //   ...and the next head closes the frame (CtBattleTick)
 
@@ -21026,11 +21044,13 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   //       reward lines (CD/01B3), then the handoff (return 1 -> fieldBattleFinish). None of it is input-gated: C1/356D
   //       reads no joypad and CD/01B3 only lets a held A cut the dwell (battle_results_box_timing.md trap 1). A bare
   //       debug end (step A) skips the sequence. The scheduler (steps C0..G) is frozen throughout.
-  if (h->victoryHold) return 0;
+  if (h->victoryHold) { BT_MV_FLUSH(); return 0; }
   // C1/10C6-10DA, the idle loop's menu pass: frame B, right after C1/10C4 INC $E5, before C1/8130's sweep and the
   // timers (C1/8129 `JSR C1/0003` runs the iteration first). Consumes the $993A the NMI raised, on this frame or on the
   // frame A before it, then `STZ $EE`.
   if (s[0x993A]) { s[0x993A] = 0; battleMenuPass(h, masha, "live"); s[0x00EE] = 0; }
+  BT_MV_FLUSH();                                                // C1/10DC JSR C1/3714 / C1/10DF JSR C1/283D (frame B)
+#undef BT_MV_FLUSH
 
   // (C0) The Wait-mode freeze (battle_atbmode.md part 2, ROM C1/1167 -> C1/81CA): $99E0 = $99E1 while a PC Tech/Item
   //   submenu is open ($95DB in {1,2}), else 0, and while $99E0 != 0 the timer pass below is skipped for every

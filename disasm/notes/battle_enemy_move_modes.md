@@ -2336,3 +2336,15 @@ what is under test, not the substitution.
 All four are dispatched by `battleMoveTick` now. No fixture arms them, so it is inert for the suite —
 but the ROM's own table dispatches them, and a port that HAS a handler and refuses to call it is less
 correct than one that does.
+
+## ADDENDUM 2026-11-08 -- where C1/3714 runs in the idle loop's frame B (leg 91, Flea)
+
+The idle loop (C1/106E-10E2) calls the mode machine on both of its frames, at different places: frame A `C1/10A9 JSR
+C1/2D9F` (the walk dispatch) then `C1/10B5 JSR C1/3714`; frame B `C1/10C4 INC $E5`, the menu pass `C1/10C6-10DA` (only
+when `$993A`), then `C1/10DC JSR C1/3714`. The port ran its C1/3714 (battleMoveTick) before the menu pass on both. On the
+frame a command is confirmed the pass clears `$99E0` (C1/3714's own `LDA $99E0 / BNE`) and picks the turn, so the
+cartridge's mode machine steps once more there (playthrough leg 91, cart f30969: Flea's `$9897` 02 -> 01, all else equal)
+and the port's did not. After the action her class-5 walk (`$98A7`) armed a frame late, ended a step short ((165,150)
+against (167,152)), and every later Flea action's SLIDE started 2 px off (n = 28 against 27: the action 2 frames longer).
+Fixed in battleTickBody: a frame that will be a frame B keeps its C1/3714 for right after the menu pass (`mvDefer`; every
+early return runs it where it stood). Verified frame by frame: `$9897`, the walk, and her f35175 foot (136,121) equal.
