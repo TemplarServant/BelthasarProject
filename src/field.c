@@ -88,6 +88,7 @@
 #include "seq_endingpic.h"   // its picture (entries 11, 14, 15)
 #include "seq_entry3.h"   // entry 3 (FF 23, after the Blackbird)
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls)
+#include "debug_sections.h"
 #include "seq_entry5.h"   // entry 5 (C0/260E's A = 85: the vortex after Magus)
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell)
 #include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle)
@@ -9272,6 +9273,12 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // $1D8B-$1D92.
   memcpy(s + 0x12000, s + 0x0920, 0x14E0); g_battleObjSaved = 1; g_battleEndFeetOn = 0;
   // ---- JSL C1/0000 (C0/18A7): the battle module ----
+  // The module starts from its own init on every fight (its work state cleared -- CtBattleBegin's clears stand in for
+  // the parts of that init the WRAM staging lacks); the host is the port's half of that per-fight state, so it starts
+  // fresh here too. Kept from one fight to the next, the Dragon Tank's script interpreter ($asc*, anim*, the pending
+  // targets) froze the next fight of the same process (Lab 16: no command window after the first, leg 38 played from
+  // leg 35) while a fresh process won it. (The main loop sets the frame's pad and the boot's post after this call.)
+  memset(h, 0, sizeof *h);
   h->mem = s; h->glb = g; h->frame = NULL; h->ctx = NULL;   // interactive: the host pumps events, not h->frame
   { const char* de = getenv("CT_BATTLE_DEBUGEND");          // env in both modes; unset -> -1 interactive / 4000 headless
     // 4000: a headless real-HP-kill fight (CT_BATTLE_MASHA, no explicit DEBUGEND) spans the $A013 action freeze
@@ -9568,6 +9575,7 @@ int main(int argc, char** argv) {
   int sprTest = 0;   // --sprtest: dump every character's menu standing sprite + its placement
   int descTest = 0;  // --desctest: dump the ROM's stored item/equip DESCRIPTION for a set of ids
   const char* walkScript = NULL;
+  int walkPipe = 0;   // --walkpipe: each frame's key asked for on stdout (`wk <frame>`), read from stdin (`<hex mask> <first>`)
   const char* playScript = NULL;         // --play: the goal-directed driver (see the runner below)
   int scene = 1, selftest = 0, talkObj = -1, gotoExit = 0, tframes = 0, targetPage = 0;
   int chooseSel = 0, doSelect = 0, atX = -1, atY = -1, showPrio = 0, worldTest = 0; char walkDir = 0;
@@ -9666,6 +9674,14 @@ int main(int argc, char** argv) {
     }
     else if (!strcmp(argv[i], "--loadflags") && i + 1 < argc) flagsPath = argv[++i];
     else if (!strcmp(argv[i], "--walkscript") && i + 1 < argc) walkScript = argv[++i];  // selftest: "u:30,r:10,a:1,." per-frame input
+    else if (!strcmp(argv[i], "--walkpipe")) { walkPipe = 1; walkScript = ""; }   // a harness feeding the keys live
+    else if (!strcmp(argv[i], "--walkfile") && i + 1 < argc) {   // the same, read from a file (a route past the command line's 32 K)
+      FILE* wf = fopen(argv[++i], "rb"); long wn = 0; char* ws = NULL;
+      if (wf) { fseek(wf, 0, SEEK_END); wn = ftell(wf); fseek(wf, 0, SEEK_SET); ws = (char*)malloc((size_t)wn + 1);
+                if (ws) { wn = (long)fread(ws, 1, (size_t)wn, wf); ws[wn] = 0; } fclose(wf); }
+      if (!ws) { fprintf(stderr, "--walkfile: cannot read %s\n", argv[i]); return 1; }
+      walkScript = ws;
+    }
     else if (!strcmp(argv[i], "--play") && i + 1 < argc) playScript = argv[++i];        // goal-directed drive (see the runner)
     else if (!strcmp(argv[i], "--talk") && i + 1 < argc) talkObj = atoi(argv[++i]);
     else if ((!strcmp(argv[i], "--tframes") || !strcmp(argv[i], "--frames")) && i + 1 < argc) tframes = atoi(argv[++i]);  // selftest: frames before capture
@@ -12297,16 +12313,69 @@ int main(int argc, char** argv) {
         }
       }
     } else
+    if (walkPipe) {
+      // The harness's key for this frame, as one `H<mask>` token's frame: `first` is the token's first frame (the key
+      // changed), which raises the edges a token start raises. Asked once per frame number; a frame number seen again
+      // keeps its key and its `first`, as a token's frame does.
+      static int wpLast = -1; static unsigned wpHm = 0; static int wpFirst = 0;
+      if (frameNo != wpLast) {
+        char buf[64] = { 0 }; unsigned hm = 0; int fi = 0;
+        printf("wk %d\n", frameNo); fflush(stdout);
+        // `P <addr> <hex bytes>` lines first: the harness writes the field's WRAM (a flat $7E/$7F address) before the key.
+        // `S <path>`: the debug snapshot F5 writes (the scene + `<path>.apu`, the SPC), for `--loadstate`.
+        while (fgets(buf, sizeof buf, stdin) && (buf[0] == 'P' || buf[0] == 'S')) {
+          if (buf[0] == 'S') {
+            char sp[48] = { 0 }; double plr[4] = { px, py, (double)pz, (double)pfac };
+            if (sscanf(buf + 1, "%47s", sp) == 1 && f.vm) {
+              int ok = CtSceneSaveState(f.vm, sp, plr);
+              if (ok && g_fieldAudio) { char na[64]; snprintf(na, sizeof na, "%s.apu", sp); CtAudioSaveState(g_fieldAudio, na); }
+              fprintf(stderr, "[walkpipe] f%d snapshot %s: %s\n", frameNo, sp, ok ? "ok" : "FAIL");
+            }
+            buf[0] = 0; continue;
+          }
+          unsigned a = 0; char hx[48] = { 0 };
+          if (sscanf(buf + 1, "%x %47s", &a, hx) == 2 && f.vm) {
+            uint8_t* w7 = CtWramSys(fieldWram());
+            for (int k = 0; hx[2 * k] && hx[2 * k + 1] && a + (unsigned)k < 0x20000; k++) {
+              unsigned v = 0; sscanf(hx + 2 * k, "%2x", &v); w7[a + (unsigned)k] = (uint8_t)v;
+            }
+          }
+          buf[0] = 0;
+        }
+        if (buf[0] == 'E') { if (g_wsEndAt < 0) g_wsEndAt = frameNo; }   // `E`: the keys are spent (CT_DUMPWRAM_AT=end)
+        else if (buf[0]) sscanf(buf, "%x %d", &hm, &fi);
+        wpLast = frameNo; wpHm = hm; wpFirst = fi;
+      }
+      unsigned hm = wpHm; int first = wpFirst;
+      if (hm) {
+        wsMask = (uint16_t)hm;
+        if (hm & 0x080) wsDx = 1; else if (hm & 0x040) wsDx = -1;
+        if (hm & 0x020) wsDy = 1; else if (hm & 0x010) wsDy = -1;
+        if (first) { if (hm & 0x010) upPressed = 1;   if (hm & 0x020) downPressed = 1;
+                     if (hm & 0x040) leftPressed = 1; if (hm & 0x080) rightPressed = 1; }
+        if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }
+        if (first && (hm & 0x001)) wsB = 1;
+        if (first && (hm & 0x008)) wsStart = 1;
+        if (first && (hm & 0x200)) wsMenu = 1;
+      }
+    } else
     if (walkScript) {
-      const char* p = walkScript;
-      int at = 0;
+      // The scan resumes at the token that held the last frame (a harness speed-up only: the same token is found as a
+      // scan from the start finds it, and a frame number that goes back restarts it) -- a route of 3.4 M frames and
+      // 10^5 tokens rescanned from its start every frame cost O(frames x tokens).
+      static const char* wsCurBase = NULL; static const char* wsCurP = NULL; static int wsCurAt = 0;
+      if (wsCurBase != walkScript || frameNo < wsCurAt) { wsCurBase = walkScript; wsCurP = walkScript; wsCurAt = 0; }
+      const char* p = wsCurP;
+      int at = wsCurAt;
       while (*p) {
+        const char* tokP = p;
         char c = *p++;
         unsigned hm = 0;
         if (c == 'H') hm = (unsigned)strtoul(p, (char**)&p, 16);
         if (*p == ':') p++;
         int n = (int)strtol(p, (char**)&p, 10);
         if (frameNo >= at && frameNo < at + n) {
+          wsCurP = tokP; wsCurAt = at;
           if (c == 'H') {
             int first = frameNo == at;
             wsMask = (uint16_t)hm;
@@ -17583,6 +17652,12 @@ int main(int argc, char** argv) {
       } else {
         int entered = 0;                                 // the detect+staging path; interactive -> enters battle mode
         fieldBattleConsumer(f.vm, !selftest, &liveHost, &ran, &gameOver, &entered);
+        if (entered && getenv("CT_BATTLE_HOSTDUMP")) {   // debug: the host struct as each fight is entered (<path>.<n>)
+          static int hdN; char hp[512]; snprintf(hp, sizeof hp, "%s.%d", getenv("CT_BATTLE_HOSTDUMP"), hdN++);
+          FILE* hf = fopen(hp, "wb"); if (hf) { fwrite(&liveHost, sizeof liveHost, 1, hf); fclose(hf); }
+          { char dp[600]; snprintf(dp, sizeof dp, "%s.data", hp); CtDebugDumpWritableSections(dp); }   // + the globals
+          fprintf(stderr, "[hostdump] f%d %s (%u bytes)\n", frameNo, hp, (unsigned)sizeof liveHost);
+        }
         if (entered) {                                   // that frame composes the freshly-staged field (no VM tick interposed)
           // Entry cut (battle_stance.md addendum 7, T3a): the field->battle position change is an instantaneous
           // cut, not a walk: the module rebuilds the OAM from the battle-formation staging (field arrays cleared

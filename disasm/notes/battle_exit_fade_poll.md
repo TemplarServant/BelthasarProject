@@ -109,3 +109,12 @@ the HDMA's alignment run by run. On the rule's oracle that depends on held cycle
 HDMA/DMA on the beam's clock (the master cycles minus the held ones, so a hold moves nothing against the beam), and the
 port prices C7 access by access with LakeSnes's alignment from that clock; or the class stays open. A rule decision
 (CLAUDE.md, the zelda3 model): asked, not taken.
+
+**DECIDED (user, 2026-11-07): timing, not reproduced** (CLAUDE.md, "Random rolls moved by a timing artefact are timing").
+What the continuous playthrough measured on leg 51 (both sides from the leg's state): the first fight's exit releases at
+f3933 on the cartridge and f3931 on the port, so the play clock's battle stall is 37 frames against 35
+(f3897-f3933 / -f3931); at the 0E5 load C0/0C75 seeds `$01F8` = 17 (clock 2D17) against 19 (2D19), robot 0B
+(X = 16) takes another direction at f4956 (C0:AE2B draws), the robots block the lead at other frames (cart: a 4-frame
+stop f5085-5088), the lead ends 1 px off, the camera align C0/885A glides 14 frames against 1 (`$1D96` 0D -> 00), the
+battle song posts 14 frames apart and the enemies' AI evaluates in another order -- another fight. The game is the
+same game with other rolls; the playthrough harness puts the cartridge's `$0400` / `$01F8` back (build/_pt77/chain5.py).

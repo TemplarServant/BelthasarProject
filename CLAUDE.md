@@ -151,6 +151,13 @@ When in doubt about a timing read, do what zelda3 did.
   cartridge). Under the rule the race is decided for the poll: the vblank that rises while the spin waits is seen -- never
   the one C0/EA70 acked before the op ran -- so the store lands one frame after the visit, on both sides.
   `CT_ORACLE_RDNMI=0` measures without. disasm/notes/oracle_rdnmi_rule.md.
+- **Random rolls moved by a timing artefact are timing** (user decision 2026-11-07, option 2): the battle exit's release
+  follows the SPC fade lattice, which follows the song uploads' pace in C7 to a few hundred cycles
+  (battle_exit_fade_poll.md); the port lands it +-1-2 frames off, the play clock `$0400` with it, and C0/0C70 seeds the
+  field's `$01F8` cursor from that clock -- other robot paths, another fight. Not reproduced (no beam-clock HDMA
+  alignment, no access-by-access C7 pricing): the game works the same way with other rolls. The playthrough harness
+  (build/_pt77/chain5.py, CHAIN_CLOCK) puts the cartridge's clock and cursor back so a replayed pad still fits; the game
+  itself never does.
 
 Everything else keeps the mandate above unchanged: the ROM + the oracle are the truth. The rule is not a license to
 invent anything that is not a read of the beam counters or a CPU-overrun frame.

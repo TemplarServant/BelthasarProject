@@ -43,7 +43,8 @@ set(CT_SRC_SEQ src/seq_stage.c src/seq_stagelib.c src/seq_race.c src/seq_racepic
                src/seq_entry6pic.c src/seq_entry7.c src/seq_entry7pic.c src/seq_entry5.c src/seq_gwarp.c)
 # The engine: the scene renderer and its data, the field VM, the overworld, the battle, the menus.
 set(CT_SRC_ENGINE src/scene.c src/lz.c src/assets.c src/ct_vm.c src/collision.c src/player.c src/world.c src/vwf.c
-                  src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c)
+                  src/battle.c src/objslot.c src/tileanim.c src/menu.c src/menu_cost.c src/field_cost.c src/oam.c
+                  src/debug_sections.c)
 # The host's presentation: the options, the picture (SDL_Renderer / OpenGL / Vulkan), the frames between, the
 # widescreen and its art.
 set(CT_SRC_HOST src/settings.c src/present.c src/present_vk.c src/motion.c src/fieldnative.c src/widext.c
