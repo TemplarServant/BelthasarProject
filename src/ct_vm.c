@@ -2403,6 +2403,15 @@ static int g_leadTk = -1;                  // -1 = the lead's 3040 arm has not r
 // then -- the lead is the queue's head (C0/5A31-5A3D) -- so the cursors take the pushed head. This port pushes after the
 // runner (CtSceneUpdateFollowers), which re-applies the reset behind its push.
 static int g_daRingPend = 0;
+// ...and the follower side of the same order. A follower's conga (C0/A26B / A2CE) runs inside its own B0 visit, and the
+// runner visits by object index, so a follower below the DA's object reads the cursors and the ring as they stood BEFORE
+// the reset, advances on them, and the reset overwrites its cursor afterwards (playthrough leg 93, 0A7 f25869: obj 2's
+// A2CE advanced $01AD 48 -> 49 and took that entry's step, C0:A31D, then the DA set $01AC/$01AD := 77). This port runs the
+// followers after the runner, so CtSceneUpdateFollowers puts the pre-reset bytes back for a follower below g_daObj and
+// re-applies the reset behind it.
+static int g_daObj = -1;                   // the object whose op 0xDA reset the ring in this pass (-1: none)
+static uint8_t g_daPreAC, g_daPreAD;       // $01AC / $01AD before the reset
+static int g_daSaveIdx = -1; static uint8_t g_daSave[3];   // the entry the reset zeroed ($7F0C00/0D00/0F00 at the head)
 static int g_leadDefer, g_leadDeferTick; static double g_leadDeferX, g_leadDeferY;   // a busy lead's step (below)
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
@@ -3171,6 +3180,11 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       //   348E  STA $7F0D00,X / 3492 STA $7F0D00,X  raw bytes 9F 00 0D 7F twice: the preX row, not 0D80
       //   3496  STA $7F0F00,X                      the shape row
       { unsigned hd = r8(m, 0x7E01AB) & 0xFF;
+        if (g_daObj < 0) {                                  // the first reset of the pass: what a follower below it saw
+          g_daObj = obj; g_daPreAC = r8(m, 0x7E01AC); g_daPreAD = r8(m, 0x7E01AD);
+          g_daSaveIdx = (int)hd;
+          g_daSave[0] = r8(m, 0x7F0C00 + hd); g_daSave[1] = r8(m, 0x7F0D00 + hd); g_daSave[2] = r8(m, 0x7F0F00 + hd);
+        }
         w8(m, 0x7E01AC, hd); w8(m, 0x7E01AD, hd);
         w8(m, 0x7F0C00 + hd, 0); w8(m, 0x7F0D00 + hd, 0); w8(m, 0x7F0F00 + hd, 0); }
       // ...and the head it copies includes this frame's push when the lead's B0 visit came first (the lead heads
@@ -5512,7 +5526,7 @@ void CtSceneTick(CtScene* sc) {
               (ts->addr >= 0 && ts->addr < sc->blen) ? sc->body[ts->addr] : 0xEE,
               sc->mem->l[0x13], sc->mem->l[0x12], sc->mem->l[0x15], sc->mem->l[0x14]); } }
   if (!sndResuming) g_leadTk = -1;                      // no B0 visit of the lead yet in this pass (a resumed one had it)
-  if (!sndResuming) g_daRingPend = 0;
+  if (!sndResuming) { g_daRingPend = 0; g_daObj = -1; g_daSaveIdx = -1; }
   if (!sndResuming) { memset(g_ranB0, 0, sizeof g_ranB0); memset(g_landedB0, 0, sizeof g_landedB0); }   // a resumed
                                                                 // pass keeps what its first half dispatched
   for (int qi = sndResuming ? sc->sndResumeN : 0; qi < nq; qi++) {   // no cut: C0/5A5D on the fixed virtual beam
@@ -6003,6 +6017,14 @@ void CtSceneUpdateFollowers(CtScene* sc) {
   }
   if (g_daRingPend) {                                   // an op 0xDA reset this pass, after the lead's visit (g_daRingPend)
     unsigned hd = w[0x01AB] & 0x7F;                     // 347D LDA $AB / STA $AC / STA $AD, on the head the push left
+    if (g_daObj >= 0) {                                 // the entry this reset zeroes, as the push left it (g_daObj)
+      if (g_daSaveIdx >= 0 && g_daSaveIdx != (int)hd) {  // the runner's reset zeroed another entry: put it back first
+        w8(sc->mem, 0x7F0C00 + g_daSaveIdx, g_daSave[0]); w8(sc->mem, 0x7F0D00 + g_daSaveIdx, g_daSave[1]);
+        w8(sc->mem, 0x7F0F00 + g_daSaveIdx, g_daSave[2]);
+      }
+      g_daSaveIdx = (int)hd;
+      g_daSave[0] = r8(sc->mem, 0x7F0C00 + hd); g_daSave[1] = r8(sc->mem, 0x7F0D00 + hd); g_daSave[2] = r8(sc->mem, 0x7F0F00 + hd);
+    }
     w[0x01AC] = (uint8_t)hd; w[0x01AD] = (uint8_t)hd;
     w8(sc->mem, 0x7F0C00 + hd, 0); w8(sc->mem, 0x7F0D00 + hd, 0); w8(sc->mem, 0x7F0F00 + hd, 0);   // 3486-3496
     g_daRingPend = 0;
@@ -6017,12 +6039,25 @@ void CtSceneUpdateFollowers(CtScene* sc) {
       if (k != lead && sc->mode[k] == m && sc->actors[k].hasPos && !sc->actors[k].dead) { folObj[m] = k; break; }
   int folOrder[2] = { 1, 2 };
   if (folObj[1] >= 0 && folObj[2] >= 0 && folObj[2] < folObj[1]) { folOrder[0] = 2; folOrder[1] = 1; }
+  // An op 0xDA in this pass (g_daObj): its reset as it stands now (the cursors, the zeroed entry), to undo for a follower
+  // the runner visits before the DA's object and to re-apply behind it.
+  int daHd = (g_daObj >= 0) ? w[0x01AC] : -1, daOn = (g_daObj >= 0);
+  #define CT_DA_UNDO() do { w[0x01AC] = g_daPreAC; w[0x01AD] = g_daPreAD; if (g_daSaveIdx >= 0) { \
+      w8(sc->mem, 0x7F0C00 + g_daSaveIdx, g_daSave[0]); w8(sc->mem, 0x7F0D00 + g_daSaveIdx, g_daSave[1]); \
+      w8(sc->mem, 0x7F0F00 + g_daSaveIdx, g_daSave[2]); } daOn = 0; } while (0)
+  #define CT_DA_REDO() do { w[0x01AC] = (uint8_t)daHd; w[0x01AD] = (uint8_t)daHd; if (g_daSaveIdx >= 0) { \
+      w8(sc->mem, 0x7F0C00 + g_daSaveIdx, 0); w8(sc->mem, 0x7F0D00 + g_daSaveIdx, 0); \
+      w8(sc->mem, 0x7F0F00 + g_daSaveIdx, 0); } daOn = 1; } while (0)
   for (int oi = 0; oi < 2; oi++) {
     int member = folOrder[oi];
     int curAddr  = 0x01AB + member;                     // $01AC (member 2), $01AD (member 3)
     int prevAddr = 0x01AB + member - 1;                 // ...measured against the one in front
     int o = folObj[member];
     if (o < 0) continue;
+    if (daHd >= 0) {                                    // the runner's order: below the DA's object -> before the reset
+      if (o < g_daObj && daOn) CT_DA_UNDO();
+      else if (o >= g_daObj && !daOn) CT_DA_REDO();
+    }
     // C0/3002 runs when the op is dispatched. A follower whose visit ended on its B0 without dispatching it (a Return
     // onto the B0 with the five-op budget spent, C0/5AB6) gets no conga that frame; its next visit runs it (landedB0).
     // One that ran its B0 keeps the conga even if a later object in the pass calls it off: A26B / A2CE ran in that
@@ -6075,6 +6110,9 @@ void CtSceneUpdateFollowers(CtScene* sc) {
               r8(sc->mem, 0x7F0D00 + c), r8(sc->mem, 0x7F0D80 + c), r8(sc->mem, 0x7F0F00 + c),
               w[0x1600 + o * 2], w[0x1680 + o * 2], w[0x1681 + o * 2], w[0x1601 + o * 2], w[0x0138]);
   }
+  if (daHd >= 0 && !daOn) CT_DA_REDO();                 // the DA's visit came after every follower's: its reset stands
+  #undef CT_DA_UNDO
+  #undef CT_DA_REDO
   if (getenv("CT_RINGDBG")) fprintf(stderr, "[ring] f%d lead=(%.4f,%.4f) 1D32=%02X%02X head=%02X cur=%02X/%02X f1=(%.4f,%.4f) fac=%02X,%02X\n",
       gVmTick, sc->fx[lead], sc->fy[lead], w[0x1D32], w[0x1D33], w[0x01AB], w[0x01AC], w[0x01AD],
       sc->nobj>3?sc->fx[3]:0.0, sc->nobj>3?sc->fy[3]:0.0, w[0x1606], w[0x1608]);

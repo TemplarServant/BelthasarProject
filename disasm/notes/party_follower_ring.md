@@ -405,3 +405,15 @@ lead's first step after the hand-back pushes `$01AB` 31 -> 32 at f15621 (C0:9E49
 `$01AC/$01AD = 32` (C0:3481/3483). This port pushes after the runner (CtSceneUpdateFollowers), so its DA copied 31 and
 the follower set off one frame early -- the shutters' walk four frames short at the end. A DA reset in a pass where the
 lead's B0 already ran (g_leadTk) is re-applied behind the push (ct_vm.c g_daRingPend).
+
+## 2026-11-08 -- a follower below the DA's object advances before the reset (playthrough leg 93)
+
+The followers' conga (C0/A26B / A2CE) runs inside each follower's own B0 visit and the runner visits by object index
+(the lead first). An op 0xDA (C0/347D `LDA $AB / STA $AC / STA $AD`, the entry at the head zeroed) in a later object's
+visit therefore resets cursors that a lower follower has ALREADY used this frame. MEASURED, the rule's cartridge, leg 93
+0A7 f25869: obj 2 (member 3) took gap $01AC - $01AD = 60 - 48 = 18 >= 10, advanced `$01AD` 48 -> 49 and copied that
+entry's velocity 10 (`$1904`, writer C0:A31D) -- one more pixel -- and the DA then set `$01AC/$01AD := 77`. The port runs
+every follower after the runner, so its follower saw the reset (gap 0) and stood: the party 1 px apart for 850 frames.
+ct_vm.c now records the pass's first reset (g_daObj, the cursors and the entry it zeroed) and CtSceneUpdateFollowers runs
+a follower below g_daObj on the pre-reset bytes, re-applying the reset behind it (g_daRingPend's re-apply behind the push
+keeps its own entry). Verified: `$01AB-$01AD` and obj 2's X equal on both sides through f25875.
