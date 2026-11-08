@@ -6207,7 +6207,10 @@ void CtSceneBattleRemoveObj(CtScene* sc, int obj) {
   w8(sc->mem, 0x7E1A81 + (uint32_t)obj * 2, 0x00);                       // C0/0809
   w8(sc->mem, 0x7E1000 + (uint32_t)obj * 2,
      (uint8_t)(r8(sc->mem, 0x7E1000 + (uint32_t)obj * 2) | 0x80));       // C0/07F6
-  sc->hasTask[obj] = 0; sc->cycles[obj] = 0; sc->mx[obj] = sc->my[obj] = 0;
+  // ...and nothing else: the mover's pair $1A80,X (the task) / $1A01,X (the ticket) and its velocity $1900/$1980,X are
+  // the page C0/0905 restored, and C0/734C (the `$1A81` bit-7 arm) only relinks the draw list ($0B00/$0B01). So a step in
+  // flight when the fight began is taken after it: the integrator C0/AA07 runs for every ticket whatever $1000 bit 7
+  // pauses (playthrough leg 93, 1BE: obj 19 restored with $1A27 = 01 took its step at f87861, C0:AA98, on the cartridge).
 }
 
 // ---- C0/595C: obj0's slot 1, run to its terminator (disasm/notes/obj0_slot1_runner.md) ----

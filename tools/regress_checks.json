@@ -50424,7 +50424,7 @@
         "playthrough: 90_castle_wings SAME -- locs 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 | story 88 | party 000401 | gold 1249 | hp 226 (2) | ctrl 3 | end picture 0 px at port -1",
         "playthrough: 91_flea SAME -- locs 0A6 1D5 0A9 | story 88 | party 000401 | gold 3199 | hp 262 (4) | ctrl 5 | end picture 0 px at port +0",
         "playthrough: 92_slash SAME -- locs 0A9 1D5 0A6 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 0AA | story 88 | party 000401 | gold 1909 | hp 277 (3) | ctrl 21 | end picture 0 px at port +0",
-        "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 38002 px at port +5",
+        "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 39657 px at port +5",
         "playthrough: 94_ozzie_barrier SAME -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 0 px at port -6",
         "playthrough: 95_magus DIFFERENT -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 50794 px at port +0",
         "playthrough: 96_laruba DIFFERENT -- locs 113 1F3 124 | story 8D 8E | party 000401 | gold 12154 | hp 322 (1) | ctrl 5 | end picture 813 px at port -1",
