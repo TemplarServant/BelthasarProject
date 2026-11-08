@@ -4087,6 +4087,24 @@ static void menuSfx(uint8_t* m, uint8_t id, const char* what) {
   if (getenv("CT_MENUSFX"))
     printf("menusfx-menu: %s -> cmd=18 id=%02X pan=80 %s\n", what, id, posted ? "posted" : "THROTTLED");
 }
+// The candidate list's slide keeps its offsets in the direct page: C2/A4AF (the climb) `$22 := 60FF, $24 := 402F,
+// $26 := 0004`, C2/A697 (the descent) `$22 := 611F, $24 := 404F, $26 := FFFC`, and each pass C2/A518 `$22 += $26`,
+// `$24 += $26` (16-bit). They stay there when the menu closes: `$27` is the battle's iteration counter (C1/8121
+// `INC $0027`), so the next fight starts counting from the byte the last slide left (FF after a descent, 00 after a
+// climb), and the parity the cursor pass tests (C1/82A2: the enqueue measured on an even `$0027` on both sides) puts
+// its first PC's box on one menu pass or the next
+// (playthrough leg 93: C2:A6CD left FF at f28546, the cartridge's first window came at f29431, the port's at f29427).
+static void menuEqSlideDp(uint8_t* m, int init, int climb) {
+  if (init) {
+    unsigned a22 = climb ? 0x60FF : 0x611F, a24 = climb ? 0x402F : 0x404F, a26 = climb ? 0x0004 : 0xFFFC;
+    m[0x22] = (uint8_t)a22; m[0x23] = (uint8_t)(a22 >> 8); m[0x24] = (uint8_t)a24; m[0x25] = (uint8_t)(a24 >> 8);
+    m[0x26] = (uint8_t)a26; m[0x27] = (uint8_t)(a26 >> 8);       // C2/A4E8-A4F5 / C2/A6BE-A6CB
+    return;
+  }
+  unsigned d = m[0x26] | (m[0x27] << 8);                        // C2/A518 `LDA $22 / CLC / ADC $26 / STA $22`
+  unsigned a22 = ((m[0x22] | (m[0x23] << 8)) + d) & 0xFFFF, a24 = ((m[0x24] | (m[0x25] << 8)) + d) & 0xFFFF;   // C2/A530
+  m[0x22] = (uint8_t)a22; m[0x23] = (uint8_t)(a22 >> 8); m[0x24] = (uint8_t)a24; m[0x25] = (uint8_t)(a24 >> 8);
+}
 
 // C2/A463 (C2/A45D's and C2/A41A's shared tail): the candidate list's window -- $0FC8 := 0, first cell 4, C2/EA81 with
 // $4204 = 0x1500, 8 rows a page over $0FC6 -- and the scrollbar in quarter rows: $0D94 = range x 4 (C2/8BA6), $0D95 = 0.
@@ -14575,12 +14593,14 @@ int main(int argc, char** argv) {
                 // when the count is zero.
                 menuEqCount = CtMenuEquipCandidates(s7, menuEquipSlot, menuStatChar, menuEqCand, menuEqCnt);
                 if (menuEqCount > 0) { menuStatSub = 2; menuEqCell = 0; menuEqScroll = 0; menuEqListRise = 4;
+                                       menuEqSlideDp(s7, 1, 1); menuEqSlideDp(s7, 0, 1);   // C2/A4AF's offsets, its first pass
                                        s7[0x0D9A] = 0xE5;             // C2/A41A -> C2/A4AF's first step: 2A565
                                        menuSfx(s7, 0x00, "equip-list-open"); }
                 else                   menuSfx(s7, 0x01, "equip-list-empty");   // C2/9C8D -> C2/EACC, id $01
               }
             } else if (menuEqListRise >= 0) {                // C2/A4AF's loop: one pass a frame, no input read
               menuEqListRise += 4;
+              menuEqSlideDp(s7, 0, 1);                       // C2/A518's pass: $22 / $24 += $26
               s7[0x0D9A] = 0xE5;                             // C2/A518: 2A560 LDA #E5 / STA $0D13 / STA $0D9A
               if (menuEqListRise >= CT_MENU_EQ_LIST_RISE_PX) { menuEqListRise = -1; menuEqListFresh = 1;   // the list is drawn
                                                                s7[0x0D92] = 0x68; s7[0x0D93] = 0x42;   // C2/A42C LDX #4268
@@ -14588,6 +14608,7 @@ int main(int argc, char** argv) {
                                                                menuSbTask = 1; s7[0x0D9A] = 0; }   // (C2/A432 -> A463 -> 8B93)
             } else if (menuEqListFall > 0) {                 // C2/A64D's yield, then C2/A697's loop: no input read
               menuEqListFall -= 4;
+              menuEqSlideDp(s7, 0, 0);                       // C2/A518's pass: $22 / $24 += $26
               s7[0x0D9A] = 0xE5;                             // C2/A697: 2A6D1 DEC $0D9A, then C2/A518's E5 each step
               if (menuEqListFall <= 0) { menuEqListFall = 0; menuStatSub = 1; menuEqRowsHold = 1;     // the gear panel;
                                          s7[0x0D92] = 0x68; s7[0x0D93] = 0x62;   // C2/A667 JSR C2/A45D: its seeds
@@ -14670,10 +14691,12 @@ int main(int argc, char** argv) {
                 if (menuEqCell >= menuEqCount) menuEqCell = menuEqCount ? menuEqCount - 1 : 0;
                 if (menuEqScroll > menuEqCell) menuEqScroll = menuEqCell;
                 menuEqListFall = 32;                         // both A and B go back to the gear panel through C2/A64D
+                menuEqSlideDp(s7, 1, 0);                     // C2/A64D -> C2/A697's offsets (C2/A6BE-A6CB)
               } else if (bHeld && !prevBBtn) {
                 memcpy(menuEqShowCand, menuEqCand, sizeof menuEqCand);   // (nothing moved: the same rows)
                 memcpy(menuEqShowCnt, menuEqCnt, sizeof menuEqCnt); menuEqShowCount = menuEqCount;
                 menuEqListFall = 32;                         // discard (C2/9CB4 -> C2/A64D): its hand swap, this frame
+                menuEqSlideDp(s7, 1, 0);                     // C2/A64D -> C2/A697's offsets (C2/A6BE-A6CB)
                 menuSfx(s7, 0x00, "equip-cand-back");
               }
             }
