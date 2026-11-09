@@ -90,7 +90,7 @@ It is **not yet verified playable from start to finish**.
 | Overworld | Works | Camera and tilemap streaming, the ambient-object VM (birds, boats), the ferry, party followers, zoned music. |
 | Sound | Works | The bank `$C7` driver upload, the song loader, the command channel, and the sound processor's program itself as C (`src/sound/`), sample-exact against the vendored SPC700/DSP it replaced. |
 | Title and attract | Works | The title sequence is the overlay's own machine; the attract demo is audited against the cartridge frame by frame. |
-| Mods (F1) | Works | Widescreen, internal resolution, frames between (60+ fps), free sync. Opt-in; with every option at its default the game is the vanilla game. |
+| Mods (F1) | Works | Widescreen, internal resolution, frames between (60+ fps), free sync, the overscan scale. Opt-in; with every option at its default the game is the vanilla game. |
 
 ### Not done
 
@@ -104,7 +104,7 @@ It is **not yet verified playable from start to finish**.
 - **Open divergences.** A list of known differences from the cartridge (a few frames of timing in some battle
   exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine).
 - **The playthrough is graded only partway.** `tools/playthrough.py` grades one route against the cartridge leg by
-  leg from New Game onward; how far it reaches is kept in [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
+  leg from New Game to Crono's return at the summit of Death Peak (137 legs); how many legs are identical to the cartridge today is kept in [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
 
 ## Quick start
 
@@ -211,7 +211,7 @@ another path). Headless runs never read that file, so the test suite always sees
 
 | Tab | Options |
 |---|---|
-| Video | Window or fullscreen, window size, scaling (fit / integer / stretch), aspect (square pixels or 4:3), filtering, vsync, backend (SDL with its render driver, OpenGL 3.3 -- 4.1 on macOS -- or Vulkan; applied at the next start; Android has SDL only). The mods live here too: **widescreen** (off, 16:9, 16:10, 21:9; plus whether a room as wide as its map continues the map into the sides), **internal resolution** (1x to 4x), **frames between** (draws the picture at the display's refresh rate between two 60 Hz frames, at a cost of one frame of latency) |
+| Video | Window or fullscreen, window size, scaling (fit / integer / **integer, overscan** -- the next integer factor up, filling the screen's height and cutting only lines the game keeps empty -- / stretch), aspect (square pixels or 4:3), filtering, vsync, backend (SDL with its render driver, OpenGL 3.3 -- 4.1 on macOS -- or Vulkan; applied at the next start; Android has SDL only). The mods live here too: **widescreen** (off, 16:9, 16:10, 21:9; plus whether a room as wide as its map continues the map into the sides), **internal resolution** (1x to 4x), **frames between** (draws the picture at the display's refresh rate between two 60 Hz frames, at a cost of one frame of latency) |
 | Audio | Volume, mute |
 | Controls | Key and controller bindings; the left stick as the d-pad |
 | Sync | **Frame-perfect** (default) or **free**: in free mode, waits that exist only because the SNES was busy (song uploads, load stalls) cost no frames |
