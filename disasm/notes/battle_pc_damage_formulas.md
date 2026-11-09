@@ -108,6 +108,16 @@ The battle boot calls it four times per seat and then sums the defence:
 (`--monitor "7E5EF0:1,7E5EF2:1" --diff`): `f316 7E5EF0=FF 7E5EF2=FF` (the raw sheet copy) →
 `f317 7E5EF0=03 7E5EF2=14`, writer **`C1:CF3B`**.
 
+### 3.1 Ayla's weapon is her level's -- C1/FABE-FB03 (2026-11-09)
+
+At the boot, after each seat's sheet copy (FD/AE52, `$2600 + id*0x50` -> the block) and before the C1/FC00 derive:
+`LDA $5E2D(+seat*0x80) / CMP #05 / BNE` (character 05, Ayla), `LDA $5E3F` (the level, +0x12) `/ JSR C1/FDAE` -- C1/C92A
+divides by `$2A` = 0x18 -- `CLC / ADC #44 / STA $5E56` (+0x29, the weapon). So her weapon is 0x44 + level / 24 in every
+fight, whatever her sheet holds, and C1/FC08's weapon pass then derives +0x43..+0x48 from that record (the crit +0x45
+with it); the fight's end writes both back to the sheet (C1/B475). MEASURED, the rule's cartridge, playthrough leg 100:
+Ayla reaches level 0x18 at f81117; the next boot (f82549) stages weapon 45 (C1:FAEE) and crit 19 (C1:CF3B) over the
+sheet's 44 / 14, written back at f86739. battle.c stages it before battlePcEquipDerive.
+
 ## 4. Measured, oracle vs port
 
 | action | oracle | port before | port after |

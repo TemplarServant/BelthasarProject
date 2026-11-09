@@ -1001,6 +1001,16 @@ static void stageAll(CtBattleHost* h) {
     }
     s[0xAEC5] = (uint8_t)n;
     s[0xAEC7] = (uint8_t)(s[0xAEC5] + s[0xAEC6]); }                                       // FB2C-FB33
+  // C1/FABE-FB03, after each seat's FD/AE52 copy of its sheet: `LDA $5E2D(,seat) / CMP #05 / BNE` -- Ayla's weapon is her
+  // level's: `LDA $5E3F / JSR C1/FDAE` (C1/C92A: level / 0x18) `CLC / ADC #44` / `STA $5E56` (+0x29), before C1/FC08
+  // derives the block from the weapon's record (its crit +0x45 among them). MEASURED, the rule's cartridge, playthrough
+  // leg 100 (12A): Ayla reaches level 0x18 at f81117; the next fight's boot (f82549) stages her weapon 45 (C1:FAEE) and
+  // crit 19 (C1:CF3B) from a sheet that still says 44 / 14, and its end writes them back (C1:B475, f86739). The port kept
+  // the sheet's weapon.
+  for (int seat = 0; seat < 3; seat++) {
+    unsigned b = kPcBlock[seat];
+    if (s[b] == 0x05) s[b + 0x29] = (uint8_t)(0x44 + s[b + 0x12] / 0x18);
+  }
   for (int seat = 0; seat < 3; seat++) {
     if (!copied[seat]) continue;
     uint8_t id = s[0x2980 + seat];
