@@ -11150,8 +11150,8 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
   // (battleComputeTechDamage, C1/DCF0-DCF9) makes it deal 1 (GATO's song). An attack (0x01) uses the enemy
   // physical formula (type 4, C1/E27B).
   if (!reactive) { h->actCrit = 0; h->actCritFlash = 0; h->actMiss = 0; }   // (a counter's: set at its decode)
-  s[0xA0FD]++;                                                      // C1/4058 INC $A0FD
-  CtBattlePcLadderWipe(h);                                          // CC/F06B at the open (C1/405B): $5D80..$5E0C
+  if (!h->actOpenWiped) { s[0xA0FD]++; CtBattlePcLadderWipe(h); }  // C1/4058 INC $A0FD / CC/F06B at the open (C1/405B) --
+  h->actOpenWiped = 0;                                              //   unless C1/4058 ran it two frames ago (battleOpenWipe)
   battleOpen409C(h);                                        // CC/F102 at C1/409C, before INC $A013
   if (!reactive) h->actTechId = 0, h->actItemId = 0;              // this path is an enemy AI action / the
                                                                   //   degenerate PC dispatch: never a PC
@@ -11596,7 +11596,8 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
       if (h->ctrMsgSlot != slot || h->ctrDecodeF == h->frames) continue;
       if (h->nameBoxT >= 0) battleNameBoxFrame(h);
       if (--h->ctrMsgHold > 0) continue;
-      if (h->ctrMsgOp && battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) { h->ctrPendSlot = slot; continue; }
+      if (h->ctrMsgOp && battleCounterDecodeRest(h, slot, h->ctrMsgOp, h->ctrMsgTgt)) {   // the box done, then the same
+        h->ctrPendSlot = slot; battleOpenWipe(h); continue; }                             //   C1/4058 (below)
       h->enCounterDelay[slot] = 0;                                // (its target left, or a message alone: C1/881C as below)
       // A message alone: CD/0295 returned this frame and the loop's head runs here (the enemy-message-end's own rule), so
       // the idle tick's frame A is the next frame and its first ATB pass the one after.
@@ -11629,6 +11630,12 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
         continue;
       }
       h->ctrPendSlot = slot; h->ctrDecodeF = h->frames;          // decoded: its window opens on the countdown,
+      // ...and C1/4058 runs on this frame: `INC $A0FD / JSL CC/F06B` (CC/F0E6 restarts `$9931`, the phase of the
+      // counter's C1/10FA menu passes), then its two waits (C1/405F, C1/40A0) before C1/40A6. MEASURED, the rule's
+      // cartridge, playthrough leg 102 f6336: an action closes and enemy 4's counter decodes; `$9931` restarts on that
+      // frame (CC:F0E9) and `$A013` rises at f6338 (C1:40A9). The port wiped at the window's open, two frames late,
+      // and the counter's menu passes ran two frames early (a held Left switched the chooser at f6410, not f6412).
+      battleOpenWipe(h);
       continue;                                                   //   from the next frame (C1/4058's two waits)
     }
     if (decodeOnly || h->ctrPendSlot != slot || h->ctrDecodeF == h->frames) continue;

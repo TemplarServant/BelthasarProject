@@ -50323,7 +50323,7 @@
         "playthrough: 64_to_denadoro DIFFERENT -- locs 087 1F1 08A 1F1 091 | story 5A | party 000102 | gold 2424 | hp 202 (2) | ctrl 3 | end picture 463 px at port -2",
         "playthrough: 65_denadoro SAME -- locs 091 08E 092 08F 093 096 090 094 095 08F 097 | story 5A 5D | party 000102 | gold 4509 | hp 99 (14) | ctrl 31 | end picture 0 px at port +0",
         "playthrough: 66_masa_mune SAME -- locs 097 | story 5D | party 000102 | gold 4509 | hp 217 (4) | ctrl 2 | end picture 0 px at port -2",
-        "playthrough: 67_masa_mune_fight DIFFERENT -- locs 097 1F1 | story 5D 60 | party 000102 | gold 6409 | hp 115 (3) | ctrl 3 | end picture 7919 px at port +3",
+        "playthrough: 67_masa_mune_fight DIFFERENT -- locs 097 1F1 | story 5D 60 | party 000102 | gold 6409 | hp 115 (3) | ctrl 3 | end picture 7919 px at port -2",
         "playthrough: 68_porre DIFFERENT -- locs 1F1 09C 1F1 09D 1F1 | story 60 | party 000102 | gold 3629 | hp 232 (2) | ctrl 3 | end picture 7749 px at port -1",
         "playthrough: 69_hero_medal SAME -- locs 1F1 098 | story 60 66 | party 000102 | gold 3629 | hp 232 (1) | ctrl 3 | end picture 0 px at port -2",
         "playthrough: 70_bent_hilt DIFFERENT -- locs 098 1F1 08C 08D | story 66 69 | party 000102 | gold 3629 | hp 232 (1) | ctrl 13 | end picture 405 px at port +0",
@@ -50358,7 +50358,7 @@
         "playthrough: 99_kino DIFFERENT -- locs 12B 1AE 12E 1AE 12B | story 93 96 97 98 | party 000501 | gold 12154 | hp 237 (3) | ctrl 9 | end picture 33152 px at port +5",
         "playthrough: 100_lair_grind DIFFERENT -- locs 12B 12E 12A 131 12E 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 | story 98 | party 000501 | gold 12154 | hp 301 (8) | ctrl 57 | end picture 54016 px at port +0",
         "playthrough: 101_ioka_rest DIFFERENT -- locs 130 12A 12E 131 12A 12E 12B 1F3 113 1F3 116 1F3 115 | story 98 | party 000501 | gold 2954 | hp 415 (2) | ctrl 9 | end picture 5 px at port -2",
-        "playthrough: 102_nizbel DIFFERENT -- locs 115 1F3 12B 12E 12A 131 12E 12A 130 | story 98 | party 000501 | gold 2954 | hp 172 (5) | ctrl 7 | end picture 33127 px at port +0",
+        "playthrough: 102_nizbel SAME -- locs 115 1F3 12B 12E 12A 131 12E 12A 130 | story 98 | party 000501 | gold 2954 | hp 172 (5) | ctrl 7 | end picture 0 px at port -3",
         "playthrough: 103_lever_rest DIFFERENT -- locs 130 12E 12A 12F 12A 12E 130 12A 12E 131 12A 12E 12B 1F3 12B 1F3 116 | story 98 | party 000501 | gold 2954 | hp 415 (3) | ctrl 11 | end picture 53074 px at port +0",
         "playthrough: 104_black_tyrano DIFFERENT -- locs 116 1F3 12B 12E 12A 131 12E 12A 130 12E 12A 12C 12D 1F3 105 1F3 133 | story 98 99 | party 000501 000181 000105 | gold 2954 | hp 363 (5) | ctrl 9 | end picture 55283 px at port +0",
         "playthrough: 105_zeal DIFFERENT -- locs 133 15F 1F4 151 1F4 161 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 149 191 192 148 192 191 149 191 14A 14B 14A 191 149 14C 14D 15F 133 1F2 0F1 133 | story 99 40 99 9F A2 A5 A8 40 A8 | party 000105 | gold 2954 | hp 1 (3) | ctrl 38 | end picture 54016 px at port +0",
@@ -50379,7 +50379,7 @@
         "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37890 px at port +0",
-        "playthrough: 76/137 legs SAME"
+        "playthrough: 77/137 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"

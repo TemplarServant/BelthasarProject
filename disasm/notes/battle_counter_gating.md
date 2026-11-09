@@ -380,3 +380,16 @@ cartridge's `$B3AC` at the close (f112859) is 05 FF FF FF. The port kept 05 05 0
 block 2 at the attack's close (`$5E10` = 05 at port f112884) and its walk moved the enemy 32 px: the next tech's slide
 (op 12 0C) aimed 32 px short and the action ran 4 frames short. battle.c battleTail881C: the eval and the clear, at every
 place the port reaches C1/881C (an enemy's span end, the handler's tail, the counter loop's end).
+
+### 8.7 A decoded counter runs C1/4058 on its decode frame (2026-11-09)
+
+C1/4058 `INC $A0FD / JSL CC/F06B / JSR C1/007E ... JSR C1/007E / JSR C1/10FA / INC $A013` (C1/4058-40A6): the action
+state's wipe comes two waits before the window's `$A013`. CC/F06B's CC/F0E6 `STZ $9931` restarts the frame-service
+count whose every fourth frame requests a C1/10FA menu pass (CF/E73B-E745), so the wipe's frame sets the phase of the
+menu passes for the whole action. MEASURED, the rule's cartridge, the playthrough's leg 102 (Nizbel's reptites): f6336 an
+action closes (C1:41BD) and enemy 4's counter decodes; `$9931` restarts on that frame (CC:F0E9), `$A013` rises at f6338
+(C1:40A9); the menu passes then fall on f6408, 6412, ... (`$95D5` from C1/058D), and a Left held from f6405 switches the
+chooser at f6412. The port wiped at the counter window's open (battleOpenAction, two frames later): its passes ran two
+frames early, the chooser switched at f6410, and the alignment's warp there put the rest of the fight a frame or two off
+(the HP chain diverged). battle.c: battleOpenWipe at the counter's decode (and after its message box), and
+battleOpenAction skips its own wipe when C1/4058 already ran (actOpenWiped), as battleArrive and battleDispatchOpen do.
