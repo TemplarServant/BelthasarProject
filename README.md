@@ -102,9 +102,14 @@ It is **not yet verified playable from start to finish**.
   vendored LakeSnes core remains the oracle, the sound's reference (`CT_AUDIO_SPC=ref`) and the in-game lockstep
   (`CT_FIELDLOCK`); the translated programs in `src/xlat/` are `ct.exe`'s references only (`--xlatcmp`).
 - **Open divergences.** A list of known differences from the cartridge (a few frames of timing in some battle
-  exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine).
+  exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine). Timing that
+  comes from the SNES's limits -- the battle exit's release following the sound uploads' pace, and the random rolls it
+  moves -- are not reproduced, by the owner's decision of 2026-11-07 ([CLAUDE.md](CLAUDE.md)).
 - **The playthrough is graded only partway.** `tools/playthrough.py` grades one route against the cartridge leg by
-  leg from New Game to Crono's return at the summit of Death Peak (137 legs); how many legs are identical to the cartridge today is kept in [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
+  leg from New Game to Crono's return at the summit of Death Peak (137 legs). Each leg that differs is traced to the
+  ROM and either fixed or classed as timing, in [disasm/notes/playthrough_leg_ledger.md](disasm/notes/playthrough_leg_ledger.md);
+  the later legs are still being triaged there. Nothing past the summit is graded. How far this reaches is kept in
+  [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
 
 ## Quick start
 
