@@ -60,6 +60,10 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 
 | 104 black tyrano | DIFFERENT (port: end dump missed) | SYNC-ONLY, 4 warps [f12816-1 f17200-2 f19023+1 f42448+1], end regions same | **timing**: two fight exits (`$95D5` -> 80), two load fade-ins (`$0119` 00 -> 01) |
 
-**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-99 and 102-104 closed above):
-100, 105, 107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
+| 105 zeal | DIFFERENT (loc) | with the fixes: **SAME**; SYNC-ONLY, 13 warps [f1728+1 f6098+1 f6643+1 f8421+1 f8778+1 f11047+1 f11980+1 f13651+1 f16802+1 f22043+2 f27597-1 f49416+1 f51290+1] (load fade-ins and world loads), end regions same | **FIXED (two port bugs)**: (1) loc 185's map has an RLE plane that reads on past its packet through `$2180` (C0/A521): the walk refused it and a median priced 26 black frames for 34 (4492a63, field_load_cost.md sec. 18); (2) the world entrance is taken on the lead's input frame with A HELD (C2/3577 -> 35E5), the port took A's first frame only, which fell inside the step onto the skyway (eb4c209, menu2_overworld_entry.md 2.3.1) |
+
+| 100 lair grind | DIFFERENT (picture, stats) | with the fixes: SYNC-ONLY, 35 warps (16 load fade-ins, 16 fight exits `$95D5` -> 80, 3 fights' first windows `$95D5` 80 -> 00), end regions same | **FIXED (four port bugs)**: (1) C1/881C ends with C1/AC46: the target lists back to FF after every pass (dba6ad9) -- a tech's victims stayed behind a physical attack's target and armed a false counter, whose walk shortened an action by 4 frames; (2) op D9's ring reset is op DA's and a follower below its object advances first (dc3da14) -- Marle and Lucca staged 1 px low, an effect a frame long; (3) a decoded counter's C1/4058 on its decode frame (1aec7ef); (4) Ayla's weapon is 0x44 + level / 24 at every boot (C1/FABE, 00db969) -- the end stats' `$27B9` 45/44 and `$27D5` 19/14 |
+
+**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-105 closed above):
+107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
 reads zeros -- its end dump missed, i.e. the port never reached the leg's last frame on a field: to be seen leg by leg.)
