@@ -52,6 +52,8 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 
 | 97 dactyl nest | DIFFERENT (port: end dump missed) | with the fix: **SYNC-ONLY after 0 warps**, end regions same; the pinned cmp SAME | **FIXED (port bug)**: the battle pose machine C1/424C publishes a combatant's window from the tables the staging laid (C1/4283-42C9: `$96DB/$A214`, `$966E`, `$A2C8`, `$A1FE,Y`) and never reads the alive list `$AF02`; the port took the enemy id from `$AF02` and stopped the window on FF. Slot 6 (id 61) attacks at f2382 off the list (`$AF02+6` = FF since f2359): the cartridge publishes its anim 03 at f2386, which takes the publish slot the victim's `06 03` then waits a frame for; the port's victim went a frame early, and every later window with it. battle.c battleAscPoseTick reads the staged id (`$AF0D`) |
 
-**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-93 closed above): 99,
+| 99 kino | DIFFERENT (picture) | SYNC-ONLY, 4 warps [f3958+1 f6460+1 f10880-1 f14979+1], end regions same | **timing**: three fight exits (`$95D5` -> 80) and a fade-in |
+
+**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-99 closed above):
 100, 102, 103, 104, 105, 107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
 reads zeros -- its end dump missed, i.e. the port never reached the leg's last frame on a field: to be seen leg by leg.)
