@@ -12113,8 +12113,13 @@ static void battleAscPoseTick(CtBattleHost* h) {
     if (ch & 0x80) { h->ascPmMode[cmb] = 0; return; }                           // empty party slot
     id = -1 - ch; facing = BT_PCFACING(h, cmb) & 3;
   } else {
-    id = s[0xAF02 + (cmb - 3)];
-    if (id == 0xFF) { h->ascPmMode[cmb] = 0; return; }                          // the seat died mid-window
+    // The pose tables are the combatant's own, laid at the staging (C1/4283-42C9: the facing latch $96DB/$A214, $966E,
+    // $A2C8 and the pointer pair $A1FE,Y): nothing here reads the alive list $AF02. So a combatant off that list still
+    // plays its window -- playthrough leg 97, slot 6 (id 61) acts at f2382 with $AF02+6 = FF since f2359, and the
+    // cartridge publishes its anim 03 at f2386 (`$A21F` -> 0A), which takes the publish the victim's `06 03` then waits
+    // a frame for. The port names the tables by the staged id ($AF0D), FF only where no enemy was staged.
+    id = s[0xAF0D + (cmb - 3)];
+    if (id == 0xFF) { h->ascPmMode[cmb] = 0; return; }                          // no enemy staged in the slot
     facing = BT_ENFACING(h, cmb - 3) & 3;
   }
   h->ascPmCur[cmb] = (h->ascPmCur[cmb] + 1) & 0xFF;                             // C1/42B0

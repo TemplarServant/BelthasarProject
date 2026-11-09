@@ -50353,7 +50353,7 @@
         "playthrough: 94_ozzie_barrier SAME -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 0 px at port -6",
         "playthrough: 95_magus DIFFERENT -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 11 px at port -1",
         "playthrough: 96_laruba DIFFERENT -- locs 113 1F3 124 | story 8D 8E | party 000401 | gold 12154 | hp 322 (1) | ctrl 5 | end picture 813 px at port -1",
-        "playthrough: 97_dactyl_nest DIFFERENT -- locs 124 1F3 125 126 127 1F3 147 | story 8E 90 93 | party 000401 008181 000581 000501 | gold 12154 | hp 164 (3) | ctrl 13 | end picture 54481 px at port +0",
+        "playthrough: 97_dactyl_nest SAME -- locs 124 1F3 125 126 127 1F3 147 | story 8E 90 93 | party 000401 008181 000581 000501 | gold 12154 | hp 164 (3) | ctrl 13 | end picture 0 px at port +0",
         "playthrough: 98_tyrano_lair_door SAME -- locs 147 1F3 12B | story 93 | party 000501 | gold 12154 | hp 164 (1) | ctrl 1 | end picture 0 px at port -2",
         "playthrough: 99_kino DIFFERENT -- locs 12B 1AE 12E 1AE 12B | story 93 96 97 98 | party 000501 | gold 12154 | hp 237 (3) | ctrl 9 | end picture 33152 px at port +5",
         "playthrough: 100_lair_grind DIFFERENT -- locs 12B 12E 12A 131 12E 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 | story 98 | party 000501 | gold 12154 | hp 301 (8) | ctrl 57 | end picture 54016 px at port +0",
@@ -50379,7 +50379,7 @@
         "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37890 px at port +0",
-        "playthrough: 75/137 legs SAME"
+        "playthrough: 76/137 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
