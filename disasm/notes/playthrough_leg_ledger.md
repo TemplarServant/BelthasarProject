@@ -54,6 +54,12 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 
 | 99 kino | DIFFERENT (picture) | SYNC-ONLY, 4 warps [f3958+1 f6460+1 f10880-1 f14979+1], end regions same | **timing**: three fight exits (`$95D5` -> 80) and a fade-in |
 
-**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-99 closed above):
-100, 102, 103, 104, 105, 107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
+| 102 nizbel | DIFFERENT (hp, picture) | with the fixes: **SAME**; SYNC-ONLY, 3 warps [f357+1 f15210-1 f19212+1] (a load, two fight exits), end regions same | **FIXED (two port bugs)**: (1) op D9's ring reset (C0/327D) is op DA's and a follower below its object advances first (dc3da14; party_follower_ring.md 2026-11-09) -- two enemy actions had run 2 and 1 frames long on PCs staged 1 px low; (2) a decoded counter runs C1/4058 on its decode frame (1aec7ef; battle_counter_gating.md 8.7): CC/F0E6's `$9931` restart sets the counter's menu-pass phase, which the port put two frames early, so a held Left switched the chooser at f6410 for f6412 |
+
+| 103 lever rest | DIFFERENT | SYNC-ONLY, 6 warps [f1719+1 f7513+1 f11031-1 f12537+1 f13659-1 f14784+1], end regions same | **timing**: four load fade-ins (`$0119` 00 -> 01), a fight exit (`$95D5` -> 80), a load (1F3) |
+
+| 104 black tyrano | DIFFERENT (port: end dump missed) | SYNC-ONLY, 4 warps [f12816-1 f17200-2 f19023+1 f42448+1], end regions same | **timing**: two fight exits (`$95D5` -> 80), two load fade-ins (`$0119` 00 -> 01) |
+
+**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-99 and 102-104 closed above):
+100, 105, 107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
 reads zeros -- its end dump missed, i.e. the port never reached the leg's last frame on a field: to be seen leg by leg.)
