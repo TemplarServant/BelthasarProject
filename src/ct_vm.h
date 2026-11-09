@@ -169,6 +169,9 @@ int CtSceneLeadScriptPlaced(const CtScene* sc, int obj, double* x, double* y);  
 // Trail the active-party followers (move mode 1/2) behind the lead: the ROM's velocity ring, run in each
 // follower's op 0xB0 visit. CtSceneTick calls it after the runner. No-op when the party has no follower.
 void CtSceneUpdateFollowers(CtScene* sc);
+// A host that places the lead instead of running his script (--followtest) says whether his op B0 ran this frame
+// (C0/3040 -> 9E29, the push's gate); the VM host never calls it (its runner arms g_leadTk itself).
+void CtSceneHostLeadB0(CtScene* sc, int ran);
 // C0/597D: re-run one object's init function (fn0) and reset its script state, the respawn the post-menu
 // reconcile C0/1A03 performs, so the PC loader in fn0 re-reads the party and re-derives this object's slot
 // ($1100,X) and sprite. Rewrites its entry in the $0197/$0199/$019B slot -> object table. The caller owns

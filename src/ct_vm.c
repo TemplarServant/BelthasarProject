@@ -5965,6 +5965,7 @@ static void ctFollowerAnimArm(CtScene* sc, int o, int cur, int advanced) {
   if (ty & 0x80) ty = ((ty ^ 0xFF) + 0x21) & 0xFF;            // 9FC3 BPL / 9FC5 EOR #FF / CLC / ADC #21
   CtAnimDispatch9FF7(w, rom, romLen, y, (ty | sh) & 0x7E);    // 9FCA ORA $DB / AND #7E / TAX / JSR ($9FF7,X)
 }
+void CtSceneHostLeadB0(CtScene* sc, int ran) { (void)sc; g_leadTk = ran ? 1 : -1; }
 void CtSceneUpdateFollowers(CtScene* sc) {
   int lead = sc->playerObj;
   if (lead < 0 || lead >= sc->nobj || !sc->actors[lead].hasPos) return;
@@ -5999,13 +6000,14 @@ void CtSceneUpdateFollowers(CtScene* sc) {
   // CtPlayerControl (the C0/881E port).
   int leadMoving = (w[0x1D32] | w[0x1D33]) != 0;        // A275 LDA $1D32 / ORA $1D33 / BEQ: the threshold's
                                                         // test only
-  // The push's own gate is that the lead actually moved, a different test (dossier sec. 5a). The push is entered
-  // by a branch whose condition is not decoded; measured, a frame with a nonzero velocity on which the lead did
-  // not move pushes nothing.
+  // The push's gate, decoded: C0/3040 (the lead's op B0: `LDA #01 / STA $1A01,X / JSR C0/9E29`) -> 9E29 `JSR C0/9E84`,
+  // 9E2C `LDA $1D32 / BNE ->9E3F`, 9E31 `LDA $1D33 / BNE ->9E42`, else `STZ $1900,X / STZ $1980,X / RTS`. So the push is
+  // the velocity at the lead's B0 visit -- not whether his position moved this frame: the integrate C0/AA07 comes later
+  // in the iteration, and a wait between them splits the two across frames (playthrough leg 95, 1BF f38: the push at the
+  // B0, a ten-frame song wait inside a later object's visit, the step at f49). The lead's B0 this pass = g_leadTk.
   int lp0 = (int)(sc->fx[lead] * 16.0), lp1 = (int)(sc->fy[lead] * 16.0);
-  int leadStepped = !sc->folLeadSeen || lp0 != sc->folLeadP[0] || lp1 != sc->folLeadP[1];
   sc->folLeadP[0] = lp0; sc->folLeadP[1] = lp1; sc->folLeadSeen = 1;
-  if (leadMoving && leadStepped) {
+  if (leadMoving && g_leadTk != -1) {
     int h = (w[0x01AB] + 1) & 0x7F;                     // 9E42 INC A / AND #7F
     w[0x01AB] = (uint8_t)h;
     w8(sc->mem, 0x7F0C00 + h, w[0x1D32]);  w8(sc->mem, 0x7F0C80 + h, w[0x1D33]);

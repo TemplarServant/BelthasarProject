@@ -43,11 +43,13 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 | 88 porre shopping | GAMEPLAY-SAME | -- | timing |
 | 93 ozzie way | DIFFERENT (picture; pinned) | with the three fixes: SYNC-ONLY, 6 warps [f51737+1 f60844+1 f91416-1 f93707-1 f97134-2 f100223-1] -- every one a fight's exit (`$95D5` -> 80), end regions same | **FIXED x3, then timing**: (1) 0A7 f25869, an op 0xDA reset the follower ring after follower obj 2's own B0 had advanced on the old cursors (ct_vm.c g_daObj, 52402e0); (2) the equip menu's list slide left `$22-$27` in the direct page and `$27` is the battle's iteration counter, so Crono's first box came a menu pass early (field.c menuEqSlideDp, a696d14); (3) a removed battle enemy keeps its step in flight -- C0/07F3 clears no mover -- obj 19 on 1BE stepped at f87861 (CtSceneBattleRemoveObj, 2c60584). What is left is the battle-exit fade lattice |
 | 94 ozzie barrier | GAMEPLAY-SAME | -- | timing |
+| 95 magus | DIFFERENT (port: end dump missed) | with the fix: SYNC-ONLY, 3 warps [f1270+1 f83984-2 f85154-1], end regions same | **FIXED (port bug)**: 1BF's opening walk -- the lead's B0 pushes the ring before a ten-frame song wait and the step comes after it; the port gated the push on the lead having moved and cleared `$1D32` during the wait, so the ring lost an entry and both followers ran a frame behind (the opening's -4/-2/+2 warps). The push's gate decoded (C0/9E29) and `$1D32` kept while parked (party_follower_ring.md, 2026-11-08). Left: f83984-2 (a mid-fight window, seat 2) -- to look at; f1270 and f85154 a fight's start and a fade-in |
 | 96 laruba | GAMEPLAY-SAME | -- | timing |
 | 101 ioka rest | GAMEPLAY-SAME | -- | timing |
 | 106 end of time | GAMEPLAY-SAME | -- | timing |
+| 113 algetty shop | (pinned SAME; DIFFERENT since the ring fix: end picture 549 px at +6) | fix build: DIVERGES -- every event from f8021 12 frames early, the menu's return | **OPEN (exposed)**: with the ring fix the port's state equals the cartridge's (the ring, and the shop menu's stashed object page `$7F:2EF2..` -- the old build's was one entry and 2-4 px off for 1706 frames); yet the menu's return (an NMI-off stretch the port prices by its cost model) now ends 12 frames early (f8009 against f8021; the picture after it identical, shifted). The old build's wrong page happened to price right. Next |
 | 115 dalton | GAMEPLAY-SAME | -- | timing |
 
-**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-93 closed above): 95, 97, 99,
+**Open, in route order** (GAMEPLAY-DIFFERENT, 2026-11-08 triage; 24-93 closed above): 97, 99,
 100, 102, 103, 104, 105, 107, 109, 114, 116, 118, 119, 120, 122. (95, 97, 104, 122: the port's side
 reads zeros -- its end dump missed, i.e. the port never reached the leg's last frame on a field: to be seen leg by leg.)

@@ -17143,8 +17143,13 @@ int main(int argc, char** argv) {
     // The party ring's input (disasm/notes/party_follower_ring.md). C0/9E3F pushes the lead's velocity
     // $1D32/$1D33, and C0/A26B tests those two bytes to decide whether the lead is moving. Only the player
     // controller C0/881E writes them, so a frame without it (a cutscene lock, a textbox, a battle) must show
-    // zero. Clear first; the movement branch below writes the real bytes back.
-    if (f.vm) { uint8_t* lw0 = CtSceneMem7E(f.vm); lw0[0x1D32] = lw0[0x1D33] = 0; }
+    // zero. Clear first; the movement branch below writes the real bytes back. Not while a script's `JSL C7/0004` holds
+    // the loop (CtSceneMainLoopParked): C0/881E does not run there and the bytes keep what it last wrote -- which the
+    // lead's B0 pushed before the wait and what the followers test after it (playthrough leg 95, 1BF: $1D32 stays F0
+    // from f38 to f48 on the cartridge through a ten-frame song wait). (The other frames without C0/881E -- a load's,
+    // the $0117 transfer's -- keep the clear: not measured, and this host moves the lead itself; leg 113 parted when they
+    // kept the bytes too.)
+    if (f.vm && !CtSceneMainLoopParked(f.vm)) { uint8_t* lw0 = CtSceneMem7E(f.vm); lw0[0x1D32] = lw0[0x1D33] = 0; }
     if (!battlePhase && !ctlLocked && !(tbActive && isChoice) && nameId < 0 && !atbGate && !gameOver && !fieldResume && mlBody) {   // movement frozen while the naming
                                                     // screen / the ATB selector is up / after a game-over (input freeze)
       dx = cdx; dy = cdy; prun = crun;

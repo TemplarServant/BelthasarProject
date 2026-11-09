@@ -14813,6 +14813,11 @@ static int runFollowTest(const char* romPath, const char* statePath, const char*
       int oly = (w[0x1880 + lead * 2] | (w[0x1881 + lead * 2] << 8)) >> 4;
       int ofx = (w[0x1800 + fx2] | (w[0x1801 + fx2] << 8)) >> 4;             // oracle follower px
       int ofy = (w[0x1880 + fx2] | (w[0x1881 + fx2] << 8)) >> 4;
+      // The lead's B0 (the push's gate, C0/9E29) is not run here: his script does not run. The visit is read off the
+      // oracle's own lead -- his word moved this frame -- which is what a walk's B0 visit leaves (follower_ring sec. 5a).
+      { static int pwx = -1, pwy = -1;
+        int wx = w[0x1800 + lead * 2] | (w[0x1801 + lead * 2] << 8), wy = w[0x1880 + lead * 2] | (w[0x1881 + lead * 2] << 8);
+        CtSceneHostLeadB0(sc, pwx < 0 || wx != pwx || wy != pwy); pwx = wx; pwy = wy; }
       CtSceneSetActorPos(sc, lead, olx, oly);                                // force our lead to match
       // ...and hand our ring the lead's velocity from the oracle too: C0/9E3F pushes $1D32/$1D33 and C0/A26B
       // tests them for "is the lead moving", and the lead here is placed, not walked. $1D2C/$1D2D (the

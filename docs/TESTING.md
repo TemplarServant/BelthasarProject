@@ -2443,7 +2443,8 @@ away with the box up; when the camera's top row reaches the chest's, the arm wri
 ramps it out. Two lines grade the arm: the cartridge's `$0129` timeline (`--monitor 0129 --diff`, 0D at f280, 00 at
 f291) and the port's (CT_TBTRACE, 0D at f281, 00 at f292: the +1 key alignment every earlier edge shows). The rest are
 the whole picture f1-320 at P + 2 with their residuals PINNED (the chest box's typewriter and ramps -- the cartridge
-draws it with C2/0003 --, a 1-px camera X while the lead stands at a wall, Marle's follower sprite): re-pin only when
+draws it with C2/0003 --, a 1-px camera X while the lead stands at a wall; Marle's follower sprite was one of them until
+2026-11-08, when the ring push's decoded gate and the song wait's kept `$1D32` made f246-320 identical: 230 -> 305/320): re-pin only when
 one of them is fixed, after checking the frames against the cartridge. Mutations: the store, the 2753 branch, the tile
 back in the collision RAM.
 ### lockstep-box-y-flips-the-window-vs-oracle / field-textbox-y-flip-and-menu-rerequest
