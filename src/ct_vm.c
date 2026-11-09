@@ -2412,6 +2412,24 @@ static int g_daRingPend = 0;
 static int g_daObj = -1;                   // the object whose op 0xDA reset the ring in this pass (-1: none)
 static uint8_t g_daPreAC, g_daPreAD;       // $01AC / $01AD before the reset
 static int g_daSaveIdx = -1; static uint8_t g_daSave[3];   // the entry the reset zeroed ($7F0C00/0D00/0F00 at the head)
+// The ring reset itself, op 0xDA's C0/347D-3496 and op 0xD9's C0/327D-3296 (the same bytes): both cursors := the head
+// $AB, and the head's entry zeroed in the velX / pre-adjust-X / shape rows (each `STA` twice, raw `9F 00 0C 7F`: the
+// 0C80 / 0D80 rows are left). `obj` is the object whose visit runs it: the pass's first reset is recorded for the
+// followers below it (g_daObj), and the head it copies includes this frame's push when the lead's B0 came first
+// (g_daRingPend). Playthrough leg 100, 12A f115613: op D9's reset in a later object's visit, after obj 2's A26B advanced
+// $01AC 3F -> 40 and took that entry's step (y -1 px, C0:AB42) -- the port's follower saw the reset and stood, and the
+// party entered the fight 1 px lower (`$29B0` fineY 0E for 0D: every effect aimed at Marle or Lucca 1 px off).
+static void ctRingReset(Mem* m, int obj) {
+  unsigned hd = r8(m, 0x7E01AB) & 0xFF;
+  if (g_daObj < 0) {                                  // the first reset of the pass: what a follower below it saw
+    g_daObj = obj; g_daPreAC = r8(m, 0x7E01AC); g_daPreAD = r8(m, 0x7E01AD);
+    g_daSaveIdx = (int)hd;
+    g_daSave[0] = r8(m, 0x7F0C00 + hd); g_daSave[1] = r8(m, 0x7F0D00 + hd); g_daSave[2] = r8(m, 0x7F0F00 + hd);
+  }
+  w8(m, 0x7E01AC, hd); w8(m, 0x7E01AD, hd);
+  w8(m, 0x7F0C00 + hd, 0); w8(m, 0x7F0D00 + hd, 0); w8(m, 0x7F0F00 + hd, 0);
+  if (g_leadTk != -1) g_daRingPend = 1;
+}
 static int g_leadDefer, g_leadDeferTick; static double g_leadDeferX, g_leadDeferY;   // a busy lead's step (below)
 static int g_leadFromOk, g_leadFromTick; static double g_leadFromX, g_leadFromY;
 static int gVmTick;                        // trace timestamps (and the step origin's frame)
@@ -3179,17 +3197,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
       //   3486  STA $7F0C00,X / 348A STA $7F0C00,X  raw bytes 9F 00 0C 7F twice: the velX row, not 0C80
       //   348E  STA $7F0D00,X / 3492 STA $7F0D00,X  raw bytes 9F 00 0D 7F twice: the preX row, not 0D80
       //   3496  STA $7F0F00,X                      the shape row
-      { unsigned hd = r8(m, 0x7E01AB) & 0xFF;
-        if (g_daObj < 0) {                                  // the first reset of the pass: what a follower below it saw
-          g_daObj = obj; g_daPreAC = r8(m, 0x7E01AC); g_daPreAD = r8(m, 0x7E01AD);
-          g_daSaveIdx = (int)hd;
-          g_daSave[0] = r8(m, 0x7F0C00 + hd); g_daSave[1] = r8(m, 0x7F0D00 + hd); g_daSave[2] = r8(m, 0x7F0F00 + hd);
-        }
-        w8(m, 0x7E01AC, hd); w8(m, 0x7E01AD, hd);
-        w8(m, 0x7F0C00 + hd, 0); w8(m, 0x7F0D00 + hd, 0); w8(m, 0x7F0F00 + hd, 0); }
-      // ...and the head it copies includes this frame's push when the lead's B0 visit came first (the lead heads
-      // the queue); the port pushes later, so the reset is re-applied behind the push (g_daRingPend).
-      if (g_leadTk != -1) g_daRingPend = 1;
+      ctRingReset(m, obj);
       s->addr = nxt;                                       // 349A LDX $C7 / 349C INX / 349D SEC
       return 0;
     }
@@ -3286,9 +3294,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     int ph = r8(m, 0x7F03FC);                                       // 326E LDA $7F03FC / BEQ ->32C8
     if (ph != 0) {
       if (ph < 4) return 1;                                        // 3274 CMP #04 / BCS / 3278 TYX / CLC: park
-      { unsigned hd = r8(m, 0x7E01AB) & 0xFF;                      // 327D LDA $AB / STA $AC / STA $AD / TAX
-        w8(m, 0x7E01AC, hd); w8(m, 0x7E01AD, hd);                  //   (the same ring reset as op 0xDA's 347D)
-        w8(m, 0x7F0C00 + hd, 0); w8(m, 0x7F0D00 + hd, 0); w8(m, 0x7F0F00 + hd, 0); }   // 3286-3296
+      ctRingReset(m, obj);                                         // 327D-3296: the same ring reset as op 0xDA's 347D
       for (int k = 0; k < 3; k++) {                                // 329A / 32A4 / 32AE
         int v = r8(m, 0x7E0000u + (uint32_t)slotDp[k]);
         if (v & 0x80) continue;                                    //   BMI: the slot is empty

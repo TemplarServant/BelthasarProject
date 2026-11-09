@@ -421,3 +421,14 @@ keeps its own entry). Verified: `$01AB-$01AD` and obj 2's X equal on both sides 
 ## 2026-11-08 -- the push's gate, decoded (sec. 5a closed), and the velocity a song wait keeps
 
 C0/3040 (the lead's op B0: `LDA #01 / STA $1A01,X / JSR C0/9E29`) -> 9E29 `JSR C0/9E84`, 9E2C `LDA $1D32 / BNE ->9E3F`, 9E31 `LDA $1D33 / BNE ->9E42`, else `STZ $1900,X / STZ $1980,X / RTS`. The push is the velocity at the lead's B0 visit. Sec. 5a's measured frame (velocity nonzero, the lead not moving, no push) is a frame his B0 did not run; the integrate C0/AA07 comes later in the iteration, so a wait between them parts the push from the step. MEASURED, the rule's cartridge, playthrough leg 95 (1BF): the push at f38 (C0:9E49), a ten-frame song wait inside a later object's visit, the lead's step at f49 (C0:AB28); and through the wait `$1D32` stays F0 (C0/881E does not run while the loop is parked). Leg 113 f295-299 the same. ct_vm.c pushes on g_leadTk (the lead's B0 this pass) and field.c keeps `$1D32/$1D33` while CtSceneMainLoopParked; --followtest, whose lead is placed and runs no script, reports the visit from the oracle's own lead word (CtSceneHostLeadB0). Verified: the ring and the menu's stashed object page equal the cartridge's through leg 113 (the old proxy left the head one entry behind for 1706 frames).
+
+## 2026-11-09 -- op 0xD9's reset is the same reset, in the same order (playthrough leg 100)
+
+Op D9 (MOVEPARTY, C0/326C) ends its later visit with the bytes of op DA's reset: C0/327D `LDA $AB / STA $AC / STA $AD`,
+3286-3296 the head's entry zeroed (writer `C0:3283` on `$01AC`). It runs in a script object's visit, so a follower below
+that object has already taken its conga this frame. MEASURED, the rule's cartridge, leg 100 (12A) f115613: the lead's
+scripted walk ends f115609, obj 2's A26B advances `$01AC` 3E, 3F, then 3F -> 40 on the reset's own frame and moves y
+-1 px (C0:AB42, `$1880` 1FE1 -> 1FD1); the reset then sets the cursors to 54. The port recorded only op DA's reset for
+the followers (g_daObj), so its follower saw D9's reset and stood: the party went into the fight with Marle and Lucca
+1 px lower (`$29B0` fineY 0E for 0D, C0/0430), every effect point resolved on them 1 px lower ($A2B0/$A2B2), and an
+enemy's action ran a frame longer (the warp at f117097). ct_vm.c ctRingReset: one reset for both ops, recorded the same.
