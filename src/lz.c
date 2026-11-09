@@ -365,7 +365,14 @@ long ct_map_build_cycles(const uint8_t* m, size_t len) {
 // copies and RLE plane; C0/A66B's $7E:7080 fill (63 MVNs of 64 bytes) and the $E5:0000 list of 7-byte entries
 // (count bit 7 = a column, C0/A6DC; a row's `AND $1E` at C0/A6C7 is 16-bit on its first pass only); the vector's
 // JMP (18). disasm/notes/field_load_cost.md sec. 9.
-long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
+long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) { return ct_map_load_cycles_w(rom, romLen, loc, NULL); }
+// ...with the WRAM the load runs on: C0/A33B decompresses the map to $7E:B500 (A352-A363) and C0/A521 reads its planes
+// through the WRAM port ($2180, C0/A5F0..), whose 17-bit address only counts up -- so an RLE plane whose stream ends before
+// its rows do goes on reading the bytes after the packet, what earlier loads left there. MEASURED, the rule's cartridge,
+// playthrough leg 105 (Zeal): loc 185's map (id BF, 14480 bytes, three 64x64 planes) runs its RLE plane past $7E:EE90 into
+// the world map's EE 00 leftovers -- C0/A550-A647 from f8219 to f8225 -- and the load lasts 8 frames more than the port's
+// stand-in priced it. `wram` (131072 bytes, $7E:0000 first) lets the walk read on; NULL refuses as before.
+long ct_map_load_cycles_w(const uint8_t* rom, size_t romLen, int loc, const uint8_t* wram) {
   if (!rom || loc < 0 || loc > 511) return -1;
   const size_t REC = 0x360000u + (size_t)loc * 14;
   if (REC + 14 > romLen) return -1;
@@ -410,14 +417,16 @@ long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc) {
     int row = 0, col = 0, done = 0;
     k += 282;
     while (!done) {
-      if (p >= len || ((m[p] & 0x80) ? p + 4 : p + 3) > len) { k = -1; goto out; }   /* a literal 3 bytes, a run 4 */
-      int b = m[p];
+#define MB(i) ((size_t)(i) < len ? (int)m[(i)] : (int)wram[(0xB500u + (unsigned)(i)) & 0x1FFFFu])
+      if (!wram && (p >= len || ((m[p] & 0x80) ? p + 4 : p + 3) > len)) { k = -1; goto out; }   /* a literal 3 bytes, a run 4 */
+      if (p > 0x20000) { k = -1; goto out; }               /* (a guard: the port's address wraps long before) */
+      int b = MB(p);
       k += 24;
       int adv = 0;
       if (!(b & 0x80)) { k += 156; p += 3; adv = 1; }
       else {
         k += 288;
-        int ln = m[p + 3], y;
+        int ln = MB(p + 3), y;
         p += 4;
         if (ln) { k += 30; y = ln; } else { k += 48; y = 0x100; }
         for (;;) {

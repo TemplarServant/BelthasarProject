@@ -40,6 +40,7 @@ const uint8_t* ct_lz_asset(size_t start, size_t* outLen, long* cyc7e, long* cyc7
 long ct_map_build_cycles(const uint8_t* m, size_t len);
 // C0/A33B besides its decompression, walked; -1 where the walk stops.
 long ct_map_load_cycles(const uint8_t* rom, size_t romLen, int loc);
+long ct_map_load_cycles_w(const uint8_t* rom, size_t romLen, int loc, const uint8_t* wram);   // reads past the packet
 
 // The overworld load's packets (bank C2's list, resolved through the world header at $C6:FD00 + world*2)
 // and their decompression cost. `srcOut` gets each 24-bit source, `dstOut` its destination bank ($7E/$7F).

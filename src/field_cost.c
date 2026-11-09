@@ -863,7 +863,7 @@ static long loadPackets(Walk* c, int loc) {
     uint8_t* img = (uint8_t*)malloc(0x20000);
     if (img) {
       size_t len = ct_lz_decompress_bounded(c->rom, (size_t)c->romLen, img, 0x20000, (size_t)mo);
-      long wk = ct_map_load_cycles(c->rom, (size_t)c->romLen, loc);
+      long wk = ct_map_load_cycles_w(c->rom, (size_t)c->romLen, loc, c->w);   // the WRAM the planes read on
       if (wk >= 0) k += wk; else if (len) k += ct_map_build_cycles(img, len); else unpriced(c, "map build");
       if (wk < 0) unpriced(c, "map build: header bytes 2-3 (C0/A463 / C0/A4B3)");
       free(img);

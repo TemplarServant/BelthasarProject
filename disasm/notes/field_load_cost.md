@@ -890,3 +890,16 @@ where the odd arm runs C0/7C45's half row, 418, and two BRLs). Traced on the Tyr
 
 The pass's remainder PASS_REST (874,897) is the mean of three traces' remainders once the walked legs are taken out:
 874,914 / 874,876 / 874,902 on loc $082 / $005 / $078; the spread is the DMA legs' sync to the master clock.
+
+## 18. A map's RLE plane reads on past its packet (2026-11-09)
+
+C0/A33B decompresses the map to `$7E:B500` (A352-A363 `$0303 = B500`, `$0305 = 7E`) and C0/A521 reads its planes through
+the WRAM port (`LDA $2180`, C0/A5F0 ...), whose 17-bit address only counts up. An RLE plane whose stream ends before its
+rows do therefore goes on reading the bytes after the packet -- whatever earlier loads left in `$7E:B500 + len` on.
+MEASURED, the rule's cartridge, playthrough leg 105 (Zeal): loc 185's map (id BF, 14480 bytes, three 64x64 planes, header
+FF 8F) runs its RLE plane past `$7E:EE90` into the world map's `EE 00` leftovers -- C0/A550-A647 from f8219 to f8225 --
+and the black lasts to the ramp at f8236. ct_map_load_cycles refused such a map ("NOT WALKED: map build: header bytes 2-3",
+a misnamed refusal: it was the RLE stream's end) and ct_map_build_cycles' median stood in: 26 frames for the cartridge's
+34. lz.c ct_map_load_cycles_w reads on in the walk's WRAM image (the port's, equal to the cartridge's there: `$7E:EE90..`
+holds `EE 00` on both sides at f8199); scene 389 now prices 11,941,979 cycles = 34 frames and its ramp lands on the
+cartridge's frame. Scene 356 (loc 164) was the same case (17 -> 18 frames).
