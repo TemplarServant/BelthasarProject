@@ -699,3 +699,18 @@ vertex i = ($CAFE + $CAD4,X, $CB00 + $CAD6,X) into $CAEA+4i / $CAEC+4i. Then `JM
 the x's with $47 = $CAD4,X, the y's with $47 = $CAD6,X) into $12..$17, `STZ $0020`, `JMP CD/367C`: the triangle filled
 into window pair $CC64 of the buffer being drawn. CD/211B: `TAY / STY $45 / STZ $48`, `REP #20`, d = v - c into $49;
 d >= 0: c + (d * $21 >> 8), else c - (|d| * $21 >> 8), 16-bit into $4B, the low byte returned.
+
+## 2026-11-09 -- three ops Giga Gaia's counter needs (playthrough leg 114)
+
+The program D1/6EEA (tech 86, Giga Gaia's hand's counter, effect 72 / program 7A) runs 373 frames on the rule's cartridge
+(`$CA32` 01 at f38688, 00 at f39061 by CD:16A4). The port stopped it at its first unknown op, 213 frames early, and the fight
+ran apart from there (the party fell at f46719 on the port only).
+- `80 0C` (CD/2A4A -> CD/2B69): a wave into `$0A00..$0AFF` -- for Y = 0..FF, X += 4 (8-bit): CE:F48E[X] * 0C's high byte
+  (`$4202`/`$4203`, `$4217`), negated when X >= 80.
+- `80 0D` (CD/2B64 `JSL D1/F108`): with D = $0A00 the wave added into the window records the display is not reading --
+  `$7C` odd: `$C5A1..`/`$C6A1..` with the second pair from $0A40+X; even: `$C221..`/`$C321..` from $0A20+X; per line (Y += 4,
+  64 lines) W1L/W1R += $0A00+X, W2L/W2R += the second, in both blocks. `ADC` with no CLC throughout: the carry runs on from
+  each add to the next, from 0 (the subop's `ASL`).
+- `C2 a b c0 c1 c2` (CD/1D56, X = a): object a's three radii `$CADA/$CADC/$CADE` += c0/c1/c2 (8-bit), each kept only below the
+  cap b (`CMP $45 / BCS`); six bytes.
+With them the program runs to its end on the port (`$CA32` 00 within a frame of the cartridge's).

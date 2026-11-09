@@ -12119,8 +12119,14 @@ static void battleAscPoseArm(CtBattleHost* h, int cmb, int anim, int mode) {
 // One frame of C1/423A + C1/424C.
 static void battleAscPoseTick(CtBattleHost* h) {
   const uint8_t* s = h->mem;
-  if (!h->composeHeld && h->ascPmBlock > 0) h->ascPmBlock--;                  // $A012: CF/E775 DEC, once/frame
-                                                                                //   (not under CF/E764's $A028)
+  // $A012's two steps down, once a frame each, the first in the NMI's tail, the second in the compose: CF/E481-E48D `LDA $A012
+  // / BEQ / CMP #01 / BEQ -> STZ $A012` -- no gate -- and CF/E764-E775 `LDA $A028 / BNE / LDA $A013 / BEQ / LDA $A012 / CMP #02 /
+  // BNE / DEC`. So a publish's 2 falls to 1 only with `$A028` clear and an action on, and from 1 to 0 regardless. MEASURED, the
+  // rule's cartridge, playthrough leg 114 (Giga Gaia's counter): the last publish f38848 (02), `$A028` rises at f38849 (01 by
+  // CF:E778), f38850 `$A012` = 00 (CF:E490) under `$A028` = 01, so the first publish after `$A028` falls (f39057) is on that
+  // frame. The port's one gated DEC left 1 through the gap and published a frame late, which turned the round-robin over.
+  if (h->ascPmBlock == 1) h->ascPmBlock = 0;
+  else if (!h->composeHeld && s[0xA013] && h->ascPmBlock == 2) h->ascPmBlock = 1;
   for (int c = 0; c < 11; c++) if (h->ascPmDwell[c] > 0) h->ascPmDwell[c]--;   // C1/423C
   int x = h->ascPmRR % 11, found = -1;
   for (int n = 0; n < 11; n++) {                                                // C1/4250 scan
@@ -19582,6 +19588,25 @@ int CtBattleFxProgOpMem(uint8_t* mem, int X, int opAddr) {
   if (battleFleeProgOp(&scratch, X, CtRomByte(rom, 0x400000L, (long)(ROM_BANK_D1 + (opAddr & 0xFFFF))), &p)) return -1;
   return p & 0xFFFF;
 }
+// D1/F108 (program op 80's subop 0D, CD/2B64 `JSL D1F108`): the wave subop 0C built at $0A00 (D = $0A00) added into the
+// window records of the buffer the display is not reading -- `$7C` odd: $C5A1.. and $C6A1.. with the second pair from $0A40+X,
+// even: $C221.. and $C321.. with it from $0A20+X; per line (Y += 4, 64 lines) W1L/W1R += $0A00+X, W2L/W2R += the second,
+// in both blocks; X += 1. Every add is `ADC` with no CLC: the carry runs on from one add to the next, from 0 (the subop's
+// `ASL` cleared it at CD/2A4C).
+static void battleFxWaveAdd(uint8_t* s) {
+  int odd = s[0x7C] & 1;
+  unsigned b0 = odd ? 0xC5A1u : 0xC221u, b1 = odd ? 0xC6A1u : 0xC321u, w2 = odd ? 0x40u : 0x20u;
+  int c = 0;
+  for (unsigned y = 0, x = 0; y < 0x100; y += 4, x++) {
+    const unsigned src[4] = { 0x0A00u + x, 0x0A00u + x, 0x0A00u + w2 + x, 0x0A00u + w2 + x };
+    for (int blk = 0; blk < 2; blk++)
+      for (int k = 0; k < 4; k++) {
+        unsigned a = (blk ? b1 : b0) + y + (unsigned)k;
+        int r = s[a] + s[src[k]] + c;
+        c = r > 0xFF; s[a] = (uint8_t)r;
+      }
+  }
+}
 static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   uint32_t p = (uint32_t)*pp;
@@ -19612,6 +19637,19 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
       if (PB(0) == 0x07) { s[0xCAEC] = (uint8_t)(s[0xCAEC] + 2); s[0xCAF0] = (uint8_t)(s[0xCAF0] - 2); break; }
       if (PB(0) == 0x08) { for (int k = 0; k < 6; k++) s[0xCAE4 + k] = 0; break; }
       if (PB(0) == 0x0E) { battleFxColRamp(s, 0x04); break; }
+      if (PB(0) == 0x0D) { battleFxWaveAdd(s); break; }              // CD/2B64 `JSL D1/F108` (leg 114, D1/8D7A)
+      if (PB(0) == 0x0C) {                                         // CD/2B69: a per-line wave into $0A00..$0AFF (8-bit X, Y):
+        // `LDA #0C / STA $4202`, then for Y = 0..FF: CE:F48E[X] * 0C, the product's high byte ($4217), negated (`EOR #FF /
+        // INC A`) when X >= 80 (`TXA / BPL`); `STA $0A00,Y`, X += 4. MEASURED, the rule's cartridge, playthrough leg 114
+        // (Giga Gaia's counter, tech 86, program D1/6EEA): `80 0C` at D1/6F41; the port stopped the program there (an
+        // unknown op) and its slot went idle 213 frames before the cartridge's (`$CA32` 00 at f39061, CD:16A4).
+        for (int y = 0, x = 0; y < 0x100; y++, x = (x + 4) & 0xFF) {
+          int v = (CtRomByte(rom, 0x400000L, (long)(ROM_FX_TRIG_TBL + (unsigned)x)) * 0x0C) >> 8;
+          if (x & 0x80) v = (-v) & 0xFF;
+          s[0x0A00 + y] = (uint8_t)v;
+        }
+        break;
+      }
       if (PB(0) == 0x06) {                                         // CD/2C98: the triangle's three points, the rotation's seed --
         // `STZ $CAEA / STZ $CAEE / LDA #01 / STA $CAEC / LDA #9F / STA $CAF0 / LDA #50 / STA $CAF4 / LDA #C0 / STA $CAF2`.
         s[0xCAEA] = 0; s[0xCAEE] = 0; s[0xCAEC] = 0x01; s[0xCAF0] = 0x9F; s[0xCAF4] = 0x50; s[0xCAF2] = 0xC0;
@@ -19692,6 +19730,17 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0x8B: return battleFxShapeDraw(h, PB(0));                                           // CD/2FB7
     case 0x87:                                                     // CD/2687: `LDA [$40] / STA $CA25 / INC $CA24`
       s[0xCA25] = PB(0); s[0xCA24]++; break;                       //   the staged byte and its request counter
+    case 0xC2: {                                                   // CD/1D56 (X = a, 16-bit): object a's three radii stepped
+      // under a cap: `$45` = b; for i = 0..2 `LDA $CADA+2i,X / CLC / ADC [$40],Y / CMP $45 / BCS skip / STA` (the 8-bit sum
+      // kept only below the cap); `$40 += 4` and the runner's INY: six bytes. MEASURED, the rule's cartridge, playthrough
+      // leg 114 (Giga Gaia's counter, tech 86): `C2 00 92 00 10 10` / `C2 01 92 00 10 10` at D1/8D5A -- the port stopped
+      // the program there as an unknown op.
+      int o = PB(0), cap = PB(1);
+      for (int i = 0; i < 3; i++) {
+        int v = (s[0xCADA + 2 * i + o] + PB(2 + i)) & 0xFF;
+        if (v < cap) s[0xCADA + 2 * i + o] = (uint8_t)v;
+      }
+      *pp = (int)p + 4; break; }
     case 0xC1:                                                     // CD/1D93 `LDA [$40] / JMP CD/3B82`: a raster wait.
       // 3B82 spins on $4212 (out of vblank, then one full HBlank edge pair) and then on `LDA $213D / CMP $45 / BCC`
       // until the beam's scanline reaches the operand. It writes no state; under the rule it is a line cut (above).

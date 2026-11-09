@@ -1038,3 +1038,13 @@ the effect tracks finishing around rel 140; they now finish at rel 185-190 and t
    `battleSongFlinchPose`'s Marle-only special case is retired: the engine publishes both, for any facing.
 10. **Multi-actor actions.** Roles 1/2 (`$AE97`/`$AE98`) are never bound — this engine dispatches one actor per
    window. A co-actor script would read them as unresolved (inert), not wrong-but-plausible.
+
+## 2026-11-09 -- `$A012` falls in two steps, one of them ungated
+
+The publish sets `$A012 = 2` (C1/430C). Two different places bring it down, once a frame each, in this order: CF/E481-E48D (the
+NMI's tail, no gate) `LDA $A012 / BEQ / CMP #01 / BEQ -> STZ $A012`, and CF/E764-E775 (the compose) `LDA $A028 / BNE / LDA $A013 /
+BEQ / LDA $A012 / CMP #02 / BNE / DEC`. So 2 -> 1 needs `$A028` clear and an action on; 1 -> 0 happens regardless. MEASURED, the
+rule's cartridge, playthrough leg 114 (Giga Gaia's counter, tech 86): publish f38848 (02, C1:430F), f38849 `$A028` = 01 and `$A012`
+= 01 (CF:E778), f38850 `$A012` = 00 (CF:E490) under `$A028` = 01; after the gap `$A028` falls at f39057 and the publish is on that
+frame. The port's single gated DEC left 1 through the gap and published a frame late: the round-robin then met the PCs' requests
+first (cmb 0 1 2 before 7 9) and the enemies' `06 03` parks ran 6 frames long.
