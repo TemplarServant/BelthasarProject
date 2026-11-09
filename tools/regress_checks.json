@@ -50350,7 +50350,7 @@
         "playthrough: 91_flea SAME -- locs 0A6 1D5 0A9 | story 88 | party 000401 | gold 3199 | hp 262 (4) | ctrl 5 | end picture 0 px at port +0",
         "playthrough: 92_slash SAME -- locs 0A9 1D5 0A6 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 0AA | story 88 | party 000401 | gold 1909 | hp 277 (3) | ctrl 21 | end picture 0 px at port +0",
         "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 39657 px at port +5",
-        "playthrough: 94_ozzie_barrier SAME -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 0 px at port -6",
+        "playthrough: 94_ozzie_barrier SAME -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 0 px at port -1",
         "playthrough: 95_magus DIFFERENT -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 11 px at port -1",
         "playthrough: 96_laruba DIFFERENT -- locs 113 1F3 124 | story 8D 8E | party 000401 | gold 12154 | hp 322 (1) | ctrl 5 | end picture 813 px at port -1",
         "playthrough: 97_dactyl_nest SAME -- locs 124 1F3 125 126 127 1F3 147 | story 8E 90 93 | party 000401 008181 000581 000501 | gold 12154 | hp 164 (3) | ctrl 13 | end picture 0 px at port +0",
@@ -50361,7 +50361,7 @@
         "playthrough: 102_nizbel SAME -- locs 115 1F3 12B 12E 12A 131 12E 12A 130 | story 98 | party 000501 | gold 2954 | hp 172 (5) | ctrl 7 | end picture 0 px at port -3",
         "playthrough: 103_lever_rest DIFFERENT -- locs 130 12E 12A 12F 12A 12E 130 12A 12E 131 12A 12E 12B 1F3 12B 1F3 116 | story 98 | party 000501 | gold 2954 | hp 415 (3) | ctrl 11 | end picture 53074 px at port +0",
         "playthrough: 104_black_tyrano DIFFERENT -- locs 116 1F3 12B 12E 12A 131 12E 12A 130 12E 12A 12C 12D 1F3 105 1F3 133 | story 98 99 | party 000501 000181 000105 | gold 2954 | hp 363 (5) | ctrl 9 | end picture 55283 px at port +0",
-        "playthrough: 105_zeal DIFFERENT -- locs 133 15F 1F4 151 1F4 161 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 149 191 192 148 192 191 149 191 14A 14B 14A 191 149 14C 14D 15F 133 1F2 0F1 133 | story 99 40 99 9F A2 A5 A8 40 A8 | party 000105 | gold 2954 | hp 1 (3) | ctrl 38 | end picture 54016 px at port +0",
+        "playthrough: 105_zeal SAME -- locs 133 15F 1F4 151 1F4 161 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 149 191 192 148 192 191 149 191 14A 14B 14A 191 149 14C 14D 15F 133 1F2 0F1 133 | story 99 40 99 9F A2 A5 A8 40 A8 | party 000105 | gold 2954 | hp 1 (3) | ctrl 38 | end picture 0 px at port +0",
         "playthrough: 106_end_of_time DIFFERENT -- locs 133 1F3 116 1F3 112 111 110 1D0 | story A8 AB 40 AB | party 000105 | gold 2954 | hp 436 (4) | ctrl 8 | end picture 3325 px at port +0",
         "playthrough: 107_keepers_dome DIFFERENT -- locs 1D0 0E3 0E2 1F2 0E1 0E0 0DF 1F2 0EC 0ED 0EC 1F2 0F1 0F2 0F3 | story AB 40 AB | party 000105 | gold 4034 | hp 335 (5) | ctrl 49 | end picture 57344 px at port +0",
         "playthrough: 108_epoch SAME -- locs 0F3 0F2 0F3 | story AB | party 000105 | gold 4034 | hp 335 (1) | ctrl 7 | end picture 0 px at port +0",
@@ -50379,7 +50379,7 @@
         "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37890 px at port +0",
-        "playthrough: 77/137 legs SAME"
+        "playthrough: 78/137 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"

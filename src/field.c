@@ -11511,6 +11511,7 @@ int main(int argc, char** argv) {
     // requested where the ROM jumps, performed once below the battle block.
     int coldResetReq = 0; const char* coldResetWhy = "";
     int talkPressed = 0, upPressed = 0, downPressed = 0, leftPressed = 0, rightPressed = 0;
+    int owEnterReq = 0;                              // C2/3577 -> C2/35E5 this frame: the lead's input frame read A held
     int nmType = 0, nmDel = 0, nmOk = 0;             // name-entry edges: type char / backspace / confirm
     int battleEndReq = 0;                            // F8 this frame = the C1/8357 controller-2 debug instant-end
     int loadFadeEntry = 0;                           // this frame is C0/2848's `JSR C0/286C` entry frame (a
@@ -12935,6 +12936,12 @@ int main(int argc, char** argv) {
         if (ph0 == 1 && wd.wram[0x027C] == 1 && !fade && !menuPhase && !owExitWait) {
           uint16_t f8 = (uint16_t)(wd.wram[0x00F8] | (wd.wram[0x00F9] << 8));
           int aArm = (f8 & 0x0080) && !(wd.entryLatch & 0x8000);     // 3577 BIT #0080 / 35E5 LDA $1B32 / BMI
+          // C2/35EA-35F1 `LDA #03 / STA $027C`: the entrance is taken HERE, on the lead's input frame, with A HELD in $00F8
+          // (the level, not a fresh press). MEASURED, the rule's cartridge, playthrough leg 105 (Zeal, world 1F5): A held
+          // from f8783 while the lead walks up onto the skyway's cell (C2:3742, arrives f8785); the input frame after the
+          // step takes it (state 3's eighteen NMIs, `$0100` = 185 at f8804, C2:24AF). The port entered on A's first frame
+          // only, which fell inside the step, and walked on: the third skyway was taken 800 frames later.
+          if (aArm) owEnterReq = 1;
           if (f8 && !aArm && !(f8 & 0x0040)) {
             uint8_t to = ((f8 & 0x0001) && CtWramGlb(fieldWram())[0x0000] >= 0x49) ? 0x09   // 3584 / 3607 CMP #49
                        : (f8 & 0x0004) ? 0x06 : 0;                                          // 358E BIT #0004
@@ -13226,7 +13233,7 @@ int main(int argc, char** argv) {
       if (!fade) worldTick++;                        // the overworld is paused while a transition fades
       // (The sea's colour cycle is the world script's own op 0x04 rows, uploaded by the NMI above, not the host's.)
       if (owEnterCd > 0) owEnterCd--;
-      else if (talkPressed && owPad && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // enter the location (C2/35E5)
+      else if ((owEnterReq || talkPressed) && owPad && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // enter the location (C2/35E5; talkPressed: a harness's own A edge, which feeds no $00F8)
         // C2/35E5 `$027C = 3`, and the main loop's state 3 is the whole exit (C2/2402):
         //   2452 LDA #C2 / LDX #2EC1 / JSR C2/04D9     a VM object on $C2:2EC1 = `28 01 52` (fade out at rate 1, die)
         //   245C NMITIMEN $81 / LDX #0012 / JSR C2/0346 x18   eighteen NMIs -- the object pass runs the fade in them

@@ -205,6 +205,15 @@ frame of a hold); `$00F2` (CT layout) and `$00F8` (config-REMAPPED layout) are H
 This is exactly the `$00F6` remap `menu_entry.md` recorded 8-bit (X→0x40 identity, Y→0x01, Sel→0x04,
 B→0x0A), now pinned as the 16-bit pair with the d-pad in the high byte.
 
+#### 2.3.1 The entrance is taken on the input frame, with A HELD (2026-11-09)
+
+C2/3572 `LDA $00F8 / BEQ` reads the held remapped word, not an edge: `BIT #0080 / BNE ->35E5`, and C2/35E5 `LDA $1B32 /
+BMI` (no entrance under the lead) or `LDA #03 / STA $027C` -- state 3, the exit (C2/2402). It runs on the lead's input
+frame only (the mover's phase 1). MEASURED, the rule's cartridge, playthrough leg 105 (world 1F5): A held from f8783 while
+the lead steps up onto the skyway's cell (C2:3742 to f8785); the next input frame takes it and `$0100` = 185 lands 18 NMIs
+later (f8804, C2:24AF). The port took the entrance on A's first frame only, which fell inside the step, and walked on.
+field.c: the C2/35E5 arm (aArm) now requests the entrance (owEnterReq) on that frame.
+
 ### 2.4 The menu block C2/251E (entry + exit, one straight-line routine)
 
 Hand-decoded from `0x2251E` (bytes verified against the hexdump; a linear decode mis-reads `LDX #2EC1`):
