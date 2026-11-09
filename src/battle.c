@@ -10665,13 +10665,21 @@ static int battleCountersPending(const CtBattleHost* h) {
   for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
   return 0;
 }
+// C1/881C's tail after the loop: `LDA $24 / BNE ->8829 / JSR C1/8C09` (the eval), then C1/8832 `JSR C1/AC46` -- both
+// target lists ($AECC, $AD8E) back to eleven FF, with or without the eval. The next action writes only what it targets
+// (a PC's physical attack `$AD8E` alone, C1/BA75-BA7A), so the FF behind it is this clear's (leg 100: a tech's victims
+// 04 05 06 stayed behind the attack's 05, and the counter arm C1/8629 copied slot 6 into `$B3AC`).
+static void battleTail881C(CtBattleHost* h) {
+  if (!h->mem[0x24]) battleAiEvalAll(h);                           // C1/8822-8826
+  battleAiTargetClear(h->mem);                                     // C1/8832 JSR C1/AC46
+}
 static void battleSpanEndArm(CtBattleHost* h, int slot) {
   uint8_t* s = h->mem;
   if (slot < 0 || slot >= 8) return;
   if (h->aiTurnAdv[slot]) { h->aiTurnAdv[slot] = 0; battleAiAdvance(h, slot); }   // C1/8E4A-8E72
   // C1/8822 `LDA $24 / BNE ->8829`: no eval once C1/B223 has found every PC down (B274 `$24 = 1`), so no RNG draw
   // is spent there.
-  if (!s[0x24] && !battleCountersPending(h)) battleAiEvalAll(h);   // C1/8826 JSR C1/8C09 -- every slot whose $B2B6 is 0
+  if (!battleCountersPending(h)) battleTail881C(h);               // C1/8826 JSR C1/8C09 -- every slot whose $B2B6 is 0
 }
 // The PC entry facing (C1/350F, disasm/notes/battle_facing_engine.md sec. 2): ctBattleFaceTab[atan2] toward the
 // nearest live, present enemy (cmb 3..10, |dx|^2 + |dy|^2 on the live feet: C1/2A43 loop, C1/2B37 metric).
@@ -11595,7 +11603,7 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
       if (!h->ctrMsgOp) h->msgHoldEndF = h->frames;
       int more = 0;
       for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
-      if (!more && !s[0x24]) battleAiEvalAll(h);
+      if (!more) battleTail881C(h);
       battleCounterLoopReturn(h);
       continue;
     }
@@ -11616,7 +11624,7 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
         // included, with its RNG draws (C1/AF22).
         int more = 0;
         for (int k2 = 0; k2 < 8; k2++) if (h->enCounterDelay[k2] > 0) more = 1;
-        if (!more && !s[0x24]) battleAiEvalAll(h);
+        if (!more) battleTail881C(h);
         if (!decodeOnly) battleCounterLoopReturn(h);              // (the close's own pass: its head is the close's)
         continue;
       }
@@ -15249,7 +15257,7 @@ static int battleDeadFlagSweep(CtBattleHost* h, int from, int cont) {
 // when the sweep stopped on a lifeline revive: the eval then waits for it (battleLifelineResume).
 static void battleH12TailRest(CtBattleHost* h, int slot) {
   if (slot >= 0) battleSpanEndArm(h, slot);                                 // C1/8E4A (the turn's) + C1/881C
-  else if (slot == -1 && !h->mem[0x24] && !battleCountersPending(h)) battleAiEvalAll(h);   // C1/8822-8826 (-2: ran already)
+  else if (slot == -1 && !battleCountersPending(h)) battleTail881C(h);   // C1/8822-8832 (-2: ran already)
 }
 static int battleH12Tail(CtBattleHost* h, int cont, int slot) {
   uint8_t* s = h->mem;

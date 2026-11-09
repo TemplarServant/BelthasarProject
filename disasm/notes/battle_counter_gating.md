@@ -366,3 +366,17 @@ f2611 / f2714): the guard's call of a second guard (header 04 02 7D, $AECC = 05)
 eval then walks slot 1 on id FF (no draw). The port took $AECC = 05, walked the new guard's block 2 as a counter
 (battleCounterTurn -> C1/8CF9 cleared its $B2B6) and its eval drew on $26 once more (aiCond 17, C1/95E4): every roll
 after it one along, Lucca's damage 2 for 1, and the party lost the fight the cartridge wins.
+
+### 8.6 The list is FF again after every pass: C1/8832 `JSR C1/AC46` (2026-11-09)
+
+C1/881C ends `LDA $B3B7 / STA $B18B / JSR C1/8862 / JSR C1/AC46 / JSL FD/ACEE / STZ $B2C0` (C1/8829-883C): C1/AC46
+(AC48-AC54) fills both target lists, `$AECC` and `$AD8E`, with eleven FF, whether the eval ran or `$24` skipped it. The
+next action writes only what it targets -- a PC's physical attack sets `$AD8E` alone (C1/BA68 -> BA75-BA7A, then C1/BFAA
+copies it to `$AECC`) -- so the FF behind entry 0 is this clear's. The port never cleared: a PC tech's victims stayed
+behind the next physical attack's target and the arm (C1/8629's copy into `$B3AC`) took them as victims.
+MEASURED (the playthrough's leg 100, 100_lair_grind, `--monitor 7EAD8E:4 --writer`): f112394 the tech C1/C45C writes 04
+05 06; f112695 C1/AC50 (the tail of that action's pass) writes FF FF FF FF; f112699 the attack C1/D68E writes 05 -- the
+cartridge's `$B3AC` at the close (f112859) is 05 FF FF FF. The port kept 05 05 06, armed a counter for slot 6 (k2), ran its
+block 2 at the attack's close (`$5E10` = 05 at port f112884) and its walk moved the enemy 32 px: the next tech's slide
+(op 12 0C) aimed 32 px short and the action ran 4 frames short. battle.c battleTail881C: the eval and the clear, at every
+place the port reaches C1/881C (an enemy's span end, the handler's tail, the counter loop's end).
