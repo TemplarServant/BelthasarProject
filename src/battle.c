@@ -11976,8 +11976,13 @@ static void battleAscQuarterGoal(int lx, int ly, int* gx, int* gy) {
 // read `LDY $86|$80 / LDA $DB / TAX / LDA $C0F700,X / STA $96DB,Y` -- $DB is C1/0222's bearing from the foot to
 // the goal, C0/F700 the facing table -- unconditionally, before the count is known (the effect-object bodies
 // C1/5042 / C1/63FC have no such store).
+// C1/5024-503F: on track 4 the slide ops arm the movers of every combatant of the list $A018 and leave by C1/512C (the op's
+// length, no park): the track goes on while the mover runs (`$A337` is the other tracks' park, C1/5003-5013). 1 = this track's
+// slide runs free. (A static: the host's struct is part of no state file, but this needs no member.)
+static uint8_t g_ascMvFree[16];
 static void battleAscSlideArm(CtBattleHost* h, int t, int gx, int gy) {
   int lx, ly; battleAscGetPos(h, t, &lx, &ly);
+  g_ascMvFree[t] = 0;
   h->ascMvN[t] = battleSlideArmSteps(lx, ly, gx, gy, h->ascSpeed[t], &h->ascStepX[t], &h->ascStepY[t]);
   h->ascMvDone[t] = 0;                                 // $A19D / $A1E0 := 0 (C1/63A1 / C1/64E8)
   h->ascAccX[t] = 0; h->ascAccY[t] = 0;                // C1/63C9 `STA $A8D4,Y / STA $A8FA,Y` (A = 0)
@@ -12208,6 +12213,7 @@ static void battleAscArm(CtBattleHost* h, int sel, int isTech, int isPcSide) {
     h->ascAccX[t] = 0x80; h->ascAccY[t] = 0x80; h->ascScrX[t] = 0; h->ascScrY[t] = 0; h->ascHead[t] = 0;
     h->ascFwdN[t] = 0; h->ascFwdAcc[t] = 0; h->ascFwdDone[t] = 0; h->ascFwdOp[t] = 0; h->ascFwdX[t] = 0; h->ascFwdY[t] = 0;
     h->ascHopOn[t] = 0; h->ascMv90[t] = -1; h->ascWalkOn[t] = 0; h->ascMvOn[t] = 0; h->ascParkLen[t] = 0;
+    g_ascMvFree[t] = 0;
     h->ascMvDone[t] = 0; h->ascMvTicked[t] = 0; h->ascFwdOn[t] = 0;
   }
   for (int k = 0; k < 3; k++) { h->ascHomeX[k] = 0; h->ascHomeY[k] = 0; }
@@ -12898,7 +12904,7 @@ static void battleFxPalCycleService(CtBattleHost* h) {
 static void battleAscMoverFrame(CtBattleHost* h, int rel, int tr) {
   for (int t = 0; t < 16; t++) {
     h->ascMvTicked[t] = 0;
-    if (!h->ascLive[t]) continue;
+    if (!h->ascLive[t] && !g_ascMvFree[t]) continue;                // (a free slide is the combatant's, not the track's: it outlives it)
     if (h->ascMvOn[t] || h->ascMvN[t] > 0) {                        // a slide: CF/F03E / CF/F087 | CF/F4B2 / CF/F503
       if (--h->ascDiv[t] > 0) continue;                             //   the divider (CF/EFC9 / CF/EFF9)
       h->ascDiv[t] = (h->ascRate[t] > 0) ? h->ascRate[t] : 1;       //   reload from $A2FE / $A309
@@ -12970,7 +12976,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
     // (Slide-mid's arm, C1/7235, parks nothing: its count runs without $A337 and a later wait-move op holds the track.)
     // The tick (the rate divider CF/EFC2 / CF/EFF2 and the step) is battleAscMoverFrame's; what runs here is the op's
     // own visit, on the done flag the tick left.
-    if (h->ascMvOn[t] || h->ascMvN[t] > 0 || h->ascMvTicked[t]) {   // parked on a move op's travel (C1/63EB)
+    int mvFree = g_ascMvFree[t];                                    // (a free slide never holds its track, its last tick included)
+    if (mvFree && h->ascMvN[t] <= 0) g_ascMvFree[t] = 0;
+    if (!mvFree && (h->ascMvOn[t] || h->ascMvN[t] > 0 || h->ascMvTicked[t])) {   // parked on a move op's travel (C1/63EB)
       if (h->ascMv90[t] >= 0) h->ascScr90 = h->ascMv90[t];          //   (a parked 98/9A's re-visit: C1/629E)
       if (h->ascMvOn[t] && h->ascMvDone[t]) {                       // $A19D set: the visit releases the op
         h->ascMvOn[t] = 0; h->ascIp[t] += (uint32_t)h->ascParkLen[t]; h->ascParkLen[t] = 0;
@@ -13614,7 +13622,12 @@ static void battleAscTick(CtBattleHost* h, int rel) {
             else battleAscHopArm(h, t, lx, ly, gx, gy, a1, op == 0x9A);
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d SLIDE (%d,%d)->(%d,%d) speed=%d n=%d\n",
                             h->frames, rel, t, lx, ly, gx, gy, h->ascSpeed[t], h->ascMvN[t]);
-            h->ascMvOn[t] = 1; h->ascParkLen[t] = len; adv = 0;       // parked on the op, $A3A9 := its length
+            // Op 12 on track 4 (C1/4FF7 `CMP #04` -> C1/5024-503F, then C1/512C): no park -- the next op runs while the mover
+            // goes on. MEASURED, the rule's cartridge, playthrough leg 114, action AB: track 4's `12 2B` then `1B 2B` lands
+            // at f55429 (C1:564D) with cmb9's y still stepping (CF:F07C, 40 frames); its `06 07` at f55462, the parked
+            // track 3's at f55502. The port parked track 4 too: cmb9's window 40 frames late.
+            if (op == 0x12 && t == 4) g_ascMvFree[t] = 1;
+            else { h->ascMvOn[t] = 1; h->ascParkLen[t] = len; adv = 0; }   // parked on the op, $A3A9 := its length
             // No step on the arm frame: the first step is the mover's next tick.
           }
           break; }

@@ -1048,3 +1048,12 @@ rule's cartridge, playthrough leg 114 (Giga Gaia's counter, tech 86): publish f3
 = 01 (CF:E778), f38850 `$A012` = 00 (CF:E490) under `$A028` = 01; after the gap `$A028` falls at f39057 and the publish is on that
 frame. The port's single gated DEC left 1 through the gap and published a frame late: the round-robin then met the PCs' requests
 first (cmb 0 1 2 before 7 9) and the enemies' `06 03` parks ran 6 frames long.
+
+## 2026-11-10 -- op 12 on track 4 does not park (C1/5024)
+
+C1/4FE3 (`12 tt`): after the resolve, `LDA $A010 / CMP #08 / BCC`, `CMP #04 / BNE`. Tracks 0-3 (C1/4FFE-5013): `$A337,X` clear ->
+C1/5135 (the arm) and C1/5127 (park, `LDA #00 / JMP C1/75BB`), re-visited until `$A19D,X`. Track 4 (C1/5024-503F): C1/5135 for each
+combatant of the list `$A018`, then `$A3A9,4 := 2` and C1/512C: the op's length, no park. So the next op runs while the movers go
+on, and the mover outlives the track (`$A337`/CF/F03E are the combatant's). MEASURED, the rule's cartridge, playthrough leg 114, action
+AB: track 4's `12 2B` then `1B 2B` at f55429 (C1:564D) with cmb9's y stepping 40 frames on (CF:F07C), its `06 07` at f55462, the parked
+track 3's at f55502. battle.c: g_ascMvFree (the port still moves only the list's first combatant).
