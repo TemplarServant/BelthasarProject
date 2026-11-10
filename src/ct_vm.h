@@ -382,6 +382,7 @@ int  CtSceneXferFrame(const CtScene* sc);          // the coming frame's kind (p
 // C0/0C76's view of $0117 at C0/00A4, the frame's head: a host whose player controller (C0/881E, which stages positional
 // exits) runs before CtSceneTick latches the byte first, so the tick's C0/0C8A drain sees what the ROM's head saw.
 void CtSceneHeadLatch(CtScene* sc);
+int CtSceneExitDrainDue(const CtScene* sc);
 // C0/0C9A-0CC4: commit the staged change ($0112-$0116 -> $0100-$0104, the origin -> $0105-$0109) and leave the main loop
 // (CtSceneTick does nothing more; CtScenePollLocChange reports the destination). Once per scene.
 void CtSceneExitCommit(CtScene* sc);

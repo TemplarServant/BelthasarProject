@@ -2358,13 +2358,24 @@ static int fieldMenuFadeT0(CtScene* vm, int inWorld) {
   int b = CtSceneBright(vm);
   return 15 - (b < 0 ? 0 : b > 15 ? 15 : b);
 }
+static int g_fieldExitDue;   // the frame's head will commit a location change (C0/0C8A): no controller after it
 static uint8_t g_collRam[0x13000];
 static const Coll* g_fc;
 static const uint8_t* g_fcWram;   // the scene's $7E page for fieldTileFetch (NULL: the host's packed planes)
+// $1D1E/$1D1F, the map's wrap masks (a size's next power of two minus one: 32 -> 0x1F, 48 or 64 -> 0x3F).
+static void fieldCollMasks(uint8_t* d, const Coll* c) {
+  // The loader's bytes when the scene has them (MEASURED, loc 074 and 077: 3F 3F on maps whose packed planes are smaller).  Without
+  // WRAM, the packed size.
+  d[0x1E] = (g_fcWram && g_fcWram[0x1D1E]) ? g_fcWram[0x1D1E] : (uint8_t)(c->cw <= 16 ? 0x0F : c->cw <= 32 ? 0x1F : 0x3F);
+  d[0x1F] = (g_fcWram && g_fcWram[0x1D1F]) ? g_fcWram[0x1D1F] : (uint8_t)(c->ch <= 16 ? 0x0F : c->ch <= 32 ? 0x1F : 0x3F);
+}
 static int fieldTileFetch(uint8_t* ram, uint8_t* b0, uint8_t* b1, uint8_t* b2) {
   uint8_t* d = ram + 0x1D00;
-  int tx = d[0x67], ty = d[0x69];                          // tentative tile hi-bytes ($1D67/$1D69)
-  if (!g_fc->shp || tx < 0 || ty < 0 || tx >= g_fc->cw || ty >= g_fc->ch) return 1;   // off-map -> solid
+  // C0/9AA1 / C0/9AC8 `AND $1E` (16-bit, $1D1E = the column mask, $1D1F = the row's): the tile hi-bytes wrap at the map's
+  // size and no bound exists. MEASURED, the rule's cartridge, playthrough leg 116 (loc 199, masks 1F / 3F): the lead walks
+  // from y 3FF0 on into row 40 = row 0 (f60262); the port's bound made it a wall and the walk stopped there.
+  int tx = d[0x67] & d[0x1E], ty = d[0x69] & d[0x1F];      // tentative tile hi-bytes ($1D67/$1D69)
+  if (!g_fc->shp || (!g_fcWram && (tx >= g_fc->cw || ty >= g_fc->ch))) return 1;   // (the packed planes' own bound)
   // The prop planes the ROM reads: C0/9AC8 fetches $7E:30C0 / $7E:7000 / $7E:7040 at (row << 8) | col (streamed by the
   // load, lz.c ct_lz_map_to_wram; moved by C0/AF4E; carried by a seed). The packed copy below keeps only the bits the
   // shape decode and the door latch use and drops prop1's low nibble, the conveyor (C0/9D6E `LDA $5A / AND #0C`,
@@ -2396,7 +2407,7 @@ static void fieldArrivalTileMode(const Coll* c, double px, double py, CtScene* v
   uint8_t* d = g_collRam + 0x1D00;
   d[0x34] = 0;
   if (!c || !c->shp) { CtSceneArrivalPriorities(vm, 0, 0, 0, 0); return; }
-  g_fc = c; g_fcWram = vm ? CtSceneMem7E(vm) : NULL;
+  g_fc = c; g_fcWram = vm ? CtSceneMem7E(vm) : NULL; fieldCollMasks(d, c);
   int X = ((int)(px * 16.0 + 0.5)) & 0xFFFF;              // the lead's words $1800/$1880 (px, py = word/16);
   int Y = ((int)(py * 16.0 + 0.5)) & 0xFFFF;              //   their high bytes = the arrival tile $0102/$0103
   d[0x67] = (uint8_t)(X >> 8); d[0x69] = (uint8_t)(Y >> 8);   // the tile the fetch hook reads
@@ -2419,7 +2430,10 @@ static void fieldArrivalTileMode(const Coll* c, double px, double py, CtScene* v
 static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz, double* px, double* py, int dx, int dy, int run, int applyMove, int* outReqX, int* outReqY) {
   uint8_t* ram = g_collRam; uint8_t* d = ram + 0x1D00;
   if (outReqX) *outReqX = 0; if (outReqY) *outReqY = 0;
-  if (!c->shp || (!dx && !dy && !d[0x2A] && !d[0x2B])) {           // idle + no conveyor momentum -> no move
+  // g_fieldExitDue: C0/0C76 runs at C0/00A4, ahead of C0/881E, and a drained $0119 leaves the main loop there (CtSceneExitCommit); this
+  // host runs the controller before its tick. MEASURED, leg 20: one more commit on row 30 armed the conveyor momentum $1D2A the
+  // cartridge never sets, and the idle lead took a step in the next location.
+  if (!c->shp || g_fieldExitDue || (!dx && !dy && !d[0x2A] && !d[0x2B])) {   // idle + no conveyor momentum -> no move
     // C0/881E runs every frame while control is active, and its head clears the direction intent ($1D2C/$1D2D,
     // 88E5), so an idle frame leaves the intent and the velocity at zero. This host skips the controller on an
     // idle frame, so it makes that clear here: the anim selector C0/9E84 reads $1D2D, and a stale intent would
@@ -2446,8 +2460,7 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
   // $1D1E/$1D1F, the map's wrap masks for the (row << 8) | col plane index: C0/9D35 builds the door index with
   // `AND $1E` / `AND $1F`. The oracle's values are the next power of two minus one per axis (32 -> 0x1F,
   // 48 or 64 -> 0x3F).
-  d[0x1E] = (uint8_t)(c->cw <= 16 ? 0x0F : c->cw <= 32 ? 0x1F : 0x3F);
-  d[0x1F] = (uint8_t)(c->ch <= 16 ? 0x0F : c->ch <= 32 ? 0x1F : 0x3F);
+  fieldCollMasks(d, c);
   // populate the actor list so 9923 (player-vs-actor) blocks on the live VM NPCs: each placed actor is a
   // solid actor at its slot; the player (slot 2) is skipped (self). 9923 blocks if a solid actor is within
   // ~$E0 (14px) of the feeler probe point.
@@ -6647,6 +6660,30 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   // (CtSceneLoadCameraEntry) places the camera only.
   { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f->sd, &m1, &m2, &m3);
     CtWramLayerScrollDecode(CtWramSys(fieldWram()), m1, m2, m3); }
+  // Camera bounds = the scroll mask (header bytes 10-13, metatiles, inclusive): cam = clamp(pos-(128,112), mask), pinned
+  // at the mask origin on axes where the room is one screen or smaller (--checkfieldcam). As C0/7477-74A5 sets them,
+  // nothing clamped: `LDA $F6000A,X / BMI` -- bit 7 of byte 10 selects the whole map, $1A = $1C = 0 and $1B / $1D =
+  // $0BCB - 1 / $0BCD - 1 (BG1's size); otherwise bytes 10, 12, 11, 13 go to $1A, $1B, $1C, $1D as they are. A record
+  // may name rows past the map (loc 1B0: y1 = $3F on a 32-row map); they are the map again (C0/7612 `AND $1F`), and the
+  // frame crop below wraps instead of clamping.
+  f->mx0 = 0; f->my0 = 0; f->mx1 = f->W; f->my1 = f->H;
+  if (hdr && (hdr[10] & 0x80)) {
+    int bw = 0, bh = 0;
+    if (f->sd && CtFieldSceneBg1Size(f->sd, &bw, &bh)) { f->mx1 = bw * 16; f->my1 = bh * 16; }
+  } else if (hdr) {
+    f->mx0 = hdr[10] * 16; f->my0 = hdr[11] * 16;
+    f->mx1 = (hdr[12] + 1) * 16; f->my1 = (hdr[13] + 1) * 16;
+  }
+  // field_camera_unification.md: seed the scroll-mask bounds into the VM ($1D1A-$1D1D, 16 px tiles) so the
+  // unified camera tick's 99DE edge test + the C0/7506 entry law can read them. A WRAM/state seed overwrites
+  // the whole $1D page afterwards (its live mask == this one); the entry init (field main) reads these.
+  // Before the init, as C0/7477 is: fn0's ops may write the page (loc 1A0's `4A 1C 1D 7E 05 / 4A 1D 1D 7E 10`, its camera's rows
+  // 05-10; MEASURED, leg 119: written after the init, the 00-1F of the record undid them and the pan `E7` started 6 rows off).
+  {
+    uint8_t* s7c = CtWramSys(fieldWram());
+    s7c[0x1D1A] = (uint8_t)(f->mx0 / 16); s7c[0x1D1B] = (uint8_t)(f->mx1 / 16 - 1);
+    s7c[0x1D1C] = (uint8_t)(f->my0 / 16); s7c[0x1D1D] = (uint8_t)(f->my1 / 16 - 1);
+  }
   f->vm = raw ? CtSceneCreateIn(fieldWram(), raw, (int)rl, gmem, scene) : NULL;
   if (g_fieldAudio) CtAudioSetEngineMode(g_fieldAudio, 0);
   // Character-sheet init ($7E2600). The ROM seeds the 8 char records once at new game (C2/956E: `LDX #0; LDY #2600;
@@ -6706,28 +6743,6 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   f->exits = CtAssetGet(a, CT_ASSET_EXITS, (uint32_t)scene, &ln);
   f->nexits = f->exits ? f->exits[0] : 0;
   if (f->exits && ln < (uint32_t)(1 + f->nexits * 16)) { f->nexits = 0; f->exits = NULL; }  // guard short/corrupt blob
-  // Camera bounds = the scroll mask (header bytes 10-13, metatiles, inclusive): cam = clamp(pos-(128,112), mask), pinned
-  // at the mask origin on axes where the room is one screen or smaller (--checkfieldcam). As C0/7477-74A5 sets them,
-  // nothing clamped: `LDA $F6000A,X / BMI` -- bit 7 of byte 10 selects the whole map, $1A = $1C = 0 and $1B / $1D =
-  // $0BCB - 1 / $0BCD - 1 (BG1's size); otherwise bytes 10, 12, 11, 13 go to $1A, $1B, $1C, $1D as they are. A record
-  // may name rows past the map (loc 1B0: y1 = $3F on a 32-row map); they are the map again (C0/7612 `AND $1F`), and the
-  // frame crop below wraps instead of clamping.
-  f->mx0 = 0; f->my0 = 0; f->mx1 = f->W; f->my1 = f->H;
-  if (hdr && (hdr[10] & 0x80)) {
-    int bw = 0, bh = 0;
-    if (f->sd && CtFieldSceneBg1Size(f->sd, &bw, &bh)) { f->mx1 = bw * 16; f->my1 = bh * 16; }
-  } else if (hdr) {
-    f->mx0 = hdr[10] * 16; f->my0 = hdr[11] * 16;
-    f->mx1 = (hdr[12] + 1) * 16; f->my1 = (hdr[13] + 1) * 16;
-  }
-  // field_camera_unification.md: seed the scroll-mask bounds into the VM ($1D1A-$1D1D, 16 px tiles) so the
-  // unified camera tick's 99DE edge test + the C0/7506 entry law can read them. A WRAM/state seed overwrites
-  // the whole $1D page afterwards (its live mask == this one); the entry init (field main) reads these.
-  if (f->vm) {
-    uint8_t* s7c = CtSceneMem7E(f->vm);
-    s7c[0x1D1A] = (uint8_t)(f->mx0 / 16); s7c[0x1D1B] = (uint8_t)(f->mx1 / 16 - 1);
-    s7c[0x1D1C] = (uint8_t)(f->my0 / 16); s7c[0x1D1D] = (uint8_t)(f->my1 / 16 - 1);
-  }
   // Stamp last, on a fully loaded scene: the char-sheet seed above runs after CtSceneCreateIn and would
   // otherwise clobber the sheet marker on the first load, so it would read "dead" for the wrong reason.
   if (g_wramLifeOn) {
@@ -16147,6 +16162,20 @@ int main(int argc, char** argv) {
     // a battle drive needs) -- ct.exe's PEEK_POKE grammar (flat offsets, a 7E/7F bank folded). The port's side of a state
     // no drive reaches cheaply: e.g. $7F01EC, the lost-battle byte scene 0AC's `48 EC 01 7F 19` reads before its op FF 96,
     // or a learned-tech seed $2837+char before a fight boots. CT_POKEWRAM_AT=<frame> writes them on that frame instead.
+    // CT_POKEWRAM_LIST="N:ADDR=HH,...[;M:ADDR=HH,...]": the same pokes on several frames (ct.exe PEEK_POKE_AT's grammar).
+    { static const char* pl; static int plRead; if (!plRead) { plRead = 1; pl = getenv("CT_POKEWRAM_LIST"); }
+      for (const char* q = pl; q && *q; ) {
+        char* e; long at = strtol(q, &e, 10); const char* seg = e;
+        q = strchr(q, ';'); if (q) q++;
+        if (*seg != ':' || at != frameNo) continue;
+        uint8_t* pw = CtWramSys(fieldWram());
+        for (seg++; *seg && *seg != ';'; ) {
+          long adr = strtol(seg, &e, 16); if (e == seg) break;
+          if (adr >= 0x7E0000 && adr <= 0x7FFFFF) adr -= 0x7E0000;
+          if (*e == '=') { long v = strtol(e + 1, &e, 16); if (adr >= 0 && adr < 0x20000) pw[adr] = (uint8_t)v; }
+          seg = e; if (*seg == ',') seg++;
+        }
+      } }
     static int pkAt = -1;
     if (pkAt < 0) { const char* pa = getenv("CT_POKEWRAM_AT"); pkAt = pa ? atoi(pa) : 1; }
     if (frameNo == pkAt) {
@@ -16859,6 +16888,7 @@ int main(int argc, char** argv) {
     // C0/1770 holds the loop (mlHead: the ALIGN and STYLE frames, and the RESUME frame that re-enters at C0/00A7). On
     // the ENTER frame it does run, and 0D3E's door arm sits ahead of 16DC -> 1770.
     if (f.vm) CtSceneHeadLatch(f.vm);                // the same head's $0117 for the tick's exit drain (C0/0C8A)
+    g_fieldExitDue = f.vm && mlHead && CtSceneExitDrainDue(f.vm);   // C0/0C8A commits this frame: the loop is left at C0/00A4, before C0/881E
     int c0d3eDirty = 0;
     if (f.vm && f.sd && !battlePhase && !inWorld && menuPhase == 0 && !inLoadFade && CtSceneShop(f.vm) < 0 &&
         mlHead && !(CtSceneMem7E(f.vm)[0x0117] & 0x80)) {

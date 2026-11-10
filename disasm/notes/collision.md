@@ -354,3 +354,17 @@ north stairs at x 16F0): `$1D1A-$1D1D` = 00 2F 13 2F; C0/8A6D leaves `$1D30` = F
 the step at y 14FF, five frames before the exit fires; the port's lead walked on to 14BF. The host now hands the bytes in
 the scene's WRAM. C0/8A6D is in the shadow's registry since (ct_shadow.c), with C0/9CA1's exit staging ($0112-$0117,
 $1D52) declared the field host's: 515 / 515 calls on that leg, 710 / 710 on the menu route.
+
+## Tile hi-bytes wrap at the map size; no bound exists (playthrough leg 116, 2026-11-10)
+
+C0/9AA1 and C0/9AC8 `AND $1E` (16-bit): the fetch index is `((tileY & $1D1F) << 8) | (tileX & $1D1E)` and nothing else bounds
+it. The cartridge, loc 199 (masks 1F / 3F): the lead walks from Y word 3FF0 into 4000 and on, row 40 reads as row 0 (f60262),
+the Y word keeps counting. The port had a bound (`tx >= cw || ty >= ch` = a wall) on the WRAM planes; that made the same step a
+wall. `fieldTileFetch` now masks first and keeps the bound only for the packed planes of a scene without WRAM. The masks must be
+set on every path that fetches, the arrival probe included (C0/9DED-9DF5, `fieldArrivalTileMode`, `fieldCollMasks`).
+They are the loader's bytes `$1D1E/$1D1F` when the scene has them (loc 074 and 077: 3F 3F on maps whose packed planes are smaller).
+
+The old bound had been hiding a second defect. C0/0C76 runs at C0/00A4, ahead of C0/881E, and a drained `$0119` leaves the main loop there;
+this host runs the controller before its tick. Leg 20: on the frame the exit commits the port ran one more C0/9C5C, on row 30 (prop byte FF),
+which armed the conveyor momentum `$1D2A` the cartridge never sets, and the idle lead took a step in the next location. The controller now
+stands down on that frame (`CtSceneExitDrainDue`, `g_fieldExitDue`).

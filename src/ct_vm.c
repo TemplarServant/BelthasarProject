@@ -2187,6 +2187,10 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   // visit whose ticket is spent completes the op (534C-535C: `STZ $1A80,X`, IP += 3, no C0/568B on this arm),
   // one aimed step of the script's own length with no re-aim. hasTask is the latch, as for 0x92.
   if ((op == 0x98 || op == 0x99) && sc->hasTask[obj]) { sc->hasTask[obj] = 0; return 0; }
+  // Op 0x9A (C0/4FEA): the same head, `LDA $1A80,X / BEQ / LDA $1A01,X / BEQ ->502A`, one step of the script's fourth byte (5064-5071
+  // `STA $1A01,X / STA $7F0B00,X`), then 502A `STZ $1A80,X / JSR C0/568B`. MEASURED, leg 122 (loc 1A7's obj 19, `9A 07 09 0C`): 12 frames
+  // and on to its `AD`; as a walk to the tile it took the whole way in one go.
+  if (op == 0x9A && sc->hasTask[obj]) { sc->hasTask[obj] = 0; mvForceIdle(sc, obj); return 0; }
   // C0/5614 (JSR'd at step issue by the tile move family, not by 0xA0 or the vector moves 0x9C/0x9D at
   // C0/4EC7/4F0A): re-selects the anim mode. A mode-3 shape (op 0xAC) is promoted (C0/5620): held index $FF
   // (animIndex < 0) -> auto walk (mode 0), else its held animeset (mode 1). Modes 0/1/2 are left as they are.
@@ -2299,7 +2303,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   } else if (dxr == 0 && dyr == 0) {               // reached the target tile (0x96/0x94/local)
     // C0/4F90 (0x96) and C0/50CF (0x97) `LDA $1C81,X / BIT #01 / BEQ / JSR C0/305D / BCS`: bit 0, not != 0.
     // 0x97 is 0x96 with the two operands read through the scene vars; from 50B9 its bytes are 0x96's.
-    if ((op == 0x96 || op == 0x97) && (sc->c1C81[obj] & 1)) {
+    if ((op == 0x96 || op == 0x97 || op == 0x9A) && (sc->c1C81[obj] & 1)) {   // (0x9A: 501E-5028)
       if (mvArriveSnap305D(sc, obj, atx, aty)) return 1;   // 4F97 / 50D6 JSR C0/305D / BCS -> JSR C0/5614, TYX / CLC
     }
     if (op == 0xA1) {                              // C0/5191 = 0x97 without the anim/facing layer (as move.c):
@@ -2319,7 +2323,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   //   4FE8: CLC / RTS              ; yield, IP parked (X = Y = the entry IP)
   // The integration loop runs after the runner in the same CtSceneTick (C0/00C4 -> C0/00D3), so the first step
   // integrates this frame. hasTask == 0 marks the first visit of this move.
-  if ((op == 0x96 || op == 0x97) && !sc->hasTask[obj]) {
+  if ((op == 0x96 || op == 0x97 || op == 0x9A) && !sc->hasTask[obj]) {
     vmSetFacing(sc->mem, a, obj, mvTables()[0x400 + mvAngle(dtx - atx, dty - aty)]);   // 4FB5
     sc->moveAngle[obj] = mvAngle(dtx - atx, dty - aty);   // store the heading for the integration visits
     sc->hasTask[obj] = 1;
@@ -2338,7 +2342,11 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   { _ang = mvAngle(dtx - atx, dty - aty); sc->moveAngle[obj] = _ang; }   // 4FAB, every issue
   _ang = animLayer ? npcMoveAngle(sc, obj, _ang) : npcMoveAngleStale(sc, obj, _ang);   // 0xA1 51F4 / 0x9E 5329: the old facing
   // Ticket = $1000,X (the object's cadence): op 0x87 sets it (moveAnim); a PC's load sets 1 (C0/42D7).
-  int _tk = a->moveAnim > 0 ? a->moveAnim : 1;  /* $1000,X cadence; default 1 (C0/42D7) */
+  // `LDA $1000,X / STA $1A01,X` (4FD2, 5113): the whole byte, the pause bit with it. An object op 0x0B paused in the pass that still
+  // visits it goes on for $80 + its period. MEASURED, leg 116 (loc 199): a guard's touch runs `0B 16` before obj 11's visit, its shot
+  // flies on at the last velocity for 74 frames, up to the fight.
+  int _tk = (a->moveAnim > 0 ? a->moveAnim : 1) | (a->cadPause ? 0x80 : 0);  /* $1000,X cadence; default 1 (C0/42D7) */
+  if (op == 0x9A) _tk = B[addr + 3];                 // 5064-5068: the script's fourth byte
   if (op == 0x98 || op == 0x99) _tk = B[addr + 2];   // 53F4: the pair's ticket is the script byte
   mvStartStep(sc, obj, _ang, _tk, animLayer);
   CtVmMoveTrace(sc, obj, op, addr, "issued");
@@ -2356,10 +2364,9 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
   // clears $7F0B00 to 0, so the following frames clamp at the next tile edge: the mover advances tile by tile and
   // rests on the sub-tile where its velocity lands (the centre snap is the separate $1C81 path). Whether the clamp
   // applies is the object's $1100 move mode (sc->mode[], dispatched in run_tasks), not who issued the move.
-  // Op 0x9A arms $7F0B00 = #80 (negative = free every frame, no clamp), like the vector ops.
   sc->b00[obj] = (op == 0x94 || op == 0x95 || op == 0x96 || op == 0x97 || op == 0xA0 || op == 0xA1 || op == 0xB5 || op == 0xB6 ||
-                  op == 0x9E || op == 0x9F || op == 0x98 || op == 0x99 || op == 0x8F) ? sc->cycles[obj]
-               : (op == 0x9A) ? -128 : 0;
+                  op == 0x9E || op == 0x9F || op == 0x98 || op == 0x99 || op == 0x8F || op == 0x9A) ? (int)(int8_t)sc->cycles[obj]   /* signed: a paused object's $84 is free */
+               : 0;
   mvIssueRegs(sc, obj, animLayer);                             // the velocity ACFD published, then JSR C0/5614 (not A0/A1/9E/9F)
   sc->hasTask[obj] = 1; return 1;                              // A0 keeps its facing (no $F700 -> $1600)
 }
@@ -5421,7 +5428,8 @@ void CtSceneTick(CtScene* sc) {
   // So rate r steps every r+1 frames. sc->bright stands for $0119's low nibble. It is part of C0/0C76, so it
   // waits out the $0117 bit 5 service with the rest of the head (`head`).
   if (head && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x02)) {
-    int cur = sc->bright & 0x0F, tg = r8(sc->mem, 0x7E011B);
+    sc->bright = r8(sc->mem, 0x7E0119) & 0x0F;                                  // 1F24 LDA $19 / AND #0F: the byte, whoever wrote it
+    int cur = sc->bright, tg = r8(sc->mem, 0x7E011B);
     if (cur == tg) w8(sc->mem, 0x7E0118, r8(sc->mem, 0x7E0118) & ~0x02);       // 1F2A -> 1F55
     else if (r8(sc->mem, 0x7E011D)) w8(sc->mem, 0x7E011D, r8(sc->mem, 0x7E011D) - 1);   // 1F30/1F42 -> DEC
     else {
@@ -6754,6 +6762,13 @@ int CtSceneBright(const CtScene* sc) { return sc->bright; }
 // sc->bright is $0119's low nibble; the host's C0/2848 ramp steps the WRAM byte, so it re-reads it here.
 void CtSceneSyncBright(CtScene* sc) { if (sc) sc->bright = r8(sc->mem, 0x7E0119) & 0x0F; }
 void CtSceneHeadLatch(CtScene* sc) { if (sc) { sc->head117 = (uint8_t)r8(sc->mem, 0x7E0117); sc->head117Set = 1; } }
+// C0/0C8A's drain will commit this frame: $0117 bit 7 at the frame's head and $0119 at 0 or negative (see CtSceneTick).
+int CtSceneExitDrainDue(const CtScene* sc) {
+  if (!sc || sc->sndFrozenTick || sc->loadFadeIn) return 0;
+  uint8_t d117 = sc->head117Set ? sc->head117 : (uint8_t)r8(sc->mem, 0x7E0117);
+  int fc = r8(sc->mem, 0x7E0119);
+  return (d117 & 0x80) && (fc == 0 || (fc & 0x80));
+}
 int CtSceneActorMoveAnim(const CtScene* sc, int i) {
   if (i < 0 || i >= sc->nobj) return 0;
   return sc->actors[i].moveAnim;

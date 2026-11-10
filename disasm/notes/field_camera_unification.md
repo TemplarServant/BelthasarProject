@@ -321,3 +321,9 @@ anchors (`$1D0A`-based) are already unified — no change. Regression order: por
 `ct.exe` copy; minted states `t439corner/t439mid/t2bed/t5fair.state`; dis dumps `dis_c0.txt/dis_c2.txt`
 (linear — desyncs over data; re-dis locally with explicit m/x before citing); byte-scan one-liners in the
 session log. All monitor commands inline in PART F.
+
+## The bounds are the loader's, then the scripts' (playthrough leg 119, 2026-11-10)
+
+C0/7477 writes `$1D1A-$1D1D` before the init runner C0/5709, and fn0's ops may write the page after it: loc 1A0's `4A 1C 1D 7E 05 / 4A 1D 1D 7E 10`
+limits its camera to rows 05-10. The host seeded the record's bounds after the init and undid them, so the camera entered 6 rows off and the
+script's `E7 00 05` pan took 21 frames instead of 36. The seed now precedes `CtSceneCreateIn`.
