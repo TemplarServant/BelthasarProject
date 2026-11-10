@@ -97,3 +97,10 @@ three are back at priority 0; the port drives the movers straight from the op an
 spawn point made the enemies' spread 5 frames longer and hid most of it; with the spread exact, the battle now
 stages 8 frames early in the port's count and every later attract leg moved by -6 to -8 frames (checks re-pinned
 at the shifted frames, same content).
+
+## 2026-11-10 -- op 0x9A's two operands are literal tiles (C0/4FFB-5006)
+
+C0/4FEA reads `LDA $7F2001,X` twice into `$F2`/`$F3` and compares with `$1801,X`/`$1881,X` (arrival: C0/5018-502D), as op 0x96 does.
+The port read them through the scene variables, as 0x97's. MEASURED, the rule's cartridge, playthrough leg 116 (loc 195's guards,
+`9A 23 1E 04` on an object placed by `8B 23 1E`): the object is already there and stays at (2380, 1EFF); the port's walked to the tile
+its locals held (5, 0C), so the guard that stops the lead at f23973 was not there and the scene's event never came.

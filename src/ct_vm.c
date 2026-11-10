@@ -2240,7 +2240,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // target's tile bytes from WRAM, as the pass found them. The lead moves in A810, after the pass; the host's new
     // position is already in sc->fx, so the C position would be a frame early.
     dtx = r8(m, 0x7E1801 + (uint32_t)off); dty = r8(m, 0x7E1881 + (uint32_t)off);
-  } else if (op == 0x96 || op == 0xA0) { dtx = B[addr + 1]; dty = B[addr + 2]; }
+  } else if (op == 0x96 || op == 0xA0 || op == 0x9A) { dtx = B[addr + 1]; dty = B[addr + 2]; }   // 0x9A: C0/4FFB-5006, the operands themselves (leg 116, 195's guards)
   else { dtx = r8(m, LOC + B[addr + 1] * 2); dty = r8(m, LOC + B[addr + 2] * 2); }
   int atx = (int)sc->fx[obj] >> 4, aty = (int)sc->fy[obj] >> 4;
   // The chase (B5/B6, C0/5215) moves only while farther than one tile; once adjacent it stops but stays
