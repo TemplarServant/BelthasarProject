@@ -120,3 +120,34 @@ and is not in it.
 
 Graded by attract-0e6-exit-fade-and-robot-depth-vs-rule-cartridge (tools/attract_0e6_exit_cmp.py), which also pins the same
 stretch's exit fade (the drain C0/0C97 now keeps sc->bright with `$0119`).
+
+## 6. The party tail runs only when the room's last object is not a party member (2026-11-11)
+
+Found on playthrough leg 125's end picture (loc 1DE, the Blackbird's wing): the party has just come in, its three members
+stand on one pixel, and the cartridge draws the third (Ayla) in front where the port drew the lead (Marle), 312 px.
+
+C0/A810's loop has two arms, and each closes the loop on its own:
+
+```
+A81B  LDA $1100,X / CMP #03 / BCC ->A870          a party member (slot 0 / 1 / 2)
+...                                               every other object: AA07, A88D, the four legs
+A83E  LDX $6D / INX / INX / CPX $BD / BMI ->A819
+A846  (the party tail: $0199, then $0197)         <- the fall-through of A844 only
+A86A  RTS
+A870  JSR AAFD / JSR A88D / BCC ->A884 / C98A / A98A / AB45 / A9CD
+A884  LDX $6D / INX / INX / CPX $BD / BMI ->A819
+A88C  RTS                                         <- a party member was last: no tail
+```
+
+So when the object with the highest index is a party member the routine returns at A88C and the tail's two relinks never
+happen: the party keeps the loop's order, the highest index at the head of its band -- in front.
+
+**Measured, the rule's cartridge** (the route's state at leg 125's end; `$7F:2000` = 6, objects 1 / 2 / 5 = slots 0 / 1 / 2,
+`$1100` = 00 / 01 / 02, all at `$1800` = 0780, `$1880` = 0CFF): bucket $66's chain is 5, 2, 1 in the state and six frames
+later. The port's tail made it 1, 2, 5 within six frames.
+
+**The port:** ct_vm.c, the tail's loop runs only when the last object's `$1100` is 3 or more. Sec. 1's "then the party
+tail" holds for the rooms where an NPC or a trigger closes the table, which is most of them (0E6's robots, sec. 1).
+
+Check: `field-picture-party-stack-order-vs-cartridge` (tools/field_picture_cmp.py, 0 px; its mutation runs the tail
+whatever the last object is).

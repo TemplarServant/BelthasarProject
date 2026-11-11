@@ -5826,8 +5826,16 @@ void CtSceneTick(CtScene* sc) {
     // read the party-slot table ($0199 = member 2, $0197 = the lead; 0x80 = empty), `TAX` makes the byte the
     // obj*2 index, and each is unlinked and relinked if its activation latch is non-zero, re-seating the PCs in
     // their bucket chain every frame. Slot 3 ($019B) is not in the tail (the ROM's own asymmetry).
+    // The tail is the fall-through of A844's closing branch alone. A party object's arm (A81E `CMP #03 / BCC ->A870`)
+    // has a closing branch of its own, A884 `LDX $6D / INX / INX / CPX $BD / BMI ->A819`, and ends on `A88C RTS`: when
+    // the room's LAST object is a party member the routine returns there, without the tail, and the party keeps the
+    // loop's order (the highest index in front).
+    // MEASURED, the rule's cartridge, the end of playthrough leg 125 (loc 1DE, `$7F:2000` = 6, object 5 the third
+    // member, `$1100` = 02): the three members stand on one pixel and bucket $66's chain is 5, 2, 1 frame after frame
+    // -- Ayla in front; the port's tail made it 1, 2, 5 and drew Marle (312 px).
     { static const uint32_t kSlot[2] = { 0x7E0199, 0x7E0197 };   // A846 then A858, in that order
-      for (int k = 0; legsOn() && k < 2; k++) {
+      const int lastCls = sc->nobj > 0 ? r8(m, 0x7E1100 + (uint32_t)(sc->nobj - 1) * 2) : 0xFF;
+      for (int k = 0; legsOn() && lastCls >= 3 && k < 2; k++) {
         int b = r8(m, kSlot[k]);
         if (b & 0x80) continue;                                  // A848 / A85A  BMI -> skip
         if (r8(m, 0x7E0F00 + (uint32_t)b) == 0) continue;         // A84B / A85D  BEQ -> skip

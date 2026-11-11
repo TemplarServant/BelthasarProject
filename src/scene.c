@@ -537,12 +537,14 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
   int ef = sceneEffect(sd);
   int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
+  int back_en = (ef & 0x20) != 0;                    // CGADSUB bit 5: the backdrop is in the math
   if (sd->scrOn) {                                   // a battle's screen (CtFieldSceneSetScreen): its TM/TS, CGWSEL bit 1 = add
     main_t = sd->scrTM; sub_t = sd->scrTS;           //   the sub screen (clear: the fixed colour, the battle compositor's), and
     if (!(sd->scrCGWSEL & 0x02)) sub_t = 0;          //   CGADSUB. A BG3 on the effect's tilemap is not in scrTM/scrTS: it is the
     blend_en = sd->scrCGADSUB & 0x07;                //   effect's layer (CtBattleFxLayerCompose draws it), not the field's that
     sub_op = (sd->scrCGADSUB & 0x80) != 0;           //   this bake holds.
     half = (sd->scrCGADSUB & 0x40) != 0;
+    back_en = (sd->scrCGADSUB & 0x20) != 0;
   }
   if (!blend) { main_t |= sub_t; sub_t = 0; }
   main_t &= ~gSceneLayersOff; sub_t &= ~gSceneLayersOff;   // CtFieldSceneBakeLayersOff: layers a window takes away
@@ -607,18 +609,29 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
           if (r < 0) r = 0; if (r > 31) r = 31;
           main_px[o + k] = (uint8_t)((r << 3) | (r >> 2));
         }
-      } else if (mc == 0 && sc) {
-        memcpy(main_px + o, inp, 3);
+      } else if (mc == 0 && sc && back_en) {
+        // No main layer here: the main pixel is the backdrop, CGRAM 0, and it takes the sub pixel only when the
+        // backdrop is in the math (CGADSUB bit 5), as a layer does (ppu_handlePixel: layer 5's mathEnabled).
+        for (int k = 0; k < 3; k++) {
+          int d = palc[0][k] >> 3, s = inp[k] >> 3;
+          int r = sub_op ? d - s : d + s;
+          if (half) r >>= 1;
+          if (r < 0) r = 0; if (r > 31) r = 31;
+          main_px[o + k] = (uint8_t)((r << 3) | (r >> 2));
+        }
       }
     }
   }
-  // A main-screen pixel no layer covers (and no sub-screen pixel shows through) is the backdrop, CGRAM 0, as in
-  // ppu_handlePixel. Scripts can paint it (loc 0FE's iris: disasm/notes/field_quad_window.md).
+  // A main-screen pixel no layer covers, where the backdrop takes no sub pixel, is the backdrop itself, CGRAM 0, as in
+  // ppu_handlePixel. Scripts can paint it (loc 0FE's iris: disasm/notes/field_quad_window.md). MEASURED, the rule's
+  // cartridge, loc 1A7 (playthrough leg 130 f2531: TM 13, TS 04, CGWSEL 02, CGADSUB 02, W12SEL 22, TMW 17): inside
+  // window 1 BG1 and BG2 are off the main screen and the disc is solid black -- BG3, on the sub screen alone, does not
+  // show through a backdrop that is not in the math.
   for (int i = 0; i < W * H; i++)
-    if (!main_cov[i] && !(sub_t && sub_cov[i])) memcpy(main_px + (size_t)i * 3, palc[0], 3);
+    if (!main_cov[i] && !(sub_t && sub_cov[i] && back_en)) memcpy(main_px + (size_t)i * 3, palc[0], 3);
   uint8_t* mot = NULL;
   if (outCov && (mot = malloc((size_t)W * H)))
-    for (int i = 0; i < W * H; i++) mot[i] = main_cov[i] ? main_cov[i] : (sub_t && sub_cov[i]) ? sub_cov[i] : 0;
+    for (int i = 0; i < W * H; i++) mot[i] = main_cov[i] ? main_cov[i] : (sub_t && sub_cov[i] && back_en) ? sub_cov[i] : 0;
 
   // crop to the scroll mask (metatiles; sm_full => whole layer 1)
   int cx0, cy0, cx1, cy1;
@@ -1037,11 +1050,12 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   // the bake's own setup (CtComposeScene's head, blend on)
   int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
   int ef = sceneEffect(sd);
-  int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
+  int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0, back_en = (ef & 0x20) != 0;
   if (sd->scrOn) {
     main_t = sd->scrTM; sub_t = sd->scrTS;
     if (!(sd->scrCGWSEL & 0x02)) sub_t = 0;
     blend_en = sd->scrCGADSUB & 0x07; sub_op = (sd->scrCGADSUB & 0x80) != 0; half = (sd->scrCGADSUB & 0x40) != 0;
+    back_en = (sd->scrCGADSUB & 0x20) != 0;
   }
   main_t &= ~sd->vramOff; sub_t &= ~sd->vramOff;
   if (sd->layDirty || !sd->layRgb[0]) {
@@ -1071,7 +1085,7 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
     sd->layDirty = 0;
   }
   for (int i = 0; i < 6; i++) { o->rgb[i] = sd->layRgb[i]; o->cov[i] = sd->layCov[i]; o->w[i] = sd->layW[i]; o->h[i] = sd->layH[i]; }
-  o->mainT = main_t; o->subT = sub_t; o->blendEn = blend_en; o->subOp = sub_op; o->half = half;
+  o->mainT = main_t; o->subT = sub_t; o->blendEn = blend_en; o->subOp = sub_op; o->half = half; o->backEn = back_en;
   memcpy(o->backdrop, sd->pal[0], 3);
   return 1;
 }

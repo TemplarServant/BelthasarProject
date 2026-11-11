@@ -2918,6 +2918,7 @@ static uint8_t g_objSubMask[FIELD_WMAX * CAMH], g_objSubRgb[FIELD_WMAX * CAMH * 
 // screen alone: 4 and 0, every sprite pixel. g_objSubDone marks the pixels a sprite was mixed into this frame, for
 // the foreground's re-draw to leave them (g_objSubBoth: OBJ on both screens).
 static uint8_t g_objSubTop[FIELD_WMAX * CAMH], g_objSubDone[FIELD_WMAX * CAMH], g_objSubBoth;
+static int g_objSubMixed;                        // sprite pixels mixed that way this frame (OBJ on both screens)
 static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
   if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3; fb[o] = r; fb[o + 1] = g; fb[o + 2] = b;
     if (g_bObjPalMask) g_bObjPalMask[(size_t)y * g_fw + x] = (uint8_t)(g_bObjPalCur < 0 ? 0xFF : g_bObjPalCur);
@@ -4508,6 +4509,7 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
           p >= g_objSubTop[(size_t)py * g_fw + px]) {
         const uint8_t* m = g_objSubRgb + ((size_t)py * g_fw + px) * 3;
         g_objSubDone[(size_t)py * g_fw + px] = 1;
+        if (g_objSubBoth) g_objSubMixed++;
         uint8_t c[3];
         for (int k = 0; k < 3; k++) {                       // ppu_handlePixel: main5 +/- sub5, halved, clamped
           int d = m[k] >> 3, sv = pal[v * 3 + k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;
@@ -18328,6 +18330,7 @@ int main(int argc, char** argv) {
       if (mainPre && both && !CtFieldSceneObjLevels(f.sd, &mlvl, &slvl)) mainPre = NULL;
       g_objSubOn = mainPre && mcov && mw == f.W && mh == f.H;
       g_objSubBoth = (uint8_t)(g_objSubOn && both);
+      g_objSubMixed = 0;
       if (g_objSubOn) {
         g_objSubSub = (uint8_t)so; g_objSubHalf = (uint8_t)hf;
         memset(g_objSubMask, 0, (size_t)g_fw * CAMH);
@@ -18965,9 +18968,12 @@ int main(int argc, char** argv) {
     g_mot = NULL; g_motOwn = CT_MOT_FIXED;
     mot->valid = f.sd && f.base && !battleCompose && !arenaShift;
     // the frames between natively (fieldnative.c): the map's layers, when nothing the native drawer leaves out is up --
-    // the caption plane, the iris window, the colour window
+    // the caption plane, the iris window, the colour window. It knows neither BG3's scroll a line at a time (the window
+    // wave, g_bg3RowOn) nor a sprite mixed in as a BG pixel's sub pixel (g_objSubMixed): such a frame's in-betweens
+    // are the reprojection's (CtMotRaster), from the frame's own picture.
     { static CtSceneLayers motLayers[2]; static CtFieldNativeFx motFx[2];
-      if (mot->valid && (hostInterp(pr) || getenv("CT_NATIVECHECK")) && CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
+      if (mot->valid && !g_bg3RowOn && !g_objSubMixed && (hostInterp(pr) || getenv("CT_NATIVECHECK")) &&
+          CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;
         motLayers[g_motIdx].cut = wideW > CAMW ? g_wideCut : 0;

@@ -6,16 +6,18 @@ r"""A field picture, the port against the cartridge from one cartridge state.
 The playthrough's legs grade their last picture, but a leg ends wherever the route cut it: after a walk, a load or a
 fight whose length is the timing class, so a picture that differs there says little about how the room is drawn. This
 tool takes the cartridge's state at a leg's START (made from the route by tools/playthrough.py, keyed on the route and
-the oracle), leaves the pad alone for a few frames on both sides, and compares the pictures: nothing moved but what the
-room itself animates, and both sides began on the same WRAM.
+the oracle) -- or at a frame inside the leg (`at`: the leg's pad played that far on the cartridge, cached in the work
+folder with the same key) -- leaves the pad alone for a few frames on both sides, and compares the pictures: nothing
+moved but what the room itself animates, and both sides began on the same WRAM.
 
-    fieldpicture: <name> leg <leg> +<n> idle frames: <d> px differ at port <lag>
+    fieldpicture: <name> leg <leg>[ f<at>] +<n> idle frames: <d> px differ at port <lag>
 
 `<lag>` is the port frame that fits best in -6..+6 around the cartridge's (the port's picture P is the cartridge's P+2).
 --png writes build/_fieldpic/<name>.png: the cartridge, the port, the pixels apart.
 
 Regression checks: the `field-picture-*` family (docs/TESTING.md).
 """
+import hashlib
 import os
 import struct
 import sys
@@ -28,7 +30,8 @@ import playthrough as P  # noqa: E402
 WORK = os.environ.get('FIELDPIC_TMP') or os.path.join(ROOT, 'build', '_fieldpic')
 P.TMP = WORK                                                  # (its own scratch: not the playthrough's)
 
-# name: the leg whose START state seeds both sides (its name in tools/playthrough/route.txt) and the idle frames.
+# name: the leg whose START state seeds both sides (its name in tools/playthrough/route.txt), `at` a frame inside the
+# leg instead, and the idle frames.
 PICTURES = {
     # Death Peak, loc 0F6 (the start of leg 135): the snow is BG3 with a speed of its own, two pixels up and one left a
     # frame, under the window wave ($1DF9): HDMA channel 3 hands BG3HOFS out a line at a time, +-5 px over 16 lines.
@@ -44,6 +47,17 @@ PICTURES = {
     # lead -- the character shows through the light, where the foreground's re-draw used to cover it. The sky around
     # the platform is BG3 under the same wave as the snow.
     'end-of-time-pillar': dict(leg='107_keepers_dome', frames=40),
+    # The Blackbird's wing, loc 1DE (the start of leg 126): the party has just come in and its three members stand on one
+    # pixel. The room's LAST object is the third member, so C0/A810 ends on its party arm's own `RTS` (C0/A88C) and never
+    # runs the party tail (C0/A846-A867): the draw list keeps the loop's order, the third member in front -- Ayla, where
+    # the port's tail put the lead, Marle (ct_vm.c, the tail's `lastCls`).
+    'party-stack-order': dict(leg='126_wing_dalton', frames=40),
+    # Loc 1A7, the Ocean Palace's disaster (leg 130 f2531, Melchior's box open at the top): TM 13, TS 04, CGWSEL 02,
+    # CGADSUB 02, W12SEL 22, TMW 17. Window 1 takes BG1 and BG2 off the main screen inside the disc; what is left is the
+    # backdrop, which is not in the math (CGADSUB bit 5 clear), so the disc is solid black -- BG3's plasma, on the sub
+    # screen alone, does not show through (scene.c CtComposeScene's `back_en`). Around it the plasma waves under an
+    # open text box, whose lines are the box's and take no shift.
+    'backdrop-out-of-the-math': dict(leg='130_black_omen_gaspar', at=2531, frames=30),
 }
 
 
@@ -62,13 +76,40 @@ def png(path, c, p):
                            + chunk(b'IDAT', zlib.compress(b''.join(rows))) + chunk(b'IEND', b''))
 
 
+def cut(pad, n):
+    """The first n frames of a pad, as a pad."""
+    out = []
+    for b, k in pad:
+        if n <= 0:
+            break
+        out.append((b, min(k, n)))
+        n -= k
+    return out
+
+
+def state_at(legs, i, at):
+    """The cartridge's state at frame `at` of leg i: the leg's pad played that far from its start state (cached with
+    the key of what made it -- every pad from power-on through the leg, the oracle, the frame)."""
+    lg = legs[i]
+    path = os.path.join(WORK, 'leg%s_f%d.state' % (lg['name'].split('_')[0], at))
+    key = hashlib.sha1(('%s|%d' % (P.key_of(legs, i), at)).encode()).hexdigest()
+    if os.path.exists(path) and os.path.exists(path + '.key') and open(path + '.key').read().strip() == key:
+        return path
+    if os.path.exists(path):
+        os.remove(path)
+    if not P.oracle_play(P.start_of(legs, i), cut(lg['pad'], at), path):
+        sys.exit('fieldpicture: the cartridge did not make %s' % path)
+    open(path + '.key', 'w').write(key)
+    return path
+
+
 def run(name, want_png):
     d = PICTURES[name]
     legs = P.route()
     i = P.find(legs, d['leg'])
     if i > 0:
         P.ensure_states(legs, i - 1)
-    start = P.start_of(legs, i)
+    start = state_at(legs, i, d['at']) if d.get('at') else P.start_of(legs, i)
     pad = [(0, d['frames'])]
     _, pics = P.port_timeline(start, pad)
     c = P.oracle_picture(start, pad)
@@ -76,8 +117,8 @@ def run(name, want_png):
         print('fieldpicture: %s leg %s: the port drew no picture' % (name, legs[i]['name'].split('_')[0]))
         return 1
     k, n = P.picture_grade(c, pics)
-    print('fieldpicture: %s leg %s +%d idle frames: %d px differ at port %+d' % (
-        name, legs[i]['name'].split('_')[0], d['frames'], n, k))
+    print('fieldpicture: %s leg %s%s +%d idle frames: %d px differ at port %+d' % (
+        name, legs[i]['name'].split('_')[0], ' f%d' % d['at'] if d.get('at') else '', d['frames'], n, k))
     if want_png:
         out = os.path.join(WORK, name + '.png')
         png(out, c, pics[k])

@@ -51,6 +51,7 @@ const uint8_t* CtFieldSceneMotionCoverage(void* h);
 typedef struct CtSceneLayers {
   const uint8_t* rgb[6]; const uint8_t* cov[6]; int w[6], h[6];
   int mainT, subT, blendEn, subOp, half;   // BL1 1 / BL2 2 / BL3 4 bits, as the bake uses them
+  int backEn;                              // CGADSUB bit 5: the backdrop is in the math (it takes the sub pixel)
   uint8_t backdrop[3];
   int beyond;                              // (host, widescreen) layers drawn past the room's edge (field.c fieldBeyondLayers): left side in bits 0-7, right in 8-15
   int still, viewX;                        // (host, widescreen) the still backdrop's layers and the 256 view's picture column

@@ -206,9 +206,17 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
             if (r < 0) r = 0; if (r > 31) r = 31;
             c[ch] = (uint8_t)((r << 3) | (r >> 2));
           }
-        } else if (!mc && sc) memcpy(c, lrow[st] + tab[st * W + X] * 3, 3);
+        } else if (!mc && sc && L->backEn) {             // the backdrop in the math takes the sub pixel (scene.c)
+          const uint8_t* s = lrow[st] + tab[st * W + X] * 3;
+          for (int ch = 0; ch < 3; ch++) {
+            int d = L->backdrop[ch] >> 3, v = s[ch] >> 3, r = L->subOp ? d - v : d + v;
+            if (L->half) r >>= 1;
+            if (r < 0) r = 0; if (r > 31) r = 31;
+            c[ch] = (uint8_t)((r << 3) | (r >> 2));
+          }
+        }
       }
-      if (!mc && !(sT && sc)) memcpy(c, L->backdrop, 3);
+      if (!mc && !(sT && sc && L->backEn)) memcpy(c, L->backdrop, 3);
       // the caption plane's back cells, where the map shows its backdrop (not inside the iris: the window's picture is
       // the map without BG1 / BG2)
       int capX = 0;
