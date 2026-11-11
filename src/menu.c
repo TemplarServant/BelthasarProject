@@ -1236,6 +1236,18 @@ void CtMenuItemTabApply(const uint8_t* rom, long romLen, uint8_t* mem, int tgtSl
   mSheet9137(sh);                                                      // C2/B30E JSR C2/8820 / C2/B311 JSR C2/9137
 }
 
+// The pick's store of $0DBF, the first operand of C2/8ECC (C2/B0AB's dispatch, `JSR ($B0EE,X)`): the restore handler
+// C2/B17F stores the constant B2 for an item with the HP bit and 8A without (`LDA #B2 / BIT $0DBD / BMI / LDA #8A /
+// STA $0DBF`), the Power Meal's C2/B107 jumps there, and the Shelter's C2/B1F8 enters past the store (`JMP C2/B18B`),
+// so its use runs C2/8ECC on whatever the visit's last pick left -- zero after C2/940D's fill. The Tabs' C2/B200 has
+// its own loop and never reaches C2/8ECC.
+void CtMenuItemPick(uint8_t* mem, int id) {
+  int idx = id - ITFX_BASE;
+  if (!mem || idx < 0 || idx >= ITFX_N) return;
+  if (ctItemFxDbf[idx]) mem[0x0DBF] = ctItemFxDbf[idx];
+}
+static void mRestoreAmountsDp(uint8_t* mem, int amtSrc, int nib, unsigned cur, int* out6);   // C2/8ECC, below
+
 // C2/8E2D, the effect half of a use (C2/8F55 runs it on the A; C2/B31C consumes 42+ frames later). `popAmt[k]` = the
 // numbers C2/9016 floats over party slot k: [0] HP = the item's amount capped at 999 (C2/8E82 `CMP #03E7`) or the max
 // when it restores to full ($0DBF bit 6) -- not the HP actually gained --, [1] MP = its amount or the max (C2/8EAB);
@@ -1248,6 +1260,7 @@ int CtMenuItemApply(uint8_t* mem, int absSlot, int targetSlot, int popAmt[3][2])
   int idx = id - ITFX_BASE;
   if (idx < 0 || idx >= ITFX_N || ctItemFxKind[idx] == ITFX_NONE || ctItemFxKind[idx] == ITFX_TAB) return 0;
   int kind = ctItemFxKind[idx], amt = ctItemFxAmt[idx], pool = ctItemFxPool[idx], bits = 0;
+  mRestoreAmountsDp(mem, mem[0x0DBF], ctItemFxNib[idx], mem[0x0D00], NULL);   // C2/8E2D's JSR C2/8ECC: the six words
   for (int m = 0; m < 3; m++) {
     if (!ctItemFxAll[idx] && m != (targetSlot & 3)) continue;
     int pid = mem[0x2980 + m];
@@ -1579,6 +1592,24 @@ void CtMenuRestoreAmounts(int amtSrc, int nib, unsigned cur, int* out6) {
   }
   if (nib & 0x80) for (int i = 0; i < 6; i++) out6[i] = (-out6[i]) & 0xFFFF;   // C2/8F41
 }
+// C2/8ECC with its store: the six amount words land on the menu's direct page (D = 0: `STA $0022,Y`, Y = 10..0), and
+// they outlive the menu -- the field takes $0920-$1DFF back at the RTL (C0/011B) and nothing below, and its own direct
+// page is elsewhere. $0027, the high byte of the third word, is the battle main loop's iteration count (C1/8121
+// `INC $0027`, never initialised), whose parity picks the iterations of the cursor pass and the handlers (C1/82A2,
+// C1/8313). (The routine's other direct-page stores -- the rolls at $02-$07, the base product at $08/$09 -- are scratch
+// the menu's next frames reuse, as they do $0022-$0025 on some screens: MEASURED, the rule's cartridge at the end of
+// tools/menu_audit_cmp.py's techcast and itemuse drives, where $0026-$002D still hold these words.)
+// Not modelled: $0022-$0025 after the pass. Their writers are the menu's draw scratch -- C2/BB97 `LDX $71 / STX $22` (a
+// row's pointer), C2/906B-908F (the number printer's digits), C2/8F4D, and outside the menu the battle's C1/8491 and
+// D1/E888's MVN -- so the port's two words there are the amounts' and the cartridge's are whatever was drawn last
+// (playthrough leg 116, the fight at cart f87971: $22/$23 differ there). Whether the battle reads any of them before
+// writing is not measured: a read-before-write census of the battle's direct page is open.
+static void mRestoreAmountsDp(uint8_t* mem, int amtSrc, int nib, unsigned cur, int* out6) {
+  int a6[6]; if (!out6) out6 = a6;
+  CtMenuRestoreAmounts(amtSrc, nib, cur, out6);
+  for (int k = 0; k < 6; k++) { mem[0x0022 + 2 * k] = (uint8_t)(out6[k] & 0xFF);
+                                mem[0x0023 + 2 * k] = (uint8_t)((out6[k] >> 8) & 0xFF); }
+}
 
 // C2/8E82 (HP) / C2/8EAB (MP), one pool of one character. `full` = $0DC0 bit 6 -> the amount is the max. The two
 // differ in two places: the HP one clamps the shown amount to 999 (`CMP #03E7`) and the MP one does not, and the MP
@@ -1651,7 +1682,7 @@ int CtMenuTechUse(uint8_t* mem, int casterCharId, int techId, int tab, int tgtSl
   int cost = CtMenuTechMp(casterCharId, techId, tab, csh[0x2A]);       // C2/B427 -> C2/BC22
   if (csh[7] < cost) return 0;                                         // C2/B42D, an 8-bit compare
   int fx = ctTechFx[techId], nib = ctTechNib[techId];                  // $0DBD / $0DC0
-  int amt[6]; CtMenuRestoreAmounts(csh[0x39], nib, rngCur, amt);       // $0DBF = the derived Magic
+  int amt[6]; mRestoreAmountsDp(mem, csh[0x39], nib, rngCur, amt);     // $0DBF = the derived Magic
   int start = (fx & 0x08) ? 0 : tgtSlot, count = 1;                    // C2/8E2D: bit 3 = all party
   if (fx & 0x08) { count = 0; for (int k = 0; k < 3; k++) if (!(mem[0x2980 + k] & 0x80)) count++; }
   for (int i = 0; i < count; i++) {

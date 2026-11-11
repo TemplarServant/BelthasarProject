@@ -2092,7 +2092,8 @@ The leg is 1033 frames (f4261 -> f5294 of attract_cena_inicial). The port held 8
   `JSR CD/3E75` (one frame) then, per sheet, CD/1368's 32-tile build into $7E:2D00 and ONE $400 packet (CD/3ED2 in
   $400-chunk mode, `$CE0F = 0`) -- 5 + 3 frames, plus the frames a build spills over (CPU, 0..4).
 - CD/0018 -> CD/0D28 -> CD/0EBD only with `$987C != FF` (C1/4850). CD/0E9D: ids `86, 7B..7F` carry CLEAR -> CD/0F42
-  at once (the run-off's `86`: its programs' arm is the one frame). Otherwise `$2A21 & 01` -> CD/0E79 + `LDA #1F /
+  at once and with NO wait (corrected 2026-11-10, battle_flee.md sec. 8: the arm lands in the JSL's own frame; the "one
+  frame" this said was a lag frame of the cartridge off the rule). Otherwise `$2A21 & 01` -> CD/0E79 + `LDA #1F /
   JSR CD/3E3B` (31 packets), else `($2C66 | $2C67) & 04` -> CD/0E79 + `#0F` (15); then CD/0F33 and CD/0F3F (one
   each), CD/0FD5 four sheet packets, CD/0FF8 the $800 map (2), CD/0D53's arm (1) = 9.
 - `$2C66/$2C67` are C0/0691's copies of `$0BD7/$0BD8`, which C0/A415-A456 pack from BYTE 4 of the map image at
@@ -2100,7 +2101,7 @@ The leg is 1033 frames (f4261 -> f5294 of attract_cena_inicial). The port held 8
   `AND #13` under `$01BB`. Loc 07D's byte 4 = 4B (`$0BD8 = 04`, the fifteen), loc 0AD's = 0B (`00`). The port reads
   the byte through ct_lz_map_header_byte at each load (fieldMapHeaderStage) and stages `$2C66..$2C6F` as C0/0691
   does (`$2C68/69 = 0`, `$2C6A = 02`, `$2C6B = $0BDF`, `$2C6C = $21`, `$2C6D = 0`, `$2C6E = 09`, `$2C6F = 0`).
-- battleActPreroll = 13 + 8 + (fx ? 1 | 9 + 31 | 9 + 15 | 9 : 0): tech $28 45 (cartridge 52, seven spill frames),
+- battleActPreroll = 13 + 8 + (fx ? 0 for 86, 7B..7F | 8 + 31 | 8 + 15 | 8 : 0) (as of 2026-11-10; it read 1 | 9 + ..): tech $28 45 (cartridge 52, seven spill frames),
   X-Strike 30 (34), GATO's song 30 (33), the `FF` group 21 (21..24). The pinned 21/33 are gone.
 
 ## 11.11 The field's VRAM and CGRAM for a translated stage (2026-09-16)

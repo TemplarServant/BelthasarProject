@@ -15,6 +15,8 @@ static const uint8_t  ctItemFxKind[ITFX_N] = {0};
 static const uint16_t ctItemFxAmt [ITFX_N] = {0};
 static const uint8_t  ctItemFxAll [ITFX_N] = {0};
 static const uint8_t  ctItemFxPool[ITFX_N] = {0}; 
+static const uint8_t  ctItemFxNib [ITFX_N] = {0}; 
+static const uint8_t  ctItemFxDbf [ITFX_N] = {0}; 
 static const uint8_t ctOrgStart[5] = {0};
 static const uint8_t ctOrgLen  [5] = {0};
 #endif

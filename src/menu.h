@@ -134,6 +134,7 @@ int  CtMenuItemUsable(int id);                       // field-menu usable? ($770
 int  CtMenuItemUse(uint8_t* mem, int absSlot, int targetSlot);  // apply effect + consume; 1 if used
 // The two halves the Item screen runs 42+ frames apart: C2/8E2D's effect (with C2/9016's pop-up numbers, $0F5D bits
 // returned) and C2/B31C's consume.
+void CtMenuItemPick(uint8_t* mem, int id);          // the pick's $0DBF (C2/B17F), C2/8ECC's operand
 int  CtMenuItemApply(uint8_t* mem, int absSlot, int targetSlot, int popAmt[3][2]);
 void CtMenuItemConsume(uint8_t* mem, int absSlot);
 // The Tabs (C2/B200's loop): X = `$0DBD` (1 Power, 6 Magic, 2 Speed; 0 = not a Tab), C2/B275's validity, C2/B2E0's apply.

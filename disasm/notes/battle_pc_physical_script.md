@@ -95,7 +95,52 @@ the logical oracle's `$1E00` shows 32 / 71: a 39-frame gap, where the REAL cartr
 - GATO's counter after a PC physical opens at the teardown + 3 in the port, + 2 on the logical oracle (f735 ->
   f737: no iteration head between, the next turn's C1/4058 runs straight after C1/41BD). `CT_BATTLE_COUNTER_DELAY` is
   still the fitted constant.
-- C1/49FF's path test C1/4A71 is not in the port's close/far verdict (a melee weapon is always close).
+- (C1/49FF's path test C1/4A71 is in the verdict since battleTargetWalkable; its stores and the facing stamp since
+  2026-11-11, sec. 6.)
 - Ops that still fall to the interpreter's inert default in the suite's fights: none (tools/battle_asc_census.py,
   2026-09-30: 152 / 152 PC scripts use only executed ops; 27/28, 43, C0-C3 and 50-55 have their cases --
   battle_asc_inert_ops.md, battle_asc_ops_orbit_shake_offsets.md).
+
+## 6. C1/49FF's stores: the actor turns to its target as the action opens (2026-11-11)
+
+`python tools/romdis.py 0149FF 115 1 0`:
+
+```
+C1/49FF  LDA #01 / STA $9930
+C1/4A04  LDA $AE91 / STA $986F / TAX            the actor
+C1/4A0B  LDA $A017 / STA $9870 / TAY            the primary target
+C1/4A12  $D3 / $D4 = $1D0C,X / $1D23,X ; $D5 / $D6 = $1D0C,Y / $1D23,Y     the live feet
+C1/4A26  JSR C1/2AE3                             $9893 = 0640, then C1/2B49: the metric over the MIRRORS $A039 / $A050
+C1/4A29  LDA $9872 / BPL / STZ $9930             beyond 40 px: far
+C1/4A31  LDA $AE91 / TAY / JSR C1/0222 / TAX / LDA $C0F700,X / STA $96DB,Y  the actor's FACING, toward the target
+C1/4A40  LDA $2980,Y / TAX / LDA $CCF63C,X / BNE ->4A4F ; LDA $9930 / BEQ ->RTS
+C1/4A4F  $80-$83 = $D3-$D6 / JSR C1/4A71 / LDA $92 / BPL -> $9930 = 1 ; else STZ $9930
+```
+
+The port had the verdict (`$9930`) and none of the stores: the distance came from the live feet, and **the actor's
+facing was not written**. A melee attacker gets a facing from its walk (CC/F434) and from the script's `72 0D`; a
+ranged one (Marle, Lucca: CC/F63C = 0) has neither, so it shot in whatever facing its last re-aim (C1/2F54, toward the
+NEAREST enemy) had left. With one enemy on the field the two agree, which is why no fixture saw it.
+
+Measured on the rule's cartridge, playthrough leg 119 (loc 1A0's fight, ids 59 + 6D x3; `--monitor ... --writer` from
+the leg's f19970 state):
+
+| frame | cartridge | port before |
+|---|---|---|
+| f20063 (`$A013` 0 -> 1 at C1:40A9, `$9877` = 04 at C1:43CB) | `$96DB+2` 00 -> 02 at C1:4A40; `$986F / $9870 / $9872` = 02 / 03 / FF at C1:2BB4; `$9893` = 0640; `$D3-$D6` = C1 6F 5B 39 | `$96DB+2` stays 00; none of the stores |
+| f20085-20129, Lucca's poses `$9907+2` | B1 B2 B3 B1 EA (the facing-2 column) | AB AC AD AB E6 (facing 0): she shot facing the wrong way |
+| f20267, her next re-aim (latch `$A098` 82 -> 02) | the facing toward seat 4 differs from 02: `INC $80`, the pose publishes, `$9912` = 1 and seat 0's visit is deferred (`$9922` 01 00 00, `$968C` 02 03 02) | the facing is unchanged, nothing publishes, seat 0 is visited (`$9922` 00 00 01, `$968C` 03 03 02) and the latch goes on to 80 |
+
+From f20267 the port's PC pose pass ran in another phase: the re-aim latch `$A098` (C1/2F22) and with it WHICH seat made
+the last C1/2986 call before an action. That call's `$9873` is what resolver 17 (C1/A709, "the nearest other enemy")
+reads when no other enemy is left (it is never reset). At f25416 Crono's tech killed the three 6D; enemy 59's counter
+block (CC/9D3A's block 2: `1F 17 00 00 / 03 17 58 00 -> 02 17 05 17 00 61`) asked "the nearest other enemy within 48 px":
+the cartridge's stale `$9873` was 05 (Marle's re-aim, f24953: (3E,80), 7298 > 0x900 -> the condition fails), the port's
+07 (Crono's, f24937: (8D,72), 1665 -> it holds). A first condition that holds runs the commit C1/8C3E at once -- the
+entry's eval, whose op 02 resolves target 05 with a draw on `$26` -- before the second condition (the id 58) fails. One
+draw more on the port: the fight handed `$29AD` = 12 back for the cartridge's 11, the next fight's crit stream `$B3E6`
+started one entry on, and Lucca's last attack on the scouts was a crit (the joined legs' warp f33341+2).
+
+The port now does the routine's stores at the dispatch (`battleActionSpan`, the frame `$9877` is written): `$986F`,
+`$9870`, the metric through `battlePosMetric` (the mirrors, `$9893`, `$9872` and its direct page), the facing through
+`battleAtan2Dp` (`$D3-$E3`) into `$96DB,actor`, then the flood as before.

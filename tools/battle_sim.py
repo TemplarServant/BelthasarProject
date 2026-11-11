@@ -24,6 +24,9 @@ r"""Any battle, port against the rule's cartridge: every enemy formation the ROM
   poke=0026:80,..  more WRAM bytes ($7E addr:val, hex) set at hpat on both sides (e.g. the battle RNG's index $0026)
   frames=N         run length (default 1500)
   mon=CCEA:1,...   more WRAM regions ($7E addr:len) graded with the rest (the cartridge's --monitor takes 32 in all)
+  from=F           grade the value sequences from frame F on (default: two frames after both sides staged). The boot
+                   lays some bytes in another order within its frames ($96DB, $9907, $968C: the port stores the
+                   entrance's values on the staging frame); a mechanism of the fight itself is graded past it
 
 Why a new staging: CT has no formation table: the fight takes the enemy objects on screen (C0/0557 reads `$1101,Y`),
 and op 0x83 (C0/46DF) is what makes an object an enemy -- its id, its slot (`$0D00` from operand 2), its mode (operand 2
@@ -267,7 +270,7 @@ def staged_at(rows, total):
     return next((f for f in range(total + 1) if s[f] and 'FF' in [s[f][i:i + 2] for i in range(0, 16, 2)]), None)
 
 
-def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
+def grade(label, rows_c, rows_p, cth, pth, total, regs=None, gfrom=None):
     """Both sides from the frame both have staged: the value sequences compared without their frames (the first
     field whose sequence differs), then the frame offsets of the matching changes, then the picture frame by frame."""
     lines = []
@@ -278,6 +281,9 @@ def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
     st_c, st_p = state_at(rows_c, f0), state_at(rows_p, f0)
     lines.append('sim %s: staged cartridge %s f%d, port %s f%d' % (label, ids_of(st_c.get(0xAF02)), sc0,
                                                                 ids_of(st_p.get(0xAF02)), sp0))
+    if gfrom is not None and gfrom > f0:
+        f0 = gfrom
+        lines.append('sim %s: graded from f%d' % (label, f0))
     offs, diffs = [], []
     for a, n in (regs or regions()):
         cc, pp = changes(rows_c, a, f0, total), changes(rows_p, a, f0, total)
@@ -338,7 +344,8 @@ def grade(label, rows_c, rows_p, cth, pth, total, regs=None):
     return lines
 
 
-def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False, mon=(), poke=()):
+def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=600, total=1500, verbose=False, mon=(), poke=(),
+          gfrom=None):
     # placed == []: gato_wait's own fight (GATO as the scene loaded it) -- the baseline the staging is measured against
     combo = int(drive[6:], 16) if drive.startswith('combo:') else None
     if combo is not None:
@@ -384,7 +391,7 @@ def fight(placed, tag, party=(0, 1, 2), inv=None, drive='mash', hp=None, hpat=60
     key = hashlib.sha1(repr((party, inv, drive, hp, hpat, total, sorted(mon), sorted(poke))).encode()).hexdigest()[:8]
     regs, rows_c, rows_p, cth, pth, plog = ab.run(pk, drv, total, 'sim_' + tag + '_' + key, regs=want, raw=True, timed=timed)
     label = tag + ' [' + (' '.join('%02X %s' % (p[0], names()[p[0]]) for p in placed) or 'GATO as loaded') + ']'
-    out = grade(label, rows_c, rows_p, cth, pth, total, regs=want)
+    out = grade(label, rows_c, rows_p, cth, pth, total, regs=want, gfrom=gfrom)
     if verbose:
         for a in (0xAF02, 0x993C, 0x2380) + tuple(r[0] for r in mon):
             for side, rows in (('cartridge', rows_c), ('port', rows_p)):
@@ -405,6 +412,7 @@ def options(args):
     if 'hp' in o: kw['hp'] = int(o['hp'])
     if 'hpat' in o: kw['hpat'] = int(o['hpat'])
     if 'frames' in o: kw['total'] = int(o['frames'])
+    if 'from' in o: kw['gfrom'] = int(o['from'])
     if 'poke' in o: kw['poke'] = [(int(a, 16) & 0xFFFF, int(v, 16)) for a, v in (x.split(':') for x in o['poke'].split(','))]
     if 'mon' in o: kw['mon'] = [(int(a, 16) & 0xFFFF, int(n)) for a, n in (x.split(':') for x in o['mon'].split(','))]
     return kw

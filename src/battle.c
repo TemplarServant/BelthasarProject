@@ -1140,6 +1140,7 @@ static int battleBlock(int idx) {                                 // combatant i
   return idx < 3 ? (int)(0x5E2Du + (unsigned)idx * 0x80u) : (int)ENEMY_BLOCK(idx - 3);
 }
 static int battleAtan2(int D3, int D4, int D5, int D6);           // fwd (defined with the trig block below)
+static int battleAtan2Dp(uint8_t* s, int D3, int D4, int D5, int D6);   // fwd: the same, with C1/0222's direct page
 static int battleTrigMul(int angle, int scale);
 static int battleS8(int v);
 static int battleIsPc(int idx) { return idx < 3; }
@@ -3823,16 +3824,67 @@ static void battleIconTrace(CtBattleHost* h, int cmb, const char* ev) {
           s[0xA4BA + cmb], s[0xA4DB + cmb]);
 }
 // C1/2F97's two stores: $A440 := the pose class, $A441,Y := the icon state (12FA6 LDA #FF / STA $A441,X first).
-static void battleStatusScanStore(CtBattleHost* h, int cmb) {
-  int cls = 3, icon = -1, low = 0;
-  CtBattleStatusScanEx(h->mem, cmb, &cls, &icon, &low);
-  h->mem[0xA440] = (uint8_t)cls;
-  h->mem[0xA441 + cmb] = low ? 0x80 : (icon < 0) ? 0xFF : (uint8_t)icon;   // C1/303C-303E (the low-HP end) / C1/3017
-  // C1/2FBD-2FD0: a combatant doomed ($A119) or fallen (+0x1D bit 7) gets $A0A8 = 1 and $968C = FF -- the byte the
-  // PC-side target lists test (battlePcTargetList); C1/308C (battleIconDispatch) clears it on the next icon change.
-  if (cmb >= 0 && cmb < 11 && (h->mem[0xA119 + cmb] || (h->mem[battleBlock(cmb) + 0x1D] & 0x80))) {
-    h->mem[0xA0A8 + cmb] = 1; h->mem[0x968C + cmb] = 0xFF;
+// C1/2F97, the status scan of one combatant ($94), whole (`python tools/romdis.py 012F97 200 1 0`). Both callers run all
+// of it: a PC's visit in the walk (C1/2E28) and the action close's loop C1/305C (C1/3067), every present combatant.
+//   2F99  $84 = $A09B,X ? 00 : 03 ; $A441,X = FF ; $A2 = CC/F8ED[2X] (the block) ; $80 = 0000
+//   2FBD  doomed ($A119,X) or fallen ($5E4A,Y bit 7): $A0A8,X = 1, $968C,X = FF -- the byte the PC-side target lists
+//         test (battlePcTargetList); C1/308C (battleIconDispatch) clears it on the next icon change
+//   2FD3  the records CC/F77F (+0 the block offset, bit 7 the end; +1 the mask; +2 the icon state; +3 the class): the
+//         first one whose bit is set -- record 0 also when $A119,X is -- gives $84 = the class (FF: 03, and with $A0A7
+//         set the record is passed over) and, unless its icon state is negative, `$A441,Y = it / CMP $A44C,Y / BEQ /
+//         LDA #FF / STA $968C,Y`: an icon that is not the latched one restarts the window. Nothing is compared when no
+//         record holds ($A441 stays FF)
+//   302C  no record: low HP ($5E2F,Y bit 0) without $A09B -> $A441,Y = 80, `LDA #12 / CMP $A44C,Y / BEQ` else (a PC:
+//         `CPY #0003 / BCS`) $968C,Y = FF, and $A440 = 12 ($84 is not written)
+//   3056  $A440 = $84
+// MEASURED, the rule's cartridge, playthrough leg 119 f21445 (`$A013` = 1: the close of enemy tech 67, which left +1E
+// bit 2 on the three PCs): `$A441-43` FF -> 04, `$968C-8E` 02 01 00 -> FF FF FF at C1:3024, `$A44C-4E` -> 04 at C1:309E.
+// The port's close stored `$A440 / $A441` only, so the three windows went on from their old entries (f22045: 03 02 01
+// for the cartridge's 00 00 00) and every PC pose after it came from another entry.
+// Returns $A440.
+static int battleStatusScan2F97(CtBattleHost* h, int cmb) {
+  uint8_t* s = h->mem;
+  if (cmb < 0 || cmb >= 11) return s[0xA440];
+  if (!gRom || (long)(ROM_STATUS_SCAN_TBL + 4) > gRomLen) {      // (no ROM: the stores of the old evaluation)
+    int cls = 3, icon = -1, low = 0;
+    CtBattleStatusScanEx(s, cmb, &cls, &icon, &low);
+    s[0xA440] = (uint8_t)cls; s[0xA441 + cmb] = low ? 0x80 : (icon < 0) ? 0xFF : (uint8_t)icon;
+    return cls;
   }
+  s[0x84] = s[0xA09B + cmb] ? 0x00 : 0x03;                        // 2F99-2FA4
+  s[0xA441 + cmb] = 0xFF;                                         // 2FA6-2FA8
+  int b = CtRomByte(gRom, 0x400000L, (long)(0x0CF8ED + cmb * 2)) | (CtRomByte(gRom, 0x400000L, (long)(0x0CF8EE + cmb * 2)) << 8);
+  s[0xA2] = (uint8_t)b; s[0xA3] = (uint8_t)(b >> 8);              // 2FAB-2FB6 LDA CC:F8ED,X / TAY / STY $A2
+  s[0x80] = 0; s[0x81] = 0;                                       // 2FB8 TDC / STA $80 (sixteen bits)
+  if (s[0xA119 + cmb] || (s[(0x5E4A + b) & 0xFFFF] & 0x80)) {     // 2FBD-2FC7
+    s[0xA0A8 + cmb] = 1; s[0x968C + cmb] = 0xFF;                  // 2FC9-2FD0
+  }
+  for (uint32_t r = ROM_STATUS_SCAN_TBL; (long)(r + 4) <= gRomLen; r += 4) {   // 2FD3 TDC / TAX ... 3026 INX x4
+    int off = CtRomByte(gRom, 0x400000L, (long)(r));
+    if (off & 0x80) {                                             // 2FD9 BMI -> 302C
+      if ((s[(0x5E2F + b) & 0xFFFF] & 0x01) && !s[0xA09B + cmb]) {   // 302C-303A
+        s[0xA441 + cmb] = 0x80;                                   // 303C-303E
+        if (s[0xA44C + cmb] != 0x12 && cmb < 3) s[0x968C + cmb] = 0xFF;   // 3041-304F
+        s[0xA440] = 0x12;                                         // 3052-3058
+        return 0x12;
+      }
+      break;                                                      // -> 3056
+    }
+    if (!(s[(0x5E4A + b + off) & 0xFFFF] & CtRomByte(gRom, 0x400000L, (long)(r + 1)))) {   // 2FDB-2FEA
+      if (r != ROM_STATUS_SCAN_TBL || !s[0xA119 + cmb]) continue; // 2FEC-2FFC: record 0 holds for a doomed one too
+    }
+    int cl = CtRomByte(gRom, 0x400000L, (long)(r + 3));           // 2FFE LDA $CCF782,X
+    if (cl == 0xFF) { if (s[0xA0A7]) continue; cl = 0x03; }       // 3002-300B
+    s[0x84] = (uint8_t)cl;                                        // 300D
+    int ic = CtRomByte(gRom, 0x400000L, (long)(r + 2));           // 3011 LDA $CCF781,X / BMI
+    if (!(ic & 0x80)) {
+      s[0xA441 + cmb] = (uint8_t)ic;                              // 3017
+      if (ic != s[0xA44C + cmb]) s[0x968C + cmb] = 0xFF;          // 301A-3021
+    }
+    break;                                                        // 3024 -> 3056
+  }
+  s[0xA440] = s[0x84];                                            // 3056-3058
+  return s[0x84];
 }
 // C1/30B6: the arm's clears (every handler but C1/3191 opens with it).
 // ...and for a seat (C1/30C7 `CPX #0003 / BCS`) it puts the seat's OBJ palette row back: `LDA $993C,X / JSR C1/0111 (x16) /
@@ -3922,7 +3974,8 @@ static void battleStatusCloseService(CtBattleHost* h) {
   s[0x99D9] = 0; s[0xA102] = 0;
   for (int guard = 0; guard < 16 && !s[0xA102]; guard++) {       // C1/305C
     int cmb = s[0x99D9];
-    if (cmb < 11 && s[0x96F5 + cmb]) battleStatusScanStore(h, cmb);   // 13062-13067
+    s[0x94] = (uint8_t)cmb; s[0x95] = 0;                         // 1305F-13060 TAX / STX $94
+    if (cmb < 11 && s[0x96F5 + cmb]) battleStatusScan2F97(h, cmb);   // 13062-13067 JSR C1/2F97, whole
     s[0x99D9]++;                                                 // 1306A
     if (s[0x99D9] == 0x0B) { s[0xA102]++; s[0x99D9] = 3; }       // 13070-13079
     for (int c = 0; c < 11; c++) battleIconDispatch(h, c);       // 1307C-1308B
@@ -9062,10 +9115,14 @@ static int battleActStage3(CtBattleHost* h) {
   if (s[0xAE93] != 0x37 && s[0xAE94] != 0) return 0xFF;
   return (a >= 0 && a < romLen) ? CtRomByte(rom, 0x400000L, (long)(a)) : 0xFF;
 }
-// The run-off action $79 (battle_flee.md 5.2): its config CD/45A6[$79] carries $987C = $86, but the effect that
-// index loads (D1:6240[$86] = two program ids, no sheet) costs one packet, not the third staging's. Observed 22 =
-// the 13 counted frames + U = 9, like the 21/33 above.
-#define CT_FLEE_ACT_PREROLL   22
+// The run-off action $79 (battle_flee.md 5.2 and sec. 8): its config CD/45A6[$79] carries $987C = $86, but the effect
+// that index loads (D1:6240[$86] = two program ids, no sheet) has no wait in it: CD/0EF8 `JSR CD/0E9D / BCC ->CD/0F42`
+// copies the four ids, `JSR CD/11B8` (a table copy) and returns at CD/0F8E; CD/0D33 then arms the slots (CD/15D5) in
+// the frame C1/4841's wait returned in. So the pre-roll is the 13 counted frames + U = 8, a no-effect action's 21.
+// The rule's cartridge, two scenes: the forest fixture's run-off opens ($A013) at f945, `$CA32` = 1 at f954 (open+9),
+// `$5D9B` = 1 at f966 (open+21), `$A013` = 0 at f1151 (open+206); playthrough leg 107's at f11727 / f11736 / f11748 /
+// f11933. (The 22 this was before is the cartridge off the rule: a lag frame in the load, the class the rule removes.)
+#define CT_FLEE_ACT_PREROLL   21
 // ...and from its script's op 01 to `STZ $A013`: C1/40D3's #FF post on the loop-exit frame, then the five C1/007E
 // waits at C1/40E1, C1/4116, C1/414B, C1/41B4 and C1/41B7.
 
@@ -9081,7 +9138,8 @@ static int battleActStage3(CtBattleHost* h) {
 //   CD/0015 -> CD/1323: `$CACF = 0..3`, CD/132E `JSR CD/3E75` (1) then one $400 packet per sheet (4)  = 5
 //   CD/002A -> CD/1314: `$CACF = 4..5`, the same for two sheets                                        = 3
 //   CD/0018 -> CD/0D28 -> CD/0EBD, only with `$987C != FF` (C1/4850):
-//     CD/0E9D: an id in {86, 7B..7F} carries clear -> CD/0F42 at once, no staging (the run-off's 1 = CD/0D53's slot)
+//     CD/0E9D: an id in {86, 7B..7F} carries clear -> CD/0F42 at once, no staging and no wait: CD/0D33's arm lands
+//     in the frame the JSL was made in (measured for 86, the run-off, above; 7B..7F take the same branch)   = 0
 //     else `$2A21 & 01` -> CD/0E79 + `LDA #1F / JSR CD/3E3B` (31), or `($2C66 | $2C67) & 04` -> CD/0E79 + `#0F` (15);
 //     CD/0F33 and CD/0F3F one each (2); CD/0FD5 one per sheet (4); CD/0FF8 the $800 map (2)                     = 8 +
 //     and CD/0D53's arm lands on the frame after the map's second wait -- the first of the twelve C1/007E waits to
@@ -9102,13 +9160,11 @@ static int battleActPreroll(CtBattleHost* h) {
   if (h->actEndByScript) return CT_FLEE_ACT_PREROLL;
   int st3 = battleActStage3(h);
   int u = 5 + 3;                                                        // CD/0015 + CD/002A
-  if (st3 != 0xFF) {
-    if (st3 == 0x86 || (st3 >= 0x7B && st3 <= 0x7F)) u += 1;            // CD/0E9D clear: no sheets, the arm only
-    else {
-      u += 8;                                                           // 0F33, 0F3F, four sheets, the map's two: eight
+  int noSheets = (st3 == 0x86 || (st3 >= 0x7B && st3 <= 0x7F));         // CD/0E9D clear -> CD/0F42..0F8E: no CD/3E75
+  if (st3 != 0xFF && !noSheets) {
+    u += 8;                                                             // 0F33, 0F3F, four sheets, the map's two: eight
                                                                         //   CD/3E75 waits
-      u += battleActLoadWait(h);                                        // CD/0EFD-0F25: 31, 15 or none
-    }
+    u += battleActLoadWait(h);                                          // CD/0EFD-0F25: 31, 15 or none
   }
   return 13 + u;
 }
@@ -9618,14 +9674,27 @@ static int battleActionSpan(CtBattleHost* h, int atk, int isTech) {
     int weapRanged = rom ? (CtRomByte(rom, 0x400000L, (long)(ROM_WEAPON_RANGED_TBL + (cid & 0xFF))) == 0) : (cid == 1);
     int melee = 1;                                              // $9930 default 1 (C1/49FF)
     if (h->actTarget >= 0 && h->actTarget < 11) {
-      int dx = BT_LIVEX(h, atk) - BT_LIVEX(h, h->actTarget);      // live foot delta (mvLiveX/Y == $1D0C/$1D23, the ROM's source)
-      int dy = BT_LIVEY(h, atk) - BT_LIVEY(h, h->actTarget);
-      melee = (dx * dx + dy * dy) <= 0x0640;                    // C1/2AE3 threshold $9893 = 0x0640 = 40^2 (inclusive):
-                                                                // C1/49FF `JSR C1/2AE3` (A9 40 / A9 06); the 0x0900 stub
-                                                                // is C1/2B2B, the cond-1F counter gate's entry, not this.
+      int tgt0 = h->actTarget;
+      // C1/4A04-4A24: `$986F` = the actor ($AE91), `$9870` = the primary target ($A017), `$D3-$D6` = their live feet
+      // ($1D0C / $1D23).
+      s[0x986F] = (uint8_t)atk; s[0x9870] = (uint8_t)tgt0;
+      int d3 = BT_LIVEX(h, atk), d4 = BT_LIVEY(h, atk), d5 = BT_LIVEX(h, tgt0), d6 = BT_LIVEY(h, tgt0);
+      // C1/4A26 `JSR C1/2AE3`: `$9893` = 0640 (40 px, squared; A9 40 / A9 06), then C1/2B49's metric -- over the two's
+      // MIRRORS $A039 / $A050 as they stand (C1/49FF refreshes neither), the sum in sixteen bits -- and `$9872` = FF beyond
+      // it. C1/4A29 `LDA $9872 / BPL / STZ $9930`. (The 0x0900 stub is C1/2B2B, the cond-1F counter gate's, not this.)
+      battlePosMetric(s, atk, tgt0, 0x0640);
+      melee = !(s[0x9872] & 0x80);
+      // C1/4A31-4A3D `LDA $AE91 / TAY / JSR C1/0222 / TAX / LDA $C0F700,X / STA $96DB,Y`: the actor turns to its target
+      // as the action opens, whatever the verdict, a ranged weapon too. MEASURED, the rule's cartridge, playthrough leg
+      // 119 f20063: Lucca (C1,6F) shoots seat 3 (5B,39) -- `$96DB+2` 00 -> 02 at C1:4A40 on the frame `$A013` rises, and
+      // her poses are the facing-2 column's (B1 / B2 / B3 / EA; the port drew AB / AC / AD / E6, facing 0). The byte
+      // outlives the action: her next re-aim (C1/2F54, toward the nearest enemy) finds another facing, publishes, and the
+      // publish count `$9912` defers the next seat's visit -- the latch `$A098` and with it what C1/2986 leaves in `$9873`
+      // (resolver 17's stale read, an enemy's counter and its draw: disasm/notes/battle_pc_physical_script.md sec. 6).
+      BT_PCFACING(h, atk) = ctBattleFaceTab[battleAtan2Dp(s, d3, d4, d5, d6) & 0xFF];
       // C1/4A40-4A6D: a melee weapon (CC/F63C != 0), or a ranged one the distance kept close, then asks C1/4A71 whether
       // the attacker can walk to the target, and that answer is the verdict ($92 < 0 -> $9930 = 0, the far anim).
-      if (!weapRanged || melee) melee = battleTargetWalkable(h, atk, h->actTarget);
+      if (!weapRanged || melee) melee = battleTargetWalkable(h, atk, tgt0);
     }
     s[0x9930] = (uint8_t)melee;                                // C1/49FF's verdict, read by C1/4394 to pick the config
     int normalSel = rom ? CtRomByte(rom, 0x400000L, (long)((melee ? ROM_NORMAL_ANIM_TBL : ROM_FAR_ANIM_TBL) + (cid & 0xFF))) : 0x00;
@@ -15791,6 +15860,12 @@ static int battleIterFrameA(const CtBattleHost* h, int fxTd) {
   // reaches the idle tick's dispatch C1/10A9 -- the enemies' published poses hold from there.
   if (h->pcThinkDelay > 0) return 0;
   for (int slot = 0; slot < 8; slot++) if (h->enMsgHold[slot] > 0) return 0;      // ...or inside its message's CD/0295
+  // ...or the handler is still in its counter loop C1/8671-881C: a victim's block 2 decoding, its name box (CD/0295,
+  // whose waits are CD/3E75 -> `JSL C1/0012` = C1/10E3, the menu pass alone) or its turn's C1/4058. The loop C1/8120
+  // has not come round, so there is no C1/106E and no dispatch C1/10A9. MEASURED, the rule's cartridge, playthrough leg
+  // 116 f88218-88228: `$A013` 0 and `$A0FD` 1 for the box's eleven frames, `$993B` / `$992D` / `$9912` and the enemies'
+  // poses still; the port visited group 1 on every one of them and its enemies' poses flickered.
+  if (battleCounterPhase(h)) return 0;
   return 1;
 }
 // $96F8,X -- the slot's present flag itself, as C1/3349 / CC/ECC0 read it: staged by CC/EC23 `INC $96F8,X` (the boot),
@@ -16573,18 +16648,9 @@ static void battlePcWalk(CtBattleHost* h) {
     BT_PCTIMER(h, seat) = (BT_PCTIMER(h, seat) - 1) & 0xFF;           // C1/2E20 DEC $9689,X
     if (BT_PCTIMER(h, seat) != 0) continue;
     // ---- C1/2F97: the window and the icon sub-state
-    int cls = 3, icon = -1, lowHp = 0;
-    CtBattleStatusScanEx(s, seat, &cls, &icon, &lowHp);
-    battleStatusScanStore(h, seat);                              // C1/2F97's stores: $A440, $A441,Y
-    { int b = gRom ? (CtRomByte(gRom, 0x400000L, (long)(0x0CF8ED + seat * 2)) | (CtRomByte(gRom, 0x400000L, (long)(0x0CF8EE + seat * 2)) << 8)) : seat * 0x80;
-      s[0xA2] = (uint8_t)b; s[0xA3] = (uint8_t)(b >> 8);        // C1/2FAF-2FB6 LDA CC:F8ED,X / STY $A2
-      s[0x80] = 0; s[0x81] = 0;                                  // C1/2FB8 TDC / STA $80 (16-bit)
-      int init = s[0xA09B + seat] ? 0 : 3;                       // C1/2F99-2FA4
-      s[0x84] = (uint8_t)(lowHp ? init : cls); }                 // C1/300D STA $84 (a class), else the start value
-    int dead = s[0x5E4A + seat * 0x80] & 0x80;                   // C1/2FC4 LDA $5E4A,Y / BPL
-    if (dead) BT_PCIDX(h, seat) = 0xFF;                             // C1/2FCE STA $968C,X (#FF)
-    if (lowHp) { if (s[0xA44C + seat] != 0x12) BT_PCIDX(h, seat) = 0xFF; }   // C1/3041-3050 `LDA #12 / CMP $A44C,Y`
-    else if (s[0xA441 + seat] != s[0xA44C + seat]) BT_PCIDX(h, seat) = 0xFF;   // C1/301A CMP $A44C,Y / C1/301F (FF compared too)
+    int cls = battleStatusScan2F97(h, seat);                     // C1/2E28 JSR C1/2F97: $A440, $A441,Y, $84, $A2, and
+                                                                 //   the window cursor $968C,X where the scan restarts it
+    int dead = s[0x5E4A + seat * 0x80] & 0x80;                   // (the re-aim's own test below, C1/2F46)
     // ($A09B,X, the "downed" gate of C1/2F99/3037, has no writer in the battle banks: it stays 0.)
     // ---- C1/2F22: the re-aim latch
     int aimed = 0;
@@ -17863,7 +17929,8 @@ static void battleFxArmSlots(CtBattleHost* h, int fx) {
 // port's pre-roll puts the arm (A = pr - CT_FX_LOAD_TO_FIRST_OP). The caster's sheets on rel 0-8 from the $A013 rise,
 // the effect load from rel 9 (A = its f w+8), the animation table at A+1, the frame LZ at A+2, `$A650 = $A652 = 0` at
 // A+3, C1/4943's eight calls at A+4..A+11 (C1/48B3 with the eighth), the script's first op at A+12
-// (battle_fx_program_census.md sec. 8.1). A no-graphics effect (86, 7B..7F) keeps the one-step load on A.
+// (battle_fx_program_census.md sec. 8.1). A no-graphics effect (86, 7B..7F) is the one-step load on A = rel 9, the
+// frame C1/4857 makes the JSL in (CD/0EFB BCC: no wait).
 static void battleFxActionLoadFrame(CtBattleHost* h, int rel) {
   int pr = battleActPreroll(h), A = pr - CT_FX_LOAD_TO_FIRST_OP, fx = battleActStage3(h);
   int gfx = fx != 0xFF && battleFxHasGraphics(battleFxLoadRemap(h->mem, fx));
@@ -21010,14 +21077,20 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // The idle tick's walk (C1/10A9 -> C1/2D9F): on a dispatch frame, visit the $A4 group (the $5E0D->$974A commits and
   // the idle window ticks), gated like the mode machine below. Not while the demo's C1/B967 is between its turn and
   // C1/40A6: the ROM is inside the call, not in the idle tick ($A4 still counts, but C1/10A9 is never reached).
+  // The NMI's stepper comes first: a frame is its NMI and then the main loop's iteration up to the next wait, so the
+  // walk dispatch below (C1/10A9, main-loop work) finds the feet this frame's CF/F978 wrote. A PC's re-aim reads them
+  // (C1/2F54 -> C1/2986 and C1/0222 over $1D0C / $1D23). MEASURED, the rule's cartridge, playthrough leg 119 f20016:
+  // seat 2 re-aims at enemy seat 6, whose foot the stepper moved (9B,97) -> (9C,96) on that frame (CF:F9CE / F9C5), and
+  // `$96DB+2` takes 02, the facing of the new foot (bearing 60); the old foot's is 01 (bearing 5C), which the port
+  // stored while its dispatch ran ahead of the stepper.
+  if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
+  battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
   if (h->schedWalk && !battleDeathHold(h) && h->demoDispatchAt < 0) battleWalkDispatch(h);
   // C1/106E-1099 is the main loop's iteration head, and the head runs in the same frame as the previous iteration's
   // tail, after that frame's service (the INC) and its walk dispatch, before `JSR C1/007E` waits for the next NMI. The
   // port's iteration marker is schedWalk.
   // The same stall holds while the main loop's CD/0009 is inside the effect teardown (battleFxTeardown): the mode machine
   // C1/3714 that starts a walk runs from the idle state (C1/10B5 / C1/10DC), behind the CD/0009 that is holding it.
-  if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
-  battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
   // The idle loop's two frames call C1/3714 at different places: frame A after the walk dispatch (C1/10A9 -> C1/10B5),
   // frame B AFTER the menu pass (C1/10C4 INC $E5, C1/10C6-10DA, then C1/10DC). On frame B the pass can confirm a command
   // -- $99E0 back to 0 (the Wait submenu's freeze, C1/3714's own `LDA $99E0 / BNE`) and the turn picked -- and the mode

@@ -433,6 +433,10 @@ void CtWramCommitLocation(CtWram* w, int leadOff2) {
 }
 // 16-bit WRAM words are little-endian, as the 65816 stores them.
 static int r16(Mem* m, uint32_t a) { return r8(m, a) | (r8(m, a + 1) << 8); }
+// $1801,X / $1881,X: an object's tile, the high byte of its 16-bit position (1/16 px). The port's position is a double
+// in pixels and does not wrap (only the WRAM image masks it), so the byte is taken from the masked value, as the ROM's
+// readers find it. For a position on the map this is `(int)p >> 4`.
+static int vmTileByte(double p) { return (((int)floor(p * 16.0)) & 0xFFFF) >> 8; }
 static void w16(Mem* m, uint32_t a, int v) { w8(m, a, v & 0xFF); w8(m, a + 1, (v >> 8) & 0xFF); }
 
 // ---- Opened-door list, $7F:1CC8 (disasm/notes/field_door_list.md) ----
@@ -1680,8 +1684,8 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
   if (op == 0x21) {                                           // GetObjCoords (C0/65B0): object[op1/2]'s tile
     int po = B[addr + 1] / 2;                                 // x/y -> locals op2/op3. Operand = a direct obj
     if (po >= 0 && po < sc->nobj) {                           // index*2 (not a PC slot like 0x22). Reads the
-      w8(m, LOC + B[addr + 2] * 2, ((int)sc->fx[po] >> 4) & 0xFF);   // live fx/fy, not actors[].x (fixed at
-      w8(m, LOC + B[addr + 3] * 2, ((int)sc->fy[po] >> 4) & 0xFF);   // spawn for movers).
+      w8(m, LOC + B[addr + 2] * 2, vmTileByte(sc->fx[po]));   // live fx/fy, not actors[].x (fixed at
+      w8(m, LOC + B[addr + 3] * 2, vmTileByte(sc->fy[po]));   // spawn for movers).
     }
     return;
   }
@@ -1871,6 +1875,9 @@ static const uint8_t* mvTables(void) {
 // --sweepaba2 checks: it reads the bytes the callers stage at $01F0-$01F3, models the routine's WRAM side
 // effects and branches on an unsigned borrow. This one takes deltas already computed in the tile domain
 // (`tgtTile - curTile`, see the op-0xA0 arm). The suite covers it indirectly; no check compares the two ports.
+// The deltas must be differences of the tile BYTES (vmTileByte): ABA2 subtracts 8-bit values and branches on the
+// borrow (`LDA $F3 / SEC / SBC $F1 / BCC`, `LDA $F2 / SEC / SBC $F0 / BCC`), so an object past the coordinate's wrap
+// (tile FC) aims at tile 03 the long way round -- 03 - FC borrows, |dx| = F9 -- and not 7 tiles to the right.
 static int mvAngle(int dx, int dy) {               // C0/ABA2: quadrant split + 32x32 atan
   const uint8_t* T = mvTables();
   int base, fx_, fy_;
@@ -2131,9 +2138,12 @@ static void mvForceIdle(CtScene* sc, int obj) {
 // So the step is diagonal: X and Y correct together on one visit. Returns 1 = stepped (the handler yields, IP
 // parked), 0 = on the tile's centre-bottom (the handler completes). After the SEC, 0x96/0x97 re-anim (JSR C0/5614)
 // before `TYX / CLC`; 0xA0 goes straight to `516A TYX / CLC / RTS`.
-static int mvArriveSnap305D(CtScene* sc, int obj, int atx, int aty) {
-  int cx = atx * 16 + 8, cy = aty * 16 + 15;     // sub-tile 0x80 = px 8 (centre) / 0xF0 = px 15 (bottom)
-  int dix = cx - (int)sc->fx[obj], diy = cy - (int)sc->fy[obj];
+static int mvArriveSnap305D(CtScene* sc, int obj) {
+  // The two tests read the position's low byte only (`LDA $1800,X / AND #F0 / CMP #80`, `LDA $1880,X / AND #F0 /
+  // CMP #F0`): the pixel inside the tile, 8 = the centre, 15 = the bottom. X: 3079 BCS -> F0 (-1 px) above, 10 below.
+  // Y: 3099 BCS never takes below F0, so +1 px.
+  int nx = ((int)floor(sc->fx[obj] * 16.0)) & 0xF0, ny = ((int)floor(sc->fy[obj] * 16.0)) & 0xF0;
+  int dix = (nx == 0x80) ? 0 : (nx > 0x80 ? -1 : 1), diy = (ny == 0xF0) ? 0 : 1;
   if (!dix && !diy) return 0;
   sc->mx[obj] = dix ? (dix > 0 ? 1 : -1) : 0;    // 307B/3082
   sc->my[obj] = diy ? (diy > 0 ? 1 : -1) : 0;    // 309B/30A7, the same visit
@@ -2246,7 +2256,12 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     dtx = r8(m, 0x7E1801 + (uint32_t)off); dty = r8(m, 0x7E1881 + (uint32_t)off);
   } else if (op == 0x96 || op == 0xA0 || op == 0x9A) { dtx = B[addr + 1]; dty = B[addr + 2]; }   // 0x9A: C0/4FFB-5006, the operands themselves (leg 116, 195's guards)
   else { dtx = r8(m, LOC + B[addr + 1] * 2); dty = r8(m, LOC + B[addr + 2] * 2); }
-  int atx = (int)sc->fx[obj] >> 4, aty = (int)sc->fy[obj] >> 4;
+  // 4F7C `LDA $1801,X / STA $F0 / LDA $1881,X / STA $F1` (0x96; the same in 50B9, 5006, 5144, 51C8 and the pair's
+  // 5237): the mover's own tile BYTES. Arrival (`CMP $F3` / `CMP $F2`), the adjacency and ABA2's heading all work on
+  // them. MEASURED, playthrough leg 118 (loc 199, cart f39461 on): objects 11 and 12 fly past the left edge on a paused
+  // ticket ($1816 = FF2B), and their next issue of `97 11 12` toward tile (03, 4C) takes the heading 03 - FB -> left;
+  // they cross the whole 256-tile coordinate before arriving (about 880 frames, the fight's script waits on them).
+  int atx = vmTileByte(sc->fx[obj]), aty = vmTileByte(sc->fy[obj]);
   // The chase (B5/B6, C0/5215) moves only while farther than one tile; once adjacent it stops but stays
   // perpetual (it never advances the script).
   int dxr = atx - dtx, dyr = aty - dty;
@@ -2292,7 +2307,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     double cx = dtx * 16 + 8, cy = dty * 16 + 8;
     double dpx = cx - sc->fx[obj], dpy = cy - sc->fy[obj];
     if (dxr == 0 && dyr == 0) {                      // op 0xA0's arrival (C0/5184): not a C0/568B site
-      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj, atx, aty)) return 1;   // 5158-5162 -> 516A
+      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj)) return 1;   // 5158-5162 -> 516A
       sc->hasTask[obj] = 0; return 0;
     }
     // Not arrived: the common path below issues the step, as C0/516D-518D does: 516D JSR C0/ABA2 (the heading from
@@ -2304,10 +2319,10 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // C0/4F90 (0x96) and C0/50CF (0x97) `LDA $1C81,X / BIT #01 / BEQ / JSR C0/305D / BCS`: bit 0, not != 0.
     // 0x97 is 0x96 with the two operands read through the scene vars; from 50B9 its bytes are 0x96's.
     if ((op == 0x96 || op == 0x97 || op == 0x9A) && (sc->c1C81[obj] & 1)) {   // (0x9A: 501E-5028)
-      if (mvArriveSnap305D(sc, obj, atx, aty)) return 1;   // 4F97 / 50D6 JSR C0/305D / BCS -> JSR C0/5614, TYX / CLC
+      if (mvArriveSnap305D(sc, obj)) return 1;   // 4F97 / 50D6 JSR C0/305D / BCS -> JSR C0/5614, TYX / CLC
     }
     if (op == 0xA1) {                              // C0/5191 = 0x97 without the anim/facing layer (as move.c):
-      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj, atx, aty)) return 1;   // 51DF / 51E3 -> 51EE, no 5614
+      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj)) return 1;   // 51DF / 51E3 -> 51EE, no 5614
       sc->hasTask[obj] = 0; return 0;              // 51E8 INX x3 / SEC -- and no JSR C0/568B
     }
     sc->hasTask[obj] = 0; mvForceIdle(sc, obj); return 0;   // aligned (or snap off) -> complete: C0/4F9C JSR C0/568B, then the SEC exit
@@ -2493,6 +2508,9 @@ static void reqOp(CtScene* sc, int target, int function, int priority) {
   if (ts->addr >= 0 && ts->prio < priority) { if (ts->ret[priority] == 0) ts->ret[priority] = fpPtr(sc, target, function); return; }
   if (ts->addr >= 0) ts->ret[ts->prio] = ssPushAddr(ts);          // C0/6005 / 60CC / 6168: $1180 (a waiter's 04 byte)
   ts->addr = fpPtr(sc, target, function); ts->prio = priority;
+  { uint32_t ipw = (uint32_t)(ts->addr + sc->header);             // C0/6027 / 60F0 / 618C STA $1180,X, in WRAM now:
+    w8(sc->mem, 0x7E1180 + (uint32_t)target * 2, ipw & 0xFF);     //   the callee's own visit (up to a cadence period
+    w8(sc->mem, 0x7E1181 + (uint32_t)target * 2, (ipw >> 8) & 0xFF); }   // later) is not what commits it
   // A pre-empting function drops the target's in-flight move. All three install arms end with the same four
   // stores, in this order: `STA $1180,X / STA $1C00,X / STZ $1A80,X / STZ $1A01,X` (op 0x02 C0/6027-6034, op 0x03
   // C0/60F0-60FD, op 0x04 C0/618C-6199; ops 0x05/0x06/0x07 BRL into the same bodies). Only the pre-empt arm reaches
@@ -5605,8 +5623,8 @@ void CtSceneTick(CtScene* sc) {
     if (sc->mode[n] != 7 || !sc->actors[n].hasPos) continue;
     int c3 = (sc->mem->s[0x1D0A] - 4) & 0xFF, c4 = (sc->mem->s[0x1D0C] + 4) & 0xFF;
     int c5 = sc->mem->s[0x1D0E] & 0xFF,       c6 = (sc->mem->s[0x1D10] + 5) & 0xFF;
-    int tx = ((int)sc->fx[n] / 16 * 2) & 0xFF;       // A966 LDA $1801,X / ASL A: the tile, doubled
-    int ty = ((int)sc->fy[n] / 16 * 2) & 0xFF;       // A972 LDA $1881,X / ASL A
+    int tx = (vmTileByte(sc->fx[n]) * 2) & 0xFF;     // A966 LDA $1801,X / ASL A: the tile, doubled
+    int ty = (vmTileByte(sc->fy[n]) * 2) & 0xFF;     // A972 LDA $1881,X / ASL A
     // A947's four compares are signed, and unlike A88D it does not clamp the edges:
     //   A96A CMP $C3 / A96C BMI ->A985      A96E CMP $C4 / A970 BPL ->A985
     //   A976 CMP $C5 / A978 BMI ->A985      A97A CMP $C6 / A97C BPL ->A985
@@ -5623,7 +5641,12 @@ void CtSceneTick(CtScene* sc) {
                                       ? "INTEG" : "skip") &&
         sc->hasTask[n] && sc->cycles[n] > 0 && sc->actors[n].hasPos) {
       double nfx = sc->fx[n] + sc->mx[n], nfy = sc->fy[n] + sc->my[n];
-      int ntx = (int)nfx >> 4, nty = (int)nfy >> 4;   // the tile the step would move into
+      // The tile the step would move into, as the BYTE the ROM's clamp carries into (vmTileByte): AA7E-AAC3 add the
+      // velocity to the position's low byte (`ADC $1800,X`, or `SBC $D9` for a negative one) and a carry or borrow holds
+      // the axis. Past the coordinate's wrap the port's double is negative and a truncation puts the tile's edge a pixel
+      // off. MEASURED, playthrough leg 118 (loc 199): object 11 at $1816 = F6F4 with $1900 = C2 (F4 - 3E, no borrow)
+      // moved on the cartridge and was held on the port, which lost 3 frames to the re-issue.
+      int ntx = vmTileByte(nfx), nty = vmTileByte(nfy);
       // Per-frame dispatch C0/A819 on the move mode $1100,X (sc->mode[n]), four arms (A81E-A82A):
       //   mode < 3        -> C0/AAFD: plain 16-bit add of the velocity, always smooth, never reads
       //                      $7F0B00, crosses tiles freely (lead PC 0, follower PCs 1/2).
@@ -5667,8 +5690,8 @@ void CtSceneTick(CtScene* sc) {
       if (b == 0) clamp = 1;                           // AA1F: == 0 -> per-axis tile-edge clamp this frame
       else { if (b > 0) sc->b00[n] = 0; clamp = 0; }   // AA23: > 0 -> clear to 0, free; < 0 -> leave, free
       if (clamp) {                                     // the clamp is per axis (aa07Axis X then Y):
-        int xc = (ntx != ((int)sc->fx[n] >> 4));       // a crossing axis is held and kills the ticket
-        int yc = (nty != ((int)sc->fy[n] >> 4));       // ($1A01 := 0); the non-crossing axis still advances
+        int xc = (ntx != vmTileByte(sc->fx[n]));       // a crossing axis is held and kills the ticket
+        int yc = (nty != vmTileByte(sc->fy[n]));       // ($1A01 := 0); the non-crossing axis still advances
         if (xc || yc) {                                // this same frame
           if (!xc) sc->fx[n] = nfx;                     // X did not cross -> advance X
           if (!yc) sc->fy[n] = nfy;                     // Y did not cross -> advance Y

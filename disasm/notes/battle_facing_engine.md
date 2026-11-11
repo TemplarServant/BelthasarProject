@@ -973,3 +973,16 @@ two sound posts; the icon sub-state handlers (`C1/308C` → `($3216,X)` — the 
 (no battle-bank writer, stays 0); the attack script's other PC publishes stay the PC bake's (only the idle
 re-arm at `retEnd+19` is mirrored, measured as entry 0 on gato_wait f506).
 
+### The re-aim reads the feet of ITS frame: the NMI's stepper comes before the walk (2026-11-11)
+
+A frame is its NMI and then the main loop's iteration up to the next wait. The stepper CF/EFAF -> CF/F978 is the NMI's;
+the idle tick's walk dispatch (C1/10A9 -> C1/2D9F) is main-loop work, so a PC's re-aim (C1/2F54: C1/2986 and C1/0222 over
+`$1D0C` / `$1D23`) finds the feet the stepper wrote on that same frame. The port ran its dispatch ahead of its stepper
+and aimed at the feet of the frame before.
+
+Measured on the rule's cartridge, playthrough leg 119 f20016 (`--monitor 7E1D0C:8,7E1D23:8,7E96DB:3,7E9873:1 --writer`):
+seat 2 (Lucca, (C1,6F)) re-aims at enemy seat 6 (`$9873` = 06 at C1:2A8C), whose foot the stepper moved (9B,97) ->
+(9C,96) on that frame (CF:F9CE / CF:F9C5); `$96DB+2` takes 02 at C1:2F94. With the ROM's tables (C0/F300, C0/F700) the
+new foot's bearing is 60 -> facing 2, the old foot's 5C -> facing 1 -- the port's value. battle.c: the frame function
+calls `battleMoveStepper` / `battleLinkParts` before `battleWalkDispatch` (nothing the stepper reads is written by the
+dispatch: it reads `$98A7,X`, `$9819,X`, `$9742,X`, `$98C2,X`).

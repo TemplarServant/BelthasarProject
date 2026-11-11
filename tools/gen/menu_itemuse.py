@@ -13,7 +13,9 @@ ctItemFx*    = the effect of the consumables 0xBC..0xCF, decoded the way C2/B0AB
                C2/B17F (HP/MP restore), bit 4 -> C2/B107 (the Power Meal: C2/B10D's first arm, $0DBD = C2 and
                $0DC0 = 40 -> HP+MP to the maximum), bit 3 -> C2/B1F8 (the Shelter: $0DBD = CA, the record's $0DC0),
                nothing set down to bit 3 -> C2/B200 (the tabs: power for CD, magic for CE, speed for the rest). An
-               item the field cannot use ($7700 bit 1 clear) is ITFX_NONE.
+               item the field cannot use ($7700 bit 1 clear) is ITFX_NONE. ctItemFxNib = the $0DC0 that decode leaves
+               and ctItemFxDbf the $0DBF the handler stores at the pick (C2/B17F; none in C2/B1F8 / C2/B200): the
+               two operands of C2/8ECC, whose amount words menu.c mirrors on the direct page.
 ctOrg*       = Organize's group ranges, C2/AC12 (start ids) and C2/AC17 (lengths).
 
     python tools/gen/menu_itemuse.py [--state S] [--out src/data/menu_itemuse.h]
@@ -33,7 +35,14 @@ N = 20                       # ids 0xBC..0xCF
 
 
 def fx(rom, prop):
-    kind, amt, allp, pool = [0] * N, [0] * N, [0] * N, [0] * N
+    kind, amt, allp, pool, nib, dbf = [0] * N, [0] * N, [0] * N, [0] * N, [0] * N, [0] * N
+    # C2/B17F, the restore handler's head: LDA #B2 / BIT $0DBD / BMI +2 / LDA #8A / STA $0DBF
+    h = 0x20000 + 0xB17F
+    assert (rom[h] == 0xA9 and rom[h + 2:h + 7] == bytes([0x2C, 0xBD, 0x0D, 0x30, 0x02]) and rom[h + 7] == 0xA9
+            and rom[h + 9:h + 12] == bytes([0x8D, 0xBF, 0x0D])), 'C2/B17F ($0DBF)'
+    dbf_hp, dbf_mp = rom[h + 1], rom[h + 8]
+    assert rom[0x2B107:0x2B10D] == bytes([0x20, 0x0D, 0xB1, 0x4C, 0x7F, 0xB1]), 'C2/B107 (JSR C2/B10D / JMP C2/B17F)'
+    assert rom[0x2B1FD:0x2B200] == bytes([0x4C, 0x8B, 0xB1]), 'C2/B1F8 (JMP C2/B18B, past the store)'
     # C2/B10D's first arm (X = 0): LDA #C2 / STA $0DBD / LDA #40 / STA $0DC0
     arm0 = rom[0x2B141] | rom[0x2B142] << 8
     a = 0x20000 + arm0
@@ -61,6 +70,9 @@ def fx(rom, prop):
             assert rom[sh] == 0xA9 and rom[sh + 2:sh + 5] == bytes([0x8D, 0xBD, 0x0D]), 'C2/B1F8 ($0DBD)'
             dbd = rom[sh + 1]
         pool[s] = (1 if dbd & 0x80 else 0) | (2 if dbd & 0x40 else 0)
+        nib[s] = dc0
+        if handler in (0xB17F, 0xB107):            # the Shelter (C2/B1F8) and the Tabs (C2/B200) store none
+            dbf[s] = dbf_hp if dbd & 0x80 else dbf_mp
         if not prop[0xBC + s] & 0x02:
             continue
         if handler in (0xB17F, 0xB107, 0xB1F8):
@@ -72,7 +84,7 @@ def fx(rom, prop):
                 kind[s], amt[s] = 2, (b3 & 0x3F) * dc0
         elif handler == 0xB200:                    # C2/B200: CD -> power, CE -> magic, else speed
             kind[s], amt[s] = 4, {0xCD: 0, 0xCE: 1}.get(0xBC + s, 2)
-    return kind, amt, allp, pool
+    return kind, amt, allp, pool, nib, dbf
 
 
 def main():
@@ -88,7 +100,7 @@ def main():
     # * FF/CF18[4] (C2/88AD) -- and leave the step to menu.c (CtMenuItemOpenGate), which runs it at every open.
     x = (rom[0x3FCF16] | rom[0x3FCF17] << 8) + (0xC8 - 0xBC) * rom[0x3FCF1C]
     prop[0xC8] |= rom[0x0C0000 + x] & 0x02
-    kind, amt, allp, pool = fx(rom, prop)
+    kind, amt, allp, pool, nib, dbf = fx(rom, prop)
     org_s, org_l = rom[0x2AC12:0x2AC17], rom[0x2AC17:0x2AC1C]
     j = lambda v: ', '.join(str(x) for x in v)
     L = ['// GENERATED (menu_itemuse gen) -- item-menu Use/Organize data, ROM-free bake.',
@@ -108,7 +120,12 @@ def main():
           'static const uint16_t ctItemFxAmt [ITFX_N] = { %s };' % j(amt),
           'static const uint8_t  ctItemFxAll [ITFX_N] = { %s };' % j(allp),
           'static const uint8_t  ctItemFxPool[ITFX_N] = { %s }; // bit0=HP bit1=MP (for FULL); idx13=C9 PowerMeal=HP+MP'
-          ' (dispatch B107)' % j(pool), '',
+          ' (dispatch B107)' % j(pool),
+         'static const uint8_t  ctItemFxNib [ITFX_N] = { %s }; // $0DC0 at the pick (C2/B0AB: the record byte 2 & 0F,'
+         ' 0F -> 0x40; the Power Meal: C2/B10D arm 0), the multiplier C2/8ECC reads' % j(nib),
+         'static const uint8_t  ctItemFxDbf [ITFX_N] = { %s }; // $0DBF the pick stores (C2/B17F: B2 with the HP bit,'
+         ' 8A without); 0 = the handler stores none (the Shelter C2/B1F8, the Tabs C2/B200)'
+         % ', '.join('0x%02X' % v for v in dbf), '',
           '// Organize group ranges (ROM C2/AC12 start ids, C2/AC17 lengths).',
           'static const uint8_t ctOrgStart[5] = { %s };' % ', '.join('0x%02X' % b for b in org_s),
           'static const uint8_t ctOrgLen  [5] = { %s };' % ', '.join('0x%02X' % b for b in org_l), '', '#endif', '']

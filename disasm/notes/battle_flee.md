@@ -238,7 +238,7 @@ count back).
   CC/F102 clobber, T+97 `battleFleeOpenAction` (C1/40A6, CC/F156's roles from the actor + CC/FBC8's co-actors + the
   `$AE95` bit walk, C1/45BB's config bytes and table words; the host record with `actEndByScript`), open+10
   `battleFleeProgramArm` (CD/0F2C..CD/15D5); `battleAdvanceAction` runs the action (the asc interpreter arms at
-  `CT_FLEE_ACT_PREROLL` = 22 = 13 + U = 9, measured like the 21/33 pre-rolls; ops 22/2D/2E/34 added; op 01 records
+  `CT_FLEE_ACT_PREROLL` = 22 = 13 + U = 9, measured like the 21/33 pre-rolls -- 21 under the rule, sec. 8; ops 22/2D/2E/34 added; op 01 records
   `actEndRel` and `INC $9876`; the #FF post on that frame; the wipe at +2; the close at +`CT_ACT_END_TAIL` = 5 with
   no HP apply, no settle re-aim, no second #FF); the exit stage: +5 the sound 10, +20/21/22 CD/0516's three steps,
   the band poll, `$CA25 = 0E`, `08`, `endReason = 3`, return 1 (the APU handshake is the audio clock's -- residual).
@@ -285,8 +285,8 @@ count back).
   `$CFFF` / `$9FFA`, every mode-5 record step, the sounds 0D / FF / 10, the hidden-object drops, the module hand-back;
   the shot at open+60 = the enemies through the live page at k = 0x77; mutations: op 22 never parks, the hide op
   skipped, the spawn's tick nibble, op 90's saturation, the 60-frame box wait, the runner's `CPY #02`, the five-wait
-  tail, the +22 pre-roll, the renderer's hide gate) and `field-battle-flee-ranaway-box` (the box shot at f800;
-  mutations: the empty line, a late preset) and `field-battle-flee-objfade` (the shot at open+60 = the Hetakes
+  tail, the pre-roll (21 under the rule, sec. 8), the renderer's hide gate) and `field-battle-flee-ranaway-box` (the box shot at f800;
+  mutations: the empty line, a late preset) and `field-battle-flee-objfade` (the shot at open+60, open+59 under the rule -- sec. 8 -- = the Hetakes
   through the live page at k = 0x77; mutations: the sprite draw ignoring the page, half the FD/E5C6 step).
 * This port's GATO acts at f251 where the oracle's acts at f332 (the enemy first-turn pacing residue, unchanged):
   with the hold from f240 Marle's deferred visit never lands before the freeze, which is why the check holds from
@@ -305,3 +305,41 @@ The counter itself (section 1) reads the auto-read register: CF/E70B `LDA $00421
 level with a frame of history, which on a route drive (the port's pad a frame after the cartridge's, field.c
 CT_WS_BATTLE_LEAD) made the first INC a frame late (f590 for the cartridge's f589) and every run-away with it. It reads
 h->joyAutoRead now, as the demo button CF/E6E0 beside it does.
+
+## 8. The run-off under the rule (2026-11-10): the pre-roll is 21, the load has no wait
+
+Sections 5.1 and 5.2 carry the run-off's frames as the cartridge gave them BEFORE the rule flip (open f744: the arm at
+open+10, `34 1B` at open+22, the first runner frame at open+23). One of those frames was a lag frame of the load.
+
+The listing. The action prologue is C1/4836 `JSL CD/0015` (5 frames), C1/483D `JSL CD/002A` (3), C1/4841 `JSR C1/007E`
+(1), then C1/4857 `JSL CD/0018` -> CD/0D28 `STZ $5D9B / TAX / JSR CD/0EBD / JSR CD/0D33 / RTL`. In CD/0EBD:
+`0EF8 JSR CD/0E9D / 0EFB BCC ->0F42`, and CD/0E9D answers carry CLEAR for the ids 86 and 7B..7F (`TDC / CLC / RTS`).
+CD/0F42-0F8E copies the four ids from `$D16240,X` to `$CA93,Y`, calls CD/11B8 (a table copy) and returns at 0F8E
+(`0F89 JSR CD/0E9D / BCS / RTS`): no CD/3E75, no CD/3E3B on the way. CD/0D33 then arms the slots (CD/15D5: `INC $CA32`)
+in the frame C1/4841's wait returned in. So the arm is open+9, and the twelve C1/007E waits after it put the script's
+first op at open+21: a no-effect action's 13 + 8.
+
+The rule's cartridge, two scenes. saves/battle_re/forest_holdleft_pre with `--input "40:120,00:230,C00:900,00:500"`
+(`CT_ORACLE_LOGICAL=1`), the open (`$A013` = 1) at f945, offsets from it:
+
+    +9    $CA32 = 01                         (the arm; 00 at +199)
+    +21   $5D9B = 01                         (the script's `34 1B`; 00 at +200)
+    +22   $BE9A = 17, then +10 every 4 frames to F7 at +78
+    +54   $CFFF = 01; record $0598 mode 50 (to 00 at +116), record $05A4 mode 50 (00 at +117)
+    +151  $9FFA = 01 (the hide); record $05A4 mode 50 again (00 at +214); $BE9A = EF, then 3 frames apart to 0F at +193
+    +199  $CFFF = 00
+    +206  $A013 = 00
+
+The fade records' acc cells: `$059F` F7 at +54, EF +56 ... 07 +114, 00 +116 (32 steps); `$05AB` F7 at +55, EF +57 ...
+F8 at +212 (63 steps). Playthrough leg 107's run-off (loc 0E3): open f11727, `$CA32` f11736, `$5D9B` f11748, `$A013` = 0
+f11933 -- the same +9 / +21 / +206.
+
+The port (battle.c: `CT_FLEE_ACT_PREROLL` 21; battleActPreroll adds no wait for the ids CD/0E9D clears) on forest_pre,
+open f829: arm f838, the program's first frame f851, the spawns and `$CFFF` f883, the hide f980, `$CFFF` = 0 f1028,
+run-off-end f1035. Every program op, mosaic step and fade-record step equals the cartridge's by open-relative frame
+(the two acc cells: 32 of 32 and 63 of 63). The 7B..7F ids (enemy techs A0-A4) take the same branch by the listing; no
+cartridge case of them was measured.
+
+Checks: `field-battle-flee-end-forest` (251 of its 263 lines one frame earlier; the shot at open+170 unchanged),
+`field-battle-flee-counter-forest` (the five lines after the open), `field-battle-flee-objfade` (the same picture at
+open+59, hash unchanged; the window f883-902). Leg 107's alignment loses the warp f11933+1 with it (16 warps left, all loads, fight exits and one first window; the fled fight's exit is f12008+2).

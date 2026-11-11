@@ -460,7 +460,8 @@ Squash with w = 15: CD/0EDE f86, CD/0F33 f101, CD/0F3F f102, CD/0FA6 f103-f106, 
 of it on A (and the frame table on A too); tools/fx_load_stage_cmp.py grades every write, rel 1-45, for Dark Matter and
 Flare (check battle-fx-load-stage-vs-logical-oracle). Rel 0's CD/1323 lands with rel 1's in the port: its PC dispatch
 opens the action after the staging's pass in its frame. The no-graphics ids (86, 7B..7F: the run-off, enemy techs A0-A4)
-keep the one-step load on A -- their pre-roll is the real oracle's, not re-measured on the rule's. CD/0EBD's remap is
+keep the one-step load on A, and A is the frame C1/4857 makes the JSL in: CD/0EFB's BCC path has no wait (re-measured on
+the rule's cartridge for 86, 2026-11-10: `$CA32` at open+9, the script's first op at open+21; battle_flee.md sec. 8). CD/0EBD's remap is
 ported with it: effect 88 (enemy tech 7A) is 88 / 89 / 8A on `$A018` / `$A017` == 7.
 
 ### 8.2 The CPU spill -- NOT ported, and why

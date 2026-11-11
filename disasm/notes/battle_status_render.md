@@ -731,3 +731,31 @@ step (18C6) -- the outline the user saw. battle.c's victory branch now runs `bat
 `battle-status-colour-cycle-ends-with-the-fight-vs-oracle` (tools/battle_status_palette_after_cmp.py).
 
 Not covered: the run-away and the defeat. Neither reaches C1/356D; whether either clears a cycling row is not measured.
+
+## The scan is WHOLE at the action close too: a new icon restarts the PC's window (2026-11-11)
+
+C1/2F97 has two callers, the PC walk's visit (C1/2E28) and the close's loop C1/305C (C1/3067, every present combatant,
+from C1/4127), and both run all of it (`python tools/romdis.py 012F97 200 1 0`):
+
+```
+2F99  $84 = $A09B,X ? 00 : 03 ; $A441,X = FF ; $A2 = CC/F8ED[2X] ; $80 = 0000
+2FBD  $A119,X or $5E4A,Y bit 7 -> $A0A8,X = 1, $968C,X = FF
+2FD3  the records CC/F77F: the first whose bit is set (record 0 also for $A119,X) -> $84 = its class (FF: 03, passed over
+      with $A0A7 set); unless its icon state is negative: $A441,Y = it / CMP $A44C,Y / BEQ / LDA #FF / STA $968C,Y
+302C  no record: low HP ($5E2F,Y bit 0, no $A09B) -> $A441,Y = 80 ; $A44C,Y != 12 and Y < 3 -> $968C,Y = FF ; $A440 = 12
+3056  $A440 = $84
+```
+
+The port's close stored `$A440` / `$A441,Y` and the fallen arm, not the window cursor: `battleStatusScanStore`. And the
+walk's inline copy compared `$A441` with `$A44C` whatever the scan found ("FF compared too"), where the ROM compares only
+a record's own non-negative icon state.
+
+Measured on the rule's cartridge, playthrough leg 119 f21445 (`$A013` = 1, the close of enemy tech 67, which had left +1E
+bit 2 on the three PCs): `$A441-43` FF -> 04 04 04 (C1:305B), `$968C-8E` 02 01 00 -> FF FF FF (C1:3024), `$A44C-4E` -> 04
+(C1:309E). At the next walk pass (f22045) the three windows start from entry 0 (`$968C` 00 00 00); the port's went on from
+03 02 01, so every PC pose from there came from another entry of its window (391 differing `$9907` values to the fight's
+end) and, through the publish count `$9912`, the visits' deferrals with them. battle.c `battleStatusScan2F97`, called by
+both; `battleStatusCloseService` sets `$94` as C1/305F does. With it (and battle_pc_physical_script.md sec. 6,
+battle_facing_engine.md's last section) that fight's `$968C`, `$9922`, `$A098`, `$96DB` and `$9907` hold the cartridge's
+values from its first window to its exit. (The port's close service still runs on the frame `$A013` falls, three frames
+after the cartridge's C1/4127: no walk pass can fall between.)

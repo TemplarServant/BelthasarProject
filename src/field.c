@@ -11341,10 +11341,10 @@ int main(int argc, char** argv) {
   uint8_t* menuFb = (uint8_t*)malloc((size_t)CAMW * CAMH * 3);
   struct {                         // the C0/011B save block, mirrored on the live values:
     int valid;                     //   $0102-4 lead tile/facing (written into the $7E image),
-    double px, py;                 //   $7F1D09/0F = 3x PC pixel pos, $7F1D15 = the $0C00 prio pairs.
-    int pz, pfac;                  //   The camera is not saved here: it lives in the VM mem.s
-    int pcObj[3], pcX[3], pcY[3];  //   ($1D0A/$1D0E/$1D93/$1D96), which the menu freeze holds untouched
-    uint8_t pcPrio[3][2];          //   (field_camera_unification.md G.2).
+    double px, py;                 //   the player's own position ($7F1D09/0F/15, the three slots' position words
+    int pz, pfac;                  //   and $0C00 pairs, are kept in the WRAM image itself). The camera is not saved
+    //                                  here: it lives in the VM mem.s ($1D0A/$1D0E/$1D93/$1D96), which the menu freeze
+    //                                  holds untouched (field_camera_unification.md G.2).
     uint8_t party[3];              //   ...and $0194-0196, the party shadow C0/1A1B compares on the way out.
   } mSave;
   memset(&mSave, 0, sizeof mSave);
@@ -13698,16 +13698,8 @@ int main(int argc, char** argv) {
           mSave.px = px; mSave.py = py; mSave.pz = pz; mSave.pfac = pfac;   // camera lives in mem.s (VM frozen)
           // C0/013D-0164: `LDA $97,X / BMI / TAY`: slot k's object is the one the slot table $0197/$0199/$019B names, not
           // an object whose $1100 mode reads k (a scene's party ops rewrite the table before the menu opens), and an empty
-          // slot (bit 7) writes nothing: its $7F:1D09 record keeps what the last save left, as this one keeps its pcX/pcY.
-          for (int k = 0; k < 3; k++) {
-            uint8_t sv = s7[0x0197 + 2 * k];
-            mSave.pcObj[k] = -1;
-            if (sv & 0x80 || sv / 2 >= CtSceneActorCount(f.vm)) continue;
-            int o = sv / 2, pl, sp, fa2;
-            CtSceneActor(f.vm, o, &pl, &sp, &mSave.pcX[k], &mSave.pcY[k], &fa2);
-            mSave.pcObj[k] = o;
-            mSave.pcPrio[k][0] = s7[0x0C00 + o * 2]; mSave.pcPrio[k][1] = s7[0x0C01 + o * 2];
-          }
+          // slot (bit 7) writes nothing: its $7F:1D09 record keeps what the last save left. The records are the WRAM
+          // image's, written above; the way out (C0/1A6F) reads them from there.
           mSave.valid = 1;
           // ROM $7E:0194-0196, the party shadow C0/1A1B compares against on the way out. Taken here,
           // with the rest of the C0/011B field-state save, so a Form exchange is detectable at close.
@@ -13770,11 +13762,20 @@ int main(int argc, char** argv) {
       } else if (menuPhase == 2 && menuShellF <= menuShellP) {
         // The init chain's RAM, in its own order (menu_shell_timing.md section 2.2): C2/940D's WRAM fill zeroes
         // $0C00-1DFF on C+1; C2/8133 unpacks the config and C2/8139 -> C2/9875 cleans the bag and rewrites the seven
-        // sheets at C+15; the shop's substate 0, C2/D52B -> C2/DACA, runs at S0. Not modelled: the fill's other ranges
-        // ($0000-00FF, $2E00-FFFF), which the cartridge's reload rebuilds and the port keeps live. $0C00-1DFF is safe
-        // to fill because both callers put their own block back at the RTL (menuStash).
+        // sheets at C+15; the shop's substate 0, C2/D52B -> C2/DACA, runs at S0. $0C00-1DFF is safe to fill because
+        // both callers put their own block back at the RTL (menuStash).
+        // The same fill zeroes the direct page (C2/9503 `LDX #0000 / LDY #0100 / JSR C2/9512`), and nothing puts it
+        // back for the field: the field program never writes $0000-$00FF (its direct page is elsewhere) and its
+        // stash is $0920-$1DFF only, so the menu's leftovers stay there until the next menu, battle or overworld
+        // module writes them. The battle reads one without initialising it: $0027, its main loop's iteration count
+        // (C1/8121 INC $0027), whose parity picks the iterations of the cursor pass and the handlers (C1/82A2,
+        // C1/8313). The overworld gets $0000-$00EF back from its own stash (C2/2E72, kOwStash[0]).
+        // Not modelled: the pad block $00F0-$00FF, which the fill zeroes too and the menu's NMI (C2/8473) rebuilds
+        // from S0 with its own repeat reload $FC -- the port's latch runs through the chain and keeps its bytes;
+        // and the fill's last range ($2E00-FFFF), which the cartridge's reload rebuilds and the port keeps live.
         if (menuShellF == menuShellP) menuFadeLive = 1;   // C2/83B2: the fade-in task, spawned at P
         if (menuShellF == 1) { memset(s7 + 0x0C00, 0, 0x1200); menuSbTask = 0;   // (C2/82B6's FF kill: no task survives)
+                               memset(s7, 0, 0x00F0);              // C2/9503: the direct page (see above)
                                menuWinDim = -1; }                  // (the fill's $2E00-FFFF: the CGRAM shadow too)
         if (menuShellF == menuShellS0 - 1) {
           menuWinColour = s7[0x2991] & 7;                  // C2/983F: $0D8C = $2991 & 7 / JMP C2/C511
@@ -13785,10 +13786,6 @@ int main(int argc, char** argv) {
           CtMenuItemOpenGate(s7, glb);                     // ... and C2/9969: the Shelter's bit on a save point only
         }
         if (menuNameOn && menuShellF == menuShellS0 - 1) s7[0x0071] = (uint8_t)menuNameId;   // C2/806B LDA $0A01 / STA $71
-        if (menuExchOn && menuShellF == 1) {                 // C2/940D's fill at C + 1 -- of the direct page too ($0000-00FF),
-          static const uint16_t dp[] = { 0x54, 0x55, 0x56, 0x5A, 0x67, 0x68, 0x7F, 0x80, 0x81 };   //   which the port keeps
-          for (size_t i = 0; i < sizeof dp / sizeof dp[0]; i++) s7[dp[i]] = 0;   //   live for the field: the screen's own bytes
-        }
         if (menuExchOn && menuShellF == menuShellS0 - 1) s7[0x0067] = 0x07;   // C2/807F, C2/808F[5] (C+15)
         if (menuLoaderOn && menuShellF == menuShellS0) {                  // S0: C2/E613 -> C2/E7C3 (C2/E7CF: the cursor on
           CtMenuHost lh; fieldLoaderHost(&lh);                   //   $30:7FE0's slot, else New Game)
@@ -14442,6 +14439,7 @@ int main(int argc, char** argv) {
                        >= CtMenuTechMp(menuStatChar, tid, menuTechTab,
                                        s7[0x2600 + (menuStatChar & 7) * 0x50 + 0x2A])) {
                   menuStatSub = 2; menuTechTgt = 0; menuTechPre = 0; menuTechPopCurve = -1;
+                  s7[0x0DBF] = s7[0x2600 + (menuStatChar & 7) * 0x50 + 0x39];   // C2/B469 LDA $9AC9 / STA $0DBF
                   menuTechOvBuild = 1; menuTechOvFirst = 1;               // C2/B488 JSR C2/BE79: C2/BA2F, then
                   menuSfx(s7, 0x00, "tech-target-open");                   //   the yield (C2/BE98); C2/B43A's blip
                 } else {
@@ -14880,6 +14878,7 @@ int main(int argc, char** argv) {
                 } else {                                      // PICKED A on the same slot (AB14): use or deselect
                   if (CtMenuItemUsable(s7[0x2400 + absSlot])) { menuItemTgt = 0;   // usable -> target-select
                                                                 s7[0x0D9A] = 0x0C;     // (C2/B195 STA $0D9A)
+                                                                CtMenuItemPick(s7, s7[0x2400 + absSlot]);  // C2/B17F: $0DBF
                                                                 menuItemTgtBuild = 1;  // C2/AF42's first frame
                                                                 menuItemPopCurve = -1; menuItemB31C = 0;
                                                                 menuItemTabX = 0; }
@@ -15936,25 +15935,42 @@ int main(int argc, char** argv) {
             if (changed) {
               int nre = CtSceneReconcileParty(f.vm);                // C0/597D on every character's object
               s7[0x0194] = s7[0x2980]; s7[0x0195] = s7[0x2981]; s7[0x0196] = s7[0x2982];   // C0/1A5D-1A6D
-              for (int k = 0; k < 3; k++) {                          // ...then re-find slot k's object: C0/1A74 `LDA $97,X /
-                uint8_t sv = s7[0x0197 + 2 * k];                      // BMI / TAY`, the new table the respawns wrote
-                mSave.pcObj[k] = (sv & 0x80 || sv / 2 >= CtSceneActorCount(f.vm)) ? -1 : sv / 2;
-              }
-              if (getenv("CT_MENUSFX"))
+              if (getenv("CT_MENUSFX")) {
+                int so[3];                                           // slot k's object in the table the respawns wrote
+                for (int k = 0; k < 3; k++) {
+                  uint8_t sv = s7[0x0197 + 2 * k];
+                  so[k] = (sv & 0x80 || sv / 2 >= CtSceneActorCount(f.vm)) ? -1 : sv / 2;
+                }
                 printf("menureconcile: party %02X%02X%02X -> %02X%02X%02X, respawned %d, slots -> obj %d/%d/%d\n",
                        mSave.party[0], mSave.party[1], mSave.party[2],
-                       s7[0x2980], s7[0x2981], s7[0x2982], nre,
-                       mSave.pcObj[0], mSave.pcObj[1], mSave.pcObj[2]);
-            }
-            for (int k = 0; k < 3; k++)
-              if (mSave.pcObj[k] >= 0) {
-                int pl, sp, cx2, cy2, fa2;
-                CtSceneActor(f.vm, mSave.pcObj[k], &pl, &sp, &cx2, &cy2, &fa2);
-                if (cx2 != mSave.pcX[k] || cy2 != mSave.pcY[k])       // without an exchange the menu moves
-                  CtSceneSetActorPos(f.vm, mSave.pcObj[k], mSave.pcX[k], mSave.pcY[k]);   // no actor, so this
-                s7[0x0C00 + mSave.pcObj[k] * 2] = mSave.pcPrio[k][0]; // does nothing (and keeps a sub-pixel
-                s7[0x0C01 + mSave.pcObj[k] * 2] = mSave.pcPrio[k][1]; // position)
+                       s7[0x2980], s7[0x2981], s7[0x2982], nre, so[0], so[1], so[2]);
               }
+            }
+            // C0/1A6F-1A97, by slot X = 0, 2, 4: `LDA $97,X / BMI skip / TAY`, then the three WORDS the open stashed go
+            // into the object the table names NOW: $7F1D09,X -> $1800,Y, $7F1D0F,X -> $1880,Y, $7F1D15,X -> $0C00,Y. The
+            // whole 1/16 px word comes back, its sub-pixel nibble with it: a respawned object (placed by its arrival arm)
+            // takes the slot's old position exactly, 0x0DFF and not 0x0DF0. An object whose words still read the stash
+            // (no exchange: the menu moves nobody) is left as it stands -- the store writes the words it has -- unless it
+            // has no position of its own yet (a respawned object whose arrival arm wrote the same words).
+            for (int x = 0; x < 6; x += 2) {
+              int sv = s7[0x0197 + x];
+              if (sv & 0x80) continue;                                              // C0/1A74-1A76
+              int wx = s7[0x11D09 + x] | (s7[0x11D0A + x] << 8), wy = s7[0x11D0F + x] | (s7[0x11D10 + x] << 8);
+              int had = (s7[0x1800 + sv] | (s7[0x1801 + sv] << 8)) == wx && (s7[0x1880 + sv] | (s7[0x1881 + sv] << 8)) == wy;
+              if (had && !CtSceneLeadScriptPlaced(f.vm, sv / 2, NULL, NULL)) had = 0;
+              if (!had && sv / 2 < CtSceneActorCount(f.vm))
+                CtSceneSetActorPosF(f.vm, sv / 2, (int16_t)wx / 16.0, (int16_t)wy / 16.0);
+              s7[0x1800 + sv] = (uint8_t)wx; s7[0x1801 + sv] = (uint8_t)(wx >> 8);    // C0/1A7B-1A7F
+              s7[0x1880 + sv] = (uint8_t)wy; s7[0x1881 + sv] = (uint8_t)(wy >> 8);    // C0/1A82-1A86
+              s7[0x0C00 + sv] = s7[0x11D15 + x]; s7[0x0C01 + sv] = s7[0x11D16 + x];   // C0/1A89-1A8D
+              if (getenv("CT_MENUSFX")) {                    // what the object holds now (the VM's own position)
+                double ox = -1, oy = -1;
+                CtSceneLeadScriptPlaced(f.vm, sv / 2, &ox, &oy);
+                printf("menureconcile: slot %d obj %d at %04X %04X (stash %04X %04X%s) prio %02X%02X\n", x / 2, sv / 2,
+                       (int)(ox * 16.0) & 0xFFFF, (int)(oy * 16.0) & 0xFFFF, wx, wy, had ? "" : ", moved",
+                       s7[0x0C01 + sv], s7[0x0C00 + sv]);
+              }
+            }
             px = mSave.px; py = mSave.py; pz = mSave.pz; pfac = mSave.pfac;
             // C0/2824 -> C0/286C's first JSR, C0/28E1: the map came back from C0/A33B with every door closed, and the
             // list (C0/01A5 does not run C0/28AA) opens again each one opened before the menu. (The render's copy of

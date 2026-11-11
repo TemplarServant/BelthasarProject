@@ -1069,6 +1069,68 @@ RNG folds in. The drive's two states are made from the playthrough route (leg 95
 song post (25 frames on the logical cartridge, whose main loop never waits there, 14 on the port's SPC); re-pin only with that
 residual measured away.
 
+### leg-window-hazard-wrap-vs-cartridge (`tools/leg_window_cmp.py hazard-wrap`)
+
+A WINDOW of a playthrough leg: where the legs grade the bytes that say the story went the same way, a window grades one
+mechanism inside a leg, step by step (`tools/leg_window_cmp.py`: both sides start from the cartridge's state at a frame of
+the leg, made from the route and cached in build/_legwin, and play the leg's pad; a step is a run of frames on which the
+named cells hold, compared by value and length). This one is leg 118, room 199 of the Ocean Palace, f35190 + 5510: the
+launcher (object 23) calls objects 11 and 12 (op 02 stores the callee's `$1180,X` at once, C0/6027), they SETCOORD and fly
+at the party's tile with `97 11 12` (C0/50B9), a fight catches them past the map's left edge (`$1816` = FF2B) and after it
+the op issues again from the tile BYTE (`$1801,X` = FF): 03 - FF borrows in C0/ABA2, so both fly left across the whole
+256-tile coordinate and arrive ~1190 frames later. The port took the tile from its pixel (-1) and aimed the short way
+right; C0/AA07's clamp (the carry out of the position's low byte) and C0/305D's snap (the low byte's high nibble) had the
+same pixel-for-byte confusion. Graded: the event PC and the two position words of each object, 1335 steps, 0 differing.
+The fight itself (cartridge f35351-f39421) is not graded -- its exit's length is the playthrough's timing class -- only
+that both come back on the same value (the `free:` line, outside the pin, says how many frames apart). Full tier (~45 s
+with the state cached, ~4 min the first time). Re-pin only when leg 118's pad changes in the route.
+
+### leg-window-menu-return-vs-cartridge (`tools/leg_window_cmp.py menu-return`)
+
+The second window: leg 119, room 19B of the Ocean Palace, f20 + 1880. The pad opens the menu at f30, the Form screen puts
+Lucca in Ayla's seat (`$2980-82` 00 01 05 -> 00 01 02) and the menu returns at f1524. The open stashed three WORDS per
+party slot (C0/011B: `$7F1D09,X` the X word, `$7F1D0F,X` the Y word, `$7F1D15,X` the `$0C00` pair, of the object `$0197,X`
+names; an empty slot stashes nothing); the return's reconcile C0/1A03 respawns the characters' objects and C0/1A6F-1A97
+stores those words, whole, into the object the table names NOW. So Lucca's object 3 takes slot 2's place to the subpixel:
+`$1806` = 0800, `$1886` = 0DFF. The port restored whole pixels (0DF0), Lucca walked a frame behind on the follower ring
+and the leg's control hand-off at f15560 came a frame early. Graded: `$0197` (6), `$0194` (3), `$1802` / `$1882` /
+`$0C02` (6 each, objects 1-3), 154 steps, 0 differing. The menu itself (cartridge f36-f1524) is the free span: the window
+only checks that both come back on the same cells (the `free:` line is pinned here -- it IS the restore). Full tier (~12 s
+cached). Four mutations: whole-pixel restore, no reconcile, the Y word's low byte not stashed, the `$0C00` pair not
+restored.
+
+The quick check `field-menu-party-reconcile` (scene 8, a debug start with no cartridge twin) prints the same store by
+slot (`menureconcile: slot N obj M at X Y (stash X Y, moved|kept) prio PP`): it pins that a respawned object whose arrival
+arm already wrote the stash's words still takes a position of its own (third mutation: left out, the slot line reads
+`at FFF0 FFF0` and the scene draws one object fewer), and that slot 1's record is what the ROM leaves for a slot that was
+empty at the open -- it writes nothing, so the stale 0000 / 0000 goes into the new holder.
+
+### leg-window-fight-poses-vs-cartridge (`tools/leg_window_cmp.py fight-poses`)
+
+The third window, and the first that grades INSIDE a fight: leg 119, loc 1A0 of the Ocean Palace, f16200 + 5900 -- the
+field before the fight with a Barghest (59) and three Thrashers (6D), then its first 5700 frames. The cells are the PC
+pose machine's: the window cursors `$968C-8E` (C1/2EA9), the visits' deferral flags `$9922-24` (C1/2E18; a publish
+C1/1C5A clears one), the re-aim latch `$A098` (C1/2F22) and the facings `$96DB-DD`. 140 steps, 0 differing. Three
+mechanisms cross it, each with its mutation:
+
+- **f17577 / f20063, the actor turns to its target.** C1/49FF, the physical's verdict routine, stores the actor's facing
+  toward the target (C1/4A31-4A3D) as the action opens. A ranged attacker has no walk and no `72 0D` to do it later:
+  Lucca's `$96DB+2` goes 00 -> 02 on the cartridge and stayed 00 on the port (she shot facing the wrong way), and her next
+  re-aim then published nothing, so the next seat's visit was not deferred.
+- **f20016, the re-aim's feet.** The NMI's stepper (CF/F978) runs before the main loop's walk dispatch (C1/10A9): the
+  re-aim reads enemy seat 6's foot of that frame, (9C,96), and stores facing 02; the port read (9B,97) and stored 01.
+- **f21445, a status at an action's close.** C1/305C runs the scan C1/2F97 whole for every combatant: enemy tech 67's
+  icon is not the latched one, so C1/301F restarts the three windows (`$968C` FF FF FF) and the next pass starts them at
+  entry 0. The port's close kept the cursors.
+
+Why it matters beyond the picture: the pose machine's phase decides WHICH seat made the last C1/2986 call, and resolver
+17 (an enemy's "nearest other enemy") reads that call's stale `$9873` when no other enemy is left. In this fight the port
+passed a condition the cartridge fails, drew once more on `$26`, and the next fight's crit stream gave Lucca a crit the
+cartridge does not have (playthrough legs 119 + 120, the old warp f33341+2). Two spans are not graded and their `free:`
+lines pinned: the boot to the first window (cartridge f16201-f16420; the port's boot is 13 frames shorter, the
+first-window class) and the close's scan frames (f21440-f21449; the port's close service runs three frames after
+C1/4127). Full tier (~2 min cached, ~6 min the first time). Re-pin only when leg 119's pad changes in the route.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, gitignored; fetched by `python tools/fetch_saves.py`
@@ -1453,6 +1515,22 @@ every frame on both sides at the alignment above, the differing frames listed in
 box. It found the chrome palette's floor(v*255/31) conversion (every menu frame), the member boxes' dim (C2/9E76's
 palette | 4, one frame behind the hand), the dimmed panels' icons (CGRAM row 4, not halved RGB) and the alignment
 itself. What it still lists is the audit's queue.
+
+### `--ram 0026:8` on three menu-audit checks -- what the menu leaves on the direct page
+
+Playthrough leg 116 (2026-11-10): a fight began with `$7E:0027` odd on the cartridge and even on the port, and from
+there the cursor pass and the handlers ran on the other iterations (C1/82A2, C1/8313 test bit 0 of the count C1/8121
+`INC $0027` keeps; the battle never initialises it). Between fights the MENU writes that byte: C2/9503 fills
+`$0000-$00FF` at every open, and C2/8ECC stores a field cast's or an item's six amount words at `$0022-$002D`. The port
+had neither. Three checks now compare `$0026-$002D` at the drive's end, the menu closed (seed: party3_field, the same
+recipe as the drives'):
+
+- **menu-config-cursor-memory-toggle-vs-oracle** -- no cast: the fill's zeroes where the seed holds `C2 DC 50 ..`;
+- **menu-tech-cast-vs-oracle** -- Slurp, C2/8ECC's random arm (`30 00 2E 00 2A 00 28 00`);
+- **menu-item-tonic-use-vs-oracle** -- a Tonic, the flat arm on the `$0DBF` the pick stores (`32 00` four times).
+
+`$0022-$0025` and the routine's scratch (`$02-$09`) are left out: the cartridge's later menu frames reuse them, and the
+port does not mirror the menu's scratch. Re-pin only if the drive changes -- the values are the oracle's.
 
 ### audio-pacing-no-drift (`CT_AUDIO_PACE`) — grading a symptom you cannot hear
 
