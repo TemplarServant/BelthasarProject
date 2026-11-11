@@ -39,7 +39,8 @@ int CtFieldSceneBakeExt(void* h, const uint16_t* planes, int w, int hgt, const u
 const uint8_t* CtFieldScenePalette(void* h);
 // The last bake's MAIN-screen coverage, one byte per pixel: the layer bit (L1 1, L2 2, L3 4) on top, 0 = backdrop.
 const uint8_t* CtFieldSceneCoverage(void* h, int* w, int* hgt);
-const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half);   // the main screen before the math, when OBJ is sub-only
+const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half, int* objBoth);   // the main screen before the math, where a sprite is the sub pixel
+int   CtFieldSceneObjLevels(void* h, const uint8_t** mainLvl, const uint8_t** subLvl);   // ...each screen's top BG pixel against the sprites
 const uint8_t* CtFieldSceneScreens(void* h, const uint8_t** subCov, const uint8_t** mainPre, int* blendEn, int* subOp,
                                    int* half);   // the last bake's sub screen + layer bits, its main before the math
 // Per pixel, the layer bit its picture comes from (motion.h); the coverage's size.
@@ -66,6 +67,7 @@ int   CtFieldSceneBg1Size(void* h, int* w, int* hgt);
 // The BG2/BG3 sample offsets relative to BG1, in pixels (returns 1 when they changed, i.e. re-bake).
 // mapBuilt = $1D35 & 6: the layers whose tilemap the load built from the MAP (C0/794E, C0/7CE7) rather than the camera.
 int   CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y, int mapBuilt);
+int   CtFieldSceneSetBg3Rows(void* h, const int16_t* dx, int n, int y0);   // BG3's scroll a line at a time (HDMA channel 3)
 int   CtFieldSceneSetVramLayers(void* h, int layers);                  // layers the bake leaves to the host's VRAM (1 = changed)
 int   CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn);   // TM / TS / the math enables, BL bits
 // The field's own handle (CtFieldSceneOpen) starts from the tileset's characters and the asset palette with no

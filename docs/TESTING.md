@@ -1137,6 +1137,28 @@ lines pinned: the boot to the first window (cartridge f16201-f16420; the port's 
 first-window class) and the close's scan frames (f21440-f21449; the port's close service runs three frames after
 C1/4127). Full tier (~2 min cached, ~6 min the first time). Re-pin only when leg 119's pad changes in the route.
 
+### field-picture-death-peak-snow-vs-cartridge, field-picture-end-of-time-pillar-vs-cartridge (`tools/field_picture_cmp.py`)
+
+A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the
+route cut the leg -- after a walk, a load or a fight whose length is the timing class -- so it says little about how a
+room is drawn. `tools/field_picture_cmp.py <name>` takes the cartridge's state at a leg's START (the route's, made from
+power-on by tools/playthrough.py), leaves the pad alone for 40 frames on both sides and compares the pictures at the lag
+that fits best (`fieldpicture: <name> leg <n> +40 idle frames: <d> px differ at port <lag>`; `--png` writes the
+cartridge, the port and the pixels apart to build/_fieldpic). Two pictures, both 0 px
+(disasm/notes/field_bg3_wave_and_obj_under_bg.md):
+
+- **death-peak-snow** (the start of leg 135, loc 0F6; 19,770 px before): the snow is BG3 under the window wave --
+  HDMA channel 3 gives BG3HOFS a line at a time (picture row r shows transfer r - 1), the wave's phase `$1DFB` moves
+  four a pixel with BG3's vertical committers (C0/9721 / C0/975F), and the snow's priority-1 pixels, above every OBJ
+  (BGMODE 09), half-add the party and the Poyozos under them. Four mutations: the row on its own transfer, the phase
+  left alone, BG3's priority tiles under the sprites, the rows never handed to the bake.
+- **end-of-time-pillar** (the start of leg 107, loc 1D0; 3,605 px before): the lead stands in a pillar of light, a BG
+  priority-1 pixel over its OBJ; with OBJ on both screens the pillar adds the sprite, its sub pixel. Three mutations:
+  BG3's priority pixels only, the foreground re-drawn over the mixed pixel, the sky's rows on their own transfer.
+
+Full tier (~20 s each with the route's states made; the states themselves come with the playthrough check's). A pixel
+apart is a bug: re-pin only against the cartridge, never to the port's own picture.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, gitignored; fetched by `python tools/fetch_saves.py`

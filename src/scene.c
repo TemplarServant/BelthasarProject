@@ -229,6 +229,16 @@ static int build_pal_anim_desc(const uint8_t* rom, int index, uint8_t* out) {
   return o;
 }
 
+// The top BG pixel's level against the sprites, per pixel of the screen that is being drawn (CtFieldSceneObjLevels):
+// the pass marks each pixel it writes, so the last layer written decides. The field's BGMODE is 09 on every frame
+// (C0/EA7B `LDA #09 / STA $2105`: mode 1 with BG3's priority bit), so the order is BG3.1 > OBJ3 > BG1.1 > BG2.1 > OBJ2
+// > BG1.0 > BG2.0 > OBJ1 > BG3.0 > OBJ0 and a level is the lowest OBJ priority that still wins the pixel: BG3.1 4
+// (none does), BG1.1 / BG2.1 3, BG1.0 / BG2.0 2, BG3.0 1, no BG pixel 0. NULL = not asked for.
+static uint8_t* gDrawLvl;
+#define BG_OBJ_LVL(bit, prio) ((uint8_t)((bit) == BL3 ? ((prio) ? 4 : 1) : ((prio) ? 3 : 2)))
+// A layer whose scroll HDMA gives a line at a time (CtFieldSceneSetBg3Rows): canvas row gDrawRowY0 + r shows the layer
+// gDrawRowDx[r] pixels further along than the layer's own offset, for r < gDrawRowN. NULL = one offset for every row.
+static const int16_t* gDrawRowDx; static int gDrawRowN, gDrawRowY0;
 static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* tiles, int lw, int lh,
                        const Meta* metas, int nmeta, const uint8_t* chips, const uint8_t* present,
                        int nchips, uint8_t pal[128][3], int prio, uint8_t bit, uint8_t* priomask,
@@ -247,13 +257,14 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
   if (mapRing) { LW = (lw != 16 || lh != 16) ? 512 : 256; LH = 256; }
   int ox = ((sox % LW) + LW) % LW, oy = ((soy % LH) + LH) % LH;
   int mx0 = ox / 16, my0 = oy / 16, fx0 = ox % 16, fy0 = oy % 16;
+  const int16_t* rowDx = gDrawRowDx;                    // (a row's shift is under 16 px either way: one metatile of slack)
   for (int cy = 0; cy <= chm; cy++)
-    for (int cx = 0; cx <= cwm; cx++) {
-      if (cy * 16 - fy0 >= H || cx * 16 - fx0 >= W) continue;
+    for (int cx = rowDx ? -1 : 0; cx <= cwm + (rowDx ? 1 : 0); cx++) {
+      if (cy * 16 - fy0 >= H || (!rowDx && cx * 16 - fx0 >= W)) continue;
       int mr, mc;                                        // the map cell this metatile shows
-      if (!mapRing) { mr = (cy + my0) % lh; mc = (cx + mx0) % lw; }
+      if (!mapRing) { mr = (cy + my0) % lh; mc = ((cx + mx0) % lw + lw) % lw; }
       else {
-        int rx = (cx + mx0) % 32, ry = (cy + my0) % 16;
+        int rx = ((cx + mx0) % 32 + 32) % 32, ry = (cy + my0) % 16;
         if (lw != 16)      { mr = ry; mc = rx; }                                         // C0/7991 / 7D28
         else if (lh != 16) { mr = ry + (rx >= 16 ? 16 : 0); mc = rx % 16; }              // C0/79AE / 7D45
         else               { mr = ry; mc = rx % 16; }                                    // C0/7976 / 7D0D
@@ -274,14 +285,16 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
         for (int y = 0; y < 8; y++) {
           int py = cy * 16 - fy0 + koy + y; if (py >= H) break;
           if (py < 0) continue;
+          int rdx = (rowDx && py >= gDrawRowY0 && py - gDrawRowY0 < gDrawRowN) ? rowDx[py - gDrawRowY0] : 0;
           for (int x = 0; x < 8; x++) {
             uint8_t v = tile[(c->fy ? 7 - y : y) * 8 + (c->fx ? 7 - x : x)];
             if (v == 0) continue;
-            int pxx = cx * 16 - fx0 + kox + x; if (pxx >= W) break;
+            int pxx = cx * 16 - fx0 + kox + x - rdx; if (pxx >= W) break;
             if (pxx < 0) continue;
             int idx = py * W + pxx;
             memcpy(px + (size_t)idx * 3, pal[c->base + v], 3);
             cov[idx] = bit;
+            if (gDrawLvl) gDrawLvl[idx] = BG_OBJ_LVL(bit, prio);   // (the layer on top so far)
             // BG1/BG2 priority-1 tiles draw OVER field sprites (the player walks behind them);
             // BG3 priority-1 stays background. Record those pixels for the field to overlay.
             if (prio == 1 && priomask && (bit == BL1 || bit == BL2)) priomask[idx] = 1;
@@ -321,9 +334,15 @@ static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint
       tm = priomask ? (uint8_t*)calloc((size_t)W * H, 1) : NULL;
       if (!tp || !tc || (priomask && !tm)) { free(tp); free(tc); free(tm); tp = tc = tm = NULL; }
     }
+    uint8_t* lvl = gDrawLvl;
+    if (tp) gDrawLvl = NULL;                           // (the still canvas is not the screen: the copy below marks)
+    const int16_t* rows = gDrawRowDx;
+    if (order_bit[i] != BL3 || tp) gDrawRowDx = NULL;  // (the rows are BG3's; a still backdrop keeps one offset)
     draw_layer(tp ? tp : px, tp ? tc : cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
                L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], tp ? tm : priomask,
                L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
+    gDrawLvl = lvl;
+    gDrawRowDx = rows;
     if (!tp) continue;
     for (int x = 0; x < W; x++) {
       int sx = stillCol(x, stillVx, stillVw, W);
@@ -331,6 +350,7 @@ static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint
         size_t s = (size_t)y * W + sx, d = (size_t)y * W + x;
         if (!tc[s]) continue;
         memcpy(px + d * 3, tp + s * 3, 3); cov[d] = tc[s];
+        if (lvl) lvl[d] = BG_OBJ_LVL(order_bit[i], order_prio[i]);
         if (tm && tm[s]) priomask[d] = 1;
       }
     }
@@ -373,6 +393,8 @@ typedef struct {
   uint8_t* prevChips;                      // shadow of chips12 to detect when a re-bake is needed
   int animFrame;                           // last frame applied to chips12/pal
   uint8_t* bakeMain;                       // the last bake's main screen before the colour math (CtFieldSceneMainScreen)
+  uint8_t* bakeMainLvl; uint8_t* bakeSubLvl;   // ...and each screen's top BG pixel against the sprites (CtFieldSceneObjLevels)
+  int16_t l3RowDx[240]; int l3RowN, l3RowY0;   // BG3's scroll a line at a time (CtFieldSceneSetBg3Rows), 0 rows = none
   uint8_t* bakeSub; uint8_t* bakeSubCov;   // ...and its sub screen (pixels, layer bits; NULL with no sub screen) and the
   int bakeBlend, bakeSubOp, bakeHalf;      //   math the bake applied with it (CtFieldSceneScreens)
   uint8_t* bakeCov; int bakeCovW, bakeCovH; // the last CtFieldSceneBake's main-screen coverage: per pixel the layer bit
@@ -391,7 +413,7 @@ static void CtFreeSceneData(SceneData* sd) {
   free(sd->chips3); free(sd->pres3); free(sd->meta3);
   free(sd->l1t); free(sd->l2t); free(sd->l3t); free(sd->tprio);
   for (int i = 0; i < 3; i++) { free(sd->held[i]); sd->held[i] = NULL; sd->heldN[i] = 0; }
-  free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain); free(sd->bakeSub); free(sd->bakeSubCov);
+  free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain); free(sd->bakeMainLvl); free(sd->bakeSubLvl); free(sd->bakeSub); free(sd->bakeSubCov);
   for (int i = 0; i < 6; i++) { free(sd->layRgb[i]); free(sd->layCov[i]); sd->layRgb[i] = sd->layCov[i] = NULL; }
 }
 
@@ -505,6 +527,8 @@ static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive :
 static int gSceneLayersOff = 0;   // BL1/BL2/BL3 bits removed from both screens for one compose (see below)
 static uint8_t* gSceneMotCov;     // CtComposeScene's motion coverage, when it is asked for the coverage (CtFieldSceneBake)
 static uint8_t* gSceneMainPre;    // ...and its main screen before the colour math (the same crop)
+static uint8_t* gSceneMainLvl;    // ...and the two screens' top BG pixels against the sprites (BG_OBJ_LVL, the same crop)
+static uint8_t* gSceneSubLvl;
 static uint8_t* gSceneSubPx;      // ...and its sub screen, pixels and layer bits (NULL with none), and the math it took
 static uint8_t* gSceneSubCov;
 static int gSceneBlend, gSceneSubOp, gSceneHalf;
@@ -554,8 +578,15 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   // The priority mask follows layer order, not the main screen: the SNES priority ladder (OBJ prio 3 > BG1.1 >
   // BG2.1 > OBJ prio 2 > ...) does not depend on TM/TS, so both passes feed it (a scene may put BG1/BG2 on the sub
   // screen alone; disasm/notes/field_sprite_prio_and_player_gate.md).
+  uint8_t* mlvl = outCov ? calloc((size_t)W * H, 1) : NULL;   // each screen's top BG pixel against the sprites
+  uint8_t* slvl = outCov ? calloc((size_t)W * H, 1) : NULL;
+  gDrawLvl = mlvl;
+  gDrawRowDx = sd->l3RowN ? sd->l3RowDx : NULL; gDrawRowN = sd->l3RowN; gDrawRowY0 = sd->l3RowY0;
   draw_pass(main_px, main_cov, W, H, main_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
+  gDrawLvl = slvl;
   draw_pass(sub_px, sub_cov, W, H, sub_t, palc, &li1, &li2, &li3, priomask, sd->stillBits, sd->stillVx, sd->stillVw);
+  gDrawLvl = NULL;
+  gDrawRowDx = NULL;
 
   // The colour math is the PPU's, in 5 bits (snes/ppu.c ppu_handlePixel): add or subtract the sub-screen colour,
   // halve, then clamp to 0..31. The palette holds conv5 values, so >> 3 recovers each channel's 5 bits exactly.
@@ -619,6 +650,12 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
       uint8_t* pp = pre ? malloc((size_t)cw * ch * 3) : NULL;
       if (pp) for (int y = 0; y < ch; y++) memcpy(pp + (size_t)y * cw * 3, pre + ((size_t)(cy0 + y) * W + cx0) * 3, (size_t)cw * 3);
       free(pre); pre = pp;
+      for (int q = 0; q < 2; q++) {
+        uint8_t** lv = q ? &slvl : &mlvl;
+        uint8_t* t = *lv ? malloc((size_t)cw * ch) : NULL;
+        if (t) for (int y = 0; y < ch; y++) memcpy(t + (size_t)y * cw, *lv + (size_t)(cy0 + y) * W + cx0, (size_t)cw);
+        free(*lv); *lv = t;
+      }
       if (keepSub) {
         uint8_t* sp = malloc((size_t)cw * ch * 3); uint8_t* sc = malloc((size_t)cw * ch);
         if (sp && sc)
@@ -639,6 +676,8 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   if (keepSub) { gSceneSubPx = sub_px; gSceneSubCov = sub_cov; } else { free(sub_px); free(sub_cov); }
   free(gSceneMotCov); gSceneMotCov = mot;
   free(gSceneMainPre); gSceneMainPre = pre;
+  free(gSceneMainLvl); gSceneMainLvl = mlvl;
+  free(gSceneSubLvl); gSceneSubLvl = slvl;
   return out;
 }
 
@@ -793,6 +832,8 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask) 
   if (out) { free(sd->bakeCov); sd->bakeCov = cov; sd->bakeCovW = *outW; sd->bakeCovH = *outH;
              free(sd->bakeMotCov); sd->bakeMotCov = gSceneMotCov; gSceneMotCov = NULL; sd->layDirty = 1;
              free(sd->bakeMain); sd->bakeMain = gSceneMainPre; gSceneMainPre = NULL;
+             free(sd->bakeMainLvl); sd->bakeMainLvl = gSceneMainLvl; gSceneMainLvl = NULL;
+             free(sd->bakeSubLvl); sd->bakeSubLvl = gSceneSubLvl; gSceneSubLvl = NULL;
              free(sd->bakeSub); free(sd->bakeSubCov); sd->bakeSub = gSceneSubPx; sd->bakeSubCov = gSceneSubCov;
              gSceneSubPx = gSceneSubCov = NULL;
              sd->bakeBlend = gSceneBlend; sd->bakeSubOp = gSceneSubOp; sd->bakeHalf = gSceneHalf;
@@ -811,12 +852,20 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
   gSceneLayersOff = 0;
   return out;
 }
-// The last bake's main screen before the colour math (same size as the bake), for a sprite on the sub screen alone.
-// The bake holds both screens already mixed, which is right for a sprite only where OBJ is on the main screen. With
-// OBJ on the sub screen only, the PPU (ppu_handlePixel) takes the main pixel and, when its layer has colour math,
-// adds or subtracts the sub pixel -- the sprite, where it wins the sub screen. Returns NULL unless that is the setup;
-// else the image and the math the bake applies (blend layers, subtract, half).
-const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half) {
+// The last bake's main screen before the colour math (same size as the bake), for a sprite that is the SUB pixel under
+// a main pixel with colour math. The bake holds both screens already mixed, which is right for a sprite only where the
+// sprite is the main pixel. Two setups make it the sub pixel:
+//   * OBJ on the sub screen only: the PPU (ppu_handlePixel) takes the main pixel and, when its layer has colour math,
+//     adds or subtracts the sub pixel -- the sprite, where it wins the sub screen (Manoria, loc 081);
+//   * OBJ on both screens, under a BG pixel that beats it: the main pixel is that BG's and, with its layer in the
+//     math, it takes the sub pixel -- the sprite again, where the sprite wins the SUB screen's own BG pixels. Death
+//     Peak's snow (loc 0F6: TM 17, TS 13, CGWSEL 02, CGADSUB 44; BG3's priority-1 pixels, above every OBJ) half-adds
+//     the party and the Poyozos under it; the End of Time's pillars of light (loc 1D0: TM 17, TS 12; BG priority-1
+//     pixels over an OBJ of priority 2) add the character who stands in one. `*objBoth` = 1 says so: which pixels is
+//     CtFieldSceneObjLevels' two maps.
+// Returns NULL unless one of them is the setup; else the image and the math the bake applies (blend layers, subtract,
+// half).
+const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half, int* objBoth) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeMain) return NULL;
   int objM = (sd->screen_flags & 0x08) != 0, objS = (sd->screen_flags & 0x80) != 0;
@@ -826,9 +875,23 @@ const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* ha
     objM = sd->scrObjM; objS = sd->scrObjS && (sd->scrCGWSEL & 0x02);
     be = sd->scrCGADSUB & 0x07; so = (sd->scrCGADSUB & 0x80) != 0; hf = (sd->scrCGADSUB & 0x40) != 0;
   }
-  if (objM || !objS || !be) return NULL;
+  if (objBoth) *objBoth = 0;
+  if (!objS || !be) return NULL;
+  if (objM) {                                          // the sprite is the main pixel but where a BG pixel beats it
+    if (!sd->bakeMainLvl || !sd->bakeSubLvl) return NULL;
+    if (objBoth) *objBoth = 1;
+  }
   if (blendEn) *blendEn = be; if (subOp) *subOp = so; if (half) *half = hf;
   return sd->bakeMain;
+}
+// ...and that bake's top BG pixel against the sprites on each screen (the bake's size; BG_OBJ_LVL: the lowest OBJ
+// priority that wins the pixel, 4 = none, 0 = no BG pixel). Returns 0 before a bake.
+int CtFieldSceneObjLevels(void* h, const uint8_t** mainLvl, const uint8_t** subLvl) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->bakeMainLvl || !sd->bakeSubLvl) return 0;
+  if (mainLvl) *mainLvl = sd->bakeMainLvl;
+  if (subLvl) *subLvl = sd->bakeSubLvl;
+  return 1;
 }
 // The last bake's two screens, for a colour window that limits the math (field.c fieldColWindowApply): the sub screen's
 // pixels (NULL when the bake had no sub screen) and its layer bits (0 = transparent), the main screen before the math, and
@@ -1060,6 +1123,18 @@ int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y,
   return 1;
 }
 
+// BG3's horizontal scroll a line at a time, as HDMA channel 3 hands it out (field.c reads the channel's table): canvas
+// row y0 + r shows BG3 `dx[r]` pixels further along than its offset (CtFieldSceneSetLayerOffsets), r < n. n = 0: one
+// offset for every row. Returns 1 when that changed (re-bake).
+int CtFieldSceneSetBg3Rows(void* h, const int16_t* dx, int n, int y0) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  if (!dx || n <= 0) { if (!sd->l3RowN) return 0; sd->l3RowN = 0; return 1; }
+  if (n > (int)(sizeof sd->l3RowDx / sizeof sd->l3RowDx[0])) n = (int)(sizeof sd->l3RowDx / sizeof sd->l3RowDx[0]);
+  if (sd->l3RowN == n && sd->l3RowY0 == y0 && !memcmp(sd->l3RowDx, dx, (size_t)n * sizeof dx[0])) return 0;
+  memcpy(sd->l3RowDx, dx, (size_t)n * sizeof dx[0]); sd->l3RowN = n; sd->l3RowY0 = y0;
+  return 1;
+}
 // The widescreen's still backdrop (a mod: field.c fieldWideStill): the layers (BL2 2 / BL3 4) the bake holds to the wide
 // picture -- the 256 view's columns (canvas column vx on) drawn from canvas column vw, the picture's middle -- and mirrors
 // past them instead of repeating; 0 = none, the bake as the PPU repeats a layer. Returns 1 when that changed (re-bake).

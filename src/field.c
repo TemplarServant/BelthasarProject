@@ -2913,6 +2913,11 @@ static void hostPresentMot(CtPresenter* pr, const uint8_t* fb, int w, int motion
 // Manoria cathedral (loc 081, header $B4: TM BG3, TS BG1 BG2 OBJ, CGADSUB $24), whose sunbeams brighten the sprites under them.
 static uint8_t g_objSubOn, g_objSubSub, g_objSubHalf;
 static uint8_t g_objSubMask[FIELD_WMAX * CAMH], g_objSubRgb[FIELD_WMAX * CAMH * 3];
+// g_objSubMask is a level: a sprite pixel of priority p is the sub pixel there when p < the mask (the main pixel is
+// a BG's that beats it and has the math) and p >= g_objSubTop (it wins the sub screen's own BG pixel). OBJ on the sub
+// screen alone: 4 and 0, every sprite pixel. g_objSubDone marks the pixels a sprite was mixed into this frame, for
+// the foreground's re-draw to leave them (g_objSubBoth: OBJ on both screens).
+static uint8_t g_objSubTop[FIELD_WMAX * CAMH], g_objSubDone[FIELD_WMAX * CAMH], g_objSubBoth;
 static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
   if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3; fb[o] = r; fb[o + 1] = g; fb[o + 2] = b;
     if (g_bObjPalMask) g_bObjPalMask[(size_t)y * g_fw + x] = (uint8_t)(g_bObjPalCur < 0 ? 0xFF : g_bObjPalCur);
@@ -4498,8 +4503,11 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
         continue;
       }
       if (winClip && !win) continue;                       // clip-only (no stencil): just not drawn here
-      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH && g_objSubMask[(size_t)py * g_fw + px]) {
+      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH) g_objSubDone[(size_t)py * g_fw + px] = 0;
+      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH && p < g_objSubMask[(size_t)py * g_fw + px] &&
+          p >= g_objSubTop[(size_t)py * g_fw + px]) {
         const uint8_t* m = g_objSubRgb + ((size_t)py * g_fw + px) * 3;
+        g_objSubDone[(size_t)py * g_fw + px] = 1;
         uint8_t c[3];
         for (int k = 0; k < 3; k++) {                       // ppu_handlePixel: main5 +/- sub5, halved, clamped
           int d = m[k] >> 3, sv = pal[v * 3 + k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;
@@ -4805,7 +4813,11 @@ static int fieldStillCol(int bit, int mx) {
 // scrolls with the map is the map's, and past the room's edge it belongs to other rooms, as BG1/BG2 do. The Steam
 // release draws BG3 inside the room's scroll mask only (0x4DE2F0's BG3 layer, 0x4DF5D0 over the mask). (Layer bits:
 // BG1 1, BG2 2, BG3 4.)
+// BG3's scroll a line at a time (HDMA channel 3; set where the layer offsets are, each frame): canvas row g_bg3RowY0 + r
+// shows BG3 g_bg3RowDx[r] pixels further along than its offset.
+static int16_t g_bg3RowDx[CAMH]; static int g_bg3RowOn, g_bg3RowY0;
 static void fieldWideExtBg3(const CtSceneLayers* L, int mx, int my, int o3x, int o3y, uint8_t* d) {
+  if (g_bg3RowOn && my >= g_bg3RowY0 && my - g_bg3RowY0 < CAMH) o3x += g_bg3RowDx[my - g_bg3RowY0];
   const uint8_t* b[2] = { NULL, NULL };            // [0] BG3 priority 0, [1] priority 1 (CtSceneLayers 0 and 5)
   for (int k = 0; k < 2; k++) {
     int i = k ? 5 : 0;
@@ -18066,7 +18078,36 @@ int main(int argc, char** argv) {
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
       int o2x, o2y, o3x, o3y; CtSceneLayerOffsetsOf(f.vm, pg, &o2x, &o2y, &o3x, &o3y);
       if (!battlePhase) o2y += fieldWideBg2Dy();     // (the widescreen's sky offset, a mod: fieldWideBg2Dy)
+      // BG3's scroll is HDMA channel 3's, a line at a time (FD/C1EE programs it DMAP 43 on $2111: BG3HOFS twice, BG3VOFS
+      // twice, bank $7F, the table $7F:1085 or $7F:133D with $0153 as the other channels; FD/C2C1 builds it). A room
+      // with the window wave ($1DF9, a location property: Death Peak's snow, loc 0F6, and the End of Time's sky, loc
+      // 1D0) swings BG3 +-5 px over 16 lines (the rule's cartridge, `--hdma` with HDMA_TRACE_BG, loc 0F6: lines 1.. =
+      // 985 986 985 984 982 980 978 977 976 975 976 977 979 981 982 984 ..., BG3VOFS one value). Where the lines differ
+      // the layer takes the table's words: the first line's as its offset, the others' differences from it row by row.
+      // A scroll written in a line's H-blank is the next line's: picture row r shows transfer r - 1 (row 0 the first
+      // one's too). The lines of an open text box are the box's (the plain entry at $14FC / $1504, another BG3VOFS):
+      // they are not the layer's and take no shift. MEASURED: from the cartridge's state at the end of playthrough leg
+      // 134, idle, the port's picture is the cartridge's two frames on to the pixel (0 of 57344 differing at +12, +40
+      // and +133 frames; with row r on transfer r, 43 rows of 224 equal); the End of Time's (leg 130's end) the same.
+      g_bg3RowOn = 0;
+      if (!battlePhase && (pg[0x0128] & 0x08)) {
+        static HdmaHeld ch3[CAMH];
+        fieldHdmaWalk(pg + 0x10000, (pg[0x0153] & 0x0F) ? 0x133D : 0x1085, 4, ch3, CAMH);
+        int h0 = ch3[0].b[0] | (ch3[0].b[1] << 8), v0 = ch3[0].b[2] | (ch3[0].b[3] << 8), wave = 0;
+        for (int r = 0; r < CAMH; r++) {
+          int rr = r ? r - 1 : 0;                          // picture row r shows the transfer before it (above)
+          int hr = ch3[rr].b[0] | (ch3[rr].b[1] << 8), vr = ch3[rr].b[2] | (ch3[rr].b[3] << 8);
+          g_bg3RowDx[r] = (int16_t)(vr == v0 ? hr - h0 : 0);
+          if (vr == v0 && hr != h0) wave = 1;
+        }
+        if (wave) {
+          int cxp = (int16_t)(pg[0x1D8F] | (pg[0x1D90] << 8)) - o3x, cyp = (int16_t)(pg[0x1D91] | (pg[0x1D92] << 8)) - o3y;
+          o3x = (int16_t)h0 - cxp; o3y = (int16_t)v0 - cyp;   // (the camera in the canvas's pixels, as the counters' offsets had it)
+          g_bg3RowOn = 1; g_bg3RowY0 = cyp;
+        }
+      }
       layerMoved = CtFieldSceneSetLayerOffsets(f.sd, o2x, o2y, o3x, o3y, pg[0x1D35]);
+      if (CtFieldSceneSetBg3Rows(f.sd, g_bg3RowOn ? g_bg3RowDx : NULL, g_bg3RowOn ? CAMH : 0, g_bg3RowY0)) layerMoved = 1;
     }
     int bgDirty = layerMoved;
     // The field's frames only: the battle's page is its own (battle.c draws its fades and flashes from it through its
@@ -18280,18 +18321,27 @@ int main(int argc, char** argv) {
     for (int y = 0; y < ch; y++)
       for (int x = 0; x < cw; x++)
         memcpy(fb + ((size_t)y * g_fw + x) * 3, f.base + fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]) * 3, 3);
-    { int be = 0, so = 0, hf = 0, mw = 0, mh = 0;           // a sprite on the sub screen alone (g_objSubOn, drawSprite)
-      const uint8_t* mainPre = f.sd ? CtFieldSceneMainScreen(f.sd, &be, &so, &hf) : NULL;
+    { int be = 0, so = 0, hf = 0, mw = 0, mh = 0, both = 0;     // a sprite that is the sub pixel (g_objSubOn, drawSprite)
+      const uint8_t* mainPre = f.sd ? CtFieldSceneMainScreen(f.sd, &be, &so, &hf, &both) : NULL;
       const uint8_t* mcov = f.sd ? CtFieldSceneCoverage(f.sd, &mw, &mh) : NULL;
+      const uint8_t* mlvl = NULL; const uint8_t* slvl = NULL;   // OBJ on both screens: under the BG pixels that beat it
+      if (mainPre && both && !CtFieldSceneObjLevels(f.sd, &mlvl, &slvl)) mainPre = NULL;
       g_objSubOn = mainPre && mcov && mw == f.W && mh == f.H;
+      g_objSubBoth = (uint8_t)(g_objSubOn && both);
       if (g_objSubOn) {
         g_objSubSub = (uint8_t)so; g_objSubHalf = (uint8_t)hf;
         memset(g_objSubMask, 0, (size_t)g_fw * CAMH);
+        memset(g_objSubTop, 0, (size_t)g_fw * CAMH);
+        memset(g_objSubDone, 0, (size_t)g_fw * CAMH);
         for (int y = 0; y < ch; y++)
           for (int x = 0; x < cw; x++) {
             size_t bi = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]), i = (size_t)y * g_fw + x;
             if (!(mcov[bi] & be)) continue;
-            g_objSubMask[i] = 1; memcpy(g_objSubRgb + i * 3, mainPre + bi * 3, 3);
+            // (OBJ on both screens: the priority-1 pixels -- BG3's, above every OBJ, and BG1's / BG2's, above an OBJ of
+            // priority 2 or less. A priority-0 pixel over an OBJ of priority 0 / 1 stays the stencil's, drawSprite.)
+            if (both) { if (mlvl[bi] < 3) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }
+            else g_objSubMask[i] = 4;
+            memcpy(g_objSubRgb + i * 3, mainPre + bi * 3, 3);
           }
       } }
     for (int y = 0; y < ch; y++)                     // the map, behind everything that follows: each pixel its layer
@@ -18833,6 +18883,7 @@ int main(int argc, char** argv) {
           if (!f.prio[bo]) continue;
           if (front[(size_t)y * g_fw + x]) { fgSkipped++; continue; }  // a prio-3 sprite half is in front here
           if (bgWinAt(x, y)) continue;                     // inside the iris -> BG1/BG2 windowed off
+          if (g_objSubBoth && g_objSubDone[(size_t)y * g_fw + x]) continue;   // the sprite under it is its sub pixel: mixed
           uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
           if (showPrio) { d[0] = 255; d[1] = 0; d[2] = 0; } else memcpy(d, f.base + bo * 3, 3);
           mot->own[(size_t)y * g_fw + x] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground

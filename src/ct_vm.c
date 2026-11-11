@@ -4376,6 +4376,12 @@ static void camCommit93E1(uint8_t* s) {
         continue;
       }
       camPut16(s, cnt[i], camGet16(s, cnt[i]) + w);
+      // BG3's vertical committers also move the window wave's phase: C0/9721 (down, $4C pixels) `INC $FB` x4 and
+      // C0/975F (up, $4B pixels) `DEC $FB` x4, per pixel, ahead of `LDX $91 / INX|DEX / STX $91` -- the wave rides the
+      // layer's rows (the horizontal ones, C0/96B7 / 96ED, and BG2's leave it alone). FD/C5E2's own step comes on top.
+      // MEASURED, the rule's cartridge, Death Peak's snow (loc 0F6, BG3 two pixels up a frame; PEEK_WRITEWATCH=1DFB:1):
+      // eight `DEC $FB` a frame (C0/9768..976E twice) and the builder's INC, DB -> D4 -> CD -> C6; the port stepped +1.
+      if (i == 3) s[0x1DFB] = (uint8_t)(s[0x1DFB] + 4 * w);
     } }
   int ax = camS8(s[0x1D3B]), wX = ax / 16; s[0x1D3B] = (uint8_t)(ax - wX * 16);      // 92CA extract + remainder
   int ay = camS8(s[0x1D3C]), wY = ay / 16; s[0x1D3C] = (uint8_t)(ay - wY * 16);
