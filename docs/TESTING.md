@@ -1137,6 +1137,16 @@ lines pinned: the boot to the first window (cartridge f16201-f16420; the port's 
 first-window class) and the close's scan frames (f21440-f21449; the port's close service runs three frames after
 C1/4127). Full tier (~2 min cached, ~6 min the first time). Re-pin only when leg 119's pad changes in the route.
 
+### leg-window-world-entry-bg3-vs-cartridge (`tools/leg_window_cmp.py world-entry-bg3`)
+
+The fourth window, and the first on the overworld: leg 131, f4860 + 100, the Epoch setting down on the 2300 A.D. map
+(world 1F2). The cells are BG3's scroll words `$24` / `$2A` and the pending camera deltas `$1BF1` / `$1BF3`. The
+lead's velocity stands in the two words (0001 / 0001) through the descent, the BG3 visits skipped by `$0294` bit 4; the
+first visit after it takes them -- FFFD / 0003, the 16.16 step plus (1, 1) -- and zeroes both (C2/7737-7754). The port
+read a camera copy that was 0 and left the WRAM words at 1 (disasm/notes/ow_bg3_animator.md, its last section). 81 steps, 0
+differing; the descent (cartridge f4861-f4878) is the free span, its `free:` line pinned -- both come back on the first
+visit's values. Full tier (~30 s cached). Two mutations: the camera's copy instead of the words, the words left standing.
+
 ### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3
 
 A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the

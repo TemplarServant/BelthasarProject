@@ -77,6 +77,14 @@ WINDOWS = {
     # the close's scan frame itself (the port's close service runs on the frame $A013 falls, three frames after C1/4127).
     'fight-poses': dict(leg='119_', start=16200, frames=5900, free=[(16201, 16420), (21440, 21449)],
                         cells=[('7E968C', 3), ('7E9922', 3), ('7EA098', 1), ('7E96DB', 3)]),
+    # The 2300 A.D. map, world 1F2: the Epoch sets down (`$0294` = F3, the BG3 visit skipped) with the lead's velocity
+    # standing in `$1BF1` / `$1BF3` (0001 / 0001), and the first visit of the BG3 drift after it (C2/7702: cartridge
+    # f4879) takes them: `$24` / `$2A` = FFFD / 0003, the 16.16 step plus (1, 1), and both words cleared (C2/7737-7754).
+    # The port's visit read a camera copy that was 0 and left the WRAM words at 1: the dust a pixel off for the stay.
+    # The cells: BG3's scroll words and the two pending deltas. Not graded: the descent's length (the world load's
+    # class -- the port's map is up three frames earlier).
+    'world-entry-bg3': dict(leg='131_', start=4860, frames=100, free=[(4861, 4878)],
+                            cells=[('7E0024', 2), ('7E002A', 2), ('7E1BF1', 2), ('7E1BF3', 2)]),
 }
 
 

@@ -3934,7 +3934,8 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     }
     // The lead's slot: C2/3725 `LDA $001C,X / STA $1BF1 / LDA $0020,X / STA $1BF3` -- its velocity, stored on the frames
     // its mover integrates. The mover itself is the host's (CtWorldStreamFrame held the delta); the store lands here.
-    if (cls == 0x3404 && c && c->leadStore) { c->pendDx = c->leadDx; c->pendDy = c->leadDy; c->leadStore = 0; }
+    if (cls == 0x3404 && c && c->leadStore) { c->pendDx = c->leadDx; c->pendDy = c->leadDy; c->leadStore = 0;
+                                              obPutW(ram + 0x1BF1, (uint16_t)c->leadDx); obPutW(ram + 0x1BF3, (uint16_t)c->leadDy); }
     // In a vehicle's modules ($027E != 0) or an event the lead's handler is obLeadModule, not the host's mover, and it
     // runs here in its slot like any block.
     if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {
@@ -3974,8 +3975,17 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     // per-line wave (C2/7759 / 7652) that reads the moved `$24`. All return CLC. Running them in the pass matters: a drift
     // object the bootstrap spawns in a later block steps its +22 in that same pass.
     if (cls == 0x75C3 || cls == 0x75FD || cls == 0x7702 || cls == 0x77F2) {
+      // The deltas the visit consumes are the WRAM words `$1BF1` / `$1BF3`, whoever stored them, and the visit zeroes
+      // them there (C2/75E5-75F8, 7617-7646, 7737-7754: `ADC $1BF1` ... `STZ $1BF1 / STZ $1BF3`); a visit `$0294 & 10`
+      // skips leaves them standing for the next one. MEASURED, the rule's cartridge, playthrough leg 131 (the Epoch
+      // setting down on the 2300 A.D. map, world 1F2): `$1BF1` / `$1BF3` are 0001 / 0001 all through the descent
+      // (`$0294` = F3), and the first visit after it (f4879) puts `$24` / `$2A` at FFFD / 0003 -- the 16.16 step plus
+      // (1, 1) -- and clears both words. The port's camera copy was 0 there: FFFC / 0002, the dust a pixel off
+      // diagonally for the whole stay, and the WRAM words left at 1.
+      if (c) { c->pendDx = (int16_t)obW(ram + 0x1BF1); c->pendDy = (int16_t)obW(ram + 0x1BF3); }
       if (c && owBg3Drift(c, ram, cls, B + 0x22)) {          // the visit's `$24` / `$2A` are WRAM in the ROM: kept there too
         obPutW(ram + 0x24, c->bg3h); obPutW(ram + 0x2A, c->bg3v);
+        obPutW(ram + 0x1BF1, 0); obPutW(ram + 0x1BF3, 0);
       }
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       continue;

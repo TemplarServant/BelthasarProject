@@ -152,3 +152,32 @@ the table from line 0 always (`w[l & 63]`); walking up or down every band change
 which reads as the mist running sideways (user report). world.c now keeps `waveTop` (= `$A916`), moved by the drift and
 read as `w[(top + (l & 63)) & 63]`; CT_OWCAMTRACE's `owbg3line` lines end with `top=`. Pinned by
 `ow-600ad-mist-wave-follows-the-camera-vs-oracle`.
+
+## The visit's deltas are the WRAM words, and what the picture still owes (2026-11-11)
+
+Found on playthrough legs 131 / 133 (the 2300 A.D. map, world 1F2): the dust is ~3,800 px away at every lag.
+
+**The words.** The visit adds `$1BF1` / `$1BF3` and zeroes them (C2/75E5-75F8, 7617-7646, 7737-7754), whoever stored
+them. Measured on the rule's cartridge, leg 131: the Epoch sets down with the lead's velocity standing in the two words
+(0001 / 0001) all through the descent (`$0294` = F3, the visits skipped), and the first visit after it (f4879) puts
+`$24` / `$2A` at FFFD / 0003 -- the 16.16 step plus (1, 1) -- and clears both. The port's visit read a camera copy
+(`pendDx / pendDy`) that was 0 there and left the WRAM words at 1: FFFC / 0002, a pixel off each way for the stay.
+Fixed: world.c's object pass loads the copy from the WRAM words before the visit and zeroes them after it; the lead's
+store writes them too. Check `leg-window-world-entry-bg3-vs-cartridge` (81 steps, 0 differing; two mutations). After
+it the port's `$24` / `$2A` are the cartridge's three frames early, the world load's class.
+
+**The picture, open.** The end pictures of 131 / 133 are still ~3,400-3,700 px away. Measured on the cartridge
+(`ct.exe --hdma <state>` with `HDMA_TRACE_BG=1`, `--ppuregs`, the WRAM of the same frames):
+
+- HDMA channel 1 is `$2111`, mode 2, indirect, table `$7E:8A35` = `F0 $8B56 / F0 $8C36 / 00`; the words at `$8B56` are
+  `E, E+S(p), E, E+S(p+1), ...` with E = `$24` (sec. 6). The port's table for the same E and p is the same (S = FB
+  at p = 4123 on both).
+- **At scanline L the register holds the table's word L - 1** (lines 1.. = E, E+S(p), E, E+S(p+1), ...; line 0 keeps
+  the NMI's latch). field.c `owBg3HLine` hands row y the word y + 1: row y is scanline y + 1, so it should be word y --
+  the field's rule (field_bg3_wave_and_obj_under_bg.md sec. 1).
+- **The table is a frame ahead of the NMI's latch in the same picture:** line 0 shows `$24` of one frame and the
+  table's E is the next frame's (the object rewrites the table at the top of the frame, before the lines read it).
+- Trying the row word alone, the lead alone and both on leg 131's end leaves 3,416-3,735 px: neither closes it, so the
+  frame each part of the world's picture shows is not pinned down yet. A seed on the map restarts the port's BG3 from 0
+  (`CtWorldCamSeed` is not what the seeded port ends on), so `tools/field_picture_cmp.py` cannot judge it; it needs a
+  line-by-line dump of both sides on a run that enters the map itself.
