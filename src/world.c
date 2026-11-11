@@ -1077,7 +1077,9 @@ void CtWorldLeadAnimFrame(uint8_t* ram, int dir, int phaseBefore, int blocked, i
   uint8_t* B = ram + CtWorldLeadBlock(ram);
   int magus = (ram[0x2980] == 6) ? 0x0C : 0;                           // C2/3971 / 399C: LDA $00 / CMP #06 / ... ADC #0C
   (void)facingInit;
-  if (B[OWOBJ_ANIMBK] != 0xC3) leadInit(ram, B);                       // C2/34F8, the init phase, once
+  // C2/34F8, the init phase: a lead block's is its own visit in the pass (CtWorldAmbientFrame, phase 0 in its slot).
+  // The fallback block of a replayed snapshot has no visit there, and no phase byte of its own: once, here.
+  if (obW(B) != 0x3404 && B[OWOBJ_ANIMBK] != 0xC3) leadInit(ram, B);
   if (dir >= -1 && phaseBefore == 1) {                                 // phase 1 = C2/3567, the input frame
     if (dir < 0) {                                                     // C2/35B3, no button at all
       B[0x28] &= 0x7F;                                                 // 35B5-35BA
@@ -1585,6 +1587,9 @@ static CtWorldJslFn g_owJsl = NULL;
 static int g_owSuspendNmis = 0;      // NMIs the pass's inline JSL crossed: the pass is suspended until they are spent
 static int g_owResumeBlock = -1;     // ...on this block (its script resumes at its saved pc)
 void CtWorldSetJsl(CtWorldJslFn fn) { g_owJsl = fn; }
+static CtWorldLeadSlotFn g_owLeadSlot = NULL;       // the host's mover, called in the lead's slot of the pass
+static void* g_owLeadSlotCtx = NULL;
+void CtWorldSetLeadSlot(CtWorldLeadSlotFn fn, void* ctx) { g_owLeadSlot = fn; g_owLeadSlotCtx = ctx; }
 int CtWorldTakePassSuspend(void) { int n = g_owSuspendNmis; g_owSuspendNmis = 0; return n; }
 static void owFarLzTo(uint8_t* ram, uint8_t bank, uint16_t dst, uint16_t tbl, uint16_t x);   // (below)
 static void owEpochPose(uint8_t* ram, uint8_t* B);   // (with the Epoch, below)
@@ -2032,6 +2037,11 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
   // many ops in one frame, and cutting it short shifts C2/048A's first-fit slots (sequence_table.md 9.10).
   // The counter is only a guard against a script that never yields (which would hang the ROM too).
   for (int guard = 0; guard < 65536; guard++) {
+    // C2/0F80-0F86 `ADC $58 / STA $58 / LDX $4E / STA $0007,X`: the block's +07 is the running pc after every advance (a
+    // jump's too -- it returns its distance in A), not only when the visit ends. It is what C2/048A's MVN hands a child:
+    // the lead and the followers the bootstrap allocates with op $35 carry their own op's address there (the cartridge's
+    // $0482 / $0488 / $048D on the 600 A.D. map).
+    obPutW(B + OWOBJ_PC, pc);
     const uint8_t* op = obScript(ram, B[0x09], pc, opbuf);   // [$58] long, bank = +09 (C2/0F67)
     int adv = -1;                                   // -1 = yield (keep pc)
     // CT_OWOBJTRACE=1: one line per opcode executed, to compare the port with the cartridge op by op.
@@ -2056,10 +2066,9 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
         obAllocNative(ram, B, 0x1DD4);
         adv = 6; break;
       // C2/10BF -- a VRAM upload: the op only spawns class $1CF5 (obVramUp below) and steps over its nine operand bytes;
-      // the child reads them through its copy of the parent's +07 (C2/0F86 stores the pc after every advance; the port
-      // keeps it in a local, so it is stored first, as in 0x28/0x29). disasm/notes/ocean_palace_aftermath.md sec. 1.
+      // the child reads them through its copy of the parent's +07 (C2/0F86 stores the pc after every advance: the loop's
+      // head), as in 0x28/0x29. disasm/notes/ocean_palace_aftermath.md sec. 1.
       case 0x03:
-        obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, 0x1CF5);
         adv = 10; break;
       case 0x05: CtWorldObjOp05(ram, op); adv = 5; break;   // C2/1100 -- enter a location
@@ -2187,15 +2196,13 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
       case 0x4D: if (ram[op[1] | (op[2] << 8)] >= op[3]) { pc = (uint16_t)(pc + (int8_t)op[4]); obPutW(B + OWOBJ_OPSTATE, 0); continue; } adv = 5; break;
       // C2/158B (0x28) / C2/1599 (0x29): `LDX #20A2` / `LDX #2105`, `JSR C2/048A`, `LDA #0002` -- allocate the native
       // fade object: 0x28 fades out, 0x29 fades in (obFade below). The child finds its rate through C2/048A's copy of
-      // the parent's +07, this op's address (C2/0F86 stores the pc after every advance), reading `[+07],Y` with Y = 1.
-      // The port keeps the pc in a local until the visit ends, so it is stored first.
+      // the parent's +07, this op's address (C2/0F86 stores the pc after every advance: the loop's head), reading
+      // `[+07],Y` with Y = 1.
       case 0x28: case 0x29: {
-        obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, op[0] == 0x28 ? 0x20A2 : 0x2105);
         adv = 2; break;
       }
       case 0x2A: case 0x2B: {                       // C2/15A7 / 15B5: the mosaic up (class $21F8) / down ($2194), 2 operands
-        obPutW(B + OWOBJ_PC, pc);
         obAllocNative(ram, B, op[0] == 0x2A ? 0x21F8 : 0x2194);
         adv = 3; break;
       }
@@ -3943,6 +3950,38 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       continue;
     }
+    // Free roam (module 0, `$0280` = 0: C2/3439 -> C2:345D's first row). The lead's handler runs HERE, in its slot,
+    // after the blocks before it -- the world's script among them:
+    //     3439 LDA $027C / CMP #01 / BEQ ->3449 / CMP #00 / BEQ ->3449 / JSR C2/0E1D / CLC / RTS
+    //     3449 LDA $0280 / ASL x3 / STA $00 / LDX $4E / LDA $0002,X / ASL / ADC $00 / TAX / JMP ($345D,X)
+    //     34F8 SEP #20 / LDX $4E / INC $0002,X / ... / 3515 LDA $0283 / STA $0014,X / LDA $0285 / STA $0018,X
+    //     3521 STZ $001A,X .. $0020,X / 352D JSR C2/3ACB / ... / 355A JSR C2/39D5 / JSR C2/39AE / BCC ->3567
+    //     3562 LDA #03 / TSB $0282 / 3567 LDA $027C / CMP #01 / BNE ->35E0 / ... / 35E0 JSR C2/0E1D / CLC / RTS
+    // Phase 0, the init C2/34F8: a lead the bootstrap's script spawned in this pass (its block comes after the script's)
+    // is initialised in the pass that made it, so the scanner (class $3264, a later block) reads `$0282` -- the arrival
+    // cell's `TSB #03` -- in that same pass and an event cell's script starts there (the cartridge's first frame with the
+    // blocks has the lead's +02 / +03 = 01 01 and `$0280` = 01). The init falls into the input frame. Phases 1 and 2,
+    // the input frame C2/3567 and the step C2/36ED, are the host's mover, called in this slot: the frame the script
+    // opens free roam (`13 7C 02 01`, an earlier block) the lead already reads the pad. Every visit ends on the frame
+    // counter (C2/054C INC $0003,X).
+    if (cls == 0x3404) {
+      if (ram[0x027C] > 1) obAnimTick(ram, B);                             // 3439-3448: neither 0 nor 1 -- the tick alone
+      else {
+        if (B[2] == 0) {
+          B[2] = 1;                                                        // 34FC INC $0002,X
+          obPutW(B + OWOBJ_XPOS, obW(ram + 0x0283)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x0285));   // 3515-351E
+          owVelZero(B);                                                    // 3521-352A
+          owLeadCells(ram);                                                // 352D JSR C2/3ACB
+          leadInit(ram, B);
+        }
+        if (g_owLeadSlot) g_owLeadSlot(g_owLeadSlotCtx);                   // 3567 / 36ED, and the tick each path ends on
+        else obAnimTick(ram, B);                                           // (no host: 35E0 JSR C2/0E1D)
+      }
+      if (c && c->leadStore) { c->pendDx = c->leadDx; c->pendDy = c->leadDy; c->leadStore = 0;   // 3725, as above
+                               obPutW(ram + 0x1BF1, (uint16_t)c->leadDx); obPutW(ram + 0x1BF3, (uint16_t)c->leadDy); }
+      int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
+      continue;
+    }
     if (cls == 0x666C || cls == 0x67FA || cls == 0x683B || cls == 0x68A3) {   // the world map's controller and markers
       int r = cls == 0x666C ? obMapCtl(ram, B) : obMapMarker(ram, B, cls);
       if (r == 0) { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
@@ -4260,6 +4299,10 @@ void CtWorldNmiVramQueue(uint8_t* ram, uint8_t* vram) {
   ram[0xE0] = 0x00; ram[0xE1] = 0xF0; ram[0xE2] = 0x7E;              // 044A-0451 LDX #F000 / STX $E0 / LDA #7E / STA $E2
 }
 void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, int dy) {
+  CtWorldStreamNmi(st);
+  CtWorldStreamApply(st, c, ram, dx, dy);
+}
+void CtWorldStreamNmi(CtWorldStream* st) {
   // The NMI at the start of this frame flushes last frame's queue (the staging is untouched in
   // between; the $E0 reset comes after the flush).
   for (int q = 0; q < st->nPend; q++) {
@@ -4279,6 +4322,8 @@ void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, 
   }
   st->nPend = 0;
   st->stageOff = 0;                                // $E0 := $F000 (reset every NMI)
+}
+void CtWorldStreamApply(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, int dy) {
   // The camera apply (C2/36F7) is the lead's moving path -- C2/36E7 `INC $0002,X`, the integrate C2/0F38 and then the
   // four dispatcher calls, a zero component included; an idle lead returns before it (C2/36E5). The port's mover
   // hands a delta on exactly those frames, so the dispatchers' words are written only then.

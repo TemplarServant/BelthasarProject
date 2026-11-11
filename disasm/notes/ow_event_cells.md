@@ -59,7 +59,74 @@ No battery save stands on these cells: `tools/ow_event_cmp.py` edits Jackie's ch
 entry the scene's exit makes, at the same cell. From `$0280 = 1`: every change of `$0280`, `$0283-$028E` the same, frame for
 frame, to the end (+265 on world 0, +193 on world 1); the party's sprites the cartridge's.
 
-Left: `$027C = 1` comes a frame early relative to the event (+31 against +32) -- the world's entry from the load, where the
-cartridge's first NMI is raised at once inside the vblank (C2:23CF, V=258) and not counted (the load clock, ROADMAP F1). The
-world's own clocks (the sea's palette cycle, 600 A.D.'s BG3 mist, the gulls) stand a frame apart from the event with it, and
-the pinned pictures differ there.
+`$027C = 1` comes at +32 from the event on both sides and the pinned pictures are the cartridge's (0 px), since 2026-11-11
+(sec. 5). Until then the port's event started a pass late (+31) and the world's own clocks (the sea's palette cycle, 600
+A.D.'s BG3 mist, the gulls) stood a frame apart from it in every picture -- filed here as the load clock. It was not.
+
+## 5. The lead's init is its block's own visit, in the pass that spawns it (2026-11-11)
+
+The world's bootstrap allocates the lead (op 35, class `$3404`) and the followers (`$3AE2`) in its first pass. Their blocks
+come after the script's, so that same pass visits them (C2/0535 walks the table in order and reads each class word when it
+gets there). The lead's first visit is phase 0 of C2:345D's first row:
+
+```
+3439 LDA $027C / CMP #01 / BEQ ->3449 / CMP #00 / BEQ ->3449 / JSR C2/0E1D / CLC / RTS
+3449 LDA $0280 / ASL x3 / STA $00 / LDX $4E / LDA $0002,X / ASL / ADC $00 / TAX / JMP ($345D,X)
+345D 34F8 3567 36ED 0000 / 3772 37A1 37BB 0000
+34F8 SEP #20 / LDX $4E / INC $0002,X / LDY $0100 / CPY #01F5 / .. / STA $000F,X / STZ $0010,X
+3515 LDA $0283 / STA $0014,X / LDA $0285 / STA $0018,X / STZ $001A,X .. $0020,X / JSR C2/3ACB
+3530 STZ $0026,X / LDA $0104 / AND #03 / STA $0028,X / STZ $1B5A / JSR C2/391C / .. / JSR C2/3987
+354C .. JSR C2/39D5 / JSR C2/39AE / BCC ->3567 / LDA #03 / TSB $0282
+3567 LDA $027C / CMP #01 / BNE ->35E0 / .. (the input frame) / 35E0 JSR C2/0E1D / CLC / RTS
+054C REP #20 / INC $0003,X                      ; the pass's tail: a CLC visit is counted
+```
+
+The init falls into the input frame -- with `$027C` = 0 (the script has not opened free roam yet) the tick alone -- and the
+scanner's block comes later in the same pass: an armed cell under the arrival point starts its event in the pass that made
+the lead.
+
+Measured on leg 67's end (the 600 A.D. map after scene 097; the blocks `$0DF0` / `$0E30` / `$0E70`): the cartridge's first
+frame with the blocks (f36956) has +02 / +03 = 01 01 on all three and `$0280 = 01`. The port's host ran the lead -- its
+mover and its init -- BEFORE the pass, found no lead on that frame and initialised it a frame later: the scanner read
+`$0282` a pass late and the event started a pass late against every other clock of the world. That was the +31 above, the
+frame between the event and the mist / the sea / the gulls, and at leg 67's end the second follower's walk frame (126 px).
+
+Fixed: phase 0 runs in the lead's slot of the pass (world.c CtWorldAmbientFrame, on `+02 = 0`; with `$027C` neither 0
+nor 1 the visit is the tick alone, C2/3439-3448), and the visit counter +03 ticks for the lead in free roam too.
+
+With it, the dispatcher's pc store. C2/0F80-0F86 `ADC $58 / STA $58 / LDX $4E / STA $0007,X` runs after every advance, so
+the block's +07 is the running pc, and C2/048A's MVN (+05..+3F of the parent) hands a child its own op's address: `$0482` /
+`$0488` / `$048D` on that map. The port kept the pc in a local until the visit ended (`$042C` in all three; three ops stored
+it by hand before allocating). It is stored at the VM loop's head now. The three blocks are then the cartridge's byte for
+byte through the stay (170 frames) but for +3E, the port's own animation counter (OWOBJ_ANIMCTR).
+
+Checks: `leg-window-map-entry-event-spawn-pass-vs-cartridge` (the first 44 frames of the stay, the blocks' first nine
+bytes and `$0280` / `$0281`), `playthrough-leg-67-map-event-in-the-spawn-pass-vs-cartridge`, and the two of sec. 4.
+
+### The whole visit is in the slot
+
+The lead's later visits were the host's too, before the pass, and so read what the pass's earlier blocks write a pass
+late. Measured on leg 68 (the 600 A.D. map out of Porre's office; the script stores `$027C = 1` at f1516):
+
+- The frame the script opens free roam (`13 7C 02 01`), the cartridge's lead already takes its input frame. With no button
+  that is the idle arm, `INC $02B1` (C2/35BD): `$02B1` = 01 on f1516. With Right held from 60 frames before the opening
+  (the leg's start state, its pad edited), `$0283` moves on f1516. The port's lead read the pad a frame later: f1517.
+- `$02B1` counted in the port while `$027C` = 0 (20 at f1516): the host took the idle arm where C2/356C `BNE ->35E0`
+  only ticks. The fidget (`$02B1` = F0) came about half a second early after an entry.
+
+- The other way round, a block BEFORE the lead's sees the lead's writes a pass later. The era placard (world 0: block
+  `$0D30`, the lead `$0D70`) counts `$1BF7` up and shows itself at `$78`; the lead's step zeroes it (C2/36E7). Measured
+  (saves/ow_w0.state, idle 50 frames then Left, one peek a frame): the frame `$1BF7` turns 00 and `$0283` moves, the OAM
+  shadow `$7E:0700` still holds the placard (FC C0 AC 31); it is gone the next frame. And from the last step's zero the
+  counter reaches `$78` 120 passes later (the script's INC comes before the lead's STZ). The port hid the placard on the
+  step's own frame and showed it after 119.
+
+Fixed: the host's mover is called from the pass, in the lead's slot (field.c owLeadSlotVisit through
+CtWorldSetLeadSlot): the pad's gate (`$027C` = 1 as it stands there), C2/3567's other arms, the step, the camera apply
+C2/36F7 (CtWorldStreamApply; the NMI's flush stays before the pass, CtWorldStreamNmi), the pose machine, the trail
+ring and the commit's mirrors (`$0283` / `$0285`, `$0102` / `$0103`). A pass its inline JSL suspends before the lead's
+slot runs the visit on the frame it resumes (the pass stands inside the JSL; by construction, not measured). Only a replayed snapshot without a `$3404` block
+keeps the host's own frame before the pass.
+
+Check: `leg-window-map-opening-input-frame-vs-cartridge` (leg 68, f1500 + 60: `$027C`, `$0283`-`$0286`, `$02B1` and the
+lead block's first five bytes).

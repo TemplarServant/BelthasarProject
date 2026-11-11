@@ -210,6 +210,15 @@ void CtWorldEnter(CtWorldCam* c, CtWorldMover* m, int cell8x, int cell8y);
 // CtWorldCamFrame does and maintains the two VRAM tilemaps.
 // ram = live WRAM (block defs $3000/$3800, grids $4000/$5800).
 void CtWorldStreamFrame(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, int dy);
+// Its two halves. The NMI's: last frame's queued columns / rows land in the tilemaps and the staging restarts ($E0).
+// The lead's: the camera apply C2/36F7 of its step (dx, dy), which belongs to the lead's visit in the object pass.
+void CtWorldStreamNmi(CtWorldStream* st);
+void CtWorldStreamApply(CtWorldStream* st, CtWorldCam* c, uint8_t* ram, int dx, int dy);
+// The lead's visit in the object pass. The lead (class $3404) is a block of the pass and its handler runs in its slot,
+// after the blocks before it (the world's script among them). Its free-roam phases -- the input frame C2/3567 and the
+// step C2/36ED -- are the host's mover: CtWorldAmbientFrame calls this in the lead's slot.
+typedef void (*CtWorldLeadSlotFn)(void* ctx);
+void CtWorldSetLeadSlot(CtWorldLeadSlotFn fn, void* ctx);
 // C2/0405, the NMI's VRAM queue ($5E lock, $5F length, 8-byte entries at $60): the anim op 6 uploads into the world's
 // byte-addressed VRAM image, drained once per frame before the object pass.
 void CtWorldNmiVramQueue(uint8_t* ram, uint8_t* vram);

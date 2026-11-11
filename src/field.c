@@ -9584,6 +9584,111 @@ static int fieldOptionsModal(CtPresenter* pr, SDL_AudioDeviceID dev) {
   return quit;
 }
 
+// ---- The lead's visit in the overworld's object pass ----
+// The lead (class $3404) is a block of the pass (C2/0535) and its handler C2/3404 runs in its slot, after the blocks
+// before it. Its free roam -- module 0, `$0280` = 0: the input frame C2/3567 and the step C2/36ED -- is the host's mover,
+// and world.c CtWorldAmbientFrame calls it HERE, in that slot. What an earlier block wrote in this pass is what the
+// handler reads: the frame the world's script opens free roam (`13 7C 02 01`) the lead already takes its input frame
+// (measured, the rule's cartridge: leg 68's start with Right held across the opening -- `$0283` moves on the frame
+// `$027C` turns 1, and `$02B1` is 01 there with no button).
+// The main loop fills the pad the iteration latched and its own states before the pass, and reads `enterReq` after it.
+typedef struct {
+  World* wd;
+  int up, down, left, right;          // the d-pad of this iteration (C2/031B's latch), before the handler's own gate
+  int fade, menuPhase, exitWait;      // the host's states under which the handler only ticks
+  int* eventModule; int* vehicleModule;   // the main loop's "the last visit was an event's / a vehicle's module"
+  int hostRan;                        // the main loop ran the lead before the pass (no $3404 block: a replayed snapshot)
+  int enterReq;                       // out: C2/35E5, the input frame read A held on an entrance
+  int gate;                           // out: the visit read the pad (`$027C` = 1 in its slot)
+} OwLeadSlot;
+static OwLeadSlot g_owLead;
+static void owLeadSlotVisit(void* ctx) {
+  OwLeadSlot* L = (OwLeadSlot*)ctx;
+  World* w = L->wd;
+  if (!w || !w->wram || L->hostRan) return;
+  uint8_t* ram = w->wram;
+  int wdx = 0, wdy = 0;
+  // After an event the mover restarts where its script left the lead; stepping out of a vehicle, where C2/34AD left it
+  // (`$0283` / `$0285`): the frame `$027E` comes back to 0 the lead's phase is 0 (C2/340E's compare against `$027F`) and
+  // its handler runs the init C2/34F8 from that spot. The mover restarts there, at rest, on the cell boundary.
+  if (*L->eventModule) {
+    *L->eventModule = 0;
+    w->mv.posX = w->mv.probeX = (uint16_t)(ram[0x0283] | (ram[0x0284] << 8));
+    w->mv.posY = w->mv.probeY = (uint16_t)(ram[0x0285] | (ram[0x0286] << 8));
+    w->mv.velX = w->mv.velY = 0; w->mv.phase = 1; w->mv.moving = 0;
+  }
+  if (*L->vehicleModule) {
+    *L->vehicleModule = 0;
+    w->mv.posX = w->mv.probeX = (uint16_t)(ram[0x0283] | (ram[0x0284] << 8));
+    w->mv.posY = w->mv.probeY = (uint16_t)(ram[0x0285] | (ram[0x0286] << 8));
+    w->mv.velX = w->mv.velY = 0; w->mv.phase = 1; w->mv.moving = 0;
+    uint8_t* LB = ram + CtWorldLeadBlock(ram);
+    LB[OWOBJ_XPOS] = ram[0x0283]; LB[OWOBJ_XPOS + 1] = ram[0x0284];
+    LB[OWOBJ_YPOS] = ram[0x0285]; LB[OWOBJ_YPOS + 1] = ram[0x0286];
+    CtWorldLeadReinit(ram);
+  }
+  uint8_t ph0 = w->mv.phase;
+  // C2/3567 `LDA $027C / CMP #01 / BNE C2/35E0`: the pad is read in free roam only -- `$027C` as it stands in this slot.
+  const int gate = ram[0x027C] == 1 && !L->fade && !L->menuPhase && !L->exitWait;
+  int up = gate && L->up, down = gate && L->down, left = gate && L->left, right = gate && L->right;
+  L->gate = gate;
+  // C2/3567's other arms (disasm/notes/menu2_overworld_entry.md sec. 2.3): on the input frame (the mover's phase 1)
+  // of free roam the lead reads the held remapped word $00F8 -- A (0x0080, unless `$1B32` is negative: C2/35E5) and
+  // X (0x0040, C2/35F3: the main loop's menu poll) first, then Y (0x0001) with the storyline >= 0x49 -> `$027C = 9`
+  // (C2/3605-3614, the exchange), then Select (0x0004) -> `$027C = 6` (C2/35FC, the world map), then the d-pad.
+  // Both stores branch to the idle path C2/35B3, so the lead takes no step that frame.
+  if (ph0 == 1 && gate) {
+    uint16_t f8 = (uint16_t)(ram[0x00F8] | (ram[0x00F9] << 8));
+    int aArm = (f8 & 0x0080) && !(w->entryLatch & 0x8000);     // 3577 BIT #0080 / 35E5 LDA $1B32 / BMI
+    // C2/35EA-35F1 `LDA #03 / STA $027C`: the entrance is taken HERE, on the lead's input frame, with A HELD in $00F8
+    // (the level, not a fresh press). MEASURED, the rule's cartridge, playthrough leg 105 (Zeal, world 1F5): A held
+    // from f8783 while the lead walks up onto the skyway's cell (C2:3742, arrives f8785); the input frame after the
+    // step takes it (state 3's eighteen NMIs, `$0100` = 185 at f8804, C2:24AF). The port entered on A's first frame
+    // only, which fell inside the step, and walked on: the third skyway was taken 800 frames later.
+    if (aArm) L->enterReq = 1;
+    if (f8 && !aArm && !(f8 & 0x0040)) {
+      uint8_t to = ((f8 & 0x0001) && CtWramGlb(fieldWram())[0x0000] >= 0x49) ? 0x09   // 3584 / 3607 CMP #49
+                 : (f8 & 0x0004) ? 0x06 : 0;                                          // 358E BIT #0004
+      if (to) { ram[0x027C] = to; up = down = left = right = 0; }
+    }
+  }
+  CtWorldMoverFrame(&w->mv, ram, up, down, left, right, &wdx, &wdy);
+  CtWorldStreamApply(&w->stm, &w->cam, ram, wdx, wdy);       // C2/36F7, the camera apply of the step
+  // Mirror the camera back into $7E:00E3..$00EA (the two BGs' tile scrolls; the object scripts read them).
+  for (int bg = 0; bg < 2; bg++) {
+    uint16_t h = w->stm.e3[bg], v = w->stm.e7[bg];
+    ram[0xE3 + bg * 2] = (uint8_t)h; ram[0xE4 + bg * 2] = (uint8_t)(h >> 8);
+    ram[0xE7 + bg * 2] = (uint8_t)v; ram[0xE8 + bg * 2] = (uint8_t)(v >> 8);
+  }
+  // The lead's animation, in the handler's own order: the press installs the walk id, the blocked press the stand id,
+  // an idle frame the stand id (or the fidget at $02B1 == $F0), and every path ends in the C2/0E1D tick. `dir` is the
+  // ROM's d-pad priority Up > Down > Left > Right (C2/3593-35B0); with `$027C` != 1 the handler only ticks (C2/356C).
+  { int dir = up ? 0 : down ? 1 : left ? 2 : right ? 3 : -1;
+    if (!gate) dir = -2;
+    int blocked = (ph0 == 1 && dir >= 0 && w->mv.phase == 1 && w->mv.velX == 0 && w->mv.velY == 0);
+    // The lead's position lives in its block (+14/+18: C2/0F38 moves them) and that is what C2/0B53 copies into the
+    // draw list: the block is given the mover's pixel before the tick that enqueues it -- the ROM's C2/3731 order --
+    // and its phase byte +02 with it (1 = the input frame C2/3567, 2 = the step C2/36ED; C2/36EA's INC, C2/3757's
+    // return).
+    uint8_t* LB = ram + CtWorldLeadBlock(ram);
+    LB[OWOBJ_XPOS] = (uint8_t)w->mv.posX; LB[OWOBJ_XPOS + 1] = (uint8_t)(w->mv.posX >> 8);
+    LB[OWOBJ_YPOS] = (uint8_t)w->mv.posY; LB[OWOBJ_YPOS + 1] = (uint8_t)(w->mv.posY >> 8);
+    LB[2] = (uint8_t)w->mv.phase;
+    CtWorldLeadAnimFrame(ram, dir, ph0, blocked, w->pfac);
+    // C2/3745-3757: the frame the step arrives (the mover's phase 2 -> 1), the handler pushes the lead's position onto
+    // its trail ring -- after its tick (3731), before the followers' blocks read it in the pass.
+    if (ph0 == 2 && w->mv.phase == 1) { CtWorldLeadRingPush(ram); CtWorldLeadArrive(ram); }
+    w->pfac = LB[0x28] & 3;                                    // the facing IS +28 & 3
+  }
+  w->prevPhase = w->mv.phase;
+  // The commit arms' mirrors (C2/34F3, 352D, 3742, 384F, 38EF): the live position into $0283 / $0285, then C2/3ACB's
+  // 8-pixel cells into $0102 / $0103 (the save's record).
+  ram[0x0283] = (uint8_t)w->mv.posX; ram[0x0284] = (uint8_t)(w->mv.posX >> 8);
+  ram[0x0285] = (uint8_t)w->mv.posY; ram[0x0286] = (uint8_t)(w->mv.posY >> 8);
+  ram[0x0102] = (uint8_t)(w->mv.posX >> 3);
+  ram[0x0103] = (uint8_t)(w->mv.posY >> 3);
+}
+
 int main(int argc, char** argv) {
 #ifdef _OPENMP
   // Let the picture threads sleep between pictures (issue #6). The option pictures (frames between, the internal
@@ -10780,6 +10885,7 @@ int main(int argc, char** argv) {
   if (getenv("CT_DUMPOBJROW") && f.vm && !getenv("CT_DUMPOBJROW_AT")) fieldDumpObjRow(f.vm, atoi(getenv("CT_DUMPOBJROW")), -1);
 
   World wd;                                             // the overworld engine (cross-engine mode)
+  CtWorldSetLeadSlot(owLeadSlotVisit, &g_owLead);       // the lead's visit, called in its slot of the object pass
   memset(&wd, 0, sizeof wd);
   // Note: the world is not loaded here. Its tables share the $7E the field and the battle use (a world load
   // overwrites $7E:3000-7E00 and the object array $0B30-1B30), so it loads only on a world entry. Availability is
@@ -12806,7 +12912,8 @@ int main(int argc, char** argv) {
       // first NMI after it, as the cartridge's do. INIDISP is taken before this frame's pass, in the NMI's own order.
       // ...and while its pass stands in an inline JSL (world.c obNative, C2/2F0F): every NMI meanwhile is C2/0178's
       // `INC $4B / RTI`, nothing of the world runs, the picture holds. The frame the JSL returns runs the rest of that
-      // pass (owPassResume): no pad latch, no draw-list reset, no lead -- the NMI that began it already did those.
+      // pass (owPassResume): no pad latch, no draw-list reset -- the NMI that began it already did those -- and the lead's
+      // visit only if the pass had not reached its slot (owLeadSlotVisit, with the pad that NMI latched).
       int owPassFrozen = 0;
       if (owPassHold > 0) { owPassHold--; owPassFrozen = 1; }
       // The gauge's two NMI-off stretches are frames without an NMI: no pad, no pass, the picture held (black: $1C = 80).
@@ -12897,6 +13004,12 @@ int main(int argc, char** argv) {
         wUp = (kp & PAD_UP) != 0; wDown = (kp & PAD_DOWN) != 0;
         wLeft = (kp & PAD_LEFT) != 0; wRight = (kp & PAD_RIGHT) != 0;
       }
+      // The lead's visit (owLeadSlotVisit, called in its slot of the pass) takes the iteration's pad as latched and the
+      // host's states as they stand; a resumed pass keeps the pad its first half latched.
+      g_owLead.wd = &wd; g_owLead.eventModule = &owEventModule; g_owLead.vehicleModule = &owVehicleModule;
+      if (!owResumeFrame) { g_owLead.up = wUp; g_owLead.down = wDown; g_owLead.left = wLeft; g_owLead.right = wRight; }
+      g_owLead.fade = fade != 0; g_owLead.menuPhase = menuPhase != 0; g_owLead.exitWait = owExitWait != 0;
+      g_owLead.hostRan = 0; g_owLead.enterReq = 0; g_owLead.gate = 0;
       if (fade || !owPad || menuPhase || owExitWait) { wUp = wDown = wLeft = wRight = 0; }   // frozen during a scene-transition
                                                   // fade, and under the menu's two fades: C2/356C
                                                   // `$027C != 1 -> JSR C2/0E1D / CLC / RTS` = anim only, no input.
@@ -12915,7 +13028,7 @@ int main(int argc, char** argv) {
       // is part of that pass and enqueues too. (A resumed pass keeps what its first half enqueued.)
       if (!owResumeFrame) CtWorldDrawListReset(wd.wram);
       if (owResumeFrame) {
-        // the rest of a suspended pass: the blocks before it (the lead's handler included) already ran in its first half
+        // the rest of a suspended pass: the blocks before the suspension already ran in its first half
       } else if (ngIntro) {                           // new-game 1000 A.D. intro pan: no player mover, no input.
         g_owNoMarker = 1;
         // The cutscene's own scripts move the camera: on the cartridge the pan is object code (the C2/066C / C2/0568
@@ -12948,8 +13061,14 @@ int main(int argc, char** argv) {
         // What the host does here is the NMI's half: flush what the steppers staged.
         CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, 0, 0);
         owVehicleModule = 1;
+      } else if (wd.wram && CtWorldHasLead(wd.wram)) {
+        // Free roam with a lead block: its visit is the pass's, in its slot (owLeadSlotVisit) -- the mover, the camera
+        // apply, the pose machine, the trail ring. Here, the NMI's half: flush what the steppers staged.
+        CtWorldStreamNmi(&wd.stm);
       } else {
         int wdx = 0, wdy = 0;
+        // (No lead block: a cutscene world, the frame before the bootstrap spawns the lead -- whose visit is then the
+        // pass's, in the slot -- or a replayed snapshot, whose lead is this branch's.)
         // Stepping out of a vehicle: the frame `$027E` comes back to 0 the lead's phase is 0 (C2/34AD, and C2/340E's compare
         // against `$027F`), so its handler runs the init C2/34F8 from the spot C2/34AD left in `$0283` / `$0285`. The host's
         // mover is that handler's module 0: it restarts there, at rest, on the cell boundary.
@@ -13021,6 +13140,11 @@ int main(int argc, char** argv) {
             uint8_t* LB = wd.wram + CtWorldLeadBlock(wd.wram);
             LB[OWOBJ_XPOS] = (uint8_t)wd.mv.posX; LB[OWOBJ_XPOS + 1] = (uint8_t)(wd.mv.posX >> 8);
             LB[OWOBJ_YPOS] = (uint8_t)wd.mv.posY; LB[OWOBJ_YPOS + 1] = (uint8_t)(wd.mv.posY >> 8);
+            // ...and its phase byte +02 with them: the mover's phase is that byte (1 = the input frame C2/3567, 2 = the
+            // step C2/36ED; C2/36EA's INC, C2/3757's return). A lead's block alone -- the fallback $0D70 is another
+            // object's. Phase 0, the init, is the block's own in the pass (world.c, the lead's slot).
+            if ((LB[0] | (LB[1] << 8)) == 0x3404) LB[2] = (uint8_t)wd.mv.phase;
+            g_owLead.hostRan = 1;
             CtWorldLeadAnimFrame(wd.wram, dir, ph0, blocked, wd.pfac);
             // C2/3745-3757: the frame the step arrives (the mover's phase 2 -> 1), the handler pushes the lead's
             // position onto its trail ring -- after its tick (3731), before the followers' blocks read it in the pass.
@@ -13035,7 +13159,7 @@ int main(int argc, char** argv) {
       // for frame); this runs after the mover above, so the position is this frame's. $027C = 0 (C2/2C20, the world
       // load) and 1 (the init script's op $13, C2/12C8) are both inside the handler's {0,1,7} gate.
       { uint8_t* wr = wd.wram;
-        if (!owVehicleModule && !owEventModule) {     // (in a vehicle's module or an event the lead's handler writes them)
+        if (!owVehicleModule && !owEventModule && !CtWorldHasLead(wr)) {   // (a lead block's handler writes them: its visit, a vehicle's module, an event)
         wr[0x0283] = (uint8_t)wd.mv.posX; wr[0x0284] = (uint8_t)(wd.mv.posX >> 8);
         wr[0x0285] = (uint8_t)wd.mv.posY; wr[0x0286] = (uint8_t)(wd.mv.posY >> 8);
         // ...and C2/3ACB, the other half of that mirror, which the save reads. All five of the world mover's commit
@@ -13277,7 +13401,7 @@ int main(int argc, char** argv) {
       if (!fade) worldTick++;                        // the overworld is paused while a transition fades
       // (The sea's colour cycle is the world script's own op 0x04 rows, uploaded by the NMI above, not the host's.)
       if (owEnterCd > 0) owEnterCd--;
-      else if ((owEnterReq || talkPressed) && owPad && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // enter the location (C2/35E5; talkPressed: a harness's own A edge, which feeds no $00F8)
+      else if (((owEnterReq || g_owLead.enterReq) || (talkPressed && owPad)) && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // enter the location (C2/35E5; talkPressed: a harness's own A edge, which feeds no $00F8)
         // C2/35E5 `$027C = 3`, and the main loop's state 3 is the whole exit (C2/2402):
         //   2452 LDA #C2 / LDX #2EC1 / JSR C2/04D9     a VM object on $C2:2EC1 = `28 01 52` (fade out at rate 1, die)
         //   245C NMITIMEN $81 / LDX #0012 / JSR C2/0346 x18   eighteen NMIs -- the object pass runs the fade in them

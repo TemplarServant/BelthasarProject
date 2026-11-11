@@ -1147,6 +1147,29 @@ read a camera copy that was 0 and left the WRAM words at 1 (disasm/notes/ow_bg3_
 differing; the descent (cartridge f4861-f4878) is the free span, its `free:` line pinned -- both come back on the first
 visit's values. Full tier (~30 s cached). Two mutations: the camera's copy instead of the words, the words left standing.
 
+### leg-window-map-entry-event-spawn-pass-vs-cartridge, playthrough-leg-67-map-event-in-the-spawn-pass-vs-cartridge
+
+The lead's init on the overworld (disasm/notes/ow_event_cells.md sec. 5). The window (`tools/leg_window_cmp.py
+map-entry-event-spawn-pass`): leg 67, f36860 + 140, the 600 A.D. map coming up on its armed event cell after scene 097.
+The cells are `$0280` / `$0281` and the first nine bytes of the party's three blocks (`$0DF0` / `$0E30` / `$0E70`: class,
+phase, the visit counter, the return and pc words). The cartridge's first frame with the blocks has +02 / +03 = 01 01 on
+all three, their own op's address at +07 (`$0482` / `$0488` / `$048D`) and `$0280` = 01: the pass that allocates the lead
+visits it (C2/34F8), and the scanner starts the event in that pass. 44 steps, 0 differing; the load (f36861-f36955) is the
+free span, its `free:` line pinned. Two mutations: the init left to the host's next frame, the pc stored only when a
+visit ends. The leg alone (`tools/playthrough.py cmp 67_masa_mune_fight`) ends on the cartridge's picture; it was 126 px
+away, the second follower's walk frame. Full tier (~1 min and ~4 min). The two `ow-event-cell-*` checks carry the same
+mechanism on a battery save: `$027C = 1` at +32 on both sides, their pictures 0 px (they pinned +31 and up to 57,344 px
+as the load clock until 2026-11-11).
+
+### leg-window-map-opening-input-frame-vs-cartridge (`tools/leg_window_cmp.py map-opening-input-frame`)
+
+The lead's visit is in its slot of the object pass (disasm/notes/ow_event_cells.md sec. 5, "The whole visit is in the
+slot"). Leg 68, f1500 + 60, the 600 A.D. map opening for free roam: the cells are `$027C`, the lead's place
+`$0283`-`$0286`, the idle counter `$02B1` and the lead block's class, phase and visit counter. `$02B1` stands at 00
+while `$027C` = 0 and is 01 on the frame the script stores `$027C = 1` (f1516) -- the input frame runs in that same
+pass -- and the first step moves `$0283` on f1517 with the phase byte at 02. 60 steps, 0 differing. Two mutations: the
+idle arm while `$027C` is not 1, the visit before the pass. Full tier (~30 s cached).
+
 ### playthrough-leg-131-map-dust-line-table-vs-cartridge, playthrough-leg-68-map-mist-line-table-vs-cartridge
 
 The overworld's per-line BG3 (HDMA channel 1 on `$2111`): the 2300 A.D. map's dust (C2/7759) and the 600 A.D. map's

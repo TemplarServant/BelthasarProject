@@ -85,6 +85,24 @@ WINDOWS = {
     # class -- the port's map is up three frames earlier).
     'world-entry-bg3': dict(leg='131_', start=4860, frames=100, free=[(4861, 4878)],
                             cells=[('7E0024', 2), ('7E002A', 2), ('7E1BF1', 2), ('7E1BF3', 2)]),
+    # The 600 A.D. map after the Masa & Mune fight (scene 097's `E0 F1 03 35 3F`, the world's armed event cell): the
+    # bootstrap's first pass allocates the lead ($0DF0, class $3404) and the two followers ($0E30 / $0E70, class $3AE2)
+    # with op 35, and the same pass visits them -- the lead's init C2/34F8 (`INC $0002,X`, the arrival cell's `TSB
+    # $0282 #03`), the pass's `INC $0003,X`, and the scanner's `$0280 = 1` after them. The cartridge's first frame with
+    # the blocks (f36956) has +02 / +03 = 01 01 on all three, their own op's address at +07 ($0482 / $0488 / $048D,
+    # C2/048A's copy of the pc the dispatcher stores after every advance) and `$0280` = 01. The cells: `$0280` / `$0281`
+    # and each block's first nine bytes (class, phase, the visit counter, the return and the pc words). The load is not
+    # graded (to f36955: the port clears the blocks the cartridge leaves stale).
+    'map-entry-event-spawn-pass': dict(leg='67_', start=36860, frames=140, free=[(36861, 36955)],
+                                       cells=[('7E0280', 2), ('7E0DF0', 9), ('7E0E30', 9), ('7E0E70', 9)]),
+    # The 600 A.D. map opening for free roam (leg 68, out of Porre's office): the world's script stores `$027C = 1`
+    # (`13 7C 02 01`) at f1516, and the lead's block -- visited later in that same pass -- already takes its input
+    # frame there: no button, so the idle arm's `INC $02B1` (C2/35BD) gives 01 on that very frame; the step the pad
+    # asks for at f1517 moves `$0283` on f1517 and the phase byte to 02. Before the opening the handler only ticks
+    # (C2/356C `BNE ->35E0`): `$02B1` stands at 00. The cells: `$027C`, the lead's place `$0283`-`$0286`, the idle
+    # counter `$02B1`, and its block's class, phase and visit counter.
+    'map-opening-input-frame': dict(leg='68_', start=1500, frames=60,
+                                    cells=[('7E027C', 1), ('7E0283', 4), ('7E02B1', 1), ('7E0DF0', 5)]),
 }
 
 
