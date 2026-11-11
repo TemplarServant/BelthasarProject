@@ -1414,7 +1414,10 @@ void CtFieldSceneCopyTiles(void* h, int sl, int st, int el, int eb, int dl, int 
 // Sprite compositor: ports assets/sprites.py compose_frame. The packed blob is
 // [size u8][nframes u8][ntiles u16] palette(16*RGB) tiles(ntiles*64) then per frame
 // units*4 chip u16 + units*2 signed offset bytes. Each of the 4 chips per unit is a
-// quadrant (TL/TR/BL/BR); chip low 10 bits = source tile, 0x4000 flip-x, 0x8000 flip-y.
+// quadrant (TL/TR/BL/BR); chip low 11 bits = source tile, 0x4000 flip-x, 0x8000 flip-y.
+// (Eleven: the anim drain's two copiers mask the record's word with `AND #07FF`, C0/E687 and C0/E534, and take the
+// tile from $CF:($CD + tile*32). Ayla's pack has 1120 tiles and 29 of her frames use tiles $400-$45F; with ten bits they
+// were drawn from the tiles 1024 below -- playthrough leg 126's end, her frames 1D / 1E.)
 int CtComposeSprite(const uint8_t* blob, uint32_t blobLen, int frame, uint8_t* out, uint8_t* outPal) {
   return CtComposeSpriteHalves(blob, blobLen, frame, out, outPal, NULL, NULL);
 }
@@ -1452,7 +1455,7 @@ int CtComposeSpriteHalves(const uint8_t* blob, uint32_t blobLen, int frame, uint
   memset(out, 0, CT_SPR_W * CT_SPR_H);
   for (int k = 0; k < units * 4; k++) {
     int chip = fr[k * 2] | (fr[k * 2 + 1] << 8);
-    int src = chip & 0x3FF;
+    int src = chip & 0x7FF;
     if (src >= ntiles) continue;
     int fx = chip & 0x4000, fy = chip & 0x8000;
     int lx = (k & 1) ? 8 : 0, ly = (k & 2) ? 8 : 0;      // k%4: 0 TL,1 TR,2 BL,3 BR

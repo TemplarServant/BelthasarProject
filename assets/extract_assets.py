@@ -630,7 +630,7 @@ def pack_sprites(rom, T):
                     break                            # past the sprite's assembly: stop
                 frames.append((chips, offs, units))
                 for c in chips:
-                    maxsrc = max(maxsrc, c & 0x3FF)
+                    maxsrc = max(maxsrc, c & 0x7FF)
             if len(frames) > 255: frames = frames[:255]   # the blob header is u8
             mf = len(frames)
             ntiles = min(len(tiles), maxsrc + 1)

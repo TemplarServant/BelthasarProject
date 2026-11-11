@@ -1523,8 +1523,8 @@
       "kind": "assets",
       "regenerable": true,
       "how": "python assets/extract_assets.py Chrono_Trigger_USA_SNES.sfc",
-      "sha256": "10fb32e52d06aa782292e26d5b3bac5f4c66fe3bf876da87764f34cb9a4f8b10",
-      "size": 14200481,
+      "sha256": "787c873b7c0042d00f54b8cccb1d571cef3bcb649af8d8fc74e623c818abf3b9",
+      "size": 19706727,
       "present_when_recorded": true
     },
     {

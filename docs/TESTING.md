@@ -1181,6 +1181,21 @@ cartridge's f3473 and f5600 against f3534, 57344 / 57344 identical each (263 px 
 Full tier (~20 s each with the route's states made; the states themselves come with the playthrough check's). A pixel
 apart is a bug: re-pin only against the cartridge, never to the port's own picture.
 
+### sprite-pack-tile-index-is-11-bits (`tools/sprite_pack_check.py`), playthrough-leg-126-ayla-frames-vs-cartridge
+
+A sprite frame's chip word carries an 11-bit tile index: the anim drain's two copiers mask it with `AND #07FF` (C0/E687,
+C0/E534; disasm/notes/sprite_chip_tile_index.md). The extractor read ten bits and capped a character's pack at 1024
+tiles; Ayla's has 1120 and 29 of her frames use tiles $400-$45F, drawn from the tiles 1024 below.
+
+- `sprite-pack-tile-index-is-11-bits` (quick, under a second) prints two counts of the user's own ROM and pack: the
+  extractor's sprite 5 (1120 tiles, no chip past them, 29 frames on tiles 400-45F) and ct_assets.dat's seven characters
+  (1785 frames, no chip past their packs). A pack extracted before the fix reads 1024 tiles / 133 chips past: run the
+  asset step again (`python assets/extract_assets.py <rom> ct_assets.dat`). Two mutations: the 10-bit cap on the pack,
+  the 10-bit bound on the tiles kept.
+- `playthrough-leg-126-ayla-frames-vs-cartridge` (full, ~40 s) is leg 126 alone (`tools/playthrough.py cmp
+  126_wing_dalton`, its own scratch folder): the leg ends on the cartridge's picture, 275 px before. It exists so the
+  compositor's mask has a check its mutation can run; the playthrough check pins the same line.
+
 ### jackie-saves-census-vs-oracle (`tools/jackie_census_cmp.py`)
 
 Real battery saves across the story (saves/downloaded/ctjackie, gitignored; fetched by `python tools/fetch_saves.py`

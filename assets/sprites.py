@@ -60,8 +60,9 @@ CHIP_LOCAL = {0: (0, 0), 1: (8, 0), 2: (0, 8), 3: (8, 8)}  # TL, TR, BL, BR
 
 def assembly_frame(rom, asm_ptrs, h, frame):
     """Parse one sprite assembly frame -> (chips[units*4] u16, offs[units] (ox,oy signed),
-    units). chips are in flat unit-major order (each unit = TL,TR,BL,BR); a chip's low 10
-    bits = source tile, bit 0x4000 = flip-x, bit 0x8000 = flip-y."""
+    units). chips are in flat unit-major order (each unit = TL,TR,BL,BR); a chip's low 11
+    bits = source tile (the anim drain's copiers mask the word with `AND #07FF`, C0/E687 and
+    C0/E534: the source is $CF:($CD + tile*32)), bit 0x4000 = flip-x, bit 0x8000 = flip-y."""
     groups, tpg = SIZE_TABLE[h['size'] & 3]
     units = groups * tpg
     pos = asm_ptrs[h['assembly']] + frame * units * 10
@@ -92,7 +93,7 @@ def compose_frame(rom, index, frame=0):
     cv = [0] * (S * S)
     for k in range(units * 4):
         v = chips[k]
-        src, fx, fy = v & 0x3FF, bool(v & 0x4000), bool(v & 0x8000)
+        src, fx, fy = v & 0x7FF, bool(v & 0x4000), bool(v & 0x8000)
         if src >= len(tiles):
             continue
         t = tiles[src]
@@ -224,10 +225,12 @@ def read_sprite_graphics(rom, gfx_ptrs, bitmap_index):
     off = gfx_ptrs[bitmap_index]
     if bitmap_index <= 6:
         # PC graphics are uncompressed; the block runs to the next gfx pointer (capped at the
-        # 10-bit chip range, 1024 tiles). PC_GFX_BYTES (208 tiles) is too short: e.g. Crono's
-        # up-walk references tiles 839-858.
+        # 11-bit chip range, 2048 tiles: C0/E687 `AND #07FF`). PC_GFX_BYTES (208 tiles) is too
+        # short: e.g. Crono's up-walk references tiles 839-858, and Ayla's pack is $8C00 bytes
+        # (1120 tiles) with 29 frames on tiles $400-$45F -- a 10-bit cap drew those from the
+        # tiles 1024 below.
         hi = [p for p in gfx_ptrs if p > off]
-        size = min(0x8000, (min(hi) - off) if hi else 0x8000)
+        size = min(0x10000, (min(hi) - off) if hi else 0x10000)
         return rom[off:off + size]
     return lz_decompress(rom, off)
 

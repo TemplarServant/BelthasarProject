@@ -77,7 +77,7 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 | 123 last village, blackbird | GAMEPLAY-SAME | -- | **FIXED (port bug), the pinned cmp SAME (0 px)**: the lead is drawn with ITS character's sheet. The host draws the lead apart from the VM's actors and used sprite 0 -- Crono's sheet and anim set -- with the lead object's frame number and palette row; from Crono's fall to his return the lead is another character's object (`$0197` = 04, `$1101+4` = 01: Marle) and the port showed Crono's frame of the same number in her colours (a spiky blond figure facing the camera; legs 132 / 136: 390 / 395 px, the whole sprite; the same on a real battery save, jackie-saves-census's ch23). field.c takes the lead object's own sprite (field_sprite_prio_and_player_gate.md sec. 7) |
 | 124 blackbird decks | GAMEPLAY-SAME | -- | fixed with 123: the pinned cmp SAME (0 px at -1) |
 | 125 blackbird wing | GAMEPLAY-SAME | -- | **picture FIXED** (2026-11-11; 312 px at +0): the party has just come into loc 1DE, its three members on one pixel, and the cartridge draws the third (Ayla) in front where the port drew the lead (Marle). C0/A810's party arm closes the loop itself and ends on `A88C RTS`: with the room's last object a party member the party tail (A846-A867) never runs, so the draw list keeps the loop's order -- bucket $66's chain 5, 2, 1 on the cartridge, 1, 2, 5 in the port (disasm/notes/field_draw_list_order.md sec. 6). The pinned cmp is SAME (0 px); `field-picture-party-stack-order-vs-cartridge` pins it |
-| 126 wing, dalton | GAMEPLAY-SAME | -- | timing (picture only, 275 px at -2 with the lead's fix, 610 before): Ayla's four-frame cycle (`$0F0B` 1D / 1E / 1F / 8D) takes the cartridge's values on the cartridge's frames (f1000-f1131, both sides' `$0F00-$0F0F` change for change), two frames off the lag the rest of the picture matches at |
+| 126 wing, dalton | GAMEPLAY-SAME | -- | **picture FIXED** (2026-11-11; 275 px at -2, all of it Ayla): not the "four-frame cycle two frames off the lag" of the first reading -- over the 67 frames around the leg's end the port never drew the cartridge's pose, at any camera shift. A frame's chip word carries an 11-bit tile index (the anim drain's `AND #07FF`, C0/E687 / C0/E534); the asset extractor read ten bits and capped a character's pack at 1024 tiles. Ayla's pack has 1120 and her frames 1D / 1E (29 frames in all) use tiles $400-$45F, drawn from the tiles 1024 below (disasm/notes/sprite_chip_tile_index.md). The pinned cmp is SAME (0 px); `playthrough-leg-126-ayla-frames-vs-cartridge` and `sprite-pack-tile-index-is-11-bits` pin it |
 | 127 winged epoch, 179 | GAMEPLAY-DIFFERENT (the port's end dump reads zeros) | SYNC-ONLY, 6 warps [f38+4 f1028+2 f17566+2 f20680-1 f21021+1 f32041+1], end regions same | **timing**: f38 is the leg's cut -- the route cuts it inside a walk (Down held from its first frame), the port's keys start a frame later, the lead walks a step behind from f1 (`$1802` 09C0 for 09D0) and control is taken four frames late; f1028 the fight's first window (`$95D5` -> 02); f17566 / f20680 / f21021 load fade-ins; f32041 a fight exit (`$95D5` -> 80) |
 | 129 north cape | GAMEPLAY-SAME | -- | fixed with 123: the pinned cmp SAME (0 px at -3) |
 | 130 black omen, gaspar | GAMEPLAY-SAME | -- | **picture FIXED** (2026-11-11, found from 134; 1845 px): what was read here as "the End of Time's backdrop streaks, an animation's phase" was the window wave on BG3, missing in the port (disasm/notes/field_bg3_wave_and_obj_under_bg.md). The pinned cmp is SAME (0 px) |
@@ -90,8 +90,7 @@ end picture only (every gameplay chain equal; 71 aligned SYNC-ONLY, its run-away
 | 137 lavos spawns, summit | GAMEPLAY-DIFFERENT (story `$7F:0000` D5 / D4: with the unwarped pad the port does not win the summit's fight) | SYNC-ONLY, 11 warps [f19158-1 f23752+1 f25722-1 f26719-1 f35413+1 f35504-1 f42386+2 f46014-1 f47727-1 f56464+1 f70396+1], end regions same | **timing**: five fight exits (`$95D5` -> 80: f19158, f23752, f25722, f35413, f42386) and the hand-back 91 frames after the fourth, which takes its frame back (f35504, control 00 -> 01); two fights' first windows (`$95D5` -> 02: f26719, f47727); three load fade-ins (`$0119` 00 -> 01: f46014, f56464, f70396). Every class is one the rules accept |
 
 **Open, in route order** (2026-11-11; 24-137 closed above as timing or fixed, but for what is named here):
-126 (Ayla's cycle, 275 px: its one-state picture is a seed in mid-motion, so "timing" is not proven for it); 131 and 133
-(the 2300 A.D. map's dust). The warp lists of
+131 and 133 (the 2300 A.D. map's dust: an animation's phase by the first reading, not proven). The warp lists of
 107, 116 and 118 were measured before the pose-machine fixes of 2026-11-11; their pinned cmp lines are the final
 build's. (95, 97, 104, 122: the port's side reads zeros -- its end dump missed, i.e. the port never reached the leg's
 last frame on a field: to be seen leg by leg.)
@@ -115,6 +114,12 @@ pictures show -- none of it a leg closed above, all of it still to be taken one 
   a leg that walks onto the map itself ends on the cartridge's picture (03's own cmp: 0 px).
 - **Tiles a script drew** (124 loc 175, 53 loc 0EB): the seeded port shows the room without them; the legs' own cmp
   lines are SAME.
-- **Not read yet:** Mt. Woe (109 loc 188, 111 loc 189: the whole picture), 100, 114, 119, 126, 135 (the leg ends in
-  motion), 91; and the small ones -- 02 (the cat walks on the cartridge and stands in the port: obj 9's ticket), 55
-  (Spekkio's sprite), 86 and 101 (the lead's frame).
+- **An object's sprite after a seed** (55, Spekkio's room): the seeded port keeps the sprite its own load picked before
+  the seed (the script chooses the form by the party's level); the cartridge's is the id the loader stored at `$1101,X`
+  (C0/448A op 0x81, C0/4564 op 0x82). The leg's own cmp is SAME. A limit of the seed.
+- **A seed in mid-motion** (86, 126, 135; 02's cat, whose walk ticket `$1A00` is half spent): the step in flight is not
+  resumed the same way. 86's own 117 px are the lead one step apart at the leg's cut.
+- **Mt. Woe** (109 loc 188, 111 loc 189): the fog's layer sits elsewhere after a seed (its rebuilt-layer origin is not in
+  the WRAM); 111's own cmp is SAME.
+- **Not read yet:** 100, 114, 119, 91; 131 and 133 (the 2300 A.D. map's dust: ~3,800 px at every lag of the leg's own end,
+  so not a frame of lag -- a phase of its own or a draw difference, open).
