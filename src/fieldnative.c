@@ -225,9 +225,11 @@ int CtFieldRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const uin
         size_t ci = (size_t)capY * fx->capW + capX;
         if (!iris && mtFull < 0 && fx->capOpq[0][ci]) memcpy(c, fx->capRgb[0] + ci * 3, 3);
       }
-      // a sprite, unless the priority-1 foreground (BG1 / BG2) is here and the pixel is not in front of it
+      // a sprite, unless the priority-1 foreground (BG1 / BG2) is here and the pixel is not in front of it -- and, with
+      // OBJ on the main screen, never over BG3's priority-1 pixel there, which is above every OBJ (BGMODE 09; field.c's
+      // foreground pass). With OBJ on the sub screen alone the recorded pixel is already the mix the frame drew.
       int sprPal = 0xFF;
-      if (spfRow[X]) {
+      if (spfRow[X] && !(L->objMain && (mT & BL3) && cv[5])) {
         int fg = !iris && (((fgT & BL1) && cv[4]) || ((fgT & BL2) && cv[3]));
         if (spfRow[X] == 2 || !fg) { memcpy(c, spRow + X * 3, 3); sprPal = sppRow[X]; }
       }

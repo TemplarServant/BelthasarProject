@@ -4490,8 +4490,9 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
       int hs = half[y * CT_SPR_W + x];
       int p = hs == 0 ? topPrio : hs == 1 ? botPrio : 2;
       int win = bgWinAt(px, py);                           // the ROM's window 1 took BG1/BG2 off this pixel
-      // Priority 0/1 loses to BG1/BG2 at either priority (mode 1's slots: OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0,
-      // OBJ1, BG3.1, OBJ0, BG3.0), per unit: the 600 A.D. castle's seated soldiers (`8E 12`, $0C00 = 20 / $0C01 = 10,
+      // Priority 0/1 loses to BG1/BG2 at either priority (the field's slots, mode 1 with BG3's priority bit -- BGMODE
+      // 09, C0/EA7D: BG3.1, OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0, OBJ1, BG3.0, OBJ0; BG3.1 is the foreground pass's),
+      // per unit: the 600 A.D. castle's seated soldiers (`8E 12`, $0C00 = 20 / $0C01 = 10,
       // loc 07B) have their lower unit hidden behind the chair. Where the window took BG1/BG2 away it shows.
       if (p < 2 && sten && !win) {
         if (px >= 0 && px < sten->cw && py >= 0 && py < sten->ch) {   // BG1/BG2 are on screen here and win
@@ -18651,9 +18652,10 @@ int main(int argc, char** argv) {
               CtMotSpriteHole(mot, px2, py2, occTag);
             }
         // An occluder only loses where BG1/BG2 are on screen, and a window can take them off it. The PPU's
-        // mode-1 layer order is a list of (layer, priority) slots: OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0,
-        // OBJ1, BG3.1, OBJ0, BG3.0, backdrop (snes/ppu.c layersPerMode[1] / prioritysPerMode[1]), so an OBJ
-        // priority-0 pixel is beaten by BG1/BG2 at either priority and by BG3 priority 1 only. A layer a window
+        // layer order is a list of (layer, priority) slots; the field's is mode 1 with BG3's priority bit (BGMODE 09,
+        // C0/EA7D; snes/ppu.c's actMode 8): BG3.1, OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0, OBJ1, BG3.0, OBJ0,
+        // backdrop, so an OBJ priority-0 pixel is beaten by BG1/BG2 at either priority and by BG3 at either too
+        // (BG3.1 by the foreground pass; under BG3.0 it is still drawn here -- no case measured). A layer a window
         // masks off this pixel is not in the list at all, so inside the Telepod iris (W12SEL=0x22 hands window 1
         // to BG1 and BG2) the priority-0 swirl wins and the gate shows. So: stencil the pixels the BG still owns
         // (above), and draw the ones the window took from it; the clip below is that same window, which is why
@@ -18892,6 +18894,28 @@ int main(int argc, char** argv) {
           mot->own[(size_t)y * g_fw + x] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
           if (g_colWinOn || g_colObjMath) colObjPal[(size_t)y * g_fw + x] = 0xFF;   // a BG pixel again (the colour math)
         }
+    // BG3's priority-1 pixels are above EVERY sprite: the field's BGMODE is 09 on every frame (the NMI's C0/EA7D `LDA
+    // #09 / STA $2105`, the only BGMODE write in bank C0: mode 1 with BG3's priority bit), so BG3.1 > OBJ3. They are
+    // re-drawn from the base over the sprites, the front (priority-3) ones too -- but for a pixel a sprite was mixed
+    // into as its sub pixel (g_objSubDone), in either setup: OBJ on both screens, or on the sub screen alone (the
+    // 2300 A.D. rooms' dust, TM 04 / TS 13 / CGADSUB 44, and Manoria: the whole room is seen through BG3, and the
+    // sprites with it). MEASURED, the rule's cartridge, Magus's lair (loc 0A5, playthrough legs 87
+    // / 88: TM 17, TS 00, CGADSUB 00): the bats are OBJ of priority 3 (OAM 16-23, 40-71) behind the dead trees'
+    // silhouettes, BG3 priority-1 tiles, and show only where a tree lets them; the port drew them whole over the trees
+    // (299 px from either leg's end state, at every lag).
+    { int lw = 0, lh = 0; const uint8_t* ml = NULL; const uint8_t* sl = NULL;
+      const uint8_t* lc = (f.sd && !dbg.noFg) ? CtFieldSceneCoverage(f.sd, &lw, &lh) : NULL;
+      if (lc && lw == f.W && lh == f.H && CtFieldSceneObjLevels(f.sd, &ml, &sl))
+        for (int y = 0; y < ch; y++)
+          for (int x = 0; x < cw; x++) {
+            size_t bo = fieldBaseAt(&f, camx + x, camy + y), i = (size_t)y * g_fw + x;
+            if (ml[bo] != 4) continue;
+            if (g_objSubOn && g_objSubDone[i]) continue;
+            memcpy(fb + i * 3, f.base + bo * 3, 3);
+            mot->own[i] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
+            if (g_colWinOn || g_colObjMath) colObjPal[i] = 0xFF;
+          }
+    }
     if (bg3Plane)                                      // the caption plane's priority-1 cells: the front layer
       for (int y = 0; y < ch; y++) fieldBg3PlaneRow(fb, y, bg3V + y, bg3H, 1, CtSceneMem7E(f.vm), NULL, 0, 0);
     if (g_colWinOn || g_colObjMath) {

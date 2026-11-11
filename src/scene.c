@@ -295,8 +295,9 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
             memcpy(px + (size_t)idx * 3, pal[c->base + v], 3);
             cov[idx] = bit;
             if (gDrawLvl) gDrawLvl[idx] = BG_OBJ_LVL(bit, prio);   // (the layer on top so far)
-            // BG1/BG2 priority-1 tiles draw OVER field sprites (the player walks behind them);
-            // BG3 priority-1 stays background. Record those pixels for the field to overlay.
+            // BG1/BG2 priority-1 tiles draw OVER field sprites of priority 2 or less (the player walks behind
+            // them): record those pixels for the field to overlay. BG3's priority-1 pixels are above every sprite
+            // (BGMODE 09); the field re-draws those from the level map (gDrawLvl 4), not from this mask.
             if (prio == 1 && priomask && (bit == BL1 || bit == BL2)) priomask[idx] = 1;
           }
         }
@@ -1086,6 +1087,7 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   }
   for (int i = 0; i < 6; i++) { o->rgb[i] = sd->layRgb[i]; o->cov[i] = sd->layCov[i]; o->w[i] = sd->layW[i]; o->h[i] = sd->layH[i]; }
   o->mainT = main_t; o->subT = sub_t; o->blendEn = blend_en; o->subOp = sub_op; o->half = half; o->backEn = back_en;
+  o->objMain = sd->scrOn ? sd->scrObjM != 0 : (sd->screen_flags & 0x08) != 0;
   memcpy(o->backdrop, sd->pal[0], 3);
   return 1;
 }

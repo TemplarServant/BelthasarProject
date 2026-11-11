@@ -1137,7 +1137,7 @@ lines pinned: the boot to the first window (cartridge f16201-f16420; the port's 
 first-window class) and the close's scan frames (f21440-f21449; the port's close service runs three frames after
 C1/4127). Full tier (~2 min cached, ~6 min the first time). Re-pin only when leg 119's pad changes in the route.
 
-### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math
+### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3
 
 A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the
 route cut the leg -- after a walk, a load or a fight whose length is the timing class -- so it says little about how a
@@ -1145,7 +1145,7 @@ room is drawn. `tools/field_picture_cmp.py <name>` takes the cartridge's state a
 power-on by tools/playthrough.py) or at a frame inside it (`at`: the leg's pad played that far on the cartridge, cached
 in build/_fieldpic with the route's key), leaves the pad alone for 30-40 frames on both sides and compares the pictures at
 the lag that fits best (`fieldpicture: <name> leg <n>[ f<at>] +<k> idle frames: <d> px differ at port <lag>`; `--png`
-writes the cartridge, the port and the pixels apart to build/_fieldpic). Four pictures, all 0 px
+writes the cartridge, the port and the pixels apart to build/_fieldpic). Six pictures, all 0 px
 (disasm/notes/field_bg3_wave_and_obj_under_bg.md, field_draw_list_order.md sec. 6):
 
 - **death-peak-snow** (the start of leg 135, loc 0F6; 19,770 px before): the snow is BG3 under the window wave --
@@ -1165,6 +1165,18 @@ writes the cartridge, the port and the pixels apart to build/_fieldpic). Four pi
   (CGADSUB bit 5 clear), so the disc is black and BG3's plasma on the sub screen does not show through. Around it the
   plasma waves under the open box, whose lines take no row shift. Two mutations: the backdrop always in the math, an
   open box turning the wave off.
+- **bg3-above-every-sprite** (the start of leg 88, loc 0A5, Magus's lair; 299 px before): a room with no colour math
+  whose trees are BG3 priority-1 tiles and whose bats are OBJ of priority 3 -- BGMODE 09 puts BG3.1 above every OBJ,
+  so the bats hang behind the silhouettes. One mutation: BG3's priority tiles not re-drawn over the sprites.
+- **sprites-on-the-sub-screen-under-bg3** (the start of leg 39, loc 0D6, Arris dome): TM 04, TS 13, CGADSUB 44 -- BG3
+  alone on the main screen and everything else, the sprites too, seen through it. The guard of the pass above: its
+  first form covered the mixed sprites with plain dust (415 px, nine playthrough legs). One mutation: a mixed pixel
+  left alone only with OBJ on both screens. (A still picture: +0 is printed.)
+
+`attract-0a5-bats-behind-the-trees-vs-rule-cartridge` (`tools/frame_region_cmp.py`, the lockstep vehicle) pins the same
+rule in the attract's own visit to Magus's lair: two whole frames of the bats' stretch, port f5540 against the
+cartridge's f3473 and f5600 against f3534, 57344 / 57344 identical each (263 px apart at f5540 before). Full tier
+(~2 min). The mutation is bg3-above-every-sprite's.
 
 Full tier (~20 s each with the route's states made; the states themselves come with the playthrough check's). A pixel
 apart is a bug: re-pin only against the cartridge, never to the port's own picture.

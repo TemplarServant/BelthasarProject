@@ -120,3 +120,40 @@ all killed. In the playthrough check ten legs' end pictures moved with secs. 1-3
 - **Death Peak's frame rate in the port:** a BG3 that moves every frame re-bakes the room every frame (about 20-30
   frames a second headless on a loaded efficiency core against 90-120 in other rooms). The picture is right; the cost
   is the bake's.
+
+## 7. BG3's priority-1 pixels are above every sprite, math or not
+
+Found by putting every end state of the route through this note's method (both sides from ONE cartridge state, an idle
+pad): Magus's lair (loc 0A5, legs 87 / 88) is 299 px
+away at EVERY lag -- a picture that stands still and still differs is the drawing, not a frame of lag. Both legs had been
+filed as timing unseen.
+
+- The room: TM 17, TS 00, CGADSUB 00 -- no colour math. The cartridge's OAM has the twelve bats at priority 3 (entries
+  16-23 and 40-71).
+- The dead trees' silhouettes are BG3 priority-1 tiles. Under BGMODE 09 (sec. 3: the field NMI's C0/EA7D, the only
+  BGMODE write in bank C0) they are above OBJ3, so a bat shows only where a tree lets it: the cartridge has a pair of
+  eyes here and there, the port drew every bat whole over the trees.
+- **The port's foreground pass** re-drew BG1's and BG2's priority-1 pixels over sprites of priority 2 or less, and
+  nothing of BG3's (the bake's own comment had BG3.1 "stay background"). Now it also re-draws every pixel whose main
+  level is 4 (sec. 3's map), over the front sprites too, but for a pixel a sprite was mixed into. fieldnative.c (the
+  frames between) skips a sprite pixel under BG3.1 the same way.
+
+- **A mixed pixel is left alone, in either setup.** The first form of the pass skipped a pixel a sprite was mixed into
+  only with OBJ on both screens (sec. 3). With OBJ on the sub screen alone -- the 2300 A.D. rooms' dust (loc 0D6: TM 04,
+  TS 13, CGADSUB 44), Denadoro, Mt. Woe, Manoria -- the whole room is seen through BG3 and so are the sprites, mixed by
+  the older path; the pass covered them with plain dust. The full run caught it: nine playthrough legs (38, 39, 41, 42,
+  44, 49, 66, 111, 132; 415 px at loc 0D6) and the checks field-manoria-frog-blob and
+  field-textbox-under-the-rule-vs-logical-oracle. The pass now skips `g_objSubDone` whenever a sprite was mixed; the
+  frames-between drawer skips a sprite under BG3.1 only with OBJ on the main screen (`CtSceneLayers.objMain`).
+
+Measured:
+
+- legs 87's and 88's end states 299 -> 0 px; loc 0D6 (leg 38's end) 0 px before and after, 415 with the first form.
+- **The attract's own visit to the room** (visit 10, port f5337-f6257 = cartridge f3270-f4190 by the audit): only
+  f5505-f5710 change, the bats' stretch. Whole frames against the rule's cartridge (tools/frame_region_cmp.py, the
+  lockstep vehicle): port f5540 = c3473, f5600 = c3534 and f5680 = c3614, 57344 / 57344 each; before, f5540 was 263 px
+  away. The audit (tools/attract_divergence.py) has the same 25 events before and after, none in this visit.
+
+Checks: `field-picture-bg3-above-every-sprite-vs-cartridge`,
+`field-picture-sprites-on-the-sub-screen-under-bg3-vs-cartridge` (the guard of the first form's mistake) and
+`attract-0a5-bats-behind-the-trees-vs-rule-cartridge`.

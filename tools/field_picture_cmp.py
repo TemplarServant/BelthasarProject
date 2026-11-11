@@ -58,6 +58,16 @@ PICTURES = {
     # screen alone, does not show through (scene.c CtComposeScene's `back_en`). Around it the plasma waves under an
     # open text box, whose lines are the box's and take no shift.
     'backdrop-out-of-the-math': dict(leg='130_black_omen_gaspar', at=2531, frames=30),
+    # Magus's lair, loc 0A5 (the start of leg 88): TM 17, TS 00, CGADSUB 00 -- no colour math at all. The dead trees'
+    # silhouettes are BG3 priority-1 tiles and the bats that hang in them OBJ of priority 3: under BGMODE 09 (the field
+    # NMI's C0/EA7D) BG3.1 is above every OBJ, so a bat shows only where a tree lets it. The port drew the sprites over
+    # BG3's priority tiles (field.c, the foreground pass's BG3 loop).
+    'bg3-above-every-sprite': dict(leg='88_porre_shopping', frames=40),
+    # Arris dome, loc 0D6 (the start of leg 39): TM 04, TS 13, CGADSUB 44 -- BG3 alone on the main screen, the room
+    # and the sprites on the sub screen, half-added: everything is seen through the dust. A sprite pixel there is the
+    # sub pixel of BG3's (mixed by drawSprite), and the re-draw of BG3's priority-1 pixels must leave it -- the first
+    # form of that pass covered the party with the dust (415 px here, nine playthrough legs).
+    'sprites-on-the-sub-screen-under-bg3': dict(leg='39_arris_shop', frames=40),
 }
 
 
