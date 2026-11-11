@@ -472,10 +472,24 @@ static void owLatchShow(World* w) {
 // shift. disasm/notes/ow_bg_vline.md.
 #define OW_BG_VLINE 1
 // BG3's H scroll on screen row y: the one `$24`, or -- while a per-line object (C2/7759 / C2/7652, world.c
-// owBg3WaveTick) has HDMA channel 1 armed -- that scanline's word of its $2111 table. Row y is scanline
-// y + OW_BG_VLINE (above), and an HDMA table's line L is written for scanline L.
-static inline int owBg3HLine(const CtWorldCam* c, int y) {
-  return c->bg3hLineOn ? c->bg3hLine[(y + OW_BG_VLINE) < 240 ? (y + OW_BG_VLINE) : 239] : c->bg3h;
+// owBg3WaveTick) has HDMA channel 1 armed -- a word of its $2111 table. Two things are not the NMI's latch (`cs`):
+//   * the WORDS are the table's own, as the pass that is running left them (`live`): HDMA reads the RAM table while
+//     the picture is drawn, and the object rewrote it at the top of the frame, before the lines. Only the channel's
+//     enable ($4A bit 1 -> HDMAEN) and, for C2/7652, the entries' address (`$7E:A916`, copied into the table by the
+//     NMI, C2/030A-0316) are the latch's.
+//   * a word written in a line's H-blank is the NEXT line's: scanline L holds word L - 1, so row y (scanline
+//     y + OW_BG_VLINE) shows word y.
+// MEASURED, the rule's cartridge (`ct.exe --hdma <state>` with HDMA_TRACE_BG=1 against the WRAM of the frames around
+// it): the 2300 A.D. map (world 1F2, C2/7759, playthrough leg 131 f4950) -- line 0 is the latch's `$24` (775), lines
+// 1.. are E, E+S(p), E, E+S(p+1).. with E = 772, the NEXT pass's `$24`, and that pass's phase; the 600 A.D. map (world
+// 1F1, C2/7652, leg 68's end) -- lines 1..8 = 5 11 17 22 27 32 37 41, the table's words 0..7 as the running pass left
+// them, line 65 word 0 again. With the latched table and word y + 1 the dust of leg 131's end was 3,648 px away.
+static inline int owBg3HLine(const CtWorldCam* cs, const CtWorldCam* live, int y) {
+  if (!cs->bg3hLineOn) return cs->bg3h;
+  if (y < 0) y = 0;
+  if (live->waveTop)                                 // C2/7652: 64 words, read from the latched top
+    return live->bg3hLine[((y & 63) + (((int)cs->waveTop - (int)live->waveTop) >> 1)) & 63];
+  return live->bg3hLine[y < 240 ? y : 239];
 }
 // BG3 pixel fetch: 2bpp, chars at byte 0xE000, 64x32 tilemap at byte 0xF000 (packed v[0xE000:0xF800]); the map is
 // two 32-wide screens, screen 1 at +0x400 words. Returns the 2-bit colour index (CGRAM entry = pal*4 + idx); *prio =
@@ -1572,7 +1586,7 @@ static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int 
     for (int x = l; x <= r; x++) {
       if (g_mot && x + X0 >= 0 && x + X0 < W) g_mot->own[y * W + x + X0] = CT_MOT_FIXED;   // (a window: screen-fixed)
       int pr = 0, pb3 = 0; uint8_t v3 = 0;
-      if (!mBg3 && w->haveBg3 && (wram[0x0041] & 0x04)) v3 = worldBg3Px(w, owBg3HLine(cs, y) + x, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
+      if (!mBg3 && w->haveBg3 && (wram[0x0041] & 0x04)) v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + x, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
       if (v3) {
         for (int ch = 0; ch < 3; ch++) {
           int m5 = w->pal[pb3 + v3][ch] >> 3, o5 = m5;
@@ -1911,7 +1925,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       int bg3Math = 0;
       if (ci < 0 && w->haveBg3 && (tmain & 0x04)) {    // BG3 under: the drifting ocean texture ($212C bit2)
         int pr, pb3;
-        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
+        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
         if (v3) { ci = pb3 + v3; bg3Math = 1; mlayer[y * W + x] = 2; if (g_mot) g_mot->own[y * W + x] = CT_MOT_BG3; }
       }
       if (ci < 0) ci = 0;                              // backdrop (CGRAM 0)
@@ -2081,7 +2095,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       uint8_t* dst = fb + (size_t)y * W * 3;
       for (int x = 0; x < W; x++) {
         int pr, pb3;
-        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
+        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
         if (!pr || !v3) continue;
         // ...in 5-bit space, as the SNES does: out5 = (main5 + sub5) >> 1 per channel, then back to 8-bit (checked
         // against the oracle's frame of saves/ow_w0.state). w->pal[] is (v5<<3)|(v5>>2), so >>3 recovers v5.
@@ -2220,7 +2234,7 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
     const uint8_t* ownRow = cur->own + (size_t)y1 * w1; const uint8_t* fbRow = fb + (size_t)y1 * w1 * 3;
     uint8_t* o = out + (size_t)Y * W * 3;
     const int wy1 = (int)owFdiv(c1y + Y, k) + OW_BG_VLINE, wy2 = (int)owFdiv(c2y + Y, k) + OW_BG_VLINE;
-    const int wy3 = (int)owFdiv(c3y + Y, k) + OW_BG_VLINE, wave = owBg3HLine(cs, y1) - cs->bg3h;
+    const int wy3 = (int)owFdiv(c3y + Y, k) + OW_BG_VLINE, wave = (cs->bg3hLineOn ? cs->bg3hLine[y1 < 240 ? y1 : 239] : cs->bg3h) - cs->bg3h;   // (rows' words: the capture's, below)
     for (int X = 0; X < W; X++, o += 3) {
       const int x1 = X / k;
       if (ownRow[x1] == CT_MOT_FIXED) { memcpy(o, fbRow + x1 * 3, 3); continue; }
@@ -13303,6 +13317,7 @@ int main(int argc, char** argv) {
         static CtWorldStream owViewStm;
         OwNat* nat = &g_owNat[g_motIdx];                 // (what the native frames between draw this frame from)
         nat->n = 0; nat->w = &wd; nat->cs = *cs; nat->W = owWideW; nat->X0 = owWideX;
+        if (cs->bg3hLineOn) for (int y = 0; y < 240; y++) nat->cs.bg3hLine[y] = (uint16_t)owBg3HLine(cs, &wd.cam, y);   // (row y's word, owBg3HLine)
         nat->stm = owWideW > CAMW ? &owViewStm : &wd.stm;
         if (owWideW > CAMW) {
           const int ext = CtSettingsGet()->sceneAdjust && wd.extOn;   // (past 1999's patch: another era's map, a mod)

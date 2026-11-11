@@ -1147,6 +1147,16 @@ read a camera copy that was 0 and left the WRAM words at 1 (disasm/notes/ow_bg3_
 differing; the descent (cartridge f4861-f4878) is the free span, its `free:` line pinned -- both come back on the first
 visit's values. Full tier (~30 s cached). Two mutations: the camera's copy instead of the words, the words left standing.
 
+### playthrough-leg-131-map-dust-line-table-vs-cartridge, playthrough-leg-68-map-mist-line-table-vs-cartridge
+
+The overworld's per-line BG3 (HDMA channel 1 on `$2111`): the 2300 A.D. map's dust (C2/7759) and the 600 A.D. map's
+mist (C2/7652). Each is one playthrough leg alone (`tools/playthrough.py cmp <leg>`, its own scratch folder), ending on
+the cartridge's picture: 131 was 3,648 px away and 68 was 7,749. The rule (disasm/notes/ow_bg3_animator.md, its last
+section): the table's words are the running pass's -- HDMA reads the RAM table while the picture is drawn, the rest of
+the camera is the NMI's latch -- and a word written in a line's H-blank is the next line's, so row y shows word y.
+Full tier (~40 s and ~25 s). Two mutations each: the latched table, the word a line late. The playthrough check pins
+the same two lines.
+
 ### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3
 
 A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the

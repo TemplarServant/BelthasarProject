@@ -166,18 +166,28 @@ Fixed: world.c's object pass loads the copy from the WRAM words before the visit
 store writes them too. Check `leg-window-world-entry-bg3-vs-cartridge` (81 steps, 0 differing; two mutations). After
 it the port's `$24` / `$2A` are the cartridge's three frames early, the world load's class.
 
-**The picture, open.** The end pictures of 131 / 133 are still ~3,400-3,700 px away. Measured on the cartridge
-(`ct.exe --hdma <state>` with `HDMA_TRACE_BG=1`, `--ppuregs`, the WRAM of the same frames):
+**The picture: the table is read live, a word a line late.** With the words exact the end pictures of 131 / 133
+were still ~3,400-3,700 px away. Measured on the cartridge (`ct.exe --hdma <state>` with `HDMA_TRACE_BG=1`, `--ppuregs`,
+the WRAM of the same frames):
 
 - HDMA channel 1 is `$2111`, mode 2, indirect, table `$7E:8A35` = `F0 $8B56 / F0 $8C36 / 00`; the words at `$8B56` are
-  `E, E+S(p), E, E+S(p+1), ...` with E = `$24` (sec. 6). The port's table for the same E and p is the same (S = FB
-  at p = 4123 on both).
+  `E, E+S(p), E, E+S(p+1), ...` with E = `$24` (sec. 6). The port's table for the same E and p is the same, word for
+  word, three frames early through leg 131's entry.
 - **At scanline L the register holds the table's word L - 1** (lines 1.. = E, E+S(p), E, E+S(p+1), ...; line 0 keeps
-  the NMI's latch). field.c `owBg3HLine` hands row y the word y + 1: row y is scanline y + 1, so it should be word y --
-  the field's rule (field_bg3_wave_and_obj_under_bg.md sec. 1).
-- **The table is a frame ahead of the NMI's latch in the same picture:** line 0 shows `$24` of one frame and the
-  table's E is the next frame's (the object rewrites the table at the top of the frame, before the lines read it).
-- Trying the row word alone, the lead alone and both on leg 131's end leaves 3,416-3,735 px: neither closes it, so the
-  frame each part of the world's picture shows is not pinned down yet. A seed on the map restarts the port's BG3 from 0
-  (`CtWorldCamSeed` is not what the seeded port ends on), so `tools/field_picture_cmp.py` cannot judge it; it needs a
-  line-by-line dump of both sides on a run that enters the map itself.
+  the NMI's latch). Row y is scanline y + 1, so it shows word y. The 600 A.D. map (C2/7652, leg 68's end): lines 1..8
+  = 5 11 17 22 27 32 37 41 = the 64-word table's words 0..7, line 65 word 0 again.
+- **The words are the running pass's, not the latch's.** The picture's camera is the NMI's latch, one pass behind the
+  WRAM (C2/01DA-0211; field.c `camShow`). The table is RAM that HDMA reads while the lines are drawn, and the object
+  rewrote it at the top of the frame: line 0 shows the latch's `$24` (775) and the lines after it E = 772, the next
+  pass's, with that pass's phase. Only the channel's enable (`$4A` bit 1) and C2/7652's entry address (`$7E:A916`,
+  copied into the table by the NMI) are the latch's.
+
+**The port** drew the latch's own table and gave row y the word y + 1. field.c `owBg3HLine(cs, live, y)`: the enable
+and C2/7652's top from the latch, the words from the live camera, word y. Results: leg 131's end picture 3,648 -> 0
+px, leg 68's (the 600 A.D. mist) 7,749 -> 0; the 1000 A.D. map's legs stay at 0. Checks
+`playthrough-leg-131-map-dust-line-table-vs-cartridge` and `playthrough-leg-68-map-mist-line-table-vs-cartridge`, two
+mutations each (the latched table; the word a line late).
+
+How it was found: a grid of trial builds over (row word, table lead, V lead) on leg 131's end -- the picture is 0 px
+only with the live table on word y. A seed on the map restarts the port's BG3 from 0, so `tools/field_picture_cmp.py`
+cannot judge the map; the legs' own lines are the picture checks.
