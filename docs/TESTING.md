@@ -255,6 +255,12 @@ writes the picture comparison. Writing legs: `try <leg> "<pad>"` (the picture in
 boxes: an A only when one waits, a few frames in -- a fixed-cadence A turns a frame's difference into a box's). The route is the work of many sessions: it grows leg by
 leg, and every leg added is a stretch of the game the port is graded on from then on.
 
+Every leg's line is pinned (01-137 since 2026-11-11; 123-137 were in the count alone until then), and
+disasm/notes/playthrough_leg_ledger.md says, leg by leg, why a DIFFERENT one differs: timing in a named class, or a port
+difference still open. The legs from Crono's fall to his return (123-136) are where the lead is another character's object:
+123, 124, 129, 132 and 136 end on the cartridge's picture only because the host draws the lead with that character's own
+sheet (field_sprite_prio_and_player_gate.md sec. 7).
+
 ### shadow-route-magus-fight (`ct.exe --shadow --btnfile tools/shadow_routes/magus_fight.btn`, a route)
 
 The shadow's first route (docs/SHADOW_PROPOSAL.md, S2). The oracle boots with a public battery save,
@@ -1139,6 +1145,10 @@ player's way and pressed through with A. Seven saves whose world scripts needed 
 (ops 24, 44/45, 4F and the native C2/7BC4) must run without a PARKED/UNDERIVED line; ch16's world map buffers after op 4F
 equal the cartridge's (`map ch16 diffs 0`); ch23 (loc 173, after the Ocean Palace) pins the frame with the lead drawn --
 the lead is `$0197`'s object, not the first fn0 with op 0x57 (Crono's own load). Untiered (full run only, ~2 min).
+
+The `lead ch23` hash is the port's own picture (a render canary): re-pinned 2026-11-11 when the lead took its own
+character's sheet -- the old picture had Marle's object drawn with Crono's frames in her palette row. Its mutation puts
+sprite 0 back.
 
 ### menu-exchange-vs-oracle (`tools/menu_exchange_cmp.py`)
 

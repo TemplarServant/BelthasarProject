@@ -18667,7 +18667,17 @@ int main(int argc, char** argv) {
         // the blanket/headboard BG hides his body per-pixel via foreground priority (the
         // SNES Mode-1 rule: BG1/BG2 prio-1 tiles draw over OBJ-priority-2 sprites), and
         // the hair shows through the BG gap. No display override -- that froze the toss.
-        uint32_t al = 0; const uint8_t* an = CtAssetGet(&assets, CT_ASSET_SPRITEANIM, 0, &al);
+        // The lead is the object $0197 names, an object like any other: the ROM draws it with the graphics its own
+        // character's load put in its record (the sheet of $1101,X), not with Crono's. After his fall the lead is
+        // another character's object -- playthrough legs 123-136, Marle's object 2 -- and the sheet and the anim set
+        // are hers (the cartridge's end pictures of legs 132 and 136; the port drew Crono's frames in her palette).
+        int leadSpr = 0;
+        if (f.vm && CtSceneActorCount(f.vm) > 1 && pObj >= 0) {
+          int q0, q1 = -1, q2, q3, q4;
+          CtSceneActor(f.vm, pObj, &q0, &q1, &q2, &q3, &q4);
+          if (q1 >= 0) leadSpr = q1;
+        }
+        uint32_t al = 0; const uint8_t* an = CtAssetGet(&assets, CT_ASSET_SPRITEANIM, (uint32_t)leadSpr, &al);
         int done = 0;
         int pma = (f.vm && CtSceneActorCount(f.vm) > 1) ? CtSceneActorMoveAnim(f.vm, pObj) : 0;
         int af = animTickActor(&pPlay, an, al, am, ai, ail, alp, ast, agen, pmv, prun, pma, pfa, &done);
@@ -18745,7 +18755,7 @@ int main(int argc, char** argv) {
           dpx = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
           dpy = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0;
         }
-        int pnp = drawSprite(&assets, fb, sidx, spal, 0, af, (int)dpx - camx, (int)dpy - camy, front, tp, bp,
+        int pnp = drawSprite(&assets, fb, sidx, spal, leadSpr, af, (int)dpx - camx, (int)dpy - camy, front, tp, bp,
                    prot ? prstart : 0, prot ? prspan : 0, prphase, pbstart, pbn, pbbgr,
                    0, pmask, pShadow, &pStenSrc);
         g_bObjPalCur = -1;

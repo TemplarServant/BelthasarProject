@@ -273,6 +273,21 @@ has at f3302 against f3298, and nothing was fitted to it.
 PC goes through `drawSprite`'s `CtStencilSrc`. They implement the same rule twice; unifying them means
 carrying `CT_STENVIZ`/`CT_STENDX`/`CT_STENDY` into `drawSprite` and is open work.
 
+## 7. The lead is drawn with ITS character's sheet (2026-11-11)
+
+The lead is the object `$0197` names and nothing more: the draw pass walks it like every object (C0/B2A5's list) and
+emits the record its own character's load staged -- the sheet and frames of `$1101,X`, the character the object holds
+(Crono 00, Marle 01, .. Magus 06). The host draws the lead apart from the VM's actors (at its own px / py, the pad's
+step), and drew it with sprite 0, Crono's sheet and anim set, taking only the frame number `$0F01,X` and the palette row
+`$0F81,X` from the lead's object. With Crono in front that is the same picture.
+
+After his fall it is not: from the Last Village to his return (playthrough legs 123-136) the lead is another character's
+object. Measured at the end of legs 132 and 136 (the rule's cartridge against the port, `python tools/playthrough.py diff
+<leg>`): `$2980-82` = 01 06 05, `$0197` = 04 (object 2, `$1101+4` = 01: Marle); the cartridge draws Marle from behind,
+the port drew Crono's frame of the same number (a front view) in Marle's palette row -- 390 and 395 differing pixels, the
+whole sprite. field.c now asks the VM for the lead object's own sprite (`CtSceneActor`) for both the anim set and the
+draw. With it legs 123, 124, 129, 132 and 136 end on the cartridge's picture (0 px).
+
 ## Repro / pins
 
 ```
