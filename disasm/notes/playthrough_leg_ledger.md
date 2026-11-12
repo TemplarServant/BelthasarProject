@@ -161,3 +161,11 @@ From leg 100 on, by what the pictures show:
   tile mode is not the seed's. The port's OWN run of leg 125 cut at f70524 draws her as the cartridge does.
 - Death Peak's snow (134 f15000, 137 f24000): the layer's position is not the seed's; the legs' own end pictures on
   those rooms are 0 px.
+- **Open, for the user -- not a seed limit:** leg 86 f16500, loc 0A3, the mountain's cutscene (`$011F` = 0; found before
+  the free-roam filter). BG2 stands at hscroll -16 there (the script's offset, 80 px behind BG1), so the screen's left
+  16 px show columns 62-63 of BG2's 64-column tilemap ring. The cartridge shows what the ring HOLDS: not the map's
+  wrap (L2 is 16 metatiles wide; row 24 has 5945 5944 where the wrap's columns 30-31 have 5947 5946), and not
+  something the room's load writes -- after `--teleport` to loc 001 and back, 1023 of the 1024 entries of BG2's
+  second screen are unchanged (and 996 of them are what loc 001 showed too): leftovers of an earlier moment of the
+  leg. The port draws the map's wrap. 269 px, static through the scene (the same at +8 .. +32 frames). Reproducing it
+  means modelling VRAM's ring -- its loader, its streamer and the scripts' writes -- which the port does not keep.
