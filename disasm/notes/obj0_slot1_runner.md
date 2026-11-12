@@ -177,3 +177,28 @@ Boundaries (not changed here):
   but be cleared by the port's CtSceneCameraEntry, which runs after.
 - **The battle return** (C0/0304 -> `0316 JSR C0/A33B`) still does not re-decompress the map in the port, so C0/0330's copies
   land on the map the battle left (field_door_list.md section 6).
+
+## 7. A wait inside fn1 spins (2026-11-12)
+
+C0/595C ignores the handlers' carry: `5977 JSR ($5D6E,X) / 597A BRA ->5967`, the next op read at whatever X the handler
+left. A wait op (C0/2F96 and C0/2FC6-2FF9, `field_wait_ops.md`) leaves X on itself while it counts, so the runner
+dispatches it again at once -- the count goes up on each dispatch and the op leaves when it is N. A wait in fn1 costs
+no frame.
+
+The port stopped fn1 at the first op that left the IP on itself ("parked": the ROM would spin for ever), wait ops
+included, and the rest of the function never ran. MEASURED, playthrough leg 122 (loc 19E, the Golems' room): fn1 is
+
+```
+0241  16 F8 80 06 0B              (a story test)
+0246  4A D7 0B 7E 17 / 4A E0 0B 7E 00
+0250  E4 06 00 09 0F 16 00 04     BG3 tiles (06,00)-(09,0F) -> (16,00): the light column, aside
+0258  AD 02
+025A  E4 00 00 03 0F 06 00 04     BG3 tiles (00,00)-(03,0F) -> (06,00): blank tiles in its place
+0262  00
+```
+
+and the oracle's `$013E-$0142` (op E4's operands) read `00 00 03 0F 06` after the load -- the second copy -- where the
+port's read `06 00 09 0F 16`. The column stood at the room's top: 1584 px when the camera pans there (leg frame 1640),
+about 3000 through the Golems' fight. The runner now goes on over a wait op (ct_vm.c CtSceneRunSlot1's loop), on the
+object's own counter `$7F0A01` (C0/595C does not touch it; what fn1 leaves in it stays). Check
+`field-picture-load-function-spins-its-waits-vs-cartridge`.

@@ -2776,11 +2776,19 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   // C0/0097 `LDA $00F0 / TSB $51` accumulates every frame and only a taken branch's TRB clears. Not taken = jump by
   // the operand from its own address (66D0).
   if (op == 0xAD || op == 0xB9 || op == 0xBA || op == 0xBC || op == 0xBD) {
-    // wait ops (ROM C0/2F96): the per-actor counter $7F0A01 gains +1 per visit while
-    // below N; when it reaches N the op consumes, resets it and the visit continues.
+    // wait ops (ROM C0/2F96, and C0/2FC6-2FF9 for the four fixed lengths): the per-actor counter $7F0A01 against N.
+    //   2F9E  CMP $7F0A01,X / BEQ ->2FAF     the count IS N: zero it, IP past the op, SEC (the visit goes on)
+    //   2FA4  BCS ->2FBA                     N above it: INC, `TYX / CLC` (the visit ends on the op)
+    //   2FA6  LDA #00 / STA $7F0A01,X / TYX / SEC / RTS     the count ABOVE N: zeroed, and the op again in the same visit
+    // The third arm is a count a longer wait left when a call took the object away from it (the counter is the
+    // object's, not the op's): the shorter wait starts over from zero, it does not end. MEASURED, playthrough leg 78
+    // (loc 11C, the holes' controller object 13): its `AD 20` is cut by the fall's call, and the `AD 06` after the first
+    // `06 00 13` runs its full six visits on the cartridge (f671-f699 at a period of 4); ended at once, the three falls
+    // and the room's exit came 24 frames early.
     int N = (op == 0xAD) ? B[addr + 1] : (op == 0xB9) ? 4 : (op == 0xBA) ? 8
           : (op == 0xBC) ? 16 : 32;
-    if (s->wait >= N) { s->wait = 0; s->addr = nxt; return 0; }
+    if (s->wait > N) s->wait = 0;                     // 2FA6: zeroed, and the op again at once (the two tests below)
+    if (s->wait == N) { s->wait = 0; s->addr = nxt; return 0; }
     s->wait++;
     return 1;
   }
@@ -6340,7 +6348,8 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
   char line[512]; int ln = 0;
   if (tr) ln = snprintf(line, sizeof line, "slot1: %s ops", site ? site : "?");
   CtSS saved = sc->st[0];
-  sc->st[0].addr = fn1; sc->st[0].prio = 0; sc->st[0].waitObj = -1; sc->st[0].wait = 0; sc->st[0].nm = 0;
+  // (the wait counter $7F0A01 is obj0's own and C0/595C does not touch it: fn1's waits count on from what it holds)
+  sc->st[0].addr = fn1; sc->st[0].prio = 0; sc->st[0].waitObj = -1; sc->st[0].nm = 0;
   // C0/595C writes no $1001,X (the queue build's countdown, which step() does not read): an op 0x87 inside fn1 re-arms
   // it (C0/488B `STA $1001,X`) and that count stays -- obj0's first visit after a load waits for it (loc 16B's fn1
   // `87 01`: obj0 runs a frame after the wing's turrets, out of phase with them).
@@ -6351,12 +6360,20 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (sc->body[at] == 0x00) { why = "end"; break; }  // 5967 LDA / BEQ ->597C
     if (tr && ln < (int)sizeof line - 16) ln += snprintf(line + ln, sizeof line - ln, " %02X@%04X", sc->body[at], at);
     vmOpCost(sc->mem, sc->body, sc->blen, at, 0);       // a load's op, priced as C0/5977 dispatches it
+    int op = sc->body[at];
     step(sc, 0);                                        // 5977 JSR ($5D6E,X): its carry is ignored
+    // 597A BRA ->5967 whatever the handler returned: an op that left X on itself is dispatched again at once. The wait
+    // ops (C0/2F96, C0/2FC6-2FF9) count one more on each dispatch and leave when the count is N, so a wait inside fn1
+    // costs no frame -- it spins here. MEASURED, playthrough leg 122 (loc 19E, the Golems' room): fn1 is `E4 06 00 09 0F
+    // 16 00 04 / AD 02 / E4 00 00 03 0F 06 00 04` -- the light column's BG3 tiles moved aside, then blank ones put in
+    // their place. Stopped at the wait, the second copy never ran and the column stood in the room.
+    if (sc->st[0].addr == at && (op == 0xAD || op == 0xB9 || op == 0xBA || op == 0xBC || op == 0xBD)) continue;
     if (sc->st[0].addr == at) { why = "parked"; break; } // the ROM would never leave C0/595C
   }
   int endAt = sc->st[0].addr;
   int dc = r8(sc->mem, 0x7E1001u);                      // what fn1's ops left in $1001 (op 0x87), else the saved count
-  sc->st[0] = saved; sc->st[0].dc = dc;
+  int wt = sc->st[0].wait;                              // ...and in $7F0A01 (a wait's end zeroes it)
+  sc->st[0] = saved; sc->st[0].dc = dc; sc->st[0].wait = wt;
   // obj0 before -> after: the ROM's runner leaves $1180/$1C00 alone, so the two must agree
   if (tr) fprintf(stderr, "%s %s@%04X obj0 @%04X p%d -> @%04X p%d\n", line, why, endAt & 0xFFFF,
                   saved.addr & 0xFFFF, saved.prio, sc->st[0].addr & 0xFFFF, sc->st[0].prio);

@@ -80,6 +80,14 @@ PICTURES = {
     # the sprites of palettes 0-3 untouched. The port did the fixed colour's math only inside a colour window: 49,965 px
     # (field.c g_colFixMap, fieldColWindowApply).
     'fixed-colour-over-the-map': dict(leg='122_golem_twins_lavos', at=61500, frames=24, own=True),
+    # The Golems' room, loc 19E (leg 122, cut at f1400 in the room before it; the load at f1490, then the camera pans
+    # up to the room's top by f1640). The controller's function 1, run to its terminator at the load (C0/56C8 ->
+    # C0/595C), is `E4 06 00 09 0F 16 00 04 / AD 02 / E4 00 00 03 0F 06 00 04`: the light column's BG3 tiles moved
+    # aside, a wait, blank tiles put in their place. C0/595C ignores a handler's carry (`JSR ($5D6E,X) / BRA ->5967`),
+    # so the wait is dispatched again and again until its count is 2 and the second copy runs in the same call. The
+    # port stopped fn1 at the first op that left the IP on itself: the column stood in the room (1584 px here, about
+    # 3000 through the fight under it).
+    'load-function-spins-its-waits': dict(leg='122_golem_twins_lavos', at=1400, frames=240, own=True),
 }
 
 

@@ -3092,3 +3092,20 @@ bounces. The cells -- the cursor and the two cats' position words -- are the car
 compared, 0 differing`; 111 differed when the port tested the unmasked cell, and the cat ended up meowing at an A press
 the cartridge's cat is out of reach of). Two mutations: the unmasked cell, the columns' mask alone. Never re-pin a
 `differing`.
+
+### leg-window-wait-starts-over-above-its-count-vs-cartridge (`tools/leg_window_cmp.py wait-starts-over-above-its-count`)
+
+The wait ops count on the object's own counter `$7F0A01,X` (disasm/notes/field_wait_ops.md): C0/2F96 ends the wait when
+the count is N, counts one more when N is above it, and when the count is ABOVE N -- left by a longer wait a call cut
+short -- zeroes it and runs the op again (2FA6). Leg 78 from frame 660 (Reptite Lair's holes): the controller's three
+`AD 06` between the party's falls are six visits each on the cartridge; the cells are its event PC and the three
+characters'. `16 steps compared, 0 differing` (7 differed: the first wait ended at once and the room's exit came 24
+frames early). One mutation. Never re-pin a `differing`.
+
+### field-picture-load-function-spins-its-waits-vs-cartridge (`tools/field_picture_cmp.py load-function-spins-its-waits`)
+
+The controller's function 1 at a load runs through its waits (disasm/notes/obj0_slot1_runner.md sec. 7): C0/595C
+ignores the handlers' carry, so a wait op is dispatched again until its count is N and the ops after it run in the same
+call. The Golems' room (loc 19E, leg 122 cut at f1400, the load at f1490): fn1 moves the light column's BG3 tiles
+aside, waits two, and puts blank tiles in their place; 240 frames on, with the camera at the room's top, the picture is
+the cartridge's (`0 px differ at port -2`; 1584 px when fn1 stopped at the wait). One mutation.

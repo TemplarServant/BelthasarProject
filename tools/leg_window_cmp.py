@@ -123,6 +123,15 @@ WINDOWS = {
     # The cells: the cursor, and objects 9 and 10's position words.
     'offmap-mover-walls-under-the-masks': dict(leg='03_', start=2, frames=236,
                                                cells=[('7E01F8', 1), ('7E1812', 2), ('7E1892', 2), ('7E1814', 2), ('7E1894', 2)]),
+    # Reptite Lair, loc 11C (the holes): the controller object 13 idles on `AD 20` (period 4) until a hole calls it
+    # (f667), then drops the party one by one -- `06 00 13 / AD 06 / 06 02 13 / AD 06 / 06 04 13 / AD 06` -- and leaves
+    # the room (`E0`). The wait's counter `$7F0A01,X` is the object's: the call found it past 6, and C0/2F96's third arm
+    # (2FA6 `LDA #00 / STA $7F0A01,X / TYX / SEC`: the count above N) zeroes it and runs the op again, so the first
+    # `AD 06` lasts its six visits like the other two (f671-f699, f699-f723, f723-f747). The port ended a wait whose
+    # count was at or above N: the first one took one visit and the room's exit came 24 frames early. The cells: the
+    # controller's event PC and the three characters' (objects 1, 6 and 2 run the fall, function 3).
+    'wait-starts-over-above-its-count': dict(leg='78_', start=660, frames=86,
+                                             cells=[('7E119A', 2), ('7E1182', 2), ('7E118C', 2), ('7E1184', 2)]),
 }
 
 

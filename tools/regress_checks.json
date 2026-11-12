@@ -51094,6 +51094,41 @@
       "notes": "A MOVER OUTSIDE THE MAP TESTS THE CELL ITS TILE WRAPS TO (disasm/notes/field_mover_wall_masks.md). C0/ACFD's landing test is `LDA $E0 / REP #30 / AND $1D1E / TAX`, `LDA $7E7040,X / BMI ->AE27`: the step's tile bytes under the map's column and row masks. Crono's kitchen (loc 001, leg 03 from frame 2): the hidden cat (object 10) stands at tile (FF, FF) = the 64x64 map's solid corner (3F, 3F), so its chase `B6 00` walls on each of its visits, four frames apart, draws a random angle (AE27 `INC $F8`) and stalls; the visible cat's own bounces take later noise entries and it steps left at f37. The cells -- `$01F8`, objects 9 and 10's position words -- are the cartridge's step for step over 236 frames. The port tested the unmasked cell (never solid): 111 of 112 steps differed, the cat ended elsewhere and an A press at f758 made it meow (`18 4E`, the sound audit's hit)."
     },
     {
+      "name": "leg-window-wait-starts-over-above-its-count-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "wait-starts-over-above-its-count"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: wait-starts-over-above-its-count leg 78 f660+86: 16 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: fight-exit-gives-up-the-kept-music ",
+        "^  free:  cartridge f303-f8070"
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Mt. Woe, loc 188: a fight under the room's own music with $2A21 bit 7 ends as the cartridge's does -- the exit gives up $2A1F bit 6 (CD/03B4), posts the fade, waits and polls, and control is back on the cartridge's frame",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (s->wait > N) s->wait = 0;                     // 2FA6: zeroed, and the op again at once (the two tests below)",
+          "replace": "    if (s->wait > N) { s->wait = 0; s->addr = nxt; return 0; }   /* MUT: a count above N ends the wait */",
+          "why": "2FA4 `BCS ->2FBA` takes the count below N; a count ABOVE falls to 2FA6, which zeroes it and returns `TYX / SEC` -- the op's own address, so it is dispatched again and counts from zero. Ended there, the controller's first `AD 06` lasts one visit instead of six"
+        }
+      ],
+      "notes": "A WAIT WHOSE COUNT IS ABOVE ITS LENGTH STARTS OVER (disasm/notes/field_wait_ops.md). C0/2F96 (op AD; C0/2FC6-2FF9 for B9 BA BC BD) compares the op's length N with the object's counter $7F0A01,X: equal ends the wait, N above counts one more, and N BELOW -- a count a longer wait left when a call took the object away -- zeroes the counter and runs the op again (2FA6 `LDA #00 / STA $7F0A01,X / TYX / SEC`). Reptite Lair, loc 11C (leg 78 from frame 660): the holes' controller idles on `AD 20`, a hole calls it at f667 and it drops the party with `06 00 13 / AD 06 / 06 02 13 / AD 06 / 06 04 13 / AD 06`; the three waits are six visits each on the cartridge (f671-f699, f699-f723, f723-f747). The cells are the controller's and the three characters' event PCs, step for step. The port ended a wait whose count was at or above N: the first took one visit, the room's exit came 24 frames early (7 of 16 steps differed)."
+    },
+    {
       "name": "field-picture-death-peak-snow-vs-cartridge",
       "argv": [
         "python",
@@ -51302,6 +51337,40 @@
           "find": "  { uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;",
           "replace": "  { uint8_t cd = w128[0x0122]; int i5 = cd & 0x1F;   /* MUT: the fade's target, not where it stands */",
           "why": "COLDATA is `$0121`, the value the fade walks a step at a time (C0/1F5A); `$0122` is where it is going"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-load-function-spins-its-waits-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "load-function-spins-its-waits"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: load-function-spins-its-waits leg 122 f1400 +240 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: fixed-colour-over-the-map "
+      ],
+      "tier": "full",
+      "timeout_s": 1500,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Loc 19F, the Ocean Palace's throne room while op 0xF1 fades the screen: every BG pixel is its colour less the fixed colour, as on the cartridge (CGADSUB 97, no sub layer, no colour window), the sprites of palettes 0-3 untouched",
+      "notes": "THE CONTROLLER'S FUNCTION 1 RUNS THROUGH ITS WAITS AT A LOAD (disasm/notes/obj0_slot1_runner.md). C0/595C dispatches fn1's ops to the `00` terminator and ignores each handler's carry (`JSR ($5D6E,X) / BRA ->5967`), so a wait op, which leaves X on itself while it counts, is dispatched again at once until its count is N: no frame passes. The Golems' room (loc 19E, leg 122): fn1 is `E4 06 00 09 0F 16 00 04 / AD 02 / E4 00 00 03 0F 06 00 04` -- the light column's BG3 tiles copied aside, then blank tiles over their place. The port stopped fn1 at the wait, the second copy never ran and the column stood in the room: 1584 px when the camera reaches the room's top (f1640), about 3000 through the fight under it. Both sides from the cartridge's state 90 frames before the load.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (sc->st[0].addr == at && (op == 0xAD || op == 0xB9 || op == 0xBA || op == 0xBC || op == 0xBD)) continue;",
+          "replace": "    /* MUT: a wait parks fn1 */",
+          "why": "C0/597A `BRA ->5967` whatever the handler returned: the wait op is dispatched again and counts on, and fn1 goes on past it in the same call. Parked there, the ops after the wait never run"
         }
       ]
     },
