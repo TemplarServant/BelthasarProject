@@ -50570,7 +50570,7 @@
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37890 px at port +0",
         "playthrough: 123_last_village_blackbird SAME -- locs 1A9 1F6 1A8 10F 173 16C 16E 16C | story CD CF | party 010205 | gold 0 | hp 646 (1) | ctrl 5 | end picture 0 px at port -2",
-        "playthrough: 124_blackbird_decks SAME -- locs 16C 173 170 172 170 175 | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 17 | end picture 0 px at port -1",
+        "playthrough: 124_blackbird_decks DIFFERENT -- locs 16C 173 170 172 170 175 | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 17 | end picture 14 px at port +0",
         "playthrough: 125_blackbird_wing SAME -- locs 175 170 1BB 170 171 176 171 178 1BC 178 171 176 1DE | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 31 | end picture 0 px at port +0",
         "playthrough: 126_wing_dalton SAME -- locs 1DE 16B | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 1 | end picture 0 px at port -2",
         "playthrough: 127_winged_epoch_179 DIFFERENT -- locs 16B 10F 16F 16B 179 16B 179 16B 179 | story CF | party 010205 | gold 43384 | hp 646 (1) | ctrl 4 | end picture 55528 px at port +0",
@@ -50584,7 +50584,7 @@
         "playthrough: 135_death_peak_0f6 SAME -- locs 0F6 | story D4 | party 010605 | gold 45684 | hp 646 (1) | ctrl 3 | end picture 0 px at port -2",
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit DIFFERENT -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 49164 px at port +0",
-        "playthrough: 100/137 legs SAME"
+        "playthrough: 99/137 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -51406,6 +51406,40 @@
           "find": "    if (sc->st[0].addr == at && (op == 0xAD || op == 0xB9 || op == 0xBA || op == 0xBC || op == 0xBD)) continue;",
           "replace": "    /* MUT: a wait parks fn1 */",
           "why": "C0/597A `BRA ->5967` whatever the handler returned: the wait op is dispatched again and counts on, and fn1 goes on past it in the same call. Parked there, the ops after the wait never run"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-effect-lock-parks-the-colour-cycles-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "effect-lock-parks-the-colour-cycles"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: effect-lock-parks-the-colour-cycles leg 117 f5100 +2460 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: fixed-colour-over-the-map "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Loc 19F, the Ocean Palace's throne room while op 0xF1 fades the screen: every BG pixel is its colour less the fixed colour, as on the cartridge (CGADSUB 97, no sub layer, no colour window), the sprites of palettes 0-3 untouched",
+      "notes": "THE EFFECT LOCK PARKS THE SCENE'S COLOUR CYCLES (disasm/notes/battle_effect_lock_park.md). D1/F426, every frame of a fight: while `$CFFF` is set (an anim script's ops 2D / 2E, a program's E6) the eight colour-slot modes are saved to $CD2F and every record whose mode has BIT 7 or is 1x is zeroed (`LDA $0520,X / BMI ->F449 / AND #F0 / CMP #10 / BNE ->F44C / F449 STZ $0520,X`), once; when the lock drops they are put back. The bit-7 modes are the room's cycles (8B, 87): Zeal's lit floor stands still for 107 frames under leg 117's second fight (cartridge f7378-f7485) and goes on from there. The port parked the 1x records alone, the floor cycled through the lock and stayed 15 frames out of step for the rest of the fight and of the room (731 px on most frames; the picture audit's legs 117 and 121). Both sides from the cartridge's state in the field before the fight; the picture 75 frames after the lock is the cartridge's at the fight's own lag.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      if ((m & 0x80) || (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }         //   AND #F0 / CMP #10 / BNE ->F44C / F449 STZ $0520,X`",
+          "replace": "      if (!(m & 0x80) && (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }   /* MUT: the 1x records alone */",
+          "why": "D1/F441 `BMI ->F449`: a mode with bit 7 is zeroed too -- the scene's colour cycles stop under the lock. Left running, the floor's cycle is 15 frames ahead of the cartridge's when the lock drops"
         }
       ]
     },

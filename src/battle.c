@@ -15535,7 +15535,12 @@ void CtBattleBegin(CtBattleHost* h) {
     //                 $BD89/$BD8B := $2C78/$2C7A (BG3): the arena lines' scrolls
     //   D1/F388-F3C2: for X < $C0 step 4 -- $BEAB := 0, $BF6B := 0, $BEAD := v, $BF6D := v - 0098; v = FFFC for 19
     //                 lines, then +4 every 12: the HUD band's BG3 lines
-    for (int k = 0; k < 12; k++) m[0x2C70 + k] = m[0x1D87 + k];
+    // (C0/06CE-0712 stores each counter twice, `STA $7E2C5A / STA $7E2C70` .. `STA $7E2C64 / STA $7E2C7A`: the copy at
+    // $2C5A-$2C65 too. CD/0CA1-0CBF, the stager's head: the arena's map bases for channel 0, `$BC85 := $2C56`,
+    // `$BC86 := $2C57`, `$BC88 := $2C59`, and `$2A21` bit 0 clears $BC86's bit 0.)
+    for (int k = 0; k < 12; k++) { m[0x2C70 + k] = m[0x1D87 + k]; m[0x2C5A + k] = m[0x1D87 + k]; }
+    m[0xBC85] = m[0x2C56]; m[0xBC86] = m[0x2C57]; m[0xBC88] = m[0x2C59];
+    if (m[0x2A21] & 1) m[0xBC86] &= 0xFE;
     for (int X = 0; X < 0x80; X += 4)
       for (int k = 0; k < 4; k++) { m[0xBC89 + X + k] = m[0x2C70 + k]; m[0xBD09 + X + k] = m[0x2C74 + k]; m[0xBD89 + X + k] = m[0x2C78 + k]; }
     { int n53 = 0x13, v = 0xFFFC;
@@ -20425,16 +20430,19 @@ static int battleFxTeardownStep(CtBattleHost* h) {
   return 1;
 }
 // D1/F426 (JSL from CD/09BB, every frame): the effect lock. While $CFFF is set the first pass saves the eight objslot
-// mode bytes ($0520 + 12k -> $CD2F + k, D1/F411) and parks every mode-1x record (mode := 0, D1/F43C-F453), once
-// ($CE12); when it drops, the modes are restored from the save (D1/F457).
+// mode bytes ($0520 + 12k -> $CD2F + k, D1/F411) and parks every record whose mode has bit 7 or is 1x (mode := 0,
+// D1/F43C-F453), once ($CE12); when it drops, the modes are restored from the save (D1/F457). The bit-7 modes are the
+// scene's colour cycles (8B, 87: a lit floor's edge, a room's glow): they stand still while an effect holds the lock and
+// go on from where they stood. MEASURED, playthrough leg 117 (loc 195's fight, an action with ops 2D / 2E): the floor's
+// cycle holds one picture for 107 frames on the cartridge (f7378-f7485).
 static void battleObjSlotPark(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (s[0xCFFF]) {
     if (s[0xCE12]) return;                                         // D1/F431-F434
     s[0xCE12]++;                                                   // D1/F436
     for (int k = 0; k < 8; k++) s[0xCD2F + k] = s[0x0520 + k * 12];          // D1/F411-F423
-    for (int k = 0; k < 8; k++) { int m = s[0x0520 + k * 12];                 // D1/F43C-F453
-      if (!(m & 0x80) && (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }
+    for (int k = 0; k < 8; k++) { int m = s[0x0520 + k * 12];                 // D1/F43C-F453: `LDA $0520,X / BMI ->F449 /
+      if ((m & 0x80) || (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }         //   AND #F0 / CMP #10 / BNE ->F44C / F449 STZ $0520,X`
   } else {
     if (!s[0xCE12]) return;                                        // D1/F457-F45A
     s[0xCE12] = 0;                                                 // D1/F45C

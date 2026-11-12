@@ -88,6 +88,13 @@ PICTURES = {
     # port stopped fn1 at the first op that left the IP on itself: the column stood in the room (1584 px here, about
     # 3000 through the fight under it).
     'load-function-spins-its-waits': dict(leg='122_golem_twins_lavos', at=1400, frames=240, own=True),
+    # Zeal, loc 195's second fight of leg 117 (cut at f5100 in the field; the fight boots itself). An action whose anim
+    # script holds the effect lock (ops 2D / 2E, `$CFFF`) runs at f7364: D1/F426 parks every colour-slot record whose mode
+    # has bit 7 or is 1x (`LDA $0520,X / BMI ->F449 / AND #F0 / CMP #10 / BNE / STZ $0520,X`) and puts the modes back when
+    # the lock drops -- the lit floor's cycle (records 8B / 87) holds one picture from f7378 to f7485 and goes on from
+    # there. The port parked the 1x records alone: the floor cycled through the lock and stood 15 frames out of step for
+    # the rest of the fight and of the room (731 px on most frames). The picture 75 frames after the lock.
+    'effect-lock-parks-the-colour-cycles': dict(leg='117_kajar_restock', at=5100, frames=2460, own=True),
 }
 
 

@@ -3120,3 +3120,12 @@ passes CT_SEED_LOADFADE=1, on which field.c goes on with the ramp. Five legs sta
 121 from its second frame, 170 frames: the brightness, the control byte and the lead's position words are the
 cartridge's (`55 steps compared, 0 differing`; all 55 differed). One mutation, the port's resume (the harness's
 answer is cached beside the state, so a mutation of the question is never run).
+
+### field-picture-effect-lock-parks-the-colour-cycles-vs-cartridge (`tools/field_picture_cmp.py effect-lock-parks-the-colour-cycles`)
+
+The effect lock stops the scene's colour cycles (disasm/notes/battle_effect_lock_park.md): D1/F426 zeroes every
+colour-slot record whose mode has bit 7 or is 1x while `$CFFF` is set and puts the modes back after. Leg 117's second
+fight, played by the port from the cartridge's state in the field before it (f5100): an action holds the lock at
+f7364-f7485 and the lit floor's cycle stands still under it; 75 frames after, the picture is the cartridge's (`0 px
+differ at port +0`). With the 1x records alone parked the floor stood 15 frames out of step (the line read `6 px
+differ at port +4`: the lag where the two cycles happen to meet). One mutation.
