@@ -51053,6 +51053,47 @@
       "notes": "2026-11-12 (disasm/notes/battle_exit_fade_poll.md, its last section; playthrough_leg_ledger.md legs 109 / 113 / 114). CD/03B4 begins `LDA $2A21 / BPL ->03C1 / LDA $2A1F / AND #BF / STA $2A1F`: a fight with `$2A21` bit 7 clears `$2A1F` bit 6 as it ends, so CD/03CC's test posts CD/039E's `81 10 00` (cartridge f7976), its fifteen frames pass and CD/042B-0436 polls the driver's fade count to f8011 before C0/1BE6's `11 45 B0`. The port's exit started at the `$CD0C` test and kept the bit: no fade, no wait, the exit 12 frames early (the ledger had the legs' 4-18 early exits down as the fade's tick lattice). The window starts both sides from the cartridge's state at f250 of leg 113 (the field, 53 frames before the encounter) and plays the leg's pad through the fight; the fight is not graded, the `free:` line is its length against the cartridge's. Re-pin only against the cartridge."
     },
     {
+      "name": "leg-window-offmap-mover-walls-under-the-masks-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "offmap-mover-walls-under-the-masks"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: offmap-mover-walls-under-the-masks leg 03 f2+236: 112 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: fight-exit-gives-up-the-kept-music ",
+        "^  free:  cartridge f303-f8070"
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Mt. Woe, loc 188: a fight under the room's own music with $2A21 bit 7 ends as the cartridge's does -- the exit gives up $2A1F bit 6 (CD/03B4), posts the fade, waits and polls, and control is back on the cartridge's frame",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (mc && mr) { col = col & 0xFF & mc; row = row & 0xFF & mr; }      // AD99 AND $1D1E",
+          "replace": "  if (0) { col = col & 0xFF & mc; row = row & 0xFF & mr; }   /* MUT: the unmasked cell */",
+          "why": "AD99 `AND $1D1E` (16-bit): the cell is the tile bytes under the map's masks. Unmasked, tile (FF, FF) is outside every map and never solid: the hidden cat flies off and never draws from $01F8"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (mc && mr) { col = col & 0xFF & mc; row = row & 0xFF & mr; }      // AD99 AND $1D1E",
+          "replace": "  if (mc && mr) { col = col & 0xFF & mc; row = row & 0xFF; }   /* MUT: the columns' mask alone */",
+          "why": "The AND is 16 bits wide: $1D1E masks the column in A's low byte and $1D1F the row in its high byte. With the row unmasked the hidden cat's row FF is outside the map"
+        }
+      ],
+      "notes": "A MOVER OUTSIDE THE MAP TESTS THE CELL ITS TILE WRAPS TO (disasm/notes/field_mover_wall_masks.md). C0/ACFD's landing test is `LDA $E0 / REP #30 / AND $1D1E / TAX`, `LDA $7E7040,X / BMI ->AE27`: the step's tile bytes under the map's column and row masks. Crono's kitchen (loc 001, leg 03 from frame 2): the hidden cat (object 10) stands at tile (FF, FF) = the 64x64 map's solid corner (3F, 3F), so its chase `B6 00` walls on each of its visits, four frames apart, draws a random angle (AE27 `INC $F8`) and stalls; the visible cat's own bounces take later noise entries and it steps left at f37. The cells -- `$01F8`, objects 9 and 10's position words -- are the cartridge's step for step over 236 frames. The port tested the unmasked cell (never solid): 111 of 112 steps differed, the cat ended elsewhere and an A press at f758 made it meow (`18 4E`, the sound audit's hit)."
+    },
+    {
       "name": "field-picture-death-peak-snow-vs-cartridge",
       "argv": [
         "python",

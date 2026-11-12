@@ -2094,10 +2094,20 @@ int CtSceneSolidLive(int* gated, int* deflected) {
 // for a nonzero dx (AE97-AEA5). A zero dx goes AEA7 `LDA $DB / BEQ` -> AEAB with $DE untouched, and AEBF's 16-bit
 // `ADC $DD` adds the first heading's sign: FF00 when that dx was negative, so the probe lands a whole tile left of
 // the step. `staleX` carries it (-16 px or 0).
+// The cell is the landing position's two tile bytes under the map's masks, AD93-AD9E: `SEP #20 / LDA $E0 / REP #30 /
+// AND $1D1E / SEP #20 / TAX` -- A's low byte the new X's tile, its high byte still the new Y's, the 16-bit AND with $1D1E
+// (the columns' mask) and $1D1F (the rows'). So a mover outside the map tests the cell its coordinates wrap to: the
+// kitchen's hidden cat stands at tile (FF, FF), which is the 64x64 map's solid corner (3F, 3F) -- every visit of its chase
+// walls, draws a random angle (AE27 `INC $F8`) and stalls, four frames apart, and the room's other movers get later
+// entries of the noise table for it. MEASURED, playthrough leg 03 (loc 001): `$01F8` 1D 1F 20 21 .. on the cartridge.
+// (An image with no masks -- a host that never ran the load -- keeps the cell as it is.)
 static int mvCrossesSolid(const CtScene* sc, int obj, double staleX) {
   if (sc->mx[obj] == 0 && sc->my[obj] == 0) return 0;                 // AD5F-AD73 / AEA7-AEA9 -> AF18
   double nfx = sc->fx[obj] + sc->mx[obj] + (sc->mx[obj] == 0 ? staleX : 0), nfy = sc->fy[obj] + sc->my[obj];
-  return sc->tileSolid(sc->tileCtx, (int)floor(nfx) >> 4, (int)nfy >> 4);   // ADA8-ADB4 / AED5-AEE1
+  int col = (int)floor(nfx) >> 4, row = (int)nfy >> 4;
+  int mc = r8(sc->mem, 0x7E1D1E), mr = r8(sc->mem, 0x7E1D1F);
+  if (mc && mr) { col = col & 0xFF & mc; row = row & 0xFF & mr; }      // AD99 AND $1D1E
+  return sc->tileSolid(sc->tileCtx, col, row);                        // ADA8-ADB4 / AED5-AEE1
 }
 // $1600,X is the facing; the drain's frame lookup (C0/CBA4, CtFieldFrameLookup) reads it from the image. Every ROM
 // facing writer is a `STA $1600,X` (the facing ops, the move family's `LDA $F700,X / STA $1600,X` at issue, the

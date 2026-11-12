@@ -112,6 +112,17 @@ WINDOWS = {
     # fade's tick lattice, the class of disasm/notes/battle_exit_fade_poll.md).
     'fight-exit-gives-up-the-kept-music': dict(leg='113_', start=250, frames=7900, free=[(303, 8070)],
                                                cells=[('7E011F', 1)]),
+    # Crono's kitchen, loc 001: the cats chase the lead (`B6 00`, C0/5410 -> 5228) on a period of 17 frames, and a hidden
+    # one (object 10) stands at tile (FF, FF) with a period of 4. Each visit issues a step through C0/ACFD, whose
+    # landing test reads the mover plane at the tile bytes UNDER THE MAP'S MASKS (AD95-AD9E `LDA $E0 / REP #30 / AND
+    # $1D1E / TAX`, `LDA $7E7040,X / BMI`): (FF, FF) is the 64x64 map's solid corner (3F, 3F), so the hidden cat walls on
+    # every visit, draws a random angle (AE27 `INC $F8 / LDA $FE00,X`) and stalls -- `$01F8` steps every fourth frame, and
+    # the visible cat's own wall bounces take later entries of the noise table: it steps left at f37 and on from there.
+    # The port tested the unmasked cell (free), the hidden cat flew off and the cursor fell behind (1E for the
+    # cartridge's 29 at f37): the cat stood where the cartridge's was not, and an A press 700 frames on made it meow.
+    # The cells: the cursor, and objects 9 and 10's position words.
+    'offmap-mover-walls-under-the-masks': dict(leg='03_', start=2, frames=236,
+                                               cells=[('7E01F8', 1), ('7E1812', 2), ('7E1892', 2), ('7E1814', 2), ('7E1894', 2)]),
 }
 
 

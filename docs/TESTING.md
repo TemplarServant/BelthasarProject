@@ -3081,3 +3081,14 @@ The older render fixtures of the same window keep their role with new mutations:
 of `field-battle-cantflee-box`, `field-battle-flee-ranaway-box`, `field-battle-results-box-onset` and
 `field-battle-results-autoadvance` were re-pinned on 2026-11-12: each changed in the window's rows 14-29 alone (the
 text's colours and the frame's last lines).
+
+### leg-window-offmap-mover-walls-under-the-masks-vs-cartridge (`tools/leg_window_cmp.py offmap-mover-walls-under-the-masks`)
+
+A mover's wall test reads the cell under the map's masks (disasm/notes/field_mover_wall_masks.md): C0/ACFD's landing
+test is `LDA $E0 / REP #30 / AND $1D1E / TAX / LDA $7E7040,X / BMI`, so an object outside the map tests the cell its
+tile bytes wrap to. Crono's kitchen, leg 03 from frame 2, 236 frames: the hidden cat at tile (FF, FF) walls on the
+map's solid corner (3F, 3F) every fourth frame and draws from `$01F8` each time, which decides the visible cat's own
+bounces. The cells -- the cursor and the two cats' position words -- are the cartridge's step for step (`112 steps
+compared, 0 differing`; 111 differed when the port tested the unmasked cell, and the cat ended up meowing at an A press
+the cartridge's cat is out of reach of). Two mutations: the unmasked cell, the columns' mask alone. Never re-pin a
+`differing`.
