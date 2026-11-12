@@ -2769,6 +2769,307 @@ int CtVmCaptionNmi(uint8_t* r) {
   return 0;
 }
 
+// ============================================================================================================
+// The field's BG tilemaps in VRAM: the entry's fill and the camera's edge streamer
+// (disasm/notes/field_bg_tilemap.md sec. 7)
+// ============================================================================================================
+// Every field BG has a 64x32 tilemap (FD/C0D7), and the picture is what VRAM holds in it. The ROM never redraws a
+// whole one while a room scrolls: the entry fills a 32x32 window at the camera (C0/75E9 / 78EC / 7CB5, DMA'd by
+// C0/7F62), and from then on each layer that crosses an 8-pixel boundary gets ONE row or column built from the WRAM
+// map into a buffer and DMA'd at the next NMI to its place in the layer's ring. The ring's place is the layer's own
+// (its origin, $1D99-$1D9E, stepped with its own scroll); the map cells are the CAMERA window's ($1D0A / $0C / $0E /
+// $10) for all three layers -- only the half-camera mode gives BG2 a window of its own ($12-$18). So a layer a script
+// scrolls apart from the camera (op 0xE6's drift) takes the camera's edge into its own ring: MEASURED, the rule's
+// cartridge, loc 0A3 (playthrough leg 86, f16431-f16446, the three layers drifting 16 px left after BG1 alone went
+// 80 px right): BG2's ring columns 63 and 62 take the map's chip columns 9 and 8 -- metatile 4, `5945 5944` on
+// tilemap row 24 -- where BG2's own neighbour is metatile 15 (`5947 5946`).
+//
+// All of it is D = $1D00 (r + 0x1D00). The scratch is written as the ROM leaves it: $52 / $54 / $58 / $5A / $5C the
+// builders', $5E / $62 / $64 / $6A / $6C / $6E C0/7F9A's.
+//   $74 / $75 / $76 / $77   this tick's crossings, down / up / right / left: bit 0 BG1, bit 1 BG2, bit 2 BG3
+//   $78 / $79 / $7A / $7B   the buffers built for the NMI: rows down / up, columns right / left
+//   $99,$9A / $9B,$9C / $9D,$9E   each layer's ring origin, column (0-63) and row (0-31)
+//   $9F-$D9                 the uploads' VRAM words, $DB-$F7 their byte counts (C0/7F9A, every tick)
+//   $7E:C800 / D000 / D800  the row buffers (BG1 / BG2 / BG3), +$80 the column buffers
+static uint8_t* gBgW;                                    // $2180's cursor ($2181-$2183 = the buffer, bank $7E)
+int g_ctVramMapDma = 0;                                  // 1 while the sink is handed tilemap words built from the WRAM map,
+                                                         //   2 for the words of a column's DMA past what its builder wrote
+static int gBgColWords[3];                               // the words each layer's column builder last wrote (30 or 31)
+// A word read from a cell OUTSIDE the layer's own map -- past its width or height ($0BCB / $0BCD BG1, $0BCF / $0BD1
+// BG2, $0BD3 / $0BD5 BG3, metatiles) under a mask that reaches further ($1D1E.., e.g. a 48-wide BG1 under mask $3F) --
+// is whatever earlier rooms and other routines left in $7E:3000 there, and the port's WRAM is not the cartridge's in
+// those cells (MEASURED: loc 01C, playthrough leg 34's end: the right column C0/87F1 lays at chip column $60 is 31
+// words of another room on the cartridge). Such words go to the image marked (g_ctVramMapDma 2), one flag a buffer word.
+static uint8_t gBgOut[0x1800 / 2];                       // per word of $7E:C800-$DFFF
+static uint8_t gBgCellOut;                               // the cell bgRec last read is outside the layer's map
+static void bgPutW(const uint8_t* r, int a) {
+  gBgOut[(gBgW - (r + 0xC800)) >> 1] = gBgCellOut;
+  *gBgW++ = r[a]; *gBgW++ = r[a + 1];
+}
+// `bytes` of the buffer at $7E:<buf> to the VRAM word `word`, the marked words apart.
+static void bgDma(const uint8_t* r, int word, int buf, int bytes) {
+  const uint8_t* o = gBgOut + ((buf - 0xC800) >> 1);
+  for (int i = 0, n = bytes / 2; i < n; ) {
+    int j = i + 1;
+    while (j < n && o[j] == o[i]) j++;
+    g_ctVramMapDma = o[i] ? 2 : 1;
+    g_ctVramSink(word + i, r + buf + i * 2, (j - i) * 2);
+    i = j;
+  }
+  g_ctVramMapDma = 1;
+}
+// A metatile's record: four words, TL TR BL BR. The cell is `$7E:3000,X` with X = row << 8 | col (XBA), the layer's
+// plane +$00 / +$40 / +$80; BG1 and BG2 take a ninth bit from the plane at +$C0 (bit 0 / bit 1) and index $7E:B000,
+// BG3 is eight bits (`AND #00FF`) into $7E:C000.
+static int bgRec(const uint8_t* r, int L, int row, int col) {
+  int X = ((row & 0xFF) << 8) | (col & 0xFF);
+  gBgCellOut = (uint8_t)((col & 0xFF) >= r[0x0BCB + L * 4] || (row & 0xFF) >= r[0x0BCD + L * 4]);
+  if (L == 0) return 0xB000 + (((r[0x30C0 + X] & 1) << 8) | r[0x3000 + X]) * 8;
+  if (L == 1) return 0xB000 + ((((r[0x30C0 + X] >> 1) & 1) << 8) | r[0x3040 + X]) * 8;
+  return 0xC000 + r[0x3080 + X] * 8;
+}
+// C0/7612 (BG1) / C0/79CF (BG2) / C0/7D66 (BG3) -- one chip row: $5A the chip row, $58 the first chip column, $5C the
+// metatiles. The masks are the layer's ($1E,$1F / $20,$21 / $22,$23: columns, rows), applied to the metatile index.
+// From an even column: $5C metatiles, two words each. From an odd one BG1 and BG2 write the first metatile's right
+// chip, `DEC $5C`, the whole metatiles, and end on the next metatile's RIGHT chip again (C0/76DB `LDA $7EB002,X`, as
+// the ROM has it) -- 2 x $5C words either way; BG3 writes the right chip and goes on with all $5C metatiles (7DBB).
+static void bgRow(uint8_t* r, int L) {
+  uint8_t* d = r + 0x1D00;
+  int mc = d[0x1E + L * 2], mr = d[0x1F + L * 2];
+  int bot = (d[0x5A] & 1) ? 4 : 0;
+  d[0x54] = (uint8_t)((d[0x5A] >> 1) & mr);
+  int odd = d[0x58] & 1;
+  d[0x52] = (uint8_t)((d[0x58] >> 1) & mc);
+  if (odd) {
+    bgPutW(r, bgRec(r, L, d[0x54], d[0x52]) + bot + 2);
+    if (L != 2) d[0x5C]--;                                           // 7690 / 7774 (BG3: none)
+    d[0x52] = (uint8_t)((d[0x52] + 1) & mc);
+  }
+  for (;;) {
+    int a = bgRec(r, L, d[0x54], d[0x52]) + bot;
+    bgPutW(r, a); bgPutW(r, a + 2);
+    d[0x52] = (uint8_t)((d[0x52] + 1) & mc);
+    if (--d[0x5C] == 0) break;
+  }
+  if (odd && L != 2) bgPutW(r, bgRec(r, L, d[0x54], d[0x52]) + bot + 2);   // 76DB / 77BF
+}
+// C0/77E4 (BG1) / C0/7BA9 (BG2) / C0/7E60 (BG3) -- one chip column: $5A the first chip row, $58 the chip column, $5C
+// the metatiles (top chip, bottom chip). From an odd row the first metatile's bottom chip comes first and all $5C
+// metatiles follow (C0/787E `BRL ->77FE`): 2 x $5C + 1 words.
+static void bgCol(uint8_t* r, int L) {
+  uint8_t* d = r + 0x1D00;
+  int mc = d[0x1E + L * 2], mr = d[0x1F + L * 2];
+  int right = (d[0x58] & 1) ? 2 : 0;
+  d[0x54] = (uint8_t)((d[0x5A] >> 1) & mr);
+  d[0x52] = (uint8_t)((d[0x58] >> 1) & mc);
+  if (d[0x5A] & 1) {
+    bgPutW(r, bgRec(r, L, d[0x54], d[0x52]) + 4 + right);
+    d[0x54] = (uint8_t)((d[0x54] + 1) & mr);
+  }
+  for (;;) {
+    int a = bgRec(r, L, d[0x54], d[0x52]) + right;
+    bgPutW(r, a); bgPutW(r, a + 4);
+    if (--d[0x5C] == 0) break;
+    d[0x54] = (uint8_t)((d[0x54] + 1) & mr);
+  }
+}
+// The twelve edge builders, C0/8243-8442. A row is 18 metatiles from the chip left of the window, at the window's top
+// ($0E) or bottom ($10) row; a column 15 metatiles from the chip row above the window, at its left ($0A) or right ($0C)
+// column. BG2's half-camera twins (8285 / 8305 / 8385 / 8405) read its own window $12 / $14 / $16 / $18.
+static void bgEdgeRow(uint8_t* r, int L, int up, int half) {
+  uint8_t* d = r + 0x1D00;
+  int own = (L == 1 && half);
+  gBgW = r + 0xC800 + L * 0x800;
+  d[0x58] = (uint8_t)(d[own ? 0x12 : 0x0A] - 1);
+  d[0x5C] = 0x12;
+  d[0x5A] = own ? d[up ? 0x16 : 0x18] : d[up ? 0x0E : 0x10];
+  bgRow(r, L);
+  d[up ? 0x79 : 0x78] |= (uint8_t)(1 << L);
+}
+static void bgEdgeCol(uint8_t* r, int L, int left, int half) {
+  uint8_t* d = r + 0x1D00;
+  int own = (L == 1 && half);
+  gBgW = r + 0xC880 + L * 0x800;
+  d[0x58] = own ? d[left ? 0x12 : 0x14] : d[left ? 0x0A : 0x0C];
+  d[0x5C] = 0x0F;
+  d[0x5A] = (uint8_t)(d[own ? 0x16 : 0x0E] - 1);
+  gBgColWords[L] = 30 + (d[0x5A] & 1);
+  bgCol(r, L);
+  d[left ? 0x7B : 0x7A] |= (uint8_t)(1 << L);
+}
+
+static int  bgG16(const uint8_t* d, int a) { return d[a] | (d[a + 1] << 8); }
+static void bgP16(uint8_t* d, int a, int v) { d[a] = (uint8_t)v; d[a + 1] = (uint8_t)(v >> 8); }
+// C0/7F9A -- where this tick's rows and columns go, for the three layers alike (BG1's cells named). A = 16 bits.
+//   813D  the row at the origin's row, from the column left of the origin: 34 words, cut where the ring's 32-column
+//         halves meet -- $9F / $A1 / $A3 the three runs' words, $DB / $DD / $DF their bytes (the third only when the
+//         first is a single word; $5E, its word, is left as it was otherwise)
+//   81A1  the same run 28 rows down: $A5 / $A7 / $A9
+//   81D6  the column at the origin, from the row above it: 32 words, cut at the ring's bottom -- $AB / $AD, $E1 / $E3
+//   8218  the same 32 columns on: $AF / $B1
+static void bgAddr(uint8_t* d, int org, int base, int up, int rowLen, int down, int left, int colLen, int right) {
+  int bs = bgG16(d, base);
+  // 7F9C-7FC9
+  int row = bgG16(d, org + 1) & 0x1F, col = (bgG16(d, org) - 1) & 0x3F, X, Y;
+  bgP16(d, 0x62, col); bgP16(d, 0x52, row << 5);
+  if (col < 0x20) { X = col + (row << 5); Y = (row << 5) + 0x400; bgP16(d, 0x6C, 0x20 - col); }
+  else { X = col - 0x20 + (row << 5) + 0x400; Y = row << 5; bgP16(d, 0x6C, 0x40 - col); }
+  { int a = (0x22 - bgG16(d, 0x6C)) & 0xFFFF;
+    if (a >= 0x21) { bgP16(d, 0x6E, 0x40); bgP16(d, 0x6C, bgG16(d, 0x6C) << 1); bgP16(d, 0x6A, 2); bgP16(d, 0x5E, X - 0x1F); }
+    else { bgP16(d, 0x6E, a << 1); bgP16(d, 0x6C, bgG16(d, 0x6C) << 1); bgP16(d, 0x6A, 0); } }
+  bgP16(d, up, X + bs); bgP16(d, up + 2, Y + bs); bgP16(d, up + 4, bgG16(d, 0x5E) + bs);
+  bgP16(d, rowLen, bgG16(d, 0x6C)); bgP16(d, rowLen + 2, bgG16(d, 0x6E)); bgP16(d, rowLen + 4, bgG16(d, 0x6A));
+  // 7FCB-7FE8
+  { int a;
+    row = (bgG16(d, org + 1) + 0x1C) & 0x1F;
+    bgP16(d, 0x62, col); bgP16(d, 0x52, row << 5);
+    if (col < 0x20) { X = col + (row << 5); a = (row << 5) + 0x400; }
+    else { X = col - 0x20 + (row << 5) + 0x400; a = row << 5; }
+    Y = X - 0x1F;
+    bgP16(d, down + 2, a + bs); bgP16(d, down, X + bs); bgP16(d, down + 4, Y + bs); }
+  // 7FEA-800C
+  row = (bgG16(d, org + 1) - 1) & 0x1F; col = bgG16(d, org) & 0x3F;
+  bgP16(d, 0x62, col); bgP16(d, 0x64, row); bgP16(d, 0x52, row << 5);
+  if (col < 0x20) { X = col + (row << 5); Y = col; }
+  else { X = col - 0x20 + (row << 5) + 0x400; Y = col + 0x3E0; }
+  bgP16(d, 0x6C, 0x20 - row); bgP16(d, 0x6E, (0x20 - bgG16(d, 0x6C)) << 1); bgP16(d, 0x6C, bgG16(d, 0x6C) << 1);
+  bgP16(d, left, X + bs); bgP16(d, left + 2, Y + bs);
+  bgP16(d, colLen, bgG16(d, 0x6C)); bgP16(d, colLen + 2, bgG16(d, 0x6E));
+  // 800E-8024
+  { int a;
+    col = (bgG16(d, org) + 0x20) & 0x3F;
+    bgP16(d, 0x62, col); bgP16(d, 0x52, row << 5);
+    if (col < 0x20) { X = col + (row << 5); a = col; }
+    else { X = col - 0x20 + (row << 5) + 0x400; a = col + 0x3E0; }
+    bgP16(d, right + 2, a + bs); bgP16(d, right, X + bs); }
+}
+void CtVmBgAddr7F9A(uint8_t* r) {
+  uint8_t* d = r + 0x1D00;
+  bgAddr(d, 0x99, 0x7C, 0x9F, 0xDB, 0xA5, 0xAB, 0xE1, 0xAF);
+  bgAddr(d, 0x9B, 0x7E, 0xB3, 0xE5, 0xB9, 0xBF, 0xEB, 0xC3);
+  bgAddr(d, 0x9D, 0x80, 0xC7, 0xEF, 0xCD, 0xD3, 0xF5, 0xD7);
+}
+
+// C0/9420-9448, the tail of the camera's commit (C0/93E1): the crossings the committers left in $74-$77 become rows and
+// columns -- up (98C1), down (985F), left (97FD), right (979B); BG1, BG2, BG3 in each, the layer's origin stepped after
+// its builder -- then C0/7F9A.
+void CtVmBgEdgeStream(uint8_t* r) {
+  uint8_t* d = r + 0x1D00;
+  int half = (r[0x0BC9] & 0x80) != 0;
+  d[0x78] = d[0x79] = d[0x7A] = d[0x7B] = 0;
+  for (int L = 0; L < 3; L++) if (d[0x75] & (1 << L)) { bgEdgeRow(r, L, 1, half); d[0x9A + L * 2] = (uint8_t)((d[0x9A + L * 2] - 1) & 0x1F); }
+  for (int L = 0; L < 3; L++) if (d[0x74] & (1 << L)) { bgEdgeRow(r, L, 0, half); d[0x9A + L * 2] = (uint8_t)((d[0x9A + L * 2] + 1) & 0x1F); }
+  for (int L = 0; L < 3; L++) if (d[0x77] & (1 << L)) { bgEdgeCol(r, L, 1, half); d[0x99 + L * 2] = (uint8_t)((d[0x99 + L * 2] - 1) & 0x3F); }
+  for (int L = 0; L < 3; L++) if (d[0x76] & (1 << L)) { bgEdgeCol(r, L, 0, half); d[0x99 + L * 2] = (uint8_t)((d[0x99 + L * 2] + 1) & 0x3F); }
+  CtVmBgAddr7F9A(r);
+}
+
+// The NMI's twelve uploaders, C0/EB91-EC13 -> C0/8445..87BF: a row is up to three DMAs a word apart (VMAIN $80, C0/84A7),
+// a column two DMAs 32 words apart (VMAIN $81, C0/86DD). A column's 32 words are more than its builder wrote (30 or
+// 31): the rest is what the buffer held -- words the port's buffer does not vouch for (the scratch at $7E:C800 is other
+// routines' too), so they go to the image marked as such (g_ctVramMapDma 2: the host does not count them known).
+static void bgNmiRow(const uint8_t* r, const uint8_t* d, int buf, int len, int adr) {
+  int n0 = bgG16(d, len), n1 = bgG16(d, len + 2), n2 = bgG16(d, len + 4);
+  if (n0) bgDma(r, bgG16(d, adr), buf, n0);
+  if (n1) bgDma(r, bgG16(d, adr + 2), buf + n0, n1);
+  if (n2) bgDma(r, bgG16(d, adr + 4), buf + n0 + n1, n2);
+}
+static void bgNmiCol(const uint8_t* r, const uint8_t* d, int buf, int len, int adr, int built) {
+  int n0 = bgG16(d, len), n1 = bgG16(d, len + 2);
+  const uint8_t* o = gBgOut + ((buf - 0xC800) >> 1);
+  for (int i = 0; i < n0 / 2; i++) {
+    g_ctVramMapDma = (i < built && !o[i]) ? 1 : 2;
+    g_ctVramSink(bgG16(d, adr) + i * 32, r + buf + i * 2, 2);
+  }
+  for (int i = 0; i < n1 / 2; i++) {
+    g_ctVramMapDma = (n0 / 2 + i < built && !o[n0 / 2 + i]) ? 1 : 2;
+    g_ctVramSink(bgG16(d, adr + 2) + i * 32, r + buf + n0 + i * 2, 2);
+  }
+  g_ctVramMapDma = 1;
+}
+// ...and the NMI's `EC03 REP #20 / EC05 STZ $78 / EC07 STZ $7A` after them: the four flag bytes are spent, so a later
+// NMI does not send the buffers again (they are other builds' scratch by then: a style's C0/75E9 fills $7E:C800 whole).
+void CtVmBgEdgeNmi(uint8_t* r) {
+  uint8_t* d = r + 0x1D00;
+  if (!g_ctVramSink) { d[0x78] = d[0x79] = d[0x7A] = d[0x7B] = 0; return; }
+  g_ctVramMapDma = 1;
+  static const int rowLen[3] = { 0xDB, 0xE5, 0xEF }, dn[3] = { 0xA5, 0xB9, 0xCD }, up[3] = { 0x9F, 0xB3, 0xC7 };
+  static const int colLen[3] = { 0xE1, 0xEB, 0xF5 }, rt[3] = { 0xAF, 0xC3, 0xD7 }, lf[3] = { 0xAB, 0xBF, 0xD3 };
+  for (int L = 0; L < 3; L++) if (d[0x78] & (1 << L)) bgNmiRow(r, d, 0xC800 + L * 0x800, rowLen[L], dn[L]);   // 8445 84C1 8523
+  for (int L = 0; L < 3; L++) if (d[0x79] & (1 << L)) bgNmiRow(r, d, 0xC800 + L * 0x800, rowLen[L], up[L]);   // 8585 85E7 8649
+  for (int L = 0; L < 3; L++) if (d[0x7A] & (1 << L)) bgNmiCol(r, d, 0xC880 + L * 0x800, colLen[L], rt[L], gBgColWords[L]);   // 86AB 86F7 8729
+  for (int L = 0; L < 3; L++) if (d[0x7B] & (1 << L)) bgNmiCol(r, d, 0xC880 + L * 0x800, colLen[L], lf[L], gBgColWords[L]);   // 875B 878D 87BF
+  g_ctVramMapDma = 0;
+  d[0x78] = d[0x79] = d[0x7A] = d[0x7B] = 0;                          // EC05 STZ $78 / EC07 STZ $7A (16 bits each)
+}
+
+// A layer's whole tilemap into $7E:C800: C0/75E9 (BG1), C0/78EC (BG2), C0/7CB5 (BG3). From the camera, 32 chip rows of
+// 16 metatiles from the window's top-left ($0A, $0E); BG2 in the half-camera mode its own window's rows $16..$18
+// (C0/792F); a layer built from the map ($1D35 bit 1 / 2) rows 0-31 from column 0, then the second half -- columns
+// 32.. when the layer is wider than 16 metatiles (C0/7991 / 7D28), else rows 32-63 when it is taller (C0/79AE / 7D45,
+// which also sets $85 / $86 = 2), else the first half again (C0/7976 / 7D0D). Returns the bytes the entry DMAs.
+int CtVmBgBuildLayer(uint8_t* r, int L) {
+  uint8_t* d = r + 0x1D00;
+  gBgW = r + 0xC800;
+  if (L == 0 || !(d[0x35] & (1 << L))) {
+    if (L == 1 && (r[0x0BC9] & 0x80)) {                               // 792F
+      d[0x58] = d[0x12]; d[0x5A] = d[0x16];
+      for (;;) { d[0x5C] = 0x10; bgRow(r, L); d[0x58] = d[0x12];
+                 int a = (d[0x5A] + 1) & 0xFF; if (a > d[0x18]) break; d[0x5A] = (uint8_t)a; }
+      return 0x800;
+    }
+    d[0x5A] = d[0x0E]; d[0x5E] = 0x20;                                // 75F8 / 7915 / 7CCD
+    do { d[0x58] = d[0x0A]; d[0x5C] = 0x10; bgRow(r, L); d[0x5A]++; } while (--d[0x5E]);
+    return 0x800;
+  }
+  int wide = r[L == 1 ? 0x0BCF : 0x0BD3] != 0x10, tall = r[L == 1 ? 0x0BD1 : 0x0BD5] != 0x10;
+  d[0x58] = 0;                                                       // 794E / 7CE7
+  for (int a = 0;; ) { d[0x5A] = (uint8_t)a; d[0x5C] = 0x10; bgRow(r, L); d[0x58] = 0; a = d[0x5A] + 1; if (a > 0x1F) break; }
+  if (wide) {                                                        // 7991 / 7D28
+    d[0x58] = 0x20;
+    for (int a = 0;; ) { d[0x5A] = (uint8_t)a; d[0x5C] = 0x10; bgRow(r, L); d[0x58] = 0x20; a = d[0x5A] + 1; if (a > 0x1F) break; }
+  } else if (tall) {                                                 // 79AE / 7D45
+    d[0x58] = 0;
+    for (int a = 0x20;; ) { d[0x5A] = (uint8_t)a; d[0x5C] = 0x10; bgRow(r, L); d[0x58] = 0; a = d[0x5A] + 1; if (a > 0x3F) break; }
+    d[L == 1 ? 0x85 : 0x86] = 0x02;
+  } else {                                                           // 7976 / 7D0D
+    d[0x58] = 0;
+    for (int a = 0;; ) { d[0x5A] = (uint8_t)a; d[0x5C] = 0x10; bgRow(r, L); d[0x58] = 0; a = d[0x5A] + 1; if (a > 0x1F) break; }
+  }
+  return 0x1000;
+}
+// C0/7F62 (`$0800` bytes) / C0/7F77 (`$1000`): the layer CtVmBgBuildLayer just built, $7E:C800 on, to the VRAM word
+// `word` -- the entry's fill and the NMI's `$46` arms (a style's tilemap).
+void CtVmBgTilemapDma(const uint8_t* r, int word, int bytes) {
+  if (!g_ctVramSink) return;
+  bgDma(r, word, 0xC800, bytes);
+  g_ctVramMapDma = 0;
+}
+// C0/87F1: the right edge's columns for the layers that follow the camera, and C0/7F9A -- the entry's last step (and
+// op 0xE5's styles'), so the first NMI lays the 33rd column down beside the window.
+void CtVmBgRightCols87F1(uint8_t* r) {
+  uint8_t* d = r + 0x1D00;
+  bgEdgeCol(r, 0, 0, 0);
+  if (!(d[0x35] & 0x02)) bgEdgeCol(r, 1, 0, (r[0x0BC9] & 0x80) != 0);
+  if (!(d[0x35] & 0x04)) bgEdgeCol(r, 2, 0, 0);
+  CtVmBgAddr7F9A(r);
+}
+// C0/0A96-0AF3, the entry: BG1 (one half, C0/7F62), BG2 (both halves when it is built from the map, C0/7F77), BG3 when
+// the room has one and no stage holds it (`$0BCA & 1`, `$01BB == 0`), each into the tilemap its word names
+// ($1D7C / $1D7E / $1D80), then C0/87F1.
+void CtVmBgEntryFill(uint8_t* r) {
+  uint8_t* d = r + 0x1D00;
+  int n = CtVmBgBuildLayer(r, 0);
+  CtVmBgTilemapDma(r, bgG16(d, 0x7C), n);
+  n = CtVmBgBuildLayer(r, 1);
+  CtVmBgTilemapDma(r, bgG16(d, 0x7E), n);
+  if ((r[0x0BCA] & 1) && !r[0x01BB]) {
+    n = CtVmBgBuildLayer(r, 2);
+    CtVmBgTilemapDma(r, bgG16(d, 0x80), n);
+  }
+  CtVmBgRightCols87F1(r);
+}
+
 // 0x29/0x2A/0x2B/0x32/0x2C/0x2F (C0/3E84 / 3ED6 / 3EDE / 3EE2 / 3EE6 / 3F12) -- the staff roll's caption plane.
 int CtVmCaptionFamily(uint8_t* r, const uint8_t* rom, int romLen, const uint8_t* script, int ip, int idx, CtHRet* out) {
   int op = script[ip];

@@ -1180,6 +1180,31 @@ the camera is the NMI's latch -- and a word written in a line's H-blank is the n
 Full tier (~40 s and ~25 s). Two mutations each: the latched table, the word a line late. The playthrough check pins
 the same two lines.
 
+### field-ring-*-vs-cartridge (`tools/field_ring_cmp.py`): camera-columns, half-camera-edge
+
+The field's BG TILEMAPS as the port keeps them, against the cartridge's VRAM, and the picture drawn from them
+(disasm/notes/field_bg_tilemap.md sec. 7). The ROM fills a layer's 64x32 tilemap at the load, rebuilds a half on op
+0xE5's styles and otherwise only edits the row or column the camera crosses -- BG2 and BG3 with the CAMERA's window,
+whatever their own scroll. `tools/field_ring_cmp.py <name>` starts both sides from the cartridge's state at a frame of
+a playthrough leg BEFORE the room's load (the port only knows the words its own uploads wrote; the state is the leg's
+pad played that far on the cartridge, cached in build/_fieldpic with the route's key), goes on with the leg's own pad
+and prints two lines: the known words of each tilemap and how many are not the cartridge's (CT_SHOTS_RING's dump
+against `--peek`'s VRAM), then the picture's distance and the cells the port drew from the tilemap (CT_RINGDBG).
+
+- **camera-columns** (leg 86 f15100 +1400, loc 0A3; 269 px before): op 0xE6 drifts BG1 alone 80 px, op 0xE5 rebuilds
+  BG1 over the mountain's opening, then the three layers go 16 px left -- BG2's columns 62-63 come on at the screen's
+  left holding the camera's chip columns 9 and 8 (the left edge's builder C0/83E5), not the map's wrap. Three
+  mutations: no cell drawn from the tilemap, the left edge reading the window's right column, a style's tilemap never
+  uploaded. ~2 min the first time, ~15 s cached. Re-pin only against the cartridge: a known-word count that moves
+  means an upload was added or lost.
+- **half-camera-edge** (leg 40 +2846 from the leg's own start, loc 0DD; 73 px before, on one frame in every 16): the
+  broad pin -- two loads and the camera streamed every way: BG1 1958 known words, BG2 1505 in the half-camera mode
+  (`$0BC9` bit 7: its own window `$1D12-$1D18`, committers C0/95E3-9683, builders 8285 / 8305 / 8385 / 8405), BG3 2048
+  (built from the map), none different from the cartridge's VRAM, and the frame where 12 cells of BG2's tilemap are
+  not the map's at its scroll is the cartridge's to the pixel. Four mutations: no cell drawn from the tilemap, the
+  half-camera crossing at `$1F` not flagged, BG2's columns started at the camera's row, the room before's words kept
+  known past a load. ~20 s.
+
 ### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3, fixed-colour-over-the-map
 
 A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the

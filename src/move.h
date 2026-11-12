@@ -175,6 +175,18 @@ typedef void (*CtVramSinkFn)(int vramWord, const uint8_t* src, int bytes);
 extern CtVramSinkFn g_ctVramSink;
 int CtVmCaption274D(uint8_t* ram, const uint8_t* rom, int romLen);
 int CtVmCaptionNmi(uint8_t* ram);
+// The field's BG tilemaps in VRAM (move.c, "The field's BG tilemaps in VRAM"): the entry's fill C0/0A96-0AF3, a layer's
+// whole tilemap into $7E:C800 (C0/75E9 / 78EC / 7CB5; returns the bytes its DMA moves), C0/87F1, the commit's tail
+// C0/9420-9448 (the crossings $1D74-$1D77 -> the edge rows and columns, the ring origins, C0/7F9A) and the NMI's twelve
+// uploaders (C0/EB91-EC13). The DMAs go to g_ctVramSink; the WRAM side is the same with or without one.
+void CtVmBgEntryFill(uint8_t* ram);
+int  CtVmBgBuildLayer(uint8_t* ram, int layer);
+void CtVmBgRightCols87F1(uint8_t* ram);
+void CtVmBgAddr7F9A(uint8_t* ram);
+void CtVmBgEdgeStream(uint8_t* ram);
+void CtVmBgEdgeNmi(uint8_t* ram);
+void CtVmBgTilemapDma(const uint8_t* ram, int word, int bytes);
+extern int g_ctVramMapDma;     // 1 while the sink is handed tilemap words built from the WRAM map (not the caption plane's)
 int CtVmPalOp33(uint8_t* ram, const uint8_t* rom, int romLen, const uint8_t* script, int ip, int idx, CtHRet* out);         // 33
 int CtVmRandOp7F(uint8_t* ram, const uint8_t* rom, int romLen, const uint8_t* script, int ip, int idx, CtHRet* out);        // 7F
 int CtVmScrollFamily(uint8_t* ram, const uint8_t* rom, int romLen, const uint8_t* script, int ip, int idx, CtHRet* out);    // E6 F4

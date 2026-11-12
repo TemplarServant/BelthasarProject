@@ -69,6 +69,12 @@ int   CtFieldSceneBg1Size(void* h, int* w, int* hgt);
 // The BG2/BG3 sample offsets relative to BG1, in pixels (returns 1 when they changed, i.e. re-bake).
 // mapBuilt = $1D35 & 6: the layers whose tilemap the load built from the MAP (C0/794E, C0/7CE7) rather than the camera.
 int   CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y, int mapBuilt);
+// The field's VRAM tilemaps against the map: the cells on the screen whose word is not the one the map puts there are
+// drawn from the word (scene.c RingOv; disasm/notes/field_bg_tilemap.md sec. 7). Returns 1 when a re-bake is needed.
+int   CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, const int* base, const int* scr,
+                          int cx, int cy, int on);
+int   CtFieldSceneRingCells(void* h, int* out);
+int   CtFieldSceneRingCell(void* h, int L, int k, int* col, int* row, int* word);
 int   CtFieldSceneSetBg3Rows(void* h, const int16_t* dx, int n, int y0);   // BG3's scroll a line at a time (HDMA channel 3)
 int   CtFieldSceneSetVramLayers(void* h, int layers);                  // layers the bake leaves to the host's VRAM (1 = changed)
 int   CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn);   // TM / TS / the math enables, BL bits

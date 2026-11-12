@@ -239,6 +239,9 @@ static uint8_t* gDrawLvl;
 // A layer whose scroll HDMA gives a line at a time (CtFieldSceneSetBg3Rows): canvas row gDrawRowY0 + r shows the layer
 // gDrawRowDx[r] pixels further along than the layer's own offset, for r < gDrawRowN. NULL = one offset for every row.
 static const int16_t* gDrawRowDx; static int gDrawRowN, gDrawRowY0;
+// The canvas pixels a layer's VRAM tilemap draws instead of its map (CtFieldSceneSetRing): draw_layer leaves them out
+// and draw_ring puts the tilemap's cells there. NULL = none.
+static const uint8_t* gDrawSkip;
 static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* tiles, int lw, int lh,
                        const Meta* metas, int nmeta, const uint8_t* chips, const uint8_t* present,
                        int nchips, uint8_t pal[128][3], int prio, uint8_t bit, uint8_t* priomask,
@@ -292,6 +295,7 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
             int pxx = cx * 16 - fx0 + kox + x - rdx; if (pxx >= W) break;
             if (pxx < 0) continue;
             int idx = py * W + pxx;
+            if (gDrawSkip && gDrawSkip[idx]) continue;   // (the tilemap's cell, not the map's: draw_ring)
             memcpy(px + (size_t)idx * 3, pal[c->base + v], 3);
             cov[idx] = bit;
             if (gDrawLvl) gDrawLvl[idx] = BG_OBJ_LVL(bit, prio);   // (the layer on top so far)
@@ -305,9 +309,61 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
     }
 }
 
+// ---- The picture is the VRAM tilemap's where it is not the map's (disasm/notes/field_bg_tilemap.md sec. 7) ----
+// A field BG is a 64x32 tilemap the ROM fills at the load and then only edits at the edges the camera crosses (C0/93E1 ->
+// the builders C0/8243-8442 -> the NMI's twelve uploaders C0/8445-87EF). BG2 and BG3 take the CAMERA's window in those
+// edits, so a layer a script moved away from the camera gets the camera's columns where its own would be, and what no
+// edit reaches stays as it was. The field hands in the cells of each tilemap that are on the screen and whose word is
+// not the one the map puts there (CtFieldSceneSetRing); those are drawn from the word. Cell i = row * 64 + col; (hx, vy)
+// = the tilemap pixel the screen's first pixel shows (the layer's scroll).
+typedef struct { uint16_t w[64 * 32]; uint8_t on[64 * 32]; int n, hx, vy; } RingOv;
+static void ring_corner(uint16_t v, int bg3, Corner* c) {      // a tilemap word, as parse_metas reads a record's
+  uint16_t chip = v & 0x3FF;
+  if (!bg3) chip = (chip >= 256) ? (uint16_t)(chip - 256) : 0xFFFF;
+  else if (chip == 0) chip = 0xFFFF;
+  c->chip = chip; c->base = (uint8_t)(((v >> 10) & 7) * (bg3 ? 4 : 16));
+  c->fx = (v & 0x4000) ? 1 : 0; c->fy = (v & 0x8000) ? 1 : 0; c->prio = (v & 0x2000) ? 1 : 0;
+}
+// Where cell i stands on the 256x224 screen (its top-left pixel, -7.. when the edge cuts it); 0 = not on it.
+static int ring_cell_screen(const RingOv* o, int i, int* sx, int* sy) {
+  int x = ((i & 63) * 8 - o->hx) & 511, y = ((i >> 6) * 8 - o->vy) & 255;
+  if (x >= 256) x -= 512;
+  if (y >= 224) y -= 256;
+  if (x <= -8 || y <= -8) return 0;
+  *sx = x; *sy = y;
+  return 1;
+}
+// The cells' pixels on a canvas whose pixel (ocx, ocy) is the screen's first (the canvas wraps, as the field reads it).
+static void draw_ring(uint8_t* px, uint8_t* cov, int W, int H, const RingOv* o, int ocx, int ocy, const uint8_t* chips,
+                      const uint8_t* present, int nchips, uint8_t pal[128][3], int prio, uint8_t bit, uint8_t* priomask) {
+  if (!o || !o->n || !chips) return;
+  for (int i = 0; i < 64 * 32; i++) {
+    int sx, sy; Corner c;
+    if (!o->on[i] || !ring_cell_screen(o, i, &sx, &sy)) continue;
+    ring_corner(o->w[i], bit == BL3, &c);
+    if (c.chip >= nchips || !present[c.chip] || (int)c.prio != (prio == 1)) continue;
+    const uint8_t* tile = chips + (size_t)c.chip * 64;
+    for (int y = 0; y < 8; y++) {
+      int qy = sy + y; if (qy < 0 || qy >= 224) continue;
+      int py = ((ocy + qy) % H + H) % H;
+      for (int x = 0; x < 8; x++) {
+        int qx = sx + x; if (qx < 0 || qx >= 256) continue;
+        uint8_t v = tile[(c.fy ? 7 - y : y) * 8 + (c.fx ? 7 - x : x)];
+        if (v == 0) continue;
+        int idx = py * W + ((ocx + qx) % W + W) % W;
+        memcpy(px + (size_t)idx * 3, pal[c.base + v], 3);
+        cov[idx] = bit;
+        if (gDrawLvl) gDrawLvl[idx] = BG_OBJ_LVL(bit, prio);
+        if (prio == 1 && priomask && (bit == BL1 || bit == BL2)) priomask[idx] = 1;
+      }
+    }
+  }
+}
+
 typedef struct { const uint16_t* tiles; int lw, lh; const Meta* metas; int nmeta;
                  const uint8_t* chips; const uint8_t* present; int nchips;
-                 const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held; } LInfo;
+                 const uint8_t* tprio; int tpw, tph; int sox, soy; int mapRing; const uint16_t* held;
+                 const RingOv* ov; const uint8_t* ovMask; int ovCx, ovCy; } LInfo;
 
 // The canvas column a still backdrop's column c shows (CtFieldSceneSetStill): the 256 columns from vw show the view's
 // [vx, vx + 256) -- the same columns when the view is in the picture's middle -- and a column past either edge the one
@@ -339,9 +395,14 @@ static void draw_pass(uint8_t* px, uint8_t* cov, int W, int H, int targets, uint
     if (tp) gDrawLvl = NULL;                           // (the still canvas is not the screen: the copy below marks)
     const int16_t* rows = gDrawRowDx;
     if (order_bit[i] != BL3 || tp) gDrawRowDx = NULL;  // (the rows are BG3's; a still backdrop keeps one offset)
+    const uint8_t* skip = (!tp && L->ov && L->ov->n) ? L->ovMask : NULL;   // (a still backdrop, a mod: the map's)
+    gDrawSkip = skip;
     draw_layer(tp ? tp : px, tp ? tc : cov, W, H, L->tiles, L->lw, L->lh, L->metas, L->nmeta,
                L->chips, L->present, L->nchips, pal, order_prio[i], (uint8_t)order_bit[i], tp ? tm : priomask,
                L->tprio, L->tpw, L->tph, L->sox, L->soy, L->mapRing, L->held);
+    gDrawSkip = NULL;
+    if (skip) draw_ring(px, cov, W, H, L->ov, L->ovCx, L->ovCy, L->chips, L->present, L->nchips, pal, order_prio[i],
+                        (uint8_t)order_bit[i], priomask);
     gDrawLvl = lvl;
     gDrawRowDx = rows;
     if (!tp) continue;
@@ -407,6 +468,9 @@ typedef struct {
   // The chips the VRAM still holds from an earlier upload (CtFieldScenePicHold): per layer, (2 w) x (2 h) chips, the
   // metatile id whose corner that chip shows, 0xFFFF = the layer's own cell (l1t..). NULL until a chip is held.
   uint16_t* held[3]; int heldN[3];
+  // The tilemap cells on the screen that are not the map's (CtFieldSceneSetRing), the canvas pixel the screen's first
+  // one is, and per layer the canvas pixels those cells cover (rovW x rovH, the bake's canvas).
+  RingOv rov[3]; int rovCx, rovCy; uint8_t* rovMask[3]; int rovW, rovH;
 } SceneData;
 
 static void CtFreeSceneData(SceneData* sd) {
@@ -414,6 +478,7 @@ static void CtFreeSceneData(SceneData* sd) {
   free(sd->chips3); free(sd->pres3); free(sd->meta3);
   free(sd->l1t); free(sd->l2t); free(sd->l3t); free(sd->tprio);
   for (int i = 0; i < 3; i++) { free(sd->held[i]); sd->held[i] = NULL; sd->heldN[i] = 0; }
+  for (int i = 0; i < 3; i++) { free(sd->rovMask[i]); sd->rovMask[i] = NULL; sd->rov[i].n = 0; }
   free(sd->animChips); free(sd->chipAnimDesc); free(sd->palAnimDesc); free(sd->prevChips); free(sd->bakeCov); free(sd->bakeMotCov); free(sd->bakeMain); free(sd->bakeMainLvl); free(sd->bakeSubLvl); free(sd->bakeSub); free(sd->bakeSubCov);
   for (int i = 0; i < 6; i++) { free(sd->layRgb[i]); free(sd->layCov[i]); sd->layRgb[i] = sd->layCov[i] = NULL; }
 }
@@ -578,6 +643,11 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   LInfo li1 = { sd->l1t, sd->w1, sd->h1, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, 0, 0, 0, sd->held[0] };
   LInfo li2 = { sd->l2t, sd->w2, sd->h2, sd->meta12, 512, sd->chips12, sd->pres12, 768, NULL, 1, 1, sd->l2ox, sd->l2oy, (sd->mapBuilt & 0x02) != 0, sd->held[1] };
   LInfo li3 = { sd->l3t, sd->w3, sd->h3, sd->meta3, 256, sd->chips3, sd->pres3, sd->nchips3, NULL, 1, 1, sd->l3ox, sd->l3oy, (sd->mapBuilt & 0x04) != 0, sd->held[2] };
+  { LInfo* lis[3] = { &li1, &li2, &li3 };                 // the tilemap's own cells (CtFieldSceneSetRing)
+    for (int L = 0; L < 3; L++)
+      if (sd->rov[L].n && sd->rovMask[L] && sd->rovW == CW * 16 && sd->rovH == CH * 16) {
+        lis[L]->ov = &sd->rov[L]; lis[L]->ovMask = sd->rovMask[L]; lis[L]->ovCx = sd->rovCx; lis[L]->ovCy = sd->rovCy;
+      } }
   // The priority mask follows layer order, not the main screen: the SNES priority ladder (OBJ prio 3 > BG1.1 >
   // BG2.1 > OBJ prio 2 > ...) does not depend on TM/TS, so both passes feed it (a scene may put BG1/BG2 on the sub
   // screen alone; disasm/notes/field_sprite_prio_and_player_gate.md).
@@ -1128,6 +1198,112 @@ int CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn) {
   if (subT) *subT = sd->scrOn ? sd->scrTS : (sd->screen_flags >> 4) & 0x07;
   if (mathEn) *mathEn = sd->scrOn ? (sd->scrCGADSUB & 0x07) : (sd->effect_flags & 0x07);
   return 1;
+}
+// The field's VRAM tilemaps against the map (RingOv, above). `vram` = the VRAM image's words, `known[a - $6000]` set
+// for each word of $6000-$77FF the port's own uploads wrote (the others are not known and stay the map's), base[L] = the
+// layer's tilemap word ($1D7C / $1D7E / $1D80; 64x32, the second 32 columns at +$400), scr[L * 2] / [L * 2 + 1] = the
+// tilemap pixel the screen's first pixel shows, (cx, cy) = the canvas pixel it is. Call after the layer offsets of the
+// frame are set. on = 0: none (another program's picture, a mod's wider one). Returns 1 when the cells or where they
+// stand changed (re-bake).
+int CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, const int* base, const int* scr,
+                        int cx, int cy, int on) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  int CW = sd->w1 > sd->w2 ? sd->w1 : sd->w2; if (sd->has_l3 && sd->w3 > CW) CW = sd->w3;
+  int CH = sd->h1 > sd->h2 ? sd->h1 : sd->h2; if (sd->has_l3 && sd->h3 > CH) CH = sd->h3;
+  int W = CW * 16, H = CH * 16, changed = 0, any = 0;
+  static RingOv nv;                                       // (18 KB: not the stack's)
+  for (int L = 0; L < 3; L++) {
+    memset(&nv, 0, sizeof nv);
+    const uint16_t* t = L == 0 ? sd->l1t : L == 1 ? sd->l2t : sd->l3t;
+    int lw = L == 0 ? sd->w1 : L == 1 ? sd->w2 : sd->w3, lh = L == 0 ? sd->h1 : L == 1 ? sd->h2 : sd->h3;
+    const Meta* metas = L == 2 ? sd->meta3 : sd->meta12;
+    const uint8_t* present = L == 2 ? sd->pres3 : sd->pres12;
+    int nmeta = L == 2 ? 256 : 512, nchips = L == 2 ? sd->nchips3 : 768;
+    int ok = on && vram && known && base && scr && t && metas && present && lw > 0 && lh > 0 && W > 0 && H > 0;
+    // BG3 from the VRAM image whole (the caption plane) or scrolled a line at a time is the host's own drawing
+    if (L == 2 && (!sd->has_l3 || (sd->vramOff & BL3) || sd->l3RowN)) ok = 0;
+    if (ok) {
+      int mapRing = L == 1 ? (sd->mapBuilt & 0x02) != 0 : L == 2 ? (sd->mapBuilt & 0x04) != 0 : 0;
+      int sox = L == 1 ? sd->l2ox : L == 2 ? sd->l3ox : 0, soy = L == 1 ? sd->l2oy : L == 2 ? sd->l3oy : 0;
+      int LW = lw * 16, LH = lh * 16;
+      if (mapRing) { LW = (lw != 16 || lh != 16) ? 512 : 256; LH = 256; }
+      nv.hx = scr[L * 2]; nv.vy = scr[L * 2 + 1];
+      for (int i = 0; i < 64 * 32; i++) {
+        int sx, sy, col = i & 63, row = i >> 6;
+        if (!ring_cell_screen(&nv, i, &sx, &sy)) continue;
+        int a = base[L] + ((col & 32) ? 0x400 : 0) + row * 32 + (col & 31);
+        if (a < 0x6000 || a >= 0x7800 || !known[a - 0x6000]) continue;
+        // the corner the map draws on the cell's first pixel on the screen (draw_layer's law)
+        int qx = sx < 0 ? 0 : sx, qy = sy < 0 ? 0 : sy;
+        int px = ((cx + qx) % W + W) % W, py = ((cy + qy) % H + H) % H;
+        int lx = ((px + sox) % LW + LW) % LW, ly = ((py + soy) % LH + LH) % LH;
+        int k = ((ly % 16) / 8) * 2 + (lx % 16) / 8, mr, mc;
+        if (!mapRing) { mr = (ly / 16) % lh; mc = (lx / 16) % lw; }
+        else {
+          int rx = (lx / 16) % 32, ry = (ly / 16) % 16;
+          if (lw != 16)      { mr = ry; mc = rx; }
+          else if (lh != 16) { mr = ry + (rx >= 16 ? 16 : 0); mc = rx % 16; }
+          else               { mr = ry; mc = rx % 16; }
+        }
+        int ti = t[mr * lw + mc];
+        if (sd->held[L]) { uint16_t hv = sd->held[L][(mr * 2 + k / 2) * (lw * 2) + mc * 2 + (k & 1)]; if (hv != 0xFFFF) ti = hv; }
+        const Corner* e = ti < nmeta ? &metas[ti].c[k] : NULL;
+        int eNone = !e || e->chip >= nchips || !present[e->chip];
+        Corner r; ring_corner(vram[a], L == 2, &r);
+        int rNone = r.chip >= nchips || !present[r.chip];
+        if (eNone && rNone) continue;
+        if (!eNone && !rNone && e->chip == r.chip && e->base == r.base && e->fx == r.fx && e->fy == r.fy &&
+            e->prio == r.prio) continue;
+        nv.on[i] = 1; nv.w[i] = vram[a]; nv.n++;
+      }
+    }
+    RingOv* cur = &sd->rov[L];
+    if (nv.n != cur->n) changed = 1;
+    else if (nv.n && (nv.hx != cur->hx || nv.vy != cur->vy || memcmp(nv.on, cur->on, sizeof nv.on) ||
+                      memcmp(nv.w, cur->w, sizeof nv.w))) changed = 1;
+    if (nv.n || cur->n) *cur = nv;
+    if (nv.n) any = 1;
+  }
+  if (any && (cx != sd->rovCx || cy != sd->rovCy || W != sd->rovW || H != sd->rovH)) changed = 1;
+  sd->rovCx = cx; sd->rovCy = cy;
+  if (!changed) return 0;
+  if (sd->rovW != W || sd->rovH != H)                     // (a mask of another canvas is no mask)
+    for (int L = 0; L < 3; L++) { free(sd->rovMask[L]); sd->rovMask[L] = NULL; }
+  sd->rovW = W; sd->rovH = H;
+  for (int L = 0; L < 3; L++) {                           // the canvas pixels the cells cover (the screen's only)
+    const RingOv* o = &sd->rov[L];
+    if (!o->n) continue;
+    if (!sd->rovMask[L] && !(sd->rovMask[L] = (uint8_t*)malloc((size_t)W * H))) { sd->rov[L].n = 0; continue; }
+    memset(sd->rovMask[L], 0, (size_t)W * H);
+    for (int i = 0; i < 64 * 32; i++) {
+      int sx, sy;
+      if (!o->on[i] || !ring_cell_screen(o, i, &sx, &sy)) continue;
+      for (int y = 0; y < 8; y++) {
+        int qy = sy + y; if (qy < 0 || qy >= 224) continue;
+        int py = ((cy + qy) % H + H) % H;
+        for (int x = 0; x < 8; x++) {
+          int qx = sx + x; if (qx < 0 || qx >= 256) continue;
+          sd->rovMask[L][(size_t)py * W + ((cx + qx) % W + W) % W] = 1;
+        }
+      }
+    }
+  }
+  return 1;
+}
+// The number of such cells per layer (out[3], may be NULL); returns their sum.
+int CtFieldSceneRingCells(void* h, int* out) {
+  SceneData* sd = (SceneData*)h;
+  if (out) for (int L = 0; L < 3; L++) out[L] = sd ? sd->rov[L].n : 0;
+  return sd ? sd->rov[0].n + sd->rov[1].n + sd->rov[2].n : 0;
+}
+// ...and cell number `k` of layer L in tilemap order (CT_RINGDBG=2): its column, row and word; 0 past the last.
+int CtFieldSceneRingCell(void* h, int L, int k, int* col, int* row, int* word) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || L < 0 || L > 2) return 0;
+  for (int i = 0; i < 64 * 32; i++)
+    if (sd->rov[L].on[i] && k-- == 0) { *col = i & 63; *row = i >> 6; *word = sd->rov[L].w[i]; return 1; }
+  return 0;
 }
 // BG2/BG3 sample offsets relative to BG1, in pixels. Returns 1 when they changed (re-bake needed).
 int CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3y, int mapBuilt) {

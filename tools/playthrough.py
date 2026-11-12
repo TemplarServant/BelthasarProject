@@ -401,6 +401,7 @@ def wram_of(state):
 
 
 SHOTS = range(-6, 7)            # the port's frames shot around the leg's end: the picture's offset is reported, not assumed
+PORT_STDOUT = ''                # the port's whole stdout of the last port_timeline (a tool's own debug lines, e.g. `ringov:`)
 
 
 def port_timeline(start, pad):
@@ -421,6 +422,8 @@ def port_timeline(start, pad):
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')
+    global PORT_STDOUT
+    PORT_STDOUT = r.stdout or ''
     pics = {}
     for f in at:
         fn = os.path.join(TMP, 'p_f%d.raw' % f)

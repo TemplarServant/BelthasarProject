@@ -520,6 +520,7 @@ static void worldPalRefresh(World* w, int from, int to) {
 static CtWram* fieldWram(void);          // the process-lifetime $7E (defined beside fieldFree)
 static void fieldSoundFlush(uint8_t* mem7E);   // the `JSL $C7:0004` a stager performs itself (see below)
 
+static void fieldRingDump(const char* pre, int frameNo);   // (CT_SHOTS_RING; defined with the VRAM image)
 // CT_SHOTS=<prefix> with CT_SHOTS_AT=<f1,f2,...> and/or CT_SHOTS_EVERY=<n>: dump the presented frame, whatever mode
 // drew it, to <prefix>_f<frameNo>.raw (tools/ctlib/fb.py's format). CT_SHOTS_LUMA=1 prints each frame's mean RGB byte;
 // CT_SHOTS_EXIT=1 ends the run after the last CT_SHOTS_AT frame. Called at every SDL present site; docs/DEBUG_SURFACE.md.
@@ -640,6 +641,8 @@ static void presentShot(const uint8_t* fb, int w, int h, int frameNo, int loc, c
   FILE* of = fopen(path, "wb");
   if (of) { uint32_t wh[2] = { (uint32_t)w, (uint32_t)h };
             fwrite(wh, 4, 2, of); fwrite(fb, (size_t)w * h * 3, 1, of); fclose(of); }
+  if (getenv("CT_SHOTS_RING")) fieldRingDump(pre, frameNo);   // <prefix>_f<n>.ring: the field's three tilemaps as this
+                                                              //   image holds them ($6000-$77FF, words) + a byte a word: known
   if (getenv("CT_SHOTS_PAL")) {
     const uint8_t* wr = CtWramSys(fieldWram());
     snprintf(path, sizeof path, "%s_f%d.pal", pre, frameNo);
@@ -5471,12 +5474,64 @@ static int seqOpeningHold(long oc, long os) {
 // picture is ported get it.
 static CtSeqStagePic g_stagePic;
 static uint16_t g_fieldVram[0x8000];
+// The three field tilemaps of that image ($6000-$77FF, 64x32 each) word by word: 1 = the word is one the field's own
+// writers put there and this image saw (the entry's fill, the edge streamer: fieldVramSink) -- the cartridge's VRAM
+// holds the same; 0 = not known (a seeded start, whatever a fight, a menu, the overworld or a stage left there).
+// Only known words are drawn in place of the map's (fieldRingOverrides).
+static uint8_t g_ringKnown[0x1800];
+static void fieldRingForget(void) { memset(g_ringKnown, 0, sizeof g_ringKnown); }
+// A door / chest handler writes its block to VRAM itself (C0/0D78..1454, C0/1705), words the port's image does not
+// take: BG1's cells of those metatiles are no longer known (the picture there is the map's). A chip stands at the
+// tilemap's origin ($1D99 / $1D9A) plus its distance from the window's first ($1D0A / $1D0E), C0/7F9A.
+static void fieldVramSink(int word, const uint8_t* src, int bytes);
+// The chest handler's own half, C0/16F0-176F, and the IRQ arm it requests (`$015F` bit 1, C0/EFD6-F05D):
+//   16F0 LDA $7E3000,X / CMP #FE / BEQ / INC $61 / CMP #E0 / BEQ   ; the lid's family: $0161 = 0 ($FE) or 1 ($E0)
+//   1700 INC A / STA $7E3000,X                                     ; the WRAM map's cell is the open lid's
+//   1705-1767 four tilemap words into $09B2 / $09B4 / $09B6 / $09B8: the cell at column (2 x col - $1D0A + $1D99) & 3F,
+//        row (2 x row - $1D0E + $1D9A) & 1F (C0/1B36: row x 32 + column, + $400 from column 32, + $1D7C), then the one
+//        to its right, the one below, and the one below right; 176C `LDA #02 / TSB $5F`
+//   EFD6 LDA $61 / BNE ->F01C: the four words of $7E:BFF8 (metatile $1FF) or $7E:BF08 ($1E1) to those addresses.
+// The WRAM cell matters to the edge streamer, which builds from $7E:3000: with the cell left closed a row or column
+// streamed over the chest laid the closed lid back into the tilemap (MEASURED: loc 048, playthrough leg 33 f1239 --
+// 118 px, the cartridge shows the open one).
+static void fieldChestVram(uint8_t* w7, int ci) {
+  int v = w7[0x3000 + (ci & 0xFFFF)], fam = v == 0xE0;
+  if (v != 0xFE && v != 0xE0) return;
+  w7[0x3000 + (ci & 0xFFFF)] = (uint8_t)(v + 1);
+  int Y = ((ci & 0xFF) * 2 - w7[0x1D0A] + w7[0x1D99]) & 0x3F, X = (((ci >> 8) & 0xFF) * 2 - w7[0x1D0E] + w7[0x1D9A]) & 0x1F;
+  int base = w7[0x1D7C] | (w7[0x1D7D] << 8), rec = fam ? 0xBF08 : 0xBFF8;
+  g_ctVramMapDma = 1;
+  for (int k = 0; k < 4; k++) {
+    int y = (Y + (k & 1)) & 0x3F, x = (X + (k >> 1)) & 0x1F;
+    fieldVramSink(base + x * 32 + (y < 0x20 ? y : y - 0x20 + 0x400), w7 + rec + k * 2, 2);
+  }
+  g_ctVramMapDma = 0;
+}
+static void fieldRingForgetRect(const uint8_t* pg, int x0, int y0, int x1, int y1) {
+  int base = pg[0x1D7C] | (pg[0x1D7D] << 8);
+  for (int y = y0; y <= y1; y++)
+    for (int x = x0; x <= x1; x++)
+      for (int k = 0; k < 4; k++) {
+        int col = (pg[0x1D99] + x * 2 + (k & 1) - pg[0x1D0A]) & 63, row = (pg[0x1D9A] + y * 2 + k / 2 - pg[0x1D0E]) & 31;
+        int a = base + ((col & 32) ? 0x400 : 0) + row * 32 + (col & 31);
+        if (a >= 0x6000 && a < 0x7800) g_ringKnown[a - 0x6000] = 0;
+      }
+}
+static void fieldRingDump(const char* pre, int frameNo) {
+  char path[512]; snprintf(path, sizeof path, "%s_f%d.ring", pre, frameNo);
+  FILE* rf = fopen(path, "wb");
+  if (!rf) return;
+  for (int i = 0; i < 0x1800; i++) { uint8_t b[2] = { (uint8_t)g_fieldVram[0x6000 + i], (uint8_t)(g_fieldVram[0x6000 + i] >> 8) }; fwrite(b, 1, 2, rf); }
+  fwrite(g_ringKnown, 1, sizeof g_ringKnown, rf);
+  fclose(rf);
+}
 // The gate warp's own machine (seq_gwarp.c): its program's state, the WRAM it runs over (the field's, copied at the jump
 // and handed back at its `JML $C0:0000`) and its last picture (the frame of the JML draws none).
 static CtGwarp g_gwarp;
 static uint8_t g_gwWram[0x20000];
 static uint8_t g_gwPic[CAMW * CAMH * 3];
 static void stagePicOpen(void) {
+  fieldRingForget();                                     // (a stage writes VRAM of its own)
   memset(&g_stagePic, 0, sizeof g_stagePic); CtSeqPicReset(&g_stagePic.p);
   memcpy(g_stagePic.p.vram, g_fieldVram, sizeof g_stagePic.p.vram);
   if (getenv("CT_STAGEPIC_TRACE")) { long n = 0; for (int i = 0; i < 0x8000; i++) n += g_fieldVram[i] != 0;
@@ -5571,11 +5626,16 @@ static uint8_t g_fieldCgram[0x200];   // (defined below with its story: what C0/
 static int g_bg3Plane = 0;
 static void fieldVramSink(int word, const uint8_t* src, int bytes) {
   if (getenv("CT_CAPTIONTRACE")) printf("caption: f%d DMA VRAM $%04X <- %d bytes\n", g_sndTraceFrame, word & 0xFFFF, bytes);
-  for (int i = 0; i < bytes / 2; i++) g_fieldVram[(word + i) & 0x7FFF] = (uint16_t)(src[2 * i] | (src[2 * i + 1] << 8));
+  for (int i = 0; i < bytes / 2; i++) {
+    int a = (word + i) & 0x7FFF;
+    g_fieldVram[a] = (uint16_t)(src[2 * i] | (src[2 * i + 1] << 8));
+    if (a >= 0x6000 && a < 0x7800) g_ringKnown[a - 0x6000] = (uint8_t)(g_ctVramMapDma != 2);   // (2: a column's leftover words)
+  }
   const uint8_t* s = CtWramSys(fieldWram());
   int map3 = s ? ((s[0x1D80] | (s[0x1D81] << 8)) & 0x7C00) : 0x7000;   // BG3's tilemap: $1D80 (C0/0A7F `LDX #7000`)
   int lo = word & 0x7FFF, hi = lo + bytes / 2;
-  if (lo < map3 + 0x800 && hi > map3) g_bg3Plane = 1;                   // two 32x32 halves (BG3SC size 1 or 2)
+  if (!g_ctVramMapDma && lo < map3 + 0x800 && hi > map3) g_bg3Plane = 1;   // two 32x32 halves (BG3SC size 1 or 2): words
+                                                                         //   that are not the map's (the streamer's are)
 }
 // One screen row of BG3 from the VRAM image, priority `pr` (0 / 1), into `fb` row y at BG3 line `line` and scroll `hofs`:
 // BG3SC = channel 0's byte $7F:14F2 (FD/C124: $1D81 | $1D86), 2bpp characters at $5000 (FD/C0E8 `LDA #05 / STA $210C`), the colours
@@ -5835,6 +5895,7 @@ static int fieldTileCopyDrain(Field* f, const uint8_t* pg, int frameNo, int hold
 static void fieldMapFromWram(Field* f, const uint8_t* sw, const char* tag) {
   if (!f->sd || !sw) return;
   for (int L = 0; L < 3; L++) CtFieldScenePicRelease(f->sd, L, NULL, 0, 0);   // (the picture is the WRAM's again)
+  fieldRingForget();                                     // (...and the tilemaps this WRAM's console held are not the image's)
   int md = CtFieldSceneMapFromWram(f->sd, sw), td = fieldTileAnimSeedShown(f->sd, sw);
   memcpy(g_fieldCgram, sw + 0x2200, sizeof g_fieldCgram);   // (a seed's CGRAM is not in the image: its page)
   int cd = CtFieldSceneSetCgram(f->sd, g_fieldCgram);
@@ -6022,7 +6083,15 @@ static void fieldEntryTilemapFill(Field* f, int scene) {
     w7[0x1D80] = 0x00; w7[0x1D81] = 0x70;                  // 0A7F LDX #7000 / STX $1D80   BG3
     w7[0x1D82] = 0x00; w7[0x1D83] = 0x78;                  // 0A85 LDX #7800 / STX $1D82   the back buffer (style 3)
     w7[0x1D84] = w7[0x1D85] = w7[0x1D86] = 0x01;           // 0A8B-0A93 LDA #01: 64x32 each
-    CtFieldSceneVramTilemaps(f->sd, g_fieldVram, s7 + 0xB000, s7 + 0xC000, s7[0x1D35], (s7[0x0BCA] & 1) && !s7[0x01BB]);
+    // C0/0A96-0AF3, the ROM's own fill from the WRAM map (move.c CtVmBgEntryFill): each layer's 32x32 window at the
+    // camera -- both halves for a layer built from the map -- DMA'd through fieldVramSink, then C0/87F1's right columns.
+    // (Its scratch -- $7E:C800.., the builders' direct page -- is the VM's WRAM, as on the cartridge.)
+    // C0/74C7-74D1, the tail of the entry's C0/74A6 (after the camera's window): `REP #20 / STZ $99 / STZ $9B / STZ $9D /
+    // SEP #20 / BRL 7F9A` -- each tilemap's origin back at column 0, row 0 (87F1's 7F9A below names the addresses).
+    w7[0x1D99] = w7[0x1D9A] = w7[0x1D9B] = w7[0x1D9C] = w7[0x1D9D] = w7[0x1D9E] = 0;
+    fieldRingForget();                                     // (whatever ran since the last fill -- the overworld, a menu, a
+    CtVmBgEntryFill(w7);                                   //  fight's effects -- left its own words past this fill's halves)
+    CtVmBgEdgeNmi(w7);                                     // the first NMI after it: C0/87F1's right columns ($1D7A), the flags spent
     if ((s7[0x0BCA] & 1) && !s7[0x01BB]) g_bg3Plane = 0;    // C0/0AD8-0AF0: BG3's tilemap is the map's again (7F62 rewrites
                                                             //   only $7000 when $1D35 bit 2 is clear; the plane is one flag)
     if (s7[0x0BE9]) w7[0x1D86] = s7[0x0BE9];                // 0AF6 LDA $0BE9 / BEQ / STA $1D86: op 0x29's 1 (64x32) or 2 (32x64)
@@ -6063,6 +6132,7 @@ static void fieldSeedVramTilemaps(Field* f) {
   if (!g_fieldVramFillPending || !f->sd || !f->vm) return;
   const uint8_t* s7 = CtSceneMem7E(f->vm);
   CtFieldSceneVramTilemaps(f->sd, g_fieldVram, s7 + 0xB000, s7 + 0xC000, s7[0x1D35], (s7[0x0BCA] & 1) && !s7[0x01BB]);
+  fieldRingForget();                                     // (the seed carries no VRAM: what the tilemaps hold is not known)
   g_fieldVramFillPending = 0;
 }
 static long g_battleSndFrames = 0;   // NMIs the chain's JSLs crossed, summed by the caller's bracket (the boot's / the return's price)
@@ -11667,7 +11737,7 @@ int main(int argc, char** argv) {
       CtWorldTilemapBuild(&wd.stm, wd.wram, &wd.cam);
       wd.entryLatch = (uint16_t)(hw[0x1B32] | (hw[0x1B33] << 8));
       { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
-      g_owNoMarker = 0; inWorld = 1; worldTick = 0; fade = 0; fadeBri = 15; pendKind = 0;
+      g_owNoMarker = 0; inWorld = 1; worldTick = 0; fieldRingForget(); fade = 0; fadeBri = 15; pendKind = 0;
       fprintf(stderr, "[loadwram] a world capture: world %d entered at its own (%d,%d), camera (%d,%d)\n",
               wl - 0x1F0, wpx, wpy, wd.cam.bg1h, wd.cam.bg1v);
     }
@@ -12108,7 +12178,7 @@ int main(int argc, char** argv) {
           g_owNoMarker = ngIntro ? 1 : 0;              // era-OBJ suppression tracks cutscene mode ($027C=0):
           // 1 = the intro pan + its post-pan fade-out (non-interactive); 0 = an interactive overworld entry
           // (a normal door/world-exit), where the "1000 A.D." placard is allowed once the player idles >=84.
-          inWorld = 1; worldTick = 0;
+          inWorld = 1; worldTick = 0; fieldRingForget();
           if (worldTest) { wtStage = (wtStage == 2) ? 3 : 1;
             printf("worldtest: on the OVERWORLD at (%d,%d), stage %d\n", pendWX, pendWY, wtStage); }
         }
@@ -17105,6 +17175,8 @@ int main(int argc, char** argv) {
         // the bumped cells from it (rows r-2..r and columns c-1..c+1 cover all five handlers). This also covers a door a
         // script drew into the WRAM map (e.g. the Manoria cathedral's after the organ), which the render's copy lacks.
         int opened = CtWramDoorOpen(fieldWram(), di);                    // 0D4C LDX $5B
+        if (opened) fieldRingForgetRect(CtSceneMem7E(f.vm), (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2, (di & 0xFF) + 1,
+                                        (di >> 8) & 0xFF);
         if (opened && CtFieldScenePicReleaseRect(f.sd, 0, (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2, (di & 0xFF) + 1,
                                                  (di >> 8) & 0xFF)) dirty = 1;   // (the handler writes its block to VRAM)
         if (opened && CtFieldSceneMapFromWramRect(f.sd, CtSceneMem7E(f.vm), (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2,
@@ -17126,6 +17198,7 @@ int main(int argc, char** argv) {
         const uint8_t* cw7 = CtSceneMem7E(f.vm);
         int ci = cw7 ? cw7[0x015D] | (cw7[0x015E] << 8) : 0;
         if (CtFieldSceneChestOpen(f.sd, ci & 0xFF, (ci >> 8) & 0xFF)) {          // 16EE LDX $5D
+          fieldChestVram((uint8_t*)cw7, ci);                 // 1700-176F, and the IRQ's C0/EFD6: the WRAM cell and its four words
           CtFieldScenePicReleaseRect(f.sd, 0, ci & 0xFF, (ci >> 8) & 0xFF, ci & 0xFF, (ci >> 8) & 0xFF);   // 1705 (VRAM too)
           dirty = 1;
         }
@@ -18412,6 +18485,34 @@ int main(int argc, char** argv) {
       g_wideStill = fieldWideStillBits(pg); g_wideStillVx = camx; g_wideStillVw = camx - vx + (pw - CAMW) / 2;
     }
     if (f.sd) bgDirty |= CtFieldSceneSetStill(f.sd, g_wideStill, g_wideStillVx, g_wideStillVw);
+    // The tilemaps' own cells (scene.c RingOv): each layer's scroll is its counter ($1D87.. / $1D8B.. / $1D8F..) as the
+    // picture shows it -- the camera's lag behind the HDMA set and the +1 line above, the same for the three -- and the
+    // canvas pixel under the screen's first is the camera. The field's picture only, 256 wide (the widescreen, a mod,
+    // draws the map past the tilemap's 256 columns and keeps the map in the middle too).
+    if (f.sd) {
+      int ringOn = f.vm && !inWorld && (!menuPhase || fieldResume) && !gameOver && wideW <= CAMW;
+      if (inWorld || (menuPhase && !fieldResume)) fieldRingForget();   // (another program's VRAM)
+      int rb[3] = { 0x6000, 0x6800, 0x7000 }, rs[6] = { 0, 0, 0, 0, 0, 0 };
+      if (ringOn) {
+        const uint8_t* pg = CtSceneMem7E(f.vm);
+        if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
+        for (int L = 0; L < 3; L++) {
+          rb[L] = pg[0x1D7C + L * 2] | (pg[0x1D7D + L * 2] << 8);
+          rs[L * 2] = (int16_t)(pg[0x1D87 + L * 4] | (pg[0x1D88 + L * 4] << 8)) - sprDX;
+          rs[L * 2 + 1] = (int16_t)(pg[0x1D89 + L * 4] | (pg[0x1D8A + L * 4] << 8)) - sprDY + 1 - fillHold;
+        }
+      }
+      if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn)) {
+        bgDirty = 1;
+        if (getenv("CT_RINGDBG")) { int rn[3]; CtFieldSceneRingCells(f.sd, rn);
+          printf("ringov: f%d cells BG1 %d BG2 %d BG3 %d scroll %d,%d %d,%d %d,%d cam %d,%d\n", frameNo, rn[0], rn[1], rn[2],
+                 rs[0], rs[1], rs[2], rs[3], rs[4], rs[5], camx, camy);
+          if (atoi(getenv("CT_RINGDBG")) >= 2)                       // ...and the first cells of each layer: col,row=word
+            for (int L = 0; L < 3; L++) { int c, r, wv;
+              for (int k = 0; k < 8 && CtFieldSceneRingCell(f.sd, L, k, &c, &r, &wv); k++)
+                printf("%sBG%d %d,%d=%04X%s", k ? " " : "ringov:   ", L + 1, c, r, wv, (k == 7 || k == rn[L] - 1) ? "\n" : ""); } }
+      }
+    }
     if (f.sd && bgDirty) {
       int nw = 0, nh = 0; uint8_t* nprio = NULL;
       uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
@@ -19158,7 +19259,8 @@ int main(int argc, char** argv) {
     // wave, g_bg3RowOn) nor a sprite mixed in as a BG pixel's sub pixel (g_objSubMixed): such a frame's in-betweens
     // are the reprojection's (CtMotRaster), from the frame's own picture.
     { static CtSceneLayers motLayers[2]; static CtFieldNativeFx motFx[2];
-      if (mot->valid && !g_bg3RowOn && !g_objSubMixed && !g_colFixMap && (hostInterp(pr) || getenv("CT_NATIVECHECK")) &&
+      if (mot->valid && !g_bg3RowOn && !g_objSubMixed && !g_colFixMap && !CtFieldSceneRingCells(f.sd, NULL) &&
+          (hostInterp(pr) || getenv("CT_NATIVECHECK")) &&
           CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;
@@ -19905,6 +20007,7 @@ int main(int argc, char** argv) {
       // text tilemap under 06B's second BG1 half), so a stage that drew takes its image back to the field's.
       if (raceOn || (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(w[0x0384])))
         memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
+      fieldRingForget();                                             // (a stage's VRAM is not the field's tilemaps)
       printf("sequence: entry %d (native) ended after %d frames from C3:0000\n", w[0x0384] & 0x1F, frameNo - seqOpenFrame + 1);
       printf("sequence: the %s ended (%s) -> reboot into loc %03X\n", raceOn ? "race" : endOn == 2 ? "panorama" : endOn == 3 ? "fall"
              : endOn == 5 ? "Epoch's dive" : "ending", st == 2 ? "soft reset" : "$7E:0000=1", w[0x0100] | (w[0x0101] << 8));
@@ -19916,7 +20019,7 @@ int main(int argc, char** argv) {
     if (gwN && gwNState != 0) {
       uint8_t* w = CtWramSys(fieldWram());
       memcpy(w, g_gwWram, 0x20000);                                  // the program's WRAM: the flags FD/EAB7 restored, $0100 staged
-      memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
+      memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram); fieldRingForget();
       printf("gatewarp: op-0xFF %02X ran %d frames -> JML C0:0000\n", gwOp, gwN->frames);
       gwN = NULL; gwNState = 0;
       CtSceneGateWarpDone(f.vm); gwPhase = 0;

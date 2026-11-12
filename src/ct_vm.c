@@ -4335,6 +4335,7 @@ static void camCommit93E1(uint8_t* s) {
   //   926E $3D = $2E + $37 + $3D + $26 + $4E ; 927E $3E = $30 + $38 + $3E + $27 + $4F
   //   928E LDA $36 / BIT #04 ... the same for BG3 into $3F/$40 from $39/$3A and $28/$29
   // Every add is an 8-bit `CLC / ADC`, so the sum wraps (the uint8_t cast).
+  uint8_t bgF[4] = { 0, 0, 0, 0 };                     // BG2's and BG3's crossings: $74 (down), $75 (up), $76 (right), $77 (left)
   { int det2 = s[0x1D36] & 0x02, det3 = s[0x1D36] & 0x04;
     int camX = camS8(s[0x1D2E]) + camS8(s[0x1D4E]), camY = camS8(s[0x1D30]) + camS8(s[0x1D4F]);
     s[0x1D3D] = (uint8_t)(camS8(s[0x1D3D]) + camS8(s[0x1D37]) + camS8(s[0x1D26]) + (det2 ? 0 : camX));
@@ -4343,10 +4344,16 @@ static void camCommit93E1(uint8_t* s) {
     s[0x1D40] = (uint8_t)(camS8(s[0x1D40]) + camS8(s[0x1D3A]) + camS8(s[0x1D29]) + (det3 ? 0 : camY));
     // 9312-93D0: extract whole pixels exactly like BG1 below (>>4 of the magnitude, the signed nibble
     // kept), then C0/9579-977x step each layer's counter one per pixel: `LDX $8D / INX / STX $8D`.
-    // The coarse/phase twins those loops also bump ($1D0B.., $1D94/$1D97..) only feed the VRAM
-    // streamer's row/column flags; the port composes from the map, so only the counters are kept.
+    // The phases those loops keep ($94 / $97, $95 / $98) are stepped below, with the crossings they flag.
+    // ...and its phase ($94 / $97 BG2, $95 / $98 BG3: X / Y), which names the layer's crossings to the edge streamer:
+    //   950F (BG2 X+) LDA $94 / CMP #0F / BNE / LDA $35 / BIT #02 / BNE / LDA #02 / TSB $76 / LDA #FF / CMP #07 / (the
+    //        same) / LDA #07 / INC A / STA $94             9545 (X-): at 00 and 08, TSB $77, DEC A
+    //   9579 / 95AF (BG2 Y+ / Y-): $97, $74 / $75          96B7 / 96ED / 9721 / 975F (BG3): $95 / $98, bit #04
+    // A layer built from the map ($1D35's bit) steps its phase and flags nothing. BG1's committers below STORE their
+    // flag (`LDA #01 / STA $76`) and run first in the ROM, so these bits are OR'ed in after them (bg74..bg77).
     static const int acc[4] = { 0x1D3D, 0x1D3E, 0x1D3F, 0x1D40 };
     static const int cnt[4] = { 0x1D8B, 0x1D8D, 0x1D8F, 0x1D91 };
+    static const int phs[4] = { 0x1D94, 0x1D97, 0x1D95, 0x1D98 };
     for (int i = 0; i < 4; i++) {
       int a = camS8(s[acc[i]]), w = a / 16;
       s[acc[i]] = (uint8_t)(a - w * 16);
@@ -4361,21 +4368,34 @@ static void camCommit93E1(uint8_t* s) {
         int ph = i == 0 ? 0x1D94 : 0x1D97, lo = i == 0 ? 0x1D12 : 0x1D16, hi = i == 0 ? 0x1D14 : 0x1D18;
         for (int k = 0; k < w; k++) {
           int A = s[ph];
-          if (A == 0x1F) { s[lo]++; s[hi]++; A = 0xFF; }      // (the $74-$77 streamer flags are not kept: the port
-          if (A == 0x0F) { s[lo]++; s[hi]++; A = 0x0F; }      //  clears them below, after this pass, unlike 93E1)
+          if (A == 0x1F) { s[lo]++; s[hi]++; bgF[i == 0 ? 2 : 0] |= 0x02; A = 0xFF; }   // (TSB $76 / $74 #02, whatever $35)
+          if (A == 0x0F) { s[lo]++; s[hi]++; bgF[i == 0 ? 2 : 0] |= 0x02; A = 0x0F; }
           A = (A + 1) & 0xFF; s[ph] = (uint8_t)A;
           if (!(A & 1)) camPut16(s, cnt[i], camGet16(s, cnt[i]) + 1);
         }
         for (int k = 0; k < -w; k++) {
           int A = s[ph];
-          if (A == 0x00) { s[hi]--; s[lo]--; A = 0x20; }
-          if (A == 0x10) { s[hi]--; s[lo]--; A = 0x10; }
+          if (A == 0x00) { s[hi]--; s[lo]--; bgF[i == 0 ? 3 : 1] |= 0x02; A = 0x20; }   // (TSB $77 / $75 #02)
+          if (A == 0x10) { s[hi]--; s[lo]--; bgF[i == 0 ? 3 : 1] |= 0x02; A = 0x10; }
           A = (A - 1) & 0xFF; s[ph] = (uint8_t)A;
           if (!(A & 1)) camPut16(s, cnt[i], camGet16(s, cnt[i]) - 1);
         }
         continue;
       }
       camPut16(s, cnt[i], camGet16(s, cnt[i]) + w);
+      { int bit = i < 2 ? 0x02 : 0x04, flag = (s[0x1D35] & bit) ? 0 : bit, xAxis = !(i & 1);
+        for (int k = 0; k < w; k++) {                         // 950F / 9579 / 96B7 / 9721
+          int A = s[phs[i]];
+          if (A == 0x0F) { bgF[xAxis ? 2 : 0] |= (uint8_t)flag; A = 0xFF; }
+          if (A == 0x07) { bgF[xAxis ? 2 : 0] |= (uint8_t)flag; A = 0x07; }
+          s[phs[i]] = (uint8_t)(A + 1);
+        }
+        for (int k = 0; k < -w; k++) {                        // 9545 / 95AF / 96ED / 975F
+          int A = s[phs[i]];
+          if (A == 0x00) { bgF[xAxis ? 3 : 1] |= (uint8_t)flag; A = 0x10; }
+          if (A == 0x08) { bgF[xAxis ? 3 : 1] |= (uint8_t)flag; A = 0x08; }
+          s[phs[i]] = (uint8_t)(A - 1);
+        } }
       // BG3's vertical committers also move the window wave's phase: C0/9721 (down, $4C pixels) `INC $FB` x4 and
       // C0/975F (up, $4B pixels) `DEC $FB` x4, per pixel, ahead of `LDX $91 / INX|DEX / STX $91` -- the wave rides the
       // layer's rows (the horizontal ones, C0/96B7 / 96ED, and BG2's leave it alone). FD/C5E2's own step comes on top.
@@ -4421,6 +4441,12 @@ static void camCommit93E1(uint8_t* s) {
     if (old == 0x08) { s[0x1D0E]--; s[0x1D10]--; s[0x1D75] = 1; old = 0x08; }
     s[0x1D96] = (uint8_t)(old - 1);
   }
+  s[0x1D74] |= bgF[0]; s[0x1D75] |= bgF[1]; s[0x1D76] |= bgF[2]; s[0x1D77] |= bgF[3];   // (BG2's and BG3's TSBs)
+  // C0/9420-9448: the crossings become the rows and columns the NMI lays into each layer's tilemap ring, and C0/7F9A
+  // names their places (move.c CtVmBgEdgeStream). The uploads are the NMI's that follows (C0/EB91-EC13); they are done
+  // here, with the buffers as this tick built them, so no host of the camera tick can leave them out.
+  CtVmBgEdgeStream(s);
+  CtVmBgEdgeNmi(s);
 }
 
 // C0/885A align machine (state $0138): glide 1 px per frame per axis toward the lead's side until both
@@ -4533,6 +4559,10 @@ void CtSceneLayerScrollLoad(CtScene* sc, uint8_t md1, uint8_t md2, uint8_t md3) 
   CtWramLayerScrollDecode(s, md1, md2, md3);
   layerHalfWindow74AC(s);                                     // decoded after the camera entry, so the window is set here
   s[0x1D94] = s[0x1D97] = 0;                                  // BG2's phases, zeroed with the rest of the $1D page
+  // ...and BG3's ($95 / $98): the edge streamer flags BG3's crossings on them (C0/96B7-979A), so a phase left from before
+  // a menu put BG3's rows and columns a chip off the camera's (MEASURED: loc 165, playthrough leg 118 f7040, after the
+  // shop's menu: $1D95 / $1D98 = 02 / 04 where the cartridge has BG1's 07 / 06, BG3's origin a column and a row ahead).
+  s[0x1D95] = s[0x1D98] = 0;
 }
 // The location load's C0/286C entry, after its object init: the camera law (C0/7506 / 7553) and C0/74AC's window.
 // C0/7F7E's clear of the $1D page (CtSceneCameraEntry's extra) and the header decode (CtWramLayerScrollDecode,
@@ -5272,6 +5302,15 @@ static void ctXferReorigin(CtScene* sc, int layer) {
   static const int org[3] = { 0x1D99, 0x1D9B, 0x1D9D }, ctr[3] = { 0x1D87, 0x1D8B, 0x1D8F };
   s[org[layer]] = s[org[layer] + 1] = 0;
   for (int k = 0; k < 4; k++) s[ctr[layer] + k] = 0;
+  CtVmBgAddr7F9A(s);                                  // 74E3 JSR C0/7F9A
+}
+// A style frame's tilemap: C0/75E9 / 78EC / 7CB5 build the layer into $7E:C800 at the camera (move.c CtVmBgBuildLayer)
+// and the NMI's $46 arm DMAs $0800 bytes of it to the word the arm names (C0/EADC `LDX $1D7C` / EAFC `$1D7E` / EB1C
+// `$1D82` / EB33 `$1D80`, each `JSR C0/7F62`) -- one half, whatever the layer. The DMA is done here, with the buffer as
+// this frame built it and the word as the NMI will find it.
+static void ctXferBuild(uint8_t* s, int layer) { CtVmBgBuildLayer(s, layer); }
+static void ctXferUpload(const uint8_t* s, int wordAt) {
+  CtVmBgTilemapDma(s, s[wordAt] | (s[wordAt + 1] << 8), 0x800);
 }
 
 static void ctXferSwapBg1(uint8_t* s) {               // 180E-1822 / 1835-184B: LDX $7C / PHX / LDX $82 / STX $7C / PLX / STX $82
@@ -5295,15 +5334,20 @@ static void ctXferStyleFrame(CtScene* sc) {
   uint8_t* s = sc->mem->s;
   int st = sc->xferStyle & 7, k = ++sc->xferStep, v46 = 0;
   switch (st) {
-  case 1: if (k == 1) { ctXferReorigin(sc, 0); v46 = 1; s[0x0145] = 0; } break;
-  case 2: if (k == 1) { ctXferReorigin(sc, 1); v46 = 2; s[0x0145] = 0; } break;
-  case 3: if (k == 1) { v46 = 3; s[0x0145] = 0; }
-          else if (k == 2) { ctXferSwapBg1(s); ctXferReorigin(sc, 0); ctXferReorigin(sc, 1); v46 = 2; }
-          else if (k == 3) { ctXferSwapBg1(s); ctXferReorigin(sc, 0); v46 = 1; }
+  case 1: if (k == 1) { ctXferBuild(s, 0); ctXferReorigin(sc, 0); v46 = 1; s[0x0145] = 0; ctXferUpload(s, 0x1D7C); } break;
+  case 2: if (k == 1) { ctXferBuild(s, 1); ctXferReorigin(sc, 1); v46 = 2; s[0x0145] = 0; ctXferUpload(s, 0x1D7E); } break;
+  case 3: if (k == 1) { ctXferBuild(s, 0); v46 = 3; s[0x0145] = 0; ctXferUpload(s, 0x1D82); }
+          else if (k == 2) { ctXferBuild(s, 1); ctXferSwapBg1(s); ctXferReorigin(sc, 0); ctXferReorigin(sc, 1); v46 = 2;
+                             ctXferUpload(s, 0x1D7E); }
+          else if (k == 3) { ctXferBuild(s, 0); ctXferSwapBg1(s); ctXferReorigin(sc, 0); v46 = 1; ctXferUpload(s, 0x1D7C); }
           break;
-  case 4: if (k == 1) { ctXferReorigin(sc, 2); v46 = 4; s[0x0145] = 0; } break;
+  case 4: if (k == 1) { ctXferBuild(s, 2); ctXferReorigin(sc, 2); v46 = 4; s[0x0145] = 0; ctXferUpload(s, 0x1D80); } break;
   }
   CtHdmaTableBuild(s);                                // C0/00DE: JSL FD/C2C1 (a table set built, $0153 bit 0 flips)...
+  if (kXferStyleFrames[st] && k == kXferStyleFrames[st]) {   // 17BF / 17E8 / 185C / 1885 JSR C0/87F1: the right columns
+    CtVmBgRightCols87F1(s);                           //   beside the rebuilt window, laid down by the NMI that follows
+    CtVmBgEdgeNmi(s);
+  }
   ctObjSlotFrame(sc);                                 //   ...JSL FD/FFF7
   if (v46) { s[0x0146] = (uint8_t)v46; sc->xferNmi46 = 1; }
   if (k == kXferStyleShown[st]) {                     // this frame's NMI upload is the one the picture shows
