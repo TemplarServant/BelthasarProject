@@ -50565,7 +50565,7 @@
         "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 43609 px at port +1",
         "playthrough: 117_kajar_restock SAME -- locs 195 196 195 196 195 194 14E 149 191 1F5 185 1F5 185 1F5 165 | story C6 | party 000105 | gold 35384 | hp 301 (2) | ctrl 19 | end picture 0 px at port +0",
         "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 54016 px at port +0",
-        "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 54009 px at port +0",
+        "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 10829 px at port +0",
         "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37890 px at port +0",
@@ -51127,6 +51127,41 @@
         }
       ],
       "notes": "A WAIT WHOSE COUNT IS ABOVE ITS LENGTH STARTS OVER (disasm/notes/field_wait_ops.md). C0/2F96 (op AD; C0/2FC6-2FF9 for B9 BA BC BD) compares the op's length N with the object's counter $7F0A01,X: equal ends the wait, N above counts one more, and N BELOW -- a count a longer wait left when a call took the object away -- zeroes the counter and runs the op again (2FA6 `LDA #00 / STA $7F0A01,X / TYX / SEC`). Reptite Lair, loc 11C (leg 78 from frame 660): the holes' controller idles on `AD 20`, a hole calls it at f667 and it drops the party with `06 00 13 / AD 06 / 06 02 13 / AD 06 / 06 04 13 / AD 06`; the three waits are six visits each on the cartridge (f671-f699, f699-f723, f723-f747). The cells are the controller's and the three characters' event PCs, step for step. The port ended a wait whose count was at or above N: the first took one visit, the room's exit came 24 frames early (7 of 16 steps differed)."
+    },
+    {
+      "name": "leg-window-seed-inside-the-load-fade-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "seed-inside-the-load-fade"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: seed-inside-the-load-fade leg 121 f1+170: 55 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: fight-exit-gives-up-the-kept-music ",
+        "^  free:  cartridge f303-f8070"
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Mt. Woe, loc 188: a fight under the room's own music with $2A21 bit 7 ends as the cartridge's does -- the exit gives up $2A1F bit 6 (CD/03B4), posts the fade, waits and polls, and control is back on the cartridge's frame",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (sl && *sl == '1' && loadWramPath) { fade = 2; loadRamp = 1; loadFadeF0 = 0; } }",
+          "replace": "    if (0 && sl && *sl == '1' && loadWramPath) { fade = 2; loadRamp = 1; loadFadeF0 = 0; } }   /* MUT: the seed's ramp not resumed */",
+          "why": "The cartridge's CPU is inside C0/2848's loop at the seed: ten more iterations raise `$0119` from 05 to 0F with the input dead. Not resumed, the port's main loop runs from the first frame and the lead walks eleven frames ahead"
+        }
+      ],
+      "notes": "A SEED TAKEN INSIDE THE LOAD'S FADE-IN GOES ON WITH IT (the harness, not the game: docs/TESTING.md). C0/2848's ramp is a loop of its own -- `INC $19 / .. JSR C0/00BF / JSR C0/EC60 / LDA $19 / CMP #0F / BMI` -- and a cartridge state cut inside it carries the fact in the program counter alone. tools/playthrough.py seed_in_load_fade asks the cartridge (the state's first frame writes `$0119` at C0:284F) and the port, told so by CT_SEED_LOADFADE=1, ramps on from the seed's brightness with the input dead until the $0F iteration. Leg 121 from its second frame, 170 frames: `$0119`, `$011F` and the lead's position words are the cartridge's (the encounter's control lock on f164). Five legs start so (106, 119, 121, 122, 124); without the resume the port's main loop ran eleven frames ahead at the seed's brightness, leg 121's fight went another way under the pad, and every picture sample of the leg differed."
     },
     {
       "name": "field-picture-death-peak-snow-vs-cartridge",

@@ -404,6 +404,28 @@ SHOTS = range(-6, 7)            # the port's frames shot around the leg's end: t
 PORT_STDOUT = ''                # the port's whole stdout of the last port_timeline (a tool's own debug lines, e.g. `ringov:`)
 
 
+def seed_in_load_fade(start, w):
+    """Is the cartridge inside the load's fade-in ramp at this state? C0/2848 raises `$0119` one a frame in a loop of
+    its own (C0/284D-2864: input dead, the scheduler under C0/00BF) and no WRAM byte says the CPU is in it, so the
+    cartridge is asked: with `$0119` between 01 and 0E, the state's first frame writes the byte at C0:284F. The port
+    takes the answer as CT_SEED_LOADFADE=1 and goes on with the ramp from the seed's brightness (field.c). Cached
+    beside the state, with the state's size and time."""
+    if start == 'boot' or not 0 < w[0x119] < 0x0F or (w[0x100] | (w[0x101] << 8)) >= 0x1F0:
+        return False
+    side = start + '.loadfade'
+    stamp = '%d %d' % (os.path.getsize(start), int(os.path.getmtime(start)))
+    if os.path.exists(side):
+        got = open(side).read().split('|')
+        if len(got) == 2 and got[0] == stamp:
+            return got[1] == '1'
+    r = subprocess.run([CT, '--monitor', '7E0119:1', '--from', start, '--input', '0:1', '--diff', '--writer'], cwd=ROOT, env=RULE,
+                       capture_output=True, text=True, errors='replace')
+    m = re.search(r'^\s*f0\s+7E0119=[0-9A-F]{2}\*?\((C0:[0-9A-F]{4})\)', r.stdout, re.M)
+    ans = bool(m) and m.group(1) == 'C0:284F'
+    open(side, 'w').write('%s|%d' % (stamp, ans))
+    return ans
+
+
 def port_timeline(start, pad):
     """The port's graded bytes on change, and its pictures around the leg's last frame ({offset: rgb bytes})."""
     w = wram_of(start)
@@ -419,6 +441,8 @@ def port_timeline(start, pad):
                # left in the tree's ct_sram.srm would change the port's legs), and a save a leg makes lands in its own
                # scratch, never over the player's file
                CT_SRAM_FRESH='1', CT_SRAM=os.path.join(TMP, 'port.srm'))
+    if seed_in_load_fade(start, w):
+        env['CT_SEED_LOADFADE'] = '1'                    # (a leg cut inside C0/2848's ramp: the port goes on with it)
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')

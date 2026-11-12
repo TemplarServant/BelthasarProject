@@ -11538,6 +11538,15 @@ int main(int argc, char** argv) {
   // run or been skipped. The ramp's iterations tick the new location's scripts (C0/00BF), so a script that stages
   // the next location with op 0xDE/0xDF sets `$011E` again during them. Latched here, at the load.
   int loadRampSkip = 0;
+  // A WRAM seed taken INSIDE that ramp (`--loadwram` of a cartridge state whose CPU stands in the loop C0/284D-2864,
+  // `$0119` between 01 and 0E): no byte of WRAM says so -- the loop is the program counter -- so the harness that made
+  // the seed says it, CT_SEED_LOADFADE=1 (tools/playthrough.py asks the cartridge: the state's first frame writes
+  // `$0119` at C0:284F). The ramp goes on from the seed's `$0119`: one INC a frame, the input dead, the scheduler
+  // under C0/00BF, the main loop back on the frame after the $0F iteration. Without it the port's main loop ran from
+  // the seed's first frame at the seed's brightness (playthrough legs 119 and 121: eleven frames ahead, the screen at
+  // 4/15 until the next load).
+  { const char* sl = getenv("CT_SEED_LOADFADE");
+    if (sl && *sl == '1' && loadWramPath) { fade = 2; loadRamp = 1; loadFadeF0 = 0; } }
   int owVehicleModule = 0;   // the last overworld frame ran a vehicle's lead module ($027E != 0; world.c obLeadModule)
   int owEventModule = 0;     // ...or an event cell's ($0280 / $0281 != 0: the lead's own row in the pass)
   // The time gauge's phases ($027C = 8, C2/261D -> C2/6A34, disasm/notes/ow_time_gauge.md): 1 the world fading out (C2:2EC1,

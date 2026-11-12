@@ -3109,3 +3109,14 @@ ignores the handlers' carry, so a wait op is dispatched again until its count is
 call. The Golems' room (loc 19E, leg 122 cut at f1400, the load at f1490): fn1 moves the light column's BG3 tiles
 aside, waits two, and puts blank tiles in their place; 240 frames on, with the camera at the room's top, the picture is
 the cartridge's (`0 px differ at port -2`; 1584 px when fn1 stopped at the wait). One mutation.
+
+### leg-window-seed-inside-the-load-fade-vs-cartridge (`tools/leg_window_cmp.py seed-inside-the-load-fade`)
+
+The HARNESS, not the game: a cartridge state cut inside the load's fade-in (C0/2848's loop -- `$0119` between 01 and
+0E, the input dead, the scheduler under C0/00BF) carries the fact in the program counter alone, so a port seeded from
+its WRAM ran its main loop from the first frame at the seed's brightness. tools/playthrough.py `seed_in_load_fade` asks
+the cartridge (the state's first frame writes `$0119` at C0:284F; cached beside the state as `<state>.loadfade`) and
+passes CT_SEED_LOADFADE=1, on which field.c goes on with the ramp. Five legs start so (106, 119, 121, 122, 124). Leg
+121 from its second frame, 170 frames: the brightness, the control byte and the lead's position words are the
+cartridge's (`55 steps compared, 0 differing`; all 55 differed). One mutation, the port's resume (the harness's
+answer is cached beside the state, so a mutation of the question is never run).

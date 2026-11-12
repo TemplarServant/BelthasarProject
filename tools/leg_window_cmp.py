@@ -132,6 +132,17 @@ WINDOWS = {
     # controller's event PC and the three characters' (objects 1, 6 and 2 run the fall, function 3).
     'wait-starts-over-above-its-count': dict(leg='78_', start=660, frames=86,
                                              cells=[('7E119A', 2), ('7E1182', 2), ('7E118C', 2), ('7E1184', 2)]),
+    # Ocean Palace, loc 196: the leg's own first frames are INSIDE the load's fade-in -- the cartridge's CPU stands in
+    # C0/2848's loop (`INC $19 / .. JSR C0/00BF / JSR C0/EC60 / LDA $19 / CMP #0F / BMI`), `$0119` 06 at the window's
+    # start, with the input dead and the scheduler under C0/00BF until the $0F iteration (f10). No WRAM byte says the
+    # CPU is in the loop, so the seed's maker asks the cartridge (playthrough.py seed_in_load_fade: the first frame
+    # writes `$0119` at C0:284F) and the port goes on with the ramp (CT_SEED_LOADFADE, field.c). The walk then meets the
+    # room's encounter on the cartridge's frame (control off at f164). The port's main loop used to run from the
+    # seed's first frame at the seed's brightness: the lead walked eleven frames ahead, the encounter came twelve
+    # early (f152), and the fight under the leg's pad went another way (every sample of the picture audit). The cells:
+    # the brightness, the control byte and the lead's position words.
+    'seed-inside-the-load-fade': dict(leg='121_', start=1, frames=170,
+                                      cells=[('7E0119', 1), ('7E011F', 1), ('7E1802', 2), ('7E1882', 2)]),
 }
 
 
@@ -185,6 +196,8 @@ def port_timeline(state, prev, pad, cells, work):
                CT_AUDIO_SEEDSTATE=state, CT_WS_BATTLE_LEAD='1', CT_SRAM_FRESH='1', CT_SRAM=os.path.join(work, 'port.srm'),
                CT_FIELD_MEMMON=','.join('%s:%X' % (port_key(a), n) for a, n in cells),
                CT_SHOTS=os.path.join(work, 'p'), CT_SHOTS_AT=str(frames), CT_SHOTS_EXIT='1')
+    if P.seed_in_load_fade(state, w):
+        env['CT_SEED_LOADFADE'] = '1'                    # (a window cut inside C0/2848's ramp: the port goes on with it)
     r = subprocess.run([P.FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', port_keys(prev, pad)], cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')
