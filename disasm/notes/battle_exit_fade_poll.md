@@ -118,3 +118,27 @@ f3933 on the cartridge and f3931 on the port, so the play clock's battle stall i
 stop f5085-5088), the lead ends 1 px off, the camera align C0/885A glides 14 frames against 1 (`$1D96` 0D -> 00), the
 battle song posts 14 frames apart and the enemies' AI evaluates in another order -- another fight. The game is the
 same game with other rolls; the playthrough harness puts the cartridge's `$0400` / `$01F8` back (build/_pt77/chain5.py).
+
+## 6. Not every early exit was the lattice: CD/03B4's head (2026-11-12)
+
+The 4-18 frame early exits of playthrough legs 109, 113 and 114 (sec. 5's class in the ledger, "noted for a look") were
+a port bug. The exit routine begins (tools/romdis.py D03B4):
+
+    CD/03B4 LDA $2A21 / BPL ->03C1
+    CD/03B9 LDA $2A1F / AND #BF / STA $2A1F        ; $2A21 bit 7: give up $2A1F bit 6
+    CD/03C1 LDA $CD0C / BEQ / JSR CD/0453          ; the effect layer's teardown
+    CD/03C9 STZ $CD23
+    CD/03CC LDA $2A1F / AND #40 / BNE ->03D6       ; bit 6 = the field's music plays through the fight: no fade...
+    CD/03D3 JSR CD/039E                            ; ...else `81 10 00` and fifteen frames
+    ...
+    CD/042B LDA $2A1F / AND #40 / BNE ->0438 / CD/0432 LDA $002141 / BNE ->0428      ; the poll, on the same bit
+
+A fight that keeps the room's music (`$2A1F` bit 6) but carries `$2A21` bit 7 loses the bit as it ends, and its exit
+is the ordinary one: fade, fifteen frames, poll. The port's exit started at the `$CD0C` test.
+
+MEASURED, loc 188 (Mt. Woe), leg 113's first fight (`$2A1F` = 40 and `$2A21` = 80 through it, `$2A1F` = 00 after): the
+cartridge posts `81 10 00` at f7976, the fade count on port 1 runs 10 .. 00 to f8011, C0/1BE6's `81 00 FF` / `11 45 B0
+04` come at f8012 and `$95D5` = 80 at f8023, control at f8071. The port posted nothing and left at f8011 / f8059, 12
+frames early. With the head (battle.c, the exit's `e == 5`): f8022 / f8070 from the leg's start, and the cartridge's
+frame from its state at f250 (`leg-window-fight-exit-kept-music-vs-cartridge`: the port +0). The leg's five exits go
+from 12 / 10 / 7 / 4 / 16 frames early to -1 / +2 / +2 / -2 and on: the lattice of sec. 1-5, nothing more.

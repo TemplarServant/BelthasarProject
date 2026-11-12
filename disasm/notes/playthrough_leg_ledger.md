@@ -101,6 +101,15 @@ Re-anchored on the cartridge's events (tools/playthrough_align.py) both are SYNC
 after a fight's first window land a frame or two off and the commands with them. Their end states draw the cartridge's
 picture (the one-state sweep: 0 px).
 
+**109 / 113 / 114, re-read 2026-11-12: their 4-18 frame early exits were a PORT BUG, not the lattice.** The exit
+routine's head CD/03B4 (`LDA $2A21 / BPL / LDA $2A1F / AND #BF / STA $2A1F`) gives up "the field's music plays through"
+when the fight carries `$2A21` bit 7, so those fights fade, wait fifteen frames and poll like any other; the port's
+exit began at the next test and left without the fade (disasm/notes/battle_exit_fade_poll.md sec. 6; battle.c;
+`leg-window-fight-exit-kept-music-vs-cartridge`). With it 113's exits are -1 / +2 / +2 / -2 and 114's -1 / -1 / 0 / 0 /
+0 / +2: the lattice. Both legs stay DIFFERENT -- the unwarped pad meets their last long fight on other frames (113's
+end picture goes 549 px -> 54016 px: the old one had the early exits cancelling) -- and 59 (Heckran) stays SAME, its end
+picture a frame nearer (port -2 for -3). The rows above keep their first reading.
+
 **A lesson of 134 for every "timing (picture only)" above:** six legs filed as timing on a GAMEPLAY-SAME grade (64, 76,
 96, 106, 115, 130) were picture bugs of one mechanism, found only when it was fixed for another leg. A leg's end
 picture is graded after its whole pad, so it cannot tell a draw bug from a frame of lag; `tools/field_picture_cmp.py`

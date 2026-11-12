@@ -103,6 +103,15 @@ WINDOWS = {
     # counter `$02B1`, and its block's class, phase and visit counter.
     'map-opening-input-frame': dict(leg='68_', start=1500, frames=60,
                                     cells=[('7E027C', 1), ('7E0283', 4), ('7E02B1', 1), ('7E0DF0', 5)]),
+    # Mt. Woe, loc 188: a fight the field's music plays through (`$2A1F` bit 6) and that carries `$2A21` bit 7. The
+    # exit's head CD/03B4 `LDA $2A21 / BPL / LDA $2A1F / AND #BF / STA $2A1F` gives the bit up, so the exit posts
+    # CD/039E's fade (`81 10 00`, cartridge f7976), waits its fifteen frames and polls the driver's fade count
+    # (CD/042B-0436) to f8011 before C0/1BE6 brings the room's song back. The port did not have the head: no fade, no
+    # wait, control back 12 frames early. The cell: the player's control `$011F` -- 01 before the encounter (f303) and
+    # from f8071 on; the fight between is not graded, and the `free:` line is the exit's length (what is left is the
+    # fade's tick lattice, the class of disasm/notes/battle_exit_fade_poll.md).
+    'fight-exit-gives-up-the-kept-music': dict(leg='113_', start=250, frames=7900, free=[(303, 8070)],
+                                               cells=[('7E011F', 1)]),
 }
 
 

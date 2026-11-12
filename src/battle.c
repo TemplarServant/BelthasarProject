@@ -20503,6 +20503,12 @@ static int battleFleeStageTick(CtBattleHost* h) {
     // the field.
     if (e == 4) s[0x0900] = 0xFF;                                 // CF/FCC7-FCC9 (then CF/FCCC's wait)
     if (e == 5) battleFbe5HpFloor(h);                             // CF/FCCF-FCE4, then FCE9 JSL CD/0006 -> CD/03B4
+    // CD/03B4's head: `LDA $2A21 / BPL ->03C1 / LDA $2A1F / AND #BF / STA $2A1F` -- a fight with $2A21 bit 7 gives up
+    // $2A1F bit 6 (the field's music kept through the fight) as it ends, so its exit posts CD/039E's fade, waits its
+    // fifteen frames and polls the driver's fade count (CD/042B) like any other. MEASURED: loc 188, playthrough leg 113's
+    // first fight ($2A1F = 40, $2A21 = 80 through the fight; $2A1F = 00 after): the cartridge posts `81 10 00` at f7976
+    // and leaves at f8012, the port, without this, posted nothing and left 12 frames early.
+    if (e == 5 && (s[0x2A21] & 0x80)) s[0x2A1F] &= 0xBF;
     if (e == 5 && s[0xCD0C]) { h->fxTeardownT = 1; h->fxTeardownLong = 1; h->exitCd0c = 21; }   // CD/03C1-03C6 -> CD/0453
     if (h->exitCd0c && h->fxTeardownT && e >= 5) {
       battleFxTeardownStep(h);                                     //   ($CD0C cleared at its t 4, CD/0463)

@@ -1161,6 +1161,16 @@ away, the second follower's walk frame. Full tier (~1 min and ~4 min). The two `
 mechanism on a battery save: `$027C = 1` at +32 on both sides, their pictures 0 px (they pinned +31 and up to 57,344 px
 as the load clock until 2026-11-11).
 
+### leg-window-fight-exit-kept-music-vs-cartridge (`tools/leg_window_cmp.py fight-exit-gives-up-the-kept-music`)
+
+A fight's EXIT when the room's music played through it. Mt. Woe, loc 188 (leg 113's first fight): `$2A1F` bit 6 keeps
+the field's song, `$2A21` bit 7 rides with it, and the exit's head CD/03B4 (`LDA $2A21 / BPL / LDA $2A1F / AND #BF /
+STA $2A1F`) gives the bit up -- so the exit posts CD/039E's fade, waits its fifteen frames and polls the driver's fade
+count like any other (disasm/notes/battle_exit_fade_poll.md sec. 6). The port's exit had no head and left 12 frames
+early. The window starts both sides from the cartridge's state at f250 (the field, before the encounter) and plays the
+leg's 7900 frames of pad; the fight is the `free` span and its line is the grade: `the port +0 frame(s)`. One
+mutation (the bit kept): -12. ~1 min the first time (the state), ~25 s cached.
+
 ### leg-window-map-opening-input-frame-vs-cartridge (`tools/leg_window_cmp.py map-opening-input-frame`)
 
 The lead's visit is in its slot of the object pass (disasm/notes/ow_event_cells.md sec. 5, "The whole visit is in the
