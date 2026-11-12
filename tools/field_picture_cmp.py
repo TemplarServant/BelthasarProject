@@ -10,7 +10,12 @@ the oracle) -- or at a frame inside the leg (`at`: the leg's pad played that far
 folder with the same key) -- leaves the pad alone for a few frames on both sides, and compares the pictures: nothing
 moved but what the room itself animates, and both sides began on the same WRAM.
 
+A state cut inside a walk cannot have its pad let go: the port's keys are the cartridge's one frame later, so an idle
+pad releases the port's direction a frame early and the walkers stop a pixel apart. Such a picture is `own`: both sides
+go on with the LEG'S OWN next frames of pad, and the port's first key is the leg's pad frame before the cut.
+
     fieldpicture: <name> leg <leg>[ f<at>] +<n> idle frames: <d> px differ at port <lag>
+    fieldpicture: <name> leg <leg> f<at> +<n> frames of the leg's pad: <d> px differ at port <lag>
 
 `<lag>` is the port frame that fits best in -6..+6 around the cartridge's (the port's picture P is the cartridge's P+2).
 --png writes build/_fieldpic/<name>.png: the cartridge, the port, the pixels apart.
@@ -68,6 +73,13 @@ PICTURES = {
     # sub pixel of BG3's (mixed by drawSprite), and the re-draw of BG3's priority-1 pixels must leave it -- the first
     # form of that pass covered the party with the dust (415 px here, nine playthrough legs).
     'sprites-on-the-sub-screen-under-bg3': dict(leg='39_arris_shop', frames=40),
+    # The Ocean Palace's throne room, loc 19F (leg 122 f61500, the party walking up the carpet): TM 13, TS 00, CGWSEL
+    # 02, CGADSUB `$0BE0` = 97 (subtract; BG1, BG2, BG3, OBJ) and op 0xF1's fade walking the fixed colour `$0121`
+    # (23..21, then 61..64: C0/1F5A). No sub layer and no colour window, so every BG pixel's operand is the FIXED colour
+    # (channel 6's rows, FD/C6E7; the NMI's `E0` then `$0121`, C0/EC3D): the room is its colours less (2, 2, 0) here,
+    # the sprites of palettes 0-3 untouched. The port did the fixed colour's math only inside a colour window: 49,965 px
+    # (field.c g_colFixMap, fieldColWindowApply).
+    'fixed-colour-over-the-map': dict(leg='122_golem_twins_lavos', at=61500, frames=24, own=True),
 }
 
 
@@ -97,6 +109,17 @@ def cut(pad, n):
     return out
 
 
+def span(pad, lo, n):
+    """Frames lo..lo+n-1 of a pad, as a pad."""
+    out, c = [], 0
+    for b, k in pad:
+        a, e = max(c, lo), min(c + k, lo + n)
+        if e > a:
+            out.append((b, e - a))
+        c += k
+    return out
+
+
 def state_at(legs, i, at):
     """The cartridge's state at frame `at` of leg i: the leg's pad played that far from its start state (cached with
     the key of what made it -- every pad from power-on through the leg, the oracle, the frame)."""
@@ -120,15 +143,24 @@ def run(name, want_png):
     if i > 0:
         P.ensure_states(legs, i - 1)
     start = state_at(legs, i, d['at']) if d.get('at') else P.start_of(legs, i)
-    pad = [(0, d['frames'])]
-    _, pics = P.port_timeline(start, pad)
+    own = bool(d.get('own'))
+    pad = span(legs[i]['pad'], d['at'], d['frames']) if own else [(0, d['frames'])]
+    keys = P.walkscript
+    if own:                                                   # the port's first key: the leg's pad frame before the cut
+        prev = span(legs[i]['pad'], d['at'] - 1, 1)
+        P.walkscript = lambda p: ','.join('H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in prev + p)
+    try:
+        _, pics = P.port_timeline(start, pad)
+    finally:
+        P.walkscript = keys
     c = P.oracle_picture(start, pad)
     if not pics:
         print('fieldpicture: %s leg %s: the port drew no picture' % (name, legs[i]['name'].split('_')[0]))
         return 1
     k, n = P.picture_grade(c, pics)
-    print('fieldpicture: %s leg %s%s +%d idle frames: %d px differ at port %+d' % (
-        name, legs[i]['name'].split('_')[0], ' f%d' % d['at'] if d.get('at') else '', d['frames'], n, k))
+    print('fieldpicture: %s leg %s%s +%d %s: %d px differ at port %+d' % (
+        name, legs[i]['name'].split('_')[0], ' f%d' % d['at'] if d.get('at') else '', d['frames'],
+        "frames of the leg's pad" if own else 'idle frames', n, k))
     if want_png:
         out = os.path.join(WORK, name + '.png')
         png(out, c, pics[k])

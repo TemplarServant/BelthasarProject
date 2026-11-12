@@ -3025,8 +3025,18 @@ static int g_colWinOn = 0, g_colWinHalf = 0, g_colWinAddSub = 0, g_colWinPrevent
 // (fieldColWindowApply).
 static int g_colObjMath = 0;
 static uint8_t g_colWinMath = 0, g_colWinFix[3];
+// The map's own pixels against the FIXED colour, with no colour window. Channel 6's rows carry `$0BE0` / `$0121` on every
+// map line (FD/C6E7 `LDA $21 / STA $152D / LDA $000BE0 / STA $152C / STA $1530`; the NMI's own write is `E0` then `$0121`,
+// C0/EC3D-EC45), and the PPU's operand for a main pixel with its math bit set is the sub pixel only where CGWSEL adds the
+// sub screen AND a sub layer covers it -- everywhere else the fixed colour (snes/ppu.c ppu_handlePixel: `secondLayer != 5`),
+// halved only when CGWSEL does not add the sub screen. The bake does the pixels a sub layer covers; these are the others.
+// MEASURED, the rule's cartridge, loc 19F (the Ocean Palace's throne room, playthrough leg 122 f61500 + 24): `$0BE0` = 97
+// (subtract; BG1, BG2, BG3, OBJ), TS = 00, CGWSEL 02, `$0121` walking 23..21 / 61..64 (op 0xF1's fade, C0/1F5A) -- every
+// BG pixel is its colour less the fixed (2, 2, 0), the sprites of palettes 0-3 untouched. The port drew no math there.
+static int g_colFixMap = 0;
+static inline int fieldColPassOn(void) { return g_colWinOn || g_colObjMath || g_colFixMap; }
 static void fieldColWindowRows(const uint8_t* w128) {
-  g_colWinOn = 0; g_colObjMath = 0;
+  g_colWinOn = 0; g_colObjMath = 0; g_colFixMap = 0;
   if (!w128) return;
   uint8_t wobj = w128[0x0BDB], cgw = w128[0x0BDE];
   g_colWinMath = w128[0x0BE0];                                    // the math every pass below uses: CGADSUB, COLDATA, CGWSEL
@@ -3037,6 +3047,10 @@ static void fieldColWindowRows(const uint8_t* w128) {
   g_colWinAddSub = (cgw & 0x02) && w128[0x11521] != 0;            // CGWSEL bit 1 with a sub screen: the sub pixel is added
   g_colWinPrevent = (cgw >> 4) & 3;                               //   (and the prevent mode: 0 never, 1 outside, 2 inside, 3 always)
   g_colObjMath = (w128[0x11520] & 0x10) && (g_colWinMath & 0x10) && (cgw & 0xC0) == 0;   // OBJ on the main screen, with math
+  // (no clip, never prevented -- CGWSEL's high nibble clear -- and something to do: a fixed colour, or the half it takes
+  //  when CGWSEL does not add the sub screen)
+  g_colFixMap = (g_colWinMath & 0x27) && (cgw & 0xF0) == 0 &&
+                ((g_colWinFix[0] | g_colWinFix[1] | g_colWinFix[2]) || g_colWinHalf);
   if (!(w128[0x0128] & 0x20) || !(wobj & 0xF0)) return;            // HDMA channel 5 off, or no colour window
   if ((wobj & 0xF0) != 0x20 || (cgw & 0xF0) != 0x10) {
     static int said = 0;
@@ -3052,12 +3066,20 @@ static void fieldColWindowRows(const uint8_t* w128) {
 static uint8_t g_fieldCgram[0x200];   // (defined below with its story: what C0/712E last uploaded)
 static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objPal, const uint8_t* cov, int covW, int covH,
                                 int camx, int camy, void* sd) {
-  if (!g_colWinOn && !g_colObjMath) return;
+  if (!fieldColPassOn()) return;
   const uint8_t* subCov = NULL, *pre = NULL;
   int bBlend = 0, bSub = 0, bHalf = 0;
   const uint8_t* sub = (sd && g_colWinAddSub) ? CtFieldSceneScreens(sd, &subCov, &pre, &bBlend, &bSub, &bHalf) : NULL;
   const uint8_t* bgSub = g_colWinOn ? sub : NULL;               // (the map's pixels are redone only under a window: the bake
                                                                 //  did them for the whole screen)
+  // With no window the map's pixels take the fixed colour where no sub pixel is their operand. A sub screen whose
+  // coverage the bake did not keep leaves that unknown: not drawn, said once.
+  int fixMap = g_colFixMap && !g_colWinOn;
+  if (fixMap && g_colWinAddSub && !sub) {
+    static int said = 0;
+    if (!said) { said = 1; fprintf(stderr, "colmath: the fixed colour over a map with a sub screen the bake did not keep -- not drawn\n"); }
+    fixMap = 0;
+  }
   uint16_t c0 = (uint16_t)(g_fieldCgram[0] | (g_fieldCgram[1] << 8));   // the backdrop, CGRAM 0
   const uint8_t bd[3] = { (uint8_t)((c0 & 31) << 3 | (c0 & 31) >> 2), (uint8_t)(((c0 >> 5) & 31) << 3 | ((c0 >> 5) & 31) >> 2),
                           (uint8_t)(((c0 >> 10) & 31) << 3 | ((c0 >> 10) & 31) >> 2) };
@@ -3069,7 +3091,7 @@ static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objP
     }
     for (int x = 0; x < cw; x++) {
       uint8_t op = objPal[(size_t)y * g_fw + x];
-      if (op == 0xFF ? !g_colWinOn : !g_colObjMath) continue;
+      if (op == 0xFF ? !(g_colWinOn || fixMap) : !g_colObjMath) continue;
       int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
       size_t bi = (size_t)sy * covW + sx;
       int lay = cov ? cov[bi] : 0, inside = x >= L && x <= R;
@@ -3084,6 +3106,7 @@ static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objP
       if (op != 0xFF) on = (g_colWinMath & 0x10) && op >= 4;              // mainLayer 4 (palettes 4-7) / 6 (0-3, never)
       else on = lay ? (g_colWinMath & lay) != 0 : (g_colWinMath & 0x20) != 0;
       if (!on) continue;
+      if (op == 0xFF && !g_colWinOn && sub && subCov[bi]) continue;   // (no window: the bake did this one, with its sub pixel)
       int useSub = (op == 0xFF ? bgSub : sub) && subCov[bi];      // the sub pixel, else the fixed colour (not halved)
       for (int k = 0; k < 3; k++) {
         int c = d[k] >> 3, o = useSub ? (sub[bi * 3 + k] >> 3) : g_colWinFix[k];
@@ -18544,7 +18567,7 @@ int main(int argc, char** argv) {
     if (battlePhase) g_colObjMath = 0;                 // (a fight's sprites are the battle compositor's)
     static uint8_t colObjPal[FIELD_WMAX * CAMH];
     uint8_t* colKeepMask = g_bObjPalMask;
-    if (g_colWinOn || g_colObjMath) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
+    if (fieldColPassOn()) { memset(colObjPal, 0xFF, sizeof colObjPal); g_bObjPalMask = colObjPal; }
 
     int order[80], oy[80], lay[80], sten[80], n = 0;    // lay = OAM priority-group draw layer
     int nSten = 0;                                      // 0x8E prio-0/1 occluder sprites (sten[k])
@@ -19031,7 +19054,7 @@ int main(int argc, char** argv) {
           uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
           if (showPrio) { d[0] = 255; d[1] = 0; d[2] = 0; } else memcpy(d, f.base + bo * 3, 3);
           mot->own[(size_t)y * g_fw + x] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
-          if (g_colWinOn || g_colObjMath) colObjPal[(size_t)y * g_fw + x] = 0xFF;   // a BG pixel again (the colour math)
+          if (fieldColPassOn()) colObjPal[(size_t)y * g_fw + x] = 0xFF;   // a BG pixel again (the colour math)
         }
     // BG3's priority-1 pixels are above EVERY sprite: the field's BGMODE is 09 on every frame (the NMI's C0/EA7D `LDA
     // #09 / STA $2105`, the only BGMODE write in bank C0: mode 1 with BG3's priority bit), so BG3.1 > OBJ3. They are
@@ -19052,12 +19075,12 @@ int main(int argc, char** argv) {
             if (g_objSubOn && g_objSubDone[i]) continue;
             memcpy(fb + i * 3, f.base + bo * 3, 3);
             mot->own[i] = (uint8_t)CtMotMapOwner(motCov ? motCov[bo] : 1, 1);   // the map's foreground
-            if (g_colWinOn || g_colObjMath) colObjPal[i] = 0xFF;
+            if (fieldColPassOn()) colObjPal[i] = 0xFF;
           }
     }
     if (bg3Plane)                                      // the caption plane's priority-1 cells: the front layer
       for (int y = 0; y < ch; y++) fieldBg3PlaneRow(fb, y, bg3V + y, bg3H, 1, CtSceneMem7E(f.vm), NULL, 0, 0);
-    if (g_colWinOn || g_colObjMath) {
+    if (fieldColPassOn()) {
       int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
       if (cvs && cvW > 0 && cvH > 0) fieldColWindowApply(fb, cw, ch, colObjPal, cvs, cvW, cvH, camx, camy, f.sd);
     }
@@ -19135,7 +19158,7 @@ int main(int argc, char** argv) {
     // wave, g_bg3RowOn) nor a sprite mixed in as a BG pixel's sub pixel (g_objSubMixed): such a frame's in-betweens
     // are the reprojection's (CtMotRaster), from the frame's own picture.
     { static CtSceneLayers motLayers[2]; static CtFieldNativeFx motFx[2];
-      if (mot->valid && !g_bg3RowOn && !g_objSubMixed && (hostInterp(pr) || getenv("CT_NATIVECHECK")) &&
+      if (mot->valid && !g_bg3RowOn && !g_objSubMixed && !g_colFixMap && (hostInterp(pr) || getenv("CT_NATIVECHECK")) &&
           CtFieldSceneLayers(f.sd, &motLayers[g_motIdx])) {
         mot->native = &motLayers[g_motIdx];
         motLayers[g_motIdx].beyond = wideW > CAMW ? g_wideBeyond : 0;

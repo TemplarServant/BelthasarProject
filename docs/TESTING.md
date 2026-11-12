@@ -1180,7 +1180,7 @@ the camera is the NMI's latch -- and a word written in a line's H-blank is the n
 Full tier (~40 s and ~25 s). Two mutations each: the latched table, the word a line late. The playthrough check pins
 the same two lines.
 
-### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3
+### field-picture-*-vs-cartridge (`tools/field_picture_cmp.py`): death-peak-snow, end-of-time-pillar, party-stack-order, backdrop-out-of-the-math, bg3-above-every-sprite, sprites-on-the-sub-screen-under-bg3, fixed-colour-over-the-map
 
 A field PICTURE, the port against the cartridge from one cartridge state. A leg's own end picture is graded wherever the
 route cut the leg -- after a walk, a load or a fight whose length is the timing class -- so it says little about how a
@@ -1188,9 +1188,16 @@ room is drawn. `tools/field_picture_cmp.py <name>` takes the cartridge's state a
 power-on by tools/playthrough.py) or at a frame inside it (`at`: the leg's pad played that far on the cartridge, cached
 in build/_fieldpic with the route's key), leaves the pad alone for 30-40 frames on both sides and compares the pictures at
 the lag that fits best (`fieldpicture: <name> leg <n>[ f<at>] +<k> idle frames: <d> px differ at port <lag>`; `--png`
-writes the cartridge, the port and the pixels apart to build/_fieldpic). Six pictures, all 0 px
+writes the cartridge, the port and the pixels apart to build/_fieldpic). Seven pictures, all 0 px
 (disasm/notes/field_bg3_wave_and_obj_under_bg.md, field_draw_list_order.md sec. 6):
 
+- **fixed-colour-over-the-map** (leg 122 f61500, loc 19F; 49,965 px before): op 0xF1 fades the throne room with
+  CGADSUB 97 and no sub layer, so every BG pixel's operand is the fixed colour `$0121` (channel 6's rows, FD/C6E7) --
+  the port did that math only inside a colour window (disasm/notes/field_quad_window.md, its last section). The one
+  `own` picture: the state is cut inside a walk, so both sides go on with the leg's own 24 frames of pad and the
+  port's first key is the leg's pad frame before the cut (an idle pad lets the port's direction go a frame early).
+  Two mutations: the fixed colour only inside a window, the fade's target for its current value. ~4 min the first
+  time (the state is 61,500 frames into the leg), seconds cached.
 - **death-peak-snow** (the start of leg 135, loc 0F6; 19,770 px before): the snow is BG3 under the window wave --
   HDMA channel 3 gives BG3HOFS a line at a time (picture row r shows transfer r - 1), the wave's phase `$1DFB` moves
   four a pixel with BG3's vertical committers (C0/9721 / C0/975F), and the snow's priority-1 pixels, above every OBJ

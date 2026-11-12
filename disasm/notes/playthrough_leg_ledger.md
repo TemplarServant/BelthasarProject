@@ -131,3 +131,33 @@ pictures show -- none of it a leg closed above, all of it still to be taken one 
   (`ct.exe --ppuregs` on the end state): the leg's cut is the first frame of the load's ramp, the class of 118-121
   above. 91's light discs show in the seeded port only (the leg's own cmp is SAME). 131 and 133 were the 2300 A.D.
   map's dust, a draw bug, fixed (their rows).
+
+**The mid-leg sweep (2026-11-11).** The same question asked INSIDE the legs: the cartridge's state every 1500 frames
+of each leg (cut in one pass), both sides from it for 24 frames, the pictures compared (scratch `s12_midsweep.py`,
+`s12_midone.py` for one state; build/_pt77/scratch_tools, results build/_pt77/midsweep3). Two things about the harness
+first:
+
+- Both sides must go on with the LEG'S OWN pad, and the port's first key must be the leg's pad frame before the cut
+  (the port's keys are the cartridge's one frame later). With an idle pad the port lets a held direction go a frame
+  early and every state cut inside a step shows a static 280-350 px: the "seed in mid-motion" class of the one-state
+  sweep above was this artefact (30 f3000 and 21 f1500: 280 / 322 px idle, 0 px with their own pad).
+- Only FREE-ROAM states say anything: the player in control (`$011F` != 0) and no fight (`$95D5` = 80). A state inside
+  a cutscene, a dialogue's opening or a fight's boot holds CPU state the seeded port does not resume -- it runs ahead
+  (leg 65 f76500: the port is in the fight 36 frames before the cartridge) or types the page again.
+
+344 states compared (every state up to leg 99, before the free-roam filter went in; free-roam states only from leg
+100 on), 204 at 0 px. Up to leg 99 what differed was a dialogue being typed, a fight or its boot, a shop, tiles a
+script drew (33 f4500, loc 047) or a palette effect in flight (31 f1500's stained glass) -- the seed's limits above.
+From leg 100 on, by what the pictures show:
+
+- **A port bug, fixed:** leg 122 f61500, loc 19F -- the fixed colour's math over the map with no colour window (op
+  0xF1's fade; 49,965 px; disasm/notes/field_quad_window.md, its last section;
+  `field-picture-fixed-colour-over-the-map-vs-cartridge`).
+- A cut on the first frames of a load's brightness ramp (the port stays black): 100 f43500, 116 f132000, 117 f4500,
+  122 f1500, 124 f27000 (`$0119` = 00 at the cut), 127 f21000.
+- A text box open in free roam: 101 f6000.
+- A map a script drew: 125 f4500 / f6000 (loc 170, the Blackbird's corridors).
+- The lead on a ladder, mirrored (125 f70500 / f72000, loc 1BB, 200 px): the host's own copy of the lead's facing and
+  tile mode is not the seed's. The port's OWN run of leg 125 cut at f70524 draws her as the cartridge does.
+- Death Peak's snow (134 f15000, 137 f24000): the layer's position is not the seed's; the legs' own end pictures on
+  those rooms are 0 px.

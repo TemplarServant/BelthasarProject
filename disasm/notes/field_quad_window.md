@@ -111,3 +111,25 @@ unless CGWSEL bit 1 adds the sub screen, then clamped in 5 bits.
 The sprites take their own colour math the same way, with or without a colour window: a main-screen OBJ pixel of
 palettes 4-7 takes it when CGADSUB `$0BE0` has bit 4 set (C0/A412 sets `$0BE0` from the map header; op 0xF1 rewrites
 it). In loc 005 after `F1 9F 00` (`$0BE0` = 17) the lead's palette-4+ pixels take BG3's sub pixel once the circle is gone.
+
+## The fixed colour over the map, with no window (2026-11-11)
+
+The rule above holds without a colour window too, and the port did not draw it: the fixed colour's math ran only inside
+a colour window (and for the sprites), so a room op 0xF1 tints or fades with no window and no sub layer stayed as it was.
+
+Measured on the rule's cartridge: loc 19F, the Ocean Palace's throne room (playthrough leg 122, the cartridge's state
+at f61500, 24 frames on with the leg's own pad). TM 13, TS 00, CGWSEL `$0BDE` = 02, `$0BE0` = 97 (subtract; BG1, BG2,
+BG3, OBJ -- not the backdrop), `$0118` = 18 and `$0121` / `$0122` walking 23 -> 21, then 61 -> 64 (C0/1F5A, a step every
+`$0123` + 1 frames). WRAM is the same on both sides frame for frame; the pictures were 49,965 px apart: every BG pixel
+of the cartridge's is its colour less (2, 2, 0) in 5 bits -- (41,41,74) for the port's (57,57,74), (0,0,0) for
+(16,8,0) -- and the sprites of palettes 0-3 equal.
+
+- Channel 6's rows: FD/C6E7 `LDA $21 / STA $152D / LDA $000BE0 / STA $152C / STA $1530` (and C846's twin), every frame,
+  for the lines outside the text box. The NMI's own write is `LDA #E0 / STA $2132 / LDA $0121 / STA $2132` (C0/EC3D).
+- The operand (snes/ppu.c ppu_handlePixel): the sub pixel only where CGWSEL adds the sub screen AND a sub layer covers
+  the pixel (`secondLayer != 5`); everywhere else the fixed colour, halved only when CGWSEL does not add the sub screen.
+
+src/field.c: `g_colFixMap` (CGADSUB has a BG or backdrop bit, CGWSEL's high nibble clear, and a fixed colour or its
+half to apply) lets `fieldColWindowApply` run over the map's pixels with no window; a pixel the bake already gave its
+sub pixel is left alone. The frames-between drawer falls back to reprojection on such frames. Check:
+`field-picture-fixed-colour-over-the-map-vs-cartridge`.

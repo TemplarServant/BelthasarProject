@@ -51097,6 +51097,46 @@
       ]
     },
     {
+      "name": "field-picture-fixed-colour-over-the-map-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fixed-colour-over-the-map"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fixed-colour-over-the-map leg 122 f61500 +24 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: fixed-colour-over-the-map "
+      ],
+      "tier": "full",
+      "timeout_s": 1500,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Loc 19F, the Ocean Palace's throne room while op 0xF1 fades the screen: every BG pixel is its colour less the fixed colour, as on the cartridge (CGADSUB 97, no sub layer, no colour window), the sprites of palettes 0-3 untouched",
+      "notes": "2026-11-11, found by the mid-leg picture sweep (disasm/notes/field_quad_window.md, 'The fixed colour over the map'; playthrough_leg_ledger.md): TM 13, TS 00, CGWSEL 02, `$0BE0` = 97 and `$0121` walking toward `$0122` (C0/1F5A). Channel 6's rows carry `$0BE0` / `$0121` on every map line (FD/C6E7) and the PPU's operand for a math pixel with no sub pixel under it is the fixed colour (ppu_handlePixel). The port did that math only inside a colour window and for the sprites: 49,965 px, the room drawn undarkened -- WRAM equal frame for frame, so the drawing alone. The first `own` picture: the state is cut inside a walk (the party going up the carpet), so both sides go on with the leg's own 24 frames of pad and the port's first key is the leg's pad frame before the cut. The state is made from the route (leg 122's pad played 61500 frames on the cartridge, cached in build/_fieldpic with the route's key; about 4 minutes the first time). Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  g_colFixMap = (g_colWinMath & 0x27) && (cgw & 0xF0) == 0 &&",
+          "replace": "  g_colFixMap = 0 && (cgw & 0xF0) == 0 &&   /* MUT: the fixed colour only inside a colour window */",
+          "why": "with no colour window the map's pixels still take the fixed colour: without it the room is not darkened (49,965 px)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  { uint8_t cd = w128[0x0121]; int i5 = cd & 0x1F;",
+          "replace": "  { uint8_t cd = w128[0x0122]; int i5 = cd & 0x1F;   /* MUT: the fade's target, not where it stands */",
+          "why": "COLDATA is `$0121`, the value the fade walks a step at a time (C0/1F5A); `$0122` is where it is going"
+        }
+      ]
+    },
+    {
       "name": "field-picture-bg3-above-every-sprite-vs-cartridge",
       "argv": [
         "python",
