@@ -2978,7 +2978,7 @@
         "pcblit f219 seat0 cid0 pose=07 foot=(134,144) cells=(123,96)(126,112)(142,128)(126,128)",
         "pcblit f389 seat1 cid1 pose=DA foot=(176,111) cells=(167,63)(164,79)(180,78)(164,95)",
         "pcblit f389 seat0 cid0 pose=C7 foot=(134,147) cells=(126,124)(110,118)(126,139)(126,111)",
-        "battleshot: f219 fnv=BA77192C"
+        "battleshot: f219 fnv=A53D8636"
       ],
       "pin": [
         "^flee f\\d+ ",
@@ -2998,9 +2998,9 @@
         },
         {
           "file": "src/battle.c",
-          "find": "    s[0xCD05] = (h->sysMsgOpenT <= CtBattleMsgLen(s)) ? 0x10 : 0x00;",
-          "replace": "    s[0xCD05] = (h->sysMsgOpenT <= 8) ? 0x10 : 0x00;   /* MUT: the renderer stops typing after 8 */",
-          "why": "CD/04DF types ONE decoded character per step (battleSysMsgFrame): the C2 renderer answers $10 while the string goes on -- 14 steps for \"Can't run away\" (CtBattleMsgLen) -- and 0 on its terminator, and the box-open (the dwell's last re-arm) follows the string's length (rule's oracle gato_wait: $CD05 = 10 f608-f621, 00 f622). Cut after 8 characters the box opens early"
+          "find": "      s[0xCD05] = s[0x0215];                                   // CD/04ED-04F0",
+          "replace": "      s[0xCD05] = (h->sysMsgOpenT <= 8) ? 0x10 : 0x00;   /* MUT: the renderer stops typing after 8 */",
+          "why": "CD/04DF types ONE decoded character per step (battleSysMsgFrame): the C2 renderer answers $10 while the string goes on -- 14 steps for \"Can't run away\" (the engine itself, `LDA $0215 / STA $CD05`) -- and 0 on its terminator, and the box-open (the dwell's last re-arm) follows the string's length (rule's oracle gato_wait: $CD05 = 10 f608-f621, 00 f622). Cut after 8 characters the box opens early"
         },
         {
           "file": "src/battle.c",
@@ -3560,8 +3560,8 @@
         "flee f733 ranaway-post ctr=120 cd=1 flags=02 msg=FF box=00 dwell=0",
         "flee f735 ranaway-open ctr=122 cd=3 flags=02 msg=FF box=00 dwell=0",
         "flee f811 ranaway-close ctr=198 cd=79 flags=02 msg=FF box=00 dwell=0",
-        "battleshot: f758 fnv=4BE8BD39",
-        "battleshot: on ranaway-open#1+23 fnv=4BE8BD39",
+        "battleshot: f758 fnv=CD82DC50",
+        "battleshot: on ranaway-open#1+23 fnv=CD82DC50",
         "battleshot: anchor 'ranaway-open'#1 fired f735, shooting f758 (+23)"
       ],
       "tier": "quick",
@@ -3573,10 +3573,10 @@
       "notes": "THE 'RAN AWAY!' BOX: CD/01B3 with id 8 over the results-message table CE:EF11 (assets/text.py `table EEF11` -> 'Ran away!'), `$020D/E/F = 11 EF CE`, `$020C = 8`, the window preset `$CCEC = 10` at T+3 (two CD/3E7D waits after the C2/0003 draw) -- the shot at f800 is inside its 76-frame window (f777-f853) with the PCs in their run poses 15/13 (the 0x2B window from the hold) and the enemies still drawn. || RE-PINNED 2026-09-17 (fnv only; old/new frames diffed pixel by pixel, every difference inside the selection bracket's 24x40 box): the bracket is the ROM's now (C1/1115 + C1/17DD, disasm/notes/battle_bracket.md) -- its grey band follows $A4EF from the band's arm (CF/E5AA, D1:5980; the bake ran it 12 frames off, from the port's combat frame), it is rebuilt every fourth frame from the chooser's LIVE foot, and after GATO's attack A Crono's live foot is 147, not the staged 144 (oracle gato_inbattle.state f0: $1D23 = 93, OAM 0 = 7A 6F 06 32, C1:1144). ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): its content moved with the fight: a fixed frame now falls where GATO / the Hetakes stand at another point of their wander, or where the actions came in another order, and the HUD's gauges read other values. Sampled against the old binary at the same event (the song: same spotlight, GATO displaced; the Ice shot's strike#2 is now GATO's song), NOT re-graded against the cartridge one by one. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18 (c), RE-PINNED (an enemy action closes at its script's op 01, disasm/notes/battle_boot_turns.md sec. 5): An enemy action now ends as every action does in the ROM -- C1/40CE's `$9876` test after the script's op 01 (C1/4CF7 -> C1/4D00) plus C1/40D3-41BA's tail -- instead of on a stored span (CT_SPAN_ENEMY_AVG 202 for every non-GATO enemy, GATO's 157 / 224 / 311). Measured on the cartridge: every enemy action closes `$9876 = 1` + 5 frames with a PC victim; the forest Hetake's six spans are now the cartridge's (177 202 188 189 192 187, were 202 each). GATO's attack A is 153 (cartridge 157), attack B 213 (222 / 226), the song 300 (311): the difference is the cartridge's LAG frames -- the action loop's every-8th-frame job (C1/10FA -> C1/0C2D, C1/1C3A's 384-byte copy) overrunning the NMI through his flurry, the C0/C4 pre-roll's decompressions -- a CPU overrun the port has no clock for (named, not fitted). The close then exposed the EFFECT TEARDOWN the main loop runs (C1/10A0 JSL CD/0009 -> CD/04AA -> CD/0453, ported): after an action whose programs ran (`$CCEA` set), 21 frames with no main-loop iteration, `$CCEA` / `$CCA2` cleared, the colours and layer shadows put back -- the port had never cleared `$CCEA` (a second program held its action forever) and lost none of those frames. Song end -> GATO's next attack is 281 frames against the cartridge's 279 (was 257). So the fight after each GATO action runs 4 / 11 frames earlier, and where that changes which ATB fills first, the order of later actions and the RNG draws that ride on it. PHOTO MOVED f800 -> f775: the same moment, found by the action's identity with the OLD binary reproducing the pinned hash through the anchor (act-end cur=0 9877=14 #2, anchor act-end#2+103); the only pixels that differ are the target bracket's four corners (52 px) -- its pulse phase, a global counter. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. The shot moved from f775 to the event it was taken after, act-end#2+103 (the old binary reproduces the pinned picture through it): the anchor is the same action; the picture changed where the fight did (ATB bars, the others' poses). MUTATION AUDIT 2026-09-18 (after the two-frame iteration): its mutation survived the re-anchored check; act-end#2+103 fell two frames before the box opened (f745 against f747). The flee's own moments are anchors now (battleFleeTrace records them like battleTrace), and the shot is ranaway-open+23 -- the old note's f800 in the f777 window, inside the box's 76 frames. ==== 2026-09-25, RE-PINNED (fnv only; every trace line unchanged): the location load now stages C0/00F4's legs inside fieldLoad, ahead of CtSceneCreateIn, and C0/7084's pass there runs fieldWindowFromRom -- so a --battletest draws its message window with the ROM's style ($2991 & 7 = 0, C0/29F7 + C0/6E5C's $FF:9E10 characters) instead of the baked stand-in it used when nothing had called it; the seed path now re-applies the seed's own $2991 as --loadwram does. Old/new diffed: 15 px, all in ONE 8x8 cell of the window (x 5-7, y 16-23), the same in the forest and GATO shots. GRADED on the cartridge: forest_battle_3hetake.state held L+R ('C00'), `Ran away!` at $020C = 08 f499 / $CCEC = 10 f502, frame f525 (= ranaway-open + 23): the 15 changed pixels equal the cartridge's 15/15 (old 0/15), the cell 64/64 (old 49/64). ==== 2026-09-26, RE-PINNED (defect #19, Yakra): frame moves only, the subject lines unchanged. Three ROM mechanisms moved the later timeline: (1) C1/3714's pass counter $9897 is staged $989F + slot, $989F = CC/F544[((period >> 1) << 2) + (step >> 1)] from the E4/F600 walk record (CC/EBE3-EBFA; 0x20 for a Hetake as before, 0x10 for Yakra), and it counts only while the live mode is not 0 (C1/371F `LDA $974A,X / BEQ`) -- the cartridge's forest_holdleft_pre holds $9897 = 16 17 while $974A = 00 00 and counts slot 2 in mode 04; slot 2's re-commits now fall at the cartridge's +16/+48/+176 after the shared commit (the old pins: +32/+64/+192); (2) an enemy PHYSICAL stages C1/4497's config -- $987A..$9886 from CD/4926/CD/4F26 by the id word $9853 (CC/EC03) -- so its effect objects walk the ROM's animation set ($9885 = BCFC for the Hetake, C1:4530) instead of CE/0000; (3) the anim op A2 (C1/6751) and the effect-object points 1C-23 (C1/77EC). The forest's six Hetake spans stay the cartridge's (battle-enemy-close-op01-forest-vs-oracle, unchanged). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines -11 frames (the fixture boot / the song load); the pin regexes match more lines than the expects, which are kept.\n==== RE-PIN 2026-10-07 (the Hetake is drawn by the generic enemy renderer; field.c battleHetakeRender retired): its idle walk publishes poses 00/01/02/07 into $9907 like any enemy's and the old renderer drew one baked pose for all of them (and the corpse from it). MEASURED against the rule's cartridge: the user's save saves/battle_re/hetake_dissolve_anim_ppu.state (WRAM, CPU, VRAM, OAM, CGRAM spliced; $9907 = 00/07/01), tools/enemy_cells_cmp.py 1436 -> 2862 of 2960 px (slot 2, alone, 1024/1024; the rest is Crono over slot 1); the live forest fight's idle Hetakes over 241 frames, best-aligned: 124672 -> 245413 of 272926 px, 0 -> 114 frames identical. Only this check's picture hash moved. ==== 2026-10-13, RE-PINNED: the idle tick runs the mode machine C1/3714 BEFORE the mirror refresh C1/283D (C1/10B5/10B8), and the boot (C1/002A) and the action loop (C1/40C8) refresh it too; on the forest fight that makes the Hetakes' feet equal to the rule's oracle in value and frame over all 399 changes of the fight (to the port's debug end) and every action span the cartridge's (battle-enemy-close-op01-forest-vs-oracle), where the old order drifted from the third action on. The lines here moved with it (two frames from the third forest action on; in GATO's forced-status run, which target the stream picks). ==== RE-PINNED 2026-10-27: the \"Ran away!\" box opens at the post + 2 and closes at + 78, the run-off's C1/895B at + 94 and $A013 at + 96 (battle.c battleFleeStageTick) -- the rule's cartridge's offsets, measured on saves/battle_re/forest_holdleft_pre (L+R from f350: the post f849, $CCEC 10 f851 / 00 f927, $AE93 79 f943) and on the playthrough's 48_lab32_road (the post f708, 710 / 786 / 802, $A013 f804); the old + 3 / + 79 / + 95 were the forest's before the rule flip (C2/0009's render, NMI-on CPU work, is free under it). Every line after the post moves one frame earlier; nothing else changes. ==== MUTATION [1] RE-TARGETED 2026-11-04 (by hand, the contributor refactor): its find no longer matched the current source; the same break on the code as it is now.",
       "mutations": [
         {
-          "file": "src/field.c",
-          "find": "    snprintf(line, sizeof line, \"Ran away!\");",
-          "replace": "    snprintf(line, sizeof line, \"%s\", \"\");   /* MUT: an empty box */",
-          "why": "CE:EF11[8] decodes to 'Ran away!'; the box carries that line for the fixed 60-frame wait"
+          "file": "src/battle.c",
+          "find": "    battleMsgVwfRun(h, 0x40);                                       // CD/027C -> CD/027F: `STA $0213 / JSL C2/0009`",
+          "replace": "    h->mem[0x0213] = 0x40;   /* MUT: an empty box */",
+          "why": "CE:EF11[8] is 'Ran away!': CD/027F's `JSL C2/0009` draws it into the window's strip $7E:B400, and the box carries that line for the fixed 60-frame wait"
         },
         {
           "file": "src/battle.c",
@@ -5266,7 +5266,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "battleshot: on victory#1+71 fnv=58F77070"
+        "battleshot: on victory#1+71 fnv=B39DB3BB"
       ],
       "pin": [
         "^battleshot: on victory#1\\+71 fnv="
@@ -5383,22 +5383,22 @@
         "saves/battle_re/bat9.raw.wram"
       ],
       "expect": [
-        "renderwram: msgbox=8..31(24) row3=19,20,20 row13=5,6,7 row16=4,5,6",
+        "renderwram: msgbox=8..31(24) row3=19,20,20 row13=5,6,7 row16=4,5,6 row19=0,1,2 row20=0,0,0",
         "renderwram: hud $2989=$12 bit1=1 windows=[8:249,160:153]"
       ],
       "timeout_s": 90,
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "    int sy = (y < 16) ? y : (tbWinH - (CT_BRESULT_H - y));",
-          "replace": "    int sy = (y < 12) ? y : (y >= CT_BRESULT_H - 10) ? tbWinH - (CT_BRESULT_H - y) : 12 + (y - 12) * (tbWinH - 22) / (CT_BRESULT_H - 22);  /* MUT: the field box's 12/18/10 patch */",
-          "why": "The generic nine-patch samples the bake proportionally; the battle window's rows are an 8/8/8 TILE-ROW split (box 0..15 <- bake 0..15, box 16..23 <- bake 72..79), measured against the oracle's own band."
+          "find": "    const uint8_t* rec = mem + 0xC0EF + 4 * r;",
+          "replace": "    const uint8_t* rec = mem + 0xC0EF + 4 * (r / 5);   /* MUT: the field band's five lines a step */",
+          "why": "The window's colour math is channel 5's record of the LINE: `cnt=98 ind=$C0EF`, a repeat entry, one {CGWSEL CGADSUB COLDATA SETINI} group per scanline, built by D1/F88C..F8E1 as 12 lines of add 8..1, 11 of subtract 0..7 and none on the last. The field box's band steps every five lines; read that way the window's rows 13 and 16 still add."
         },
         {
           "file": "src/field.c",
-          "find": "    int fr = ctFieldWinRamp(sy), br = ctBattleMsgRamp(y);",
-          "replace": "    int fr = 0, br = 0;  /* MUT: keep the bake's FIELD ramp */",
-          "why": "CT_ASSET_WINDOW is a lift of the FIELD dialogue box, whose band is ADD 8..1 then SUB 0..7 at FIVE lines a step over 80 rows. The battle band (D1/F88C..F8CE: 12 ADD, 11 SUB, one off, one step per line) is a different shape, so leaving the field ramp baked in mis-colours every row."
+          "find": "  int r1 = below ? 0xCA02 : 0xCA06, r3 = below ? 0xCA0E : 0xCA12;",
+          "replace": "  int r1 = below ? 0xCA06 : 0xCA02, r3 = below ? 0xCA0E : 0xCA12;   /* MUT: BG1's record of the other side */",
+          "why": "BG1's scroll in the band is channel 1's record of the window's side: $CA02 (vofs FF27, D1/F35F) when the window is below, $CA06 (00D7) above -- either puts BG1's lines 224-247, the frame rows 28-30 of the tilemap at $7800, on the band's 24 scanlines. With the other side's record the band shows other rows and the frame is gone."
         }
       ],
       "notes": "THE BATTLE MESSAGE BAND IS 24 SCANLINES WITH ITS OWN COLOUR RAMP (defect #10 'the message with the battle's rewards does not have the correct hdma'). The results window is one HDMA band of the preset D1/FE5E selects with `LDA $CA25 / CLC / ADC $CA22 / CLC / ADC $CCEC / JSL CE:EE6E`; read out of the armed ch0 header at $7E:C867 its entry is cnt=$18 ind=$BE9B -- 24 scanlines -- and ch4 gives TM=TS=$05 (BG1+BG3) for exactly those lines. The same $18 comes back at the opposite position, so the height is the band's and not one fixture's accident. The RAMP is ch5's table $7E:C0EF, built by D1/F88C..F8CE as an accumulator stepped by $00AA: 12 lines of ADD 8..1 ($E856 down), 11 of SUB 0..7 ($E0AA up), math OFF on the last. The port drew 40 rows of the FIELD dialogue bake, whose own band (ADD 8..1 then SUB 0..7 at FIVE lines a step over 80 rows) is baked into the texture. Now: 24 rows, an 8/8/8 tile-row patch (box 0..15 from bake 0..15, box 16..23 from bake 72..79) and the field ramp swapped for the battle one. MEASURED against the oracle (saves/battle_re/forest_battle_3hetake.state driven to the results box, its rows compared in the text-free columns x=170..250): 22 of the 24 rows are EXACT in 5-bit units. The two that are not are box rows 19 and 20 (+2): CT_ASSET_WINDOW is a lift of the FIELD box and its own band CLIPPED those rows (bake rows 75/76 pinned at 0), so no de-ramp can recover the base -- the code takes the largest base the clamp allows. The clean fix is a 256x24 lift of the battle box itself, the way saves/ct_window.bin was made; until then those two rows are 2/31 dark. row3 and row16 are sampled at x=210, a text-free column: the oracle reads 19,20,20 and 4,5,6 there and so does the port. row3/row13/row16 are sampled at x=210, a text-free column; the oracle reads 19,20,20 / 5,6,7 / 4,5,6 there. Row 13 is the one that tells the two row-patches apart (8/8/8 takes it from bake row 13, the generic 12/18/10 from bake row 41); rows 3 and 16 agree under both. ==== 2026-09-23, RE-PINNED: the strip's white border run 147 -> 153. The fixture has Crono alone in the queue, and the ROM's frame rows ($0B40 = the base $D1:5800 + C1/081E's seat-0 frame) keep the party window's own top-left corner at col 12, 6 px further left than the both-ready capture's box1 edge; the strip equals the cartridge's (tools/battle_hud_strip_cmp.py, bat4_lake / bat9_lake: all but the running ATB cells). disasm/notes/battle_hud_command_windows.md"
@@ -5425,7 +5425,7 @@
       ],
       "expect": [
         "renderwram: msgtext=x8..154 dy=6..15",
-        "renderwram: msgbox=8..31(24) row3=19,20,20 row13=5,6,7 row16=4,5,6"
+        "renderwram: msgbox=8..31(24) row3=19,20,20 row13=5,6,7 row16=4,5,6 row19=0,1,2 row20=0,0,0"
       ],
       "pin": [
         "^renderwram: msgtext=",
@@ -5434,25 +5434,117 @@
       "timeout_s": 30,
       "mutations": [
         {
-          "file": "src/field.c",
-          "find": "  int x = TB_X0, y = boxTop + CT_BRESULT_TEXT_DY;",
-          "replace": "  int x = TB_X0 + 10, y = boxTop + CT_BRESULT_TEXT_DY;   /* MUT: the port's old indent */",
-          "why": "The pen X is the ROM's own $0234, set to 8 by C2/57DF (`LDA $0214 / CMP #02 / BNE / LDA #00 / BRA / LDA #08 / STA $0234`, and CD/0264 zeroes $0214), and $0234 IS the pixel X -- C2/5DE7 takes `$0234 & 7` as the sub-tile column, C2/5E02 `($0234 & F8) >> 2` as the tile, C2/5E27 advances it by the ROM width table $C2:60E6. The port added 10 to it, so every reward line started 10px right of where the ROM puts it (oracle ink x 8..154 at BOTH band positions)."
+          "file": "src/battle.c",
+          "find": "  s[0x0214] = 0;\n  memset(s + 0xB400, 0, 0x400);                                // CD/0239",
+          "replace": "  s[0x0214] = 0x80;   /* MUT: the pen from x 0 */\n  memset(s + 0xB400, 0, 0x400);                                // CD/0239",
+          "why": "The pen X is the ROM's own $0234, set to 8 by C2/57DF (`LDA $0214 / CMP #02 / BNE / LDA #00 / BRA / LDA #08 / STA $0234`; `LDA $0214 / BPL / STZ $0234`) because CD/0272 zeroes $0214: the engine draws the line into the strip from pixel 8 (oracle ink x 8..154 at both band positions). With bit 7 set the pen starts at 0."
         },
         {
           "file": "src/field.c",
-          "find": "#define CT_BRESULT_TEXT_DY   6",
-          "replace": "#define CT_BRESULT_TEXT_DY   14",
-          "why": "The glyph cell tops out at band row 6, measured on the oracle at both band positions (forest_battle_3hetake line 1: band top renderY 8, ink rows 14..23; bat4_lake line 1: band top 184, ink rows 190..199). The port used 14 and the line sat 8 rows low inside a 24-row window."
+          "find": "  int r1 = below ? 0xCA02 : 0xCA06, r3 = below ? 0xCA0E : 0xCA12;",
+          "replace": "  int r1 = below ? 0xCA02 : 0xCA06, r3 = below ? 0xCA12 : 0xCA0E;   /* MUT: BG3's record of the other side */",
+          "why": "BG3's scroll in the band is channel 3's record of the window's side: $CA0E (vofs 000D, D1/F36E) below, $CA12 (00BD) above -- BG3's lines 198-221, so the strip's two tile rows (tilemap rows 25-26) start on the band's line 2 and the glyphs' ink covers band rows 6..15 (oracle: ink rows 14..23 with the band at 8, 190..199 with the band at 184). The other side's record shows other rows: no text in the band."
         },
         {
           "file": "src/field.c",
-          "find": "    if (*p == ' ') { x += cGlyphW(font, gi); continue; }        // (its bitmap is blank -- nothing to draw)",
-          "replace": "    if (*p == ' ') { x += 5; continue; }   /* MUT: a magic space width */",
-          "why": "The SPACE is CT charset $EF = glyph index 79, and the ROM's own advance table at $C2:60E6 (baked into this font blob, read by C2/5E27) says 4. A hardcoded 5 stretches every line: over the three spaces of \"Got N experience point(s)!\" the port's ink ran to x157 instead of the oracle's x154."
+          "find": "                         : (t >= 0x130 && t < 0x150) ? mem + 0xB600 + (t - 0x130) * 16 : NULL;",
+          "replace": "                         : (t >= 0x130 && t < 0x150) ? mem + 0xB500 + (t - 0x130) * 16 : NULL;   /* MUT: the right half from the left half's lower row */",
+          "why": "The strip $7E:B400 is four runs of sixteen tiles: 100-10F and 110-11F (the left half's two rows, uploaded from $B400 to VRAM $5800) and 130-13F and 140-14F (the right half's, from $B600 to $5980; CD/0694-06AF). A line longer than 128 px (\"Got 9 experience point(s)!\" ends at x 154) has its tail in the right half."
         }
       ],
       "notes": "THE REWARD LINE'S PEN ORIGIN inside the results window -- the reported \"the reward messages at the end of the battle are not aligned in the box\". battle-results-band-24-lines grades the window CHROME and is completely blind to the text; the text was 10px right, 8 rows low and 3px wide. Signature is read back OUT OF THE RENDERED PIXELS and reported RELATIVE to the band top, so the same numbers hold at both band positions (the bottom half is graded by battle-results-band-24-lines-bottom, which carries the same msgtext line). ORACLE: forest_battle_3hetake mashed to $020C=0 with $CCEC=$10 (line 1, \"Got 9 experience point(s)!\") -- ink x 8..154 over image rows 22..31 = renderY 14..23 with the band at renderY 8; bat4_lake, same line, ink x 8..154 over image rows 198..207 = renderY 190..199 with the band at 184. The port now reproduces the oracle's per-row lit-pixel counts and x extents EXACTLY (20,15,80,71,80,58,64,73,6,4 / x 9..154, 8..154, ..., 56..111). X is ROM-DERIVED ($0234 = 8, C2/57DF) and so is the advance (the $C2:60E6 width table, space = 4); the row-6 offset is an ORACLE MEASUREMENT at both positions -- the $CA24 tilemap upload's VRAM row is not derived, and that is the one thing here that is not read off an instruction."
+    },
+    {
+      "name": "battle-message-window-reward-line-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_msg_window_cmp.py",
+        "reward-line"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_ring_cmp.py",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "msgwindow: reward-line leg 117 f5100 +2700 frames of the leg's pad: strip 0 of 1024 bytes differ, engine 0 of 64 bytes differ",
+        "msgwindow: reward-line the window's 24 lines (rows 184-207): 0 px differ at port +0; text pixels 1472"
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "notes": "A REWARD LINE THROUGH THE TEXT ENGINE (disasm/notes/battle_message_window.md): leg 117's second fight, played by the port from a cartridge state cut in the field before it, to its first reward line -- message 00 of CE:EF11, `Got {0F} exp...`, the number FD/AD26 stages at $0200-$0202 -- \"Got 468 experience point(s)!\", which crosses the strip's two halves. The strip and the engine's state are the cartridge's bytes and the window its picture. The victory's lines used to be host strings (\"ASCII approx\"); FD/AD17's arguments and CD/01B3's build now feed the same engine (battle.c battleResultLinePost).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    case 0: case 2: s[0x0200] = (uint8_t)val; s[0x0201] = (uint8_t)(val >> 8); s[0x0202] = 0; break;",
+          "replace": "    case 0: case 2: s[0x0200] = (uint8_t)val; s[0x0201] = 0; s[0x0202] = 0; break;   /* MUT: the number's low byte only */",
+          "why": "FD/AD26 `STX $0200 / STZ $0202`: the experience is a 16-bit word (468 = $01D4) the template's code 0F reads as three bytes. One byte prints 212"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  battleMsgVwfRun(h, 0x40);                                      // CD/01D5 JSR CD/027F",
+          "replace": "  battleMsgVwfRun(h, 0x10);   /* MUT: sixteen glyphs */",
+          "why": "CD/027C `LDA #40`: the whole line in one call, up to 64 glyphs. Sixteen stop inside \"experience\""
+        },
+        {
+          "file": "src/field.c",
+          "find": "        const uint8_t* g = (t >= 0x100 && t < 0x120) ? mem + 0xB400 + (t - 0x100) * 16",
+          "replace": "        const uint8_t* g = (t >= 0x100 && t < 0x110) ? mem + 0xB400 + (t - 0x100) * 16   /* MUT: the upper row only */",
+          "why": "Tiles 110-11F are the left half's lower row ($7E:B500): the glyphs are two tiles tall"
+        }
+      ]
+    },
+    {
+      "name": "battle-message-window-target-name-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_msg_window_cmp.py",
+        "target-name"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_ring_cmp.py",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "msgwindow: target-name leg 117 f600 +300 frames of the leg's pad: image 0 of 512 bytes differ, strip 0 of 1024 bytes differ, engine 0 of 64 bytes differ",
+        "msgwindow: target-name the window's 24 lines (rows 184-207): 0 px differ at port +0; text pixels 896"
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "notes": "THE BATTLE'S MESSAGE WINDOW IS THE CARTRIDGE'S, BYTES AND PICTURE (disasm/notes/battle_message_window.md): the Att picker's target box of leg 117's first fight (message 0C of CE:EF11, `12 01` -- the enemy's name typed a character a frame). The port boots the fight from a cartridge state cut in the field 100 frames before it; 300 frames on, the boot's image of the window's tilemap rows ($7E:7FFD, CC/E4FC), the text strip the engine drew ($7E:B400, C2/0003 / C2/0009) and the engine's own block and state ($0200-$023F) are the cartridge's byte for byte, and the window's 24 lines are its picture to the pixel (896 of them the text's two colours). Before: the window was a lift of the field box de-ramped (two rows 2/31 off), the text drawn by the host in three fixed tones -- 996 px of this frame.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  battleMsgVwfBegin(h);                                        // CD/0278 JSL C2/0003",
+          "replace": "  /* MUT: no C2/0003 */",
+          "why": "CD/0278 `JSL C2/0003` opens the string for the engine: the pointer `[$020D] + 2 * $020C` into $0231-$0233, the pen $0234 = 8, the argument cursor $023D = 00:0200, the verdict $0215 = 4. Without it the typed calls run on whatever the block held: no name in the strip, other bytes in the engine's state"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    b[0x80 + 2 * k] = (uint8_t)(0x10 + k); b[0xA0 + 2 * k] = (uint8_t)(0x40 + k);",
+          "replace": "    b[0x80 + 2 * k] = (uint8_t)(0x20 + k); b[0xA0 + 2 * k] = (uint8_t)(0x40 + k);   /* MUT: the left half's lower row from tiles 120.. */",
+          "why": "CC/E52B `LDA #10`: the text's second tile row is tiles 110-11F on the left (the glyphs' lower halves, $7E:B500). Named 120.. the row shows tiles no upload writes: the image differs and the glyphs lose their lower halves"
+        },
+        {
+          "file": "src/field.c",
+          "find": "          if (v) { int ci = ((w >> 10) & 7) * 4 + v; cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x04; }",
+          "replace": "          if (v) { int ci = 0 * 4 + v; cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x04; }   /* MUT: BG3 palette 0 */",
+          "why": "The text's words are `29xx`: BG3 palette 2, CGRAM 8-11 -- 1483 the shadow, 4A51 the edge, 7FFF the body on the battle's page. Another palette colours the glyphs from other words"
+        },
+        {
+          "file": "src/field.c",
+          "find": "cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x04; }",
+          "replace": "cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x01; }   /* MUT: the text through BG1's math */",
+          "why": "The band's CGADSUB is 01 / 81: the fixed colour is added to or subtracted from BG1 alone, so the frame ramps and the text does not -- its shadow 1483 and its edge 4A51 keep their colours on every line of the band"
+        }
+      ]
     },
     {
       "name": "battle-results-band-24-lines-bottom",
@@ -5474,22 +5566,22 @@
         "saves/battle_re/bat4.raw.wram"
       ],
       "expect": [
-        "renderwram: msgbox=184..207(24) row3=19,20,20 row13=5,6,7 row16=4,5,6",
+        "renderwram: msgbox=184..207(24) row3=19,20,20 row13=5,6,7 row16=4,5,6 row19=0,1,2 row20=0,0,0",
         "renderwram: msgtext=x8..154 dy=6..15"
       ],
       "timeout_s": 90,
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "    int sy = (y < 16) ? y : (tbWinH - (CT_BRESULT_H - y));",
-          "replace": "    int sy = (y < 12) ? y : (y >= CT_BRESULT_H - 10) ? tbWinH - (CT_BRESULT_H - y) : 12 + (y - 12) * (tbWinH - 22) / (CT_BRESULT_H - 22);  /* MUT: the field box's 12/18/10 patch */",
-          "why": "The generic nine-patch samples the bake proportionally; the battle window's rows are an 8/8/8 TILE-ROW split (box 0..15 <- bake 0..15, box 16..23 <- bake 72..79), measured against the oracle's own band."
+          "find": "    const uint8_t* rec = mem + 0xC0EF + 4 * r;",
+          "replace": "    const uint8_t* rec = mem + 0xC0EF + 4 * (r / 5);   /* MUT: the field band's five lines a step */",
+          "why": "The window's colour math is channel 5's record of the LINE: `cnt=98 ind=$C0EF`, a repeat entry, one {CGWSEL CGADSUB COLDATA SETINI} group per scanline, built by D1/F88C..F8E1 as 12 lines of add 8..1, 11 of subtract 0..7 and none on the last. The field box's band steps every five lines; read that way the window's rows 13 and 16 still add."
         },
         {
           "file": "src/field.c",
-          "find": "    int fr = ctFieldWinRamp(sy), br = ctBattleMsgRamp(y);",
-          "replace": "    int fr = 0, br = 0;  /* MUT: keep the bake's FIELD ramp */",
-          "why": "CT_ASSET_WINDOW is a lift of the FIELD dialogue box, whose band is ADD 8..1 then SUB 0..7 at FIVE lines a step over 80 rows. The battle band (D1/F88C..F8CE: 12 ADD, 11 SUB, one off, one step per line) is a different shape, so leaving the field ramp baked in mis-colours every row."
+          "find": "  int r1 = below ? 0xCA02 : 0xCA06, r3 = below ? 0xCA0E : 0xCA12;",
+          "replace": "  int r1 = below ? 0xCA06 : 0xCA02, r3 = below ? 0xCA0E : 0xCA12;   /* MUT: BG1's record of the other side */",
+          "why": "BG1's scroll in the band is channel 1's record of the window's side: $CA02 (vofs FF27, D1/F35F) when the window is below, $CA06 (00D7) above -- either puts BG1's lines 224-247, the frame rows 28-30 of the tilemap at $7800, on the band's 24 scanlines. With the other side's record the band shows other rows and the frame is gone."
         }
       ],
       "notes": "The OPPOSITE position of battle-results-band-24-lines (preset $12, $2989 bit1 = 0): the same cnt=$18 band at scanlines 185..208, the same ramp table. Pinning both stops the height or the ramp from being fixed on one side only. row3/row13/row16 are sampled at x=210, a text-free column; the oracle reads 19,20,20 / 5,6,7 / 4,5,6 there. Row 13 is the one that tells the two row-patches apart (8/8/8 takes it from bake row 13, the generic 12/18/10 from bake row 41); rows 3 and 16 agree under both."
@@ -5610,7 +5702,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "battleshot: on results-advance#3+0 fnv=44385E86",
+        "battleshot: on results-advance#3+0 fnv=480F0544",
         "battleloop: victory f2013 pcAttacks=3 cronoHP=66 marleHP=65"
       ],
       "pin": [
@@ -6802,7 +6894,7 @@
         "saves/battle_re/gato_wait.state"
       ],
       "expect": [
-        "tech char2 #1: cartridge up c694 span 213 | port up p694 span 213 | effect SAME; picture lag +1: 190 differing frame(s), worst 1504 px"
+        "tech char2 #1: cartridge up c694 span 213 | port up p694 span 213 | effect SAME; picture lag +1: 147 differing frame(s), worst 1504 px"
       ],
       "pin": [
         "^tech char2 #1: "
@@ -11753,8 +11845,8 @@
       "mutations": [
         {
           "file": "src/battle.c",
-          "find": "    s[0xCD05] = (h->sysMsgOpenT <= CtBattleMsgLen(s)) ? 0x10 : 0x00;",
-          "replace": "    s[0xCD05] = (h->sysMsgOpenT <= 18) ? 0x10 : 0x00;",
+          "find": "      s[0xCD05] = s[0x0215];                                   // CD/04ED-04F0",
+          "replace": "      s[0xCD05] = (h->sysMsgOpenT <= 8) ? 0x10 : 0x00;   /* MUT: the renderer stops typing after 8 */",
           "why": "the old fixed 18-frame open: the terminator lands at post + 19 whatever the string's length"
         },
         {
@@ -47315,7 +47407,7 @@
         "widescreen: scene 112 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 98 black",
         "widescreen: scene roll 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 29962 black",
         "widescreen: scene line 398x224: the middle 256 == the 256 picture (0 px differ); sides 31808 px, 29962 black",
-        "widescreen: scene forest 398x224: the middle 256 != the 256 picture (34266 px differ); sides 31808 px, 0 black; the view stands at x 0 (the camera at the room's edge), 12675 px differ there",
+        "widescreen: scene forest 398x224: the middle 256 != the 256 picture (34266 px differ); sides 31808 px, 0 black; the view stands at x 0 (the camera at the room's edge), 12679 px differ there",
         "widescreen: scene forest: the HUD rows 160-207 at the middle: 0 px differ"
       ],
       "pin": [
@@ -50463,7 +50555,7 @@
         "playthrough: 106_end_of_time SAME -- locs 133 1F3 116 1F3 112 111 110 1D0 | story A8 AB 40 AB | party 000105 | gold 2954 | hp 436 (4) | ctrl 8 | end picture 0 px at port -1",
         "playthrough: 107_keepers_dome DIFFERENT -- locs 1D0 0E3 0E2 1F2 0E1 0E0 0DF 1F2 0EC 0ED 0EC 1F2 0F1 0F2 0F3 | story AB 40 AB | party 000105 | gold 4034 | hp 335 (5) | ctrl 49 | end picture 57344 px at port +0",
         "playthrough: 108_epoch SAME -- locs 0F3 0F2 0F3 | story AB | party 000105 | gold 4034 | hp 335 (1) | ctrl 7 | end picture 0 px at port +0",
-        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53791 px at port +0",
+        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53722 px at port -5",
         "playthrough: 110_mt_woe_summit SAME -- locs 188 189 18B 18D 18B | story B4 | party 000105 | gold 7434 | hp 457 (3) | ctrl 17 | end picture 0 px at port +0",
         "playthrough: 111_mt_woe_chests SAME -- locs 18B 189 | story B4 | party 000105 | gold 8934 | hp 376 (2) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 112_mt_woe_189 SAME -- locs 189 188 | story B4 | party 000105 | gold 11934 | hp 310 (2) | ctrl 7 | end picture 0 px at port +0",

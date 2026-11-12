@@ -74,3 +74,9 @@ and so does the port.
 Checks `battle-results-band-24-lines` (top) and `-bottom` (the opposite position), two mutations each,
 all killed: the generic nine-patch, and keeping the bake's field ramp. Row 13 is the sample that tells the
 two patches apart -- 8/8/8 takes it from bake row 13, the 12/18/10 from bake row 41.
+
+## 5. Superseded (2026-11-12)
+
+The window is no longer a lift: it is drawn from the rows, the tiles, the page and the records the cartridge shows
+(`battle_message_window.md`), so the two rows of sec. 4 are exact (`row19=0,1,2 row20=0,0,0` in the fixtures) and the
+de-ramp of sec. 3 is gone. Sections 1-2 (the band, the ramp) stand.

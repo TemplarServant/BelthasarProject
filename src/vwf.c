@@ -7,12 +7,14 @@
 #include "romview.h"
 #include <stdio.h>
 
-typedef struct { uint8_t* w; const uint8_t* rom; long romLen; int bad; } Vwf;
+// w7f: bank $7F kept apart from the image (NULL: the image carries it at 0x10000), its first w7fLen bytes.
+typedef struct { uint8_t* w; const uint8_t* rom; long romLen; int bad; uint8_t* w7f; long w7fLen; } Vwf;
 
 #define DP(o) v->w[0x0200 + (o)]
 
 static uint8_t rd(Vwf* v, uint32_t a) {
   uint8_t b = (uint8_t)(a >> 16); uint16_t o = (uint16_t)a;
+  if (b == 0x7F && v->w7f) return (long)o < v->w7fLen ? v->w7f[o] : 0;
   if (b == 0x7E || b == 0x7F) return v->w[((uint32_t)(b - 0x7E) << 16) | o];
   if (!(b & 0x40) && o < 0x2000) return v->w[o];                      // banks 00-3F / 80-BF: the low WRAM
   if ((b & 0x40) || o >= 0x8000) {                                     // HiROM
@@ -23,7 +25,8 @@ static uint8_t rd(Vwf* v, uint32_t a) {
 }
 static void wr(Vwf* v, uint32_t a, uint8_t x) {
   uint8_t b = (uint8_t)(a >> 16); uint16_t o = (uint16_t)a;
-  if (b == 0x7E || b == 0x7F) v->w[((uint32_t)(b - 0x7E) << 16) | o] = x;
+  if (b == 0x7F && v->w7f) { if ((long)o < v->w7fLen) v->w7f[o] = x; }
+  else if (b == 0x7E || b == 0x7F) v->w[((uint32_t)(b - 0x7E) << 16) | o] = x;
   else if (!(b & 0x40) && o < 0x2000) v->w[o] = x;
 }
 static unsigned rdW(Vwf* v, uint32_t a) { return rd(v, a) | (rd(v, (a + 1) & 0xFFFFFF) << 8); }
@@ -318,8 +321,7 @@ static int run(Vwf* v) {
   }
 }
 
-void CtVwfBegin(uint8_t* wram, const uint8_t* rom, long romLen) {
-  Vwf vv = { wram, rom, romLen, 0 }, *v = &vv;
+static void vwfBegin(Vwf* v) {
   uint32_t p = (dpLong(v, 0x0D) + ((unsigned)DP(0x0C) << 1)) & 0xFFFFFF;   // `LDA [$0D],Y` (16-bit)
   DP(0x31) = rd(v, p); DP(0x32) = rd(v, (p + 1) & 0xFFFFFF);
   DP(0x33) = DP(0x0F); DP(0x30) = 0;
@@ -330,8 +332,7 @@ void CtVwfBegin(uint8_t* wram, const uint8_t* rom, long romLen) {
   DP(0x17) = 0;
 }
 
-int CtVwfRun(uint8_t* wram, const uint8_t* rom, long romLen) {
-  Vwf vv = { wram, rom, romLen, 0 }, *v = &vv;
+static int vwfRun(Vwf* v) {
   switch (DP(0x15)) {                                                  // C2/584A (C2:5851[$15])
   case 0x00: return 0;                                                 // 5893: the string has ended
   case 0x05: case 0x07: case 0x09: case 0x0B:                          // 5897 / 589B: a new line's pen
@@ -345,4 +346,17 @@ int CtVwfRun(uint8_t* wram, const uint8_t* rom, long romLen) {
     break;                                                             // 5895
   }
   return run(v) < 0 || v->bad ? -1 : 0;
+}
+
+void CtVwfBegin(uint8_t* wram, const uint8_t* rom, long romLen) {
+  Vwf vv = { wram, rom, romLen, 0, NULL, 0 }; vwfBegin(&vv);
+}
+int CtVwfRun(uint8_t* wram, const uint8_t* rom, long romLen) {
+  Vwf vv = { wram, rom, romLen, 0, NULL, 0 }; return vwfRun(&vv);
+}
+void CtVwfBeginBanks(uint8_t* w7e, uint8_t* w7f, long w7fLen, const uint8_t* rom, long romLen) {
+  Vwf vv = { w7e, rom, romLen, 0, w7f, w7fLen }; vwfBegin(&vv);
+}
+int CtVwfRunBanks(uint8_t* w7e, uint8_t* w7f, long w7fLen, const uint8_t* rom, long romLen) {
+  Vwf vv = { w7e, rom, romLen, 0, w7f, w7fLen }; return vwfRun(&vv);
 }

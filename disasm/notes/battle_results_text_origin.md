@@ -111,3 +111,10 @@ The `$CA24` upload's VRAM row (which would make the band-row-6 offset an instruc
 measurement) is not derived. The same question would settle why the FIELD textbox's first line is at
 `top + 9` in this port while this window's is at `top + 6`, since both go through the same bank-C2
 composer into the same kind of buffer.
+
+## Superseded (2026-11-12): the row is derived
+
+The text is the strip the engine draws at `$7E:B400` (the port now runs C2/0003 / C2/0009 itself), shown by BG3's rows
+25-26 of the tilemap at `$7800`; channel 3's record (`$CA0E` vofs 000D below, `$CA12` 00BD above) puts BG3's line 198 on
+the band's first scanline, so the rows start on band line 2 and the glyphs' ink on line 6 -- the measured offset.
+`battle_message_window.md`.

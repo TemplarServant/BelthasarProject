@@ -3271,14 +3271,9 @@ static int wordW(const uint8_t* font, const char* s, int i, int j) {
 #define CT_BRESULT_Y_TOP     8
 #define CT_BRESULT_Y_BOTTOM  184
 #define CT_BRESULT_H         24   // the cnt=$18 of the preset's second ch0/ch4/ch5 entry
-/* Where the line's text sits inside that band. X is the ROM's: C2/57DF (`JSL $C20003` from CD/025E) does
-       57FD  LDA $0214 / CMP #02 / BNE +4 / LDA #00 / BRA +2 / LDA #08 / STA $0234
-   and CD/0264 `STZ $0214` makes $0214 = 0, so the pen starts at $0234 = 8, the pen X in pixels (C2/5DE7 takes
-   `$0234 & 7` as the sub-tile column, C2/5E02 `($0234 & F8) >> 2` as the tile, and C2/5E27 `LDA $C260E6,X / ADC $34 /
-   STA $34` advances it by the glyph's width from the table this font blob carries).
-   Y is measured on the oracle at both band positions (the $CA24 upload's VRAM row is not derived): the glyph cell top
-   is band top + 6 in both. disasm/notes/battle_results_text_origin.md. */
-#define CT_BRESULT_TEXT_DY   6    // glyph-cell top, relative to the band's first row (oracle, both positions)
+/* The line's text is the strip the engine drew (C2/0003 / C2/0009 into $7E:B400): its pen starts at $0234 = 8 (C2/57FD,
+   `$0214` = 0) and BG3's scroll record puts the strip's rows on the band's lines (battleMsgWindowDraw).
+   disasm/notes/battle_results_text_origin.md, battle_message_window.md. */
 #define TB_BOTY  131
 // The indent a line-break token carries: 0x05/0x07/0x09 are a bare newline and 0x06/0x08/0x0A newline then indent
 // three; 0x0B/0x0C are the page break's two. The typewriter (C0/2126) spends one iteration on a control code, so the
@@ -3470,54 +3465,6 @@ static void drawCtWindow(uint8_t* fb, int top, int h) {
       }
       plot(fb, x, top + y, r, g, b);
     }
-  }
-}
-// ---- The battle message band: 24 scanlines with its own colour ramp (disasm/notes/battle_results_band.md) ----
-// The results/rewards window is one HDMA band of the preset D1/FE5E selects with
-// `LDA $CA25 / CLC / ADC $CA22 / CLC / ADC $CCEC / JSL CE:EE6E`: ch0's entry `cnt=$18 ind=$BE9B`, 24 scanlines at
-// either position (presets $13 and $12), with ch4's TM=TS=$05 (BG1+BG3 only) on those lines.
-// The ramp is ch5's ($2130 mode 4, table $7E:C948, its window entry `cnt=98 (repeat 24) ind=$C0EF`): 12 lines of ADD
-// 8..1, 11 of SUB 0..7 and math off on the last, built by D1/F88C..F8CE from an accumulator stepped by $00AA whose high
-// byte is the COLDATA value:
-//   D1/F894  acc = $E856, step -$00AA, 12 entries      (ADD, $2131 = $01)
-//   D1/F898  acc = $E0AA, step +$00AA, 12 entries      (SUB, $2131 = $81)
-//   D1/F8E1  forces entry 23 to math off
-// CT_ASSET_WINDOW is a lift of the field box, whose band ramps differently (ADD 8..1 then SUB 0..7 at five lines a step
-// over 80 rows), so the source row's ramp is taken off and the battle band's applied for the output row.
-static int ctBattleMsgRamp(int row) {            // + = ADD v, - = SUB v, 0 = math off
-  if (row >= 23) return 0;                       // D1/F8E1
-  if (row < 12)  return   ((0xE856 - row * 0xAA) >> 8) - 0xE0;
-  return        -(int)((((0xE0AA + (row - 12) * 0xAA) >> 8) - 0xE0));
-}
-static int ctFieldWinRamp(int srcRow) {          // what is baked into CT_ASSET_WINDOW (saves/intro_box)
-  if (srcRow >= 79) return 0;
-  if (srcRow < 40)  return 8 - srcRow / 5;
-  return -((srcRow - 40) / 5);
-}
-// Rows: an 8/8/8 tile-row patch matching the oracle's band: box rows 0..15 come from bake rows 0..15 and box rows
-// 16..23 from bake rows 72..79 (two tile rows of head and one of foot, where the field box has two, four and one).
-static void drawCtMsgWindow24(uint8_t* fb, int top) {
-  for (int y = top + g_fillBoxDy; y < top + g_fillBoxDy + CT_BRESULT_H; y++) if (y >= 0 && y < CAMH) g_bBoxRow[y] = 1;
-  if (!tbWinPx || tbWinH < 80) { drawCtWindow(fb, top, CT_BRESULT_H); return; }   // no bake -> the drawn box
-  for (int y = 0; y < CT_BRESULT_H; y++) {
-    int sy = (y < 16) ? y : (tbWinH - (CT_BRESULT_H - y));
-    const uint8_t* src = tbWinPx + (size_t)sy * 256 * 3;
-    uint8_t* dst = fb + ((size_t)(top + y) * CAMW) * 3;
-    int fr = ctFieldWinRamp(sy), br = ctBattleMsgRamp(y);
-    for (int x = 0; x < 256; x++)
-      for (int c = 0; c < 3; c++) {
-        int b5 = src[x * 3 + c] >> 3;                       // SNES colour math is 5-bit
-        // A saturated bake value has no exact base, only an interval, because the field band's add/subtract
-        // clamped it before the lift: b5 == 31 means base >= 31 - fr, and b5 == 0 (fr < 0) means base <= -fr.
-        // Take the largest base the clamp allows (31 pinned high, -fr pinned low); that matches the oracle on all
-        // 24 rows of both positions.
-        // Note: the limit is the source. A 256x24 lift of the battle box itself (as saves/ct_window.bin was made)
-        // would remove this de-ramp.
-        int base = (b5 >= 31) ? 31 : (b5 <= 0 && fr < 0) ? -fr : b5 - fr;
-        int v5 = base + br;
-        if (v5 < 0) v5 = 0; else if (v5 > 31) v5 = 31;
-        dst[x * 3 + c] = (uint8_t)((v5 << 3) | (v5 >> 2));
-      }
   }
 }
 static int pageChars(const char* s, int start, int end) {   // reveal length of a page (visible chars)
@@ -7559,128 +7506,98 @@ static int battleGatoSinging(const uint8_t* mem, const CtBattleHost* h) {
 // The song's spotlight is the arena's own colour math (CtBattleFxLayerCompose): its program's BG3 beam on the sub
 // screen (TS = 04) added to BG1/BG2 (CGADSUB = 03, no half) over lines 0-160, with the room's palettes faded down under
 // it.
-// The victory results message box: a top-anchored window (battle_results_window.md sec. V1) showing the current reward
-// line; battle.c's battleResultsTick owns the line cadence (CD/01B3). It reuses the field dialogue chrome
-// (drawCtWindow) and the variable-width font (cDrawGlyph); the lines are the CE/EF2D templates (sec. V3), the item name
-// via CtMenuItemName ($CC/0B5E). The box appears whole in one frame (no slide, no typewriter): CD/025E + CD/027F build
-// the tilemap off-screen and the $CA24 NMI upload publishes it at once.
-// Note: it is not the field textbox machine (battle_results_box_timing.md 1.7): $0126/$0134 are never written during a
-// victory; only the bank-C2 glyph renderer is shared.
-static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_t* font, const uint8_t* rom, long romLen) {
-  if (!fb || !h || !font) return;
-  int kind = -1, val = 0;
-  char line[64]; line[0] = 0;
-  int typed = -1;                                                  // a party post's typewriter prefix (-1 = all)
-  // The system message box, CD/0310 -> C2/0003 over table CC:3A09 (battle.c battleSysMsgPost): the same window,
-  // opposite the HUD strip, holding one line while $CCEC = $10. The bytes are the ROM's own ($020C the id, $020D/E/F
-  // the table), so a mid-battle seed carrying an open box renders it too, and a results-box seed ($020F = $CE,
-  // CE:EF11) does not take this branch. The battle posts id $75 here (C1/1076, the can't-flee consumer: "Can't run away").
-  if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCC && h->mem[0x020D] == 0x09 && h->mem[0x020E] == 0x3A) {
-    // CC:3A09 is the TECH DESCRIPTIONS' table too (index = the global tech id; 75 "Can't run away", 76-78 the Single/
-    // Dual/Triple Tech lines -- battle_top_message_box.md sec. 0): decoded from the ROM for any $020C, and typed -- C2/0009
-    // renders one character per CD/04DF step ($0213 = 1), so the line grows by what the typewriter has reached.
-    long tp = 0x0C3A09L + 2L * h->mem[0x020C];
-    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8)), line, (int)sizeof line);
-    typed = h->sysMsgOpenT;
-  } else if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCE && h->mem[0x020D] == 0x11 && h->mem[0x020E] == 0xEF
-             && (h->mem[0x020C] == 0x0B || h->mem[0x020C] == 0x0C)) {
-    // CE:EF11[0C] = `12 01 00`: the enemy's name, the 11 bytes at CC:6500 + 11 * [$0200] (C2/5AD0, the EF padding typed
-    // as spaces); [0B] = `12 01 EF 0E E0 0E 00`: the name, a space, the number at $0201, '/', the number at $0203 -- the
-    // Att picker's target box (C1/19D7-1A47), typed like the descriptions.
-    int o = 0, id = h->mem[0x0200];
-    for (int i = 0; i < 11 && rom && o < 60; i++) {
-      long a = 0x0C6500L + 11L * id + i;
-      uint8_t c = (a < romLen) ? CtRomByte(rom, 0x400000L, (long)(a)) : 0xEF;
-      line[o++] = (c == 0xEF) ? ' ' : fieldCtChar(c);
+// The battle's message window, as the cartridge shows it (disasm/notes/battle_message_window.md): 24 lines of the band
+// preset the open window selects ($CCEC = $10 added to the id, D1/FE5E) with BG1 and BG3 on the main screen (ch4, TM = 05),
+// both reading the tilemap at VRAM $7800 (ch0's block $BE9B), each at its own scroll:
+//   BG1  ch1's record $CA02 (the window below: vofs FF27, D1/F35F) or $CA06 (above: 00D7): its lines 224-247, the frame
+//        rows 28-30. The tiles are the field window's (FF/9E10 + colour * $280: F0-FF and 3FC-3FF, as the strip's
+//        frames), coloured from the live page $2200 and through the line's colour math -- ch5's records $C0EF + 4 * line
+//        (CGWSEL CGADSUB COLDATA SETINI, built by D1/F88C: add 8..1, subtract 0..7, none on the last line).
+//   BG3  ch3's record $CA0E (below: 000D) or $CA12 (above: 00BD): its lines 198-221, the text rows 24-27. The tiles are the
+//        strip the text engine drew at $7E:B400 (C2/0003 / C2/0009, battle.c battleMsgVwfBegin / battleMsgVwfRun): tiles
+//        100-11F at $B400 and 130-14F at $B600, 2 bpp, the palette the word names (2: CGRAM 8-11). A word without the
+//        priority bit lies under BG1's opaque window ($2105 = 09, ch6's $C14F); the blank tile 1FF draws nothing.
+// The rows are the boot's image (CC/E4FC-E563 builds it at $7E:7FFD and uploads it; battle.c CtBattleMsgWindowRows):
+// twelve rows from row 24. WRAM's copy does not last the fight, VRAM's does.
+static uint16_t battleMsgWindowWord(int row, int col) {
+  if (row < 24 || row >= 36) return 0;
+  const uint8_t* b = CtBattleMsgWindowRows() + (row - 24) * 0x40 + (col & 31) * 2;
+  return (uint16_t)(b[0] | (b[1] << 8));
+}
+static void battleMsgWindowDraw(uint8_t* fb, const uint8_t* mem, int top) {
+  long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+  const uint8_t* frame = CtRomPtr(rom, romLen, 0x3F9E10L + (long)(mem[0x2991] & 7) * 0x280, 0x280);   // the Window Color's tiles
+  int below = (top == CT_BRESULT_Y_BOTTOM);
+  int r1 = below ? 0xCA02 : 0xCA06, r3 = below ? 0xCA0E : 0xCA12;
+  int h1 = (mem[r1] | (mem[r1 + 1] << 8)) & 0x3FF, v1 = (mem[r1 + 2] | (mem[r1 + 3] << 8)) & 0x3FF;
+  int h3 = (mem[r3] | (mem[r3 + 1] << 8)) & 0x3FF, v3 = (mem[r3 + 2] | (mem[r3 + 3] << 8)) & 0x3FF;
+  uint8_t fix[3] = { 0, 0, 0 };
+  for (int r = 0; r < CT_BRESULT_H; r++) {
+    int y = top + r;
+    const uint8_t* rec = mem + 0xC0EF + 4 * r;
+    uint8_t op = rec[1], cd = rec[2];
+    if (cd & 0x20) fix[0] = cd & 0x1F;
+    if (cd & 0x40) fix[1] = cd & 0x1F;
+    if (cd & 0x80) fix[2] = cd & 0x1F;
+    if (y < 0 || y >= CAMH) continue;
+    int l1 = (y + 1 + v1) & 0xFF, l3 = (y + 1 + v3) & 0xFF;
+    for (int x = 0; x < 256; x++) {
+      int cw = mem[0x2200] | (mem[0x2201] << 8), layer = 0x20;        // the backdrop
+      { int bx = (x + h1) & 0xFF;
+        uint16_t w = battleMsgWindowWord(l1 >> 3, bx >> 3);
+        int t = w & 0x3FF, k = (t >= 0xF0 && t <= 0xFF) ? t - 0xF0 : (t >= 0x3FC) ? 16 + (t - 0x3FC) : -1;
+        if (k >= 0 && frame) {
+          int ty = (w & 0x8000) ? 7 - (l1 & 7) : (l1 & 7), bit = (w & 0x4000) ? (bx & 7) : 7 - (bx & 7);
+          const uint8_t* g = frame + k * 32 + ty * 2;
+          int p = ((g[0] >> bit) & 1) | (((g[1] >> bit) & 1) << 1) | (((g[16] >> bit) & 1) << 2) | (((g[17] >> bit) & 1) << 3);
+          if (p) { int ci = ((w >> 10) & 7) * 16 + p; cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x01; }
+        } }
+      { int bx = (x + h3) & 0xFF;
+        uint16_t w = battleMsgWindowWord(l3 >> 3, bx >> 3);
+        int t = w & 0x3FF;
+        const uint8_t* g = (t >= 0x100 && t < 0x120) ? mem + 0xB400 + (t - 0x100) * 16
+                         : (t >= 0x130 && t < 0x150) ? mem + 0xB600 + (t - 0x130) * 16 : NULL;
+        if ((w & 0x2000) && g) {
+          int fy = (w & 0x8000) ? 7 - (l3 & 7) : (l3 & 7), bit = (w & 0x4000) ? (bx & 7) : 7 - (bx & 7);
+          int v = ((g[fy * 2] >> bit) & 1) | (((g[fy * 2 + 1] >> bit) & 1) << 1);
+          if (v) { int ci = ((w >> 10) & 7) * 4 + v; cw = mem[0x2200 + ci * 2] | (mem[0x2201 + ci * 2] << 8); layer = 0x04; }
+        } }
+      uint8_t rgb[3];
+      for (int c = 0; c < 3; c++) {
+        int c5 = (cw >> (5 * c)) & 0x1F;
+        if (op & layer) {
+          c5 = (op & 0x80) ? c5 - fix[c] : c5 + fix[c];
+          if (op & 0x40) c5 >>= 1;
+          c5 = c5 < 0 ? 0 : c5 > 31 ? 31 : c5;
+        }
+        rgb[c] = (uint8_t)((c5 << 3) | (c5 >> 2));
+      }
+      plot(fb, x, y, rgb[0], rgb[1], rgb[2]);
     }
-    line[o] = 0;
-    if (h->mem[0x020C] == 0x0B)
-      snprintf(line + o, sizeof line - (size_t)o, " %d/%d", h->mem[0x0201] | (h->mem[0x0202] << 8), h->mem[0x0203] | (h->mem[0x0204] << 8));
-    typed = h->sysMsgOpenT;
-  } else if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCE && h->mem[0x020D] == 0x11 && h->mem[0x020E] == 0xEF
-             && h->mem[0x020C] == 0x08) {
-    // The results-message machine's own table, CE:EF11, posted by CD/01B3 with an id instead of a reward line: id 8
-    // = "Ran away!" (assets/text.py `table EEF11`), the flee end's box (C1/8201 `LDA #08 / JSL CD/0021`). The ids
-    // the victory posts (0..3) never reach this branch -- the port's results sequence keeps them host-side.
-    snprintf(line, sizeof line, "Ran away!");
-  } else if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCE && h->mem[0x020D] == 0x11 && h->mem[0x020E] == 0xEF
-             && h->mem[0x020C] == 0x09) {
-    // CE:EF11[9] = `11 EF C0 C8 CD EF CE C9 DE` = "{11} got up!", posted by the lifeline revive inside the dead-flag sweep
-    // (C1/B379-B386: `$0200 = $AF0A,Y / LDA #09 / JSL CD/0021`); token 11 is the PC's name at $2C23 + $0200 * 6 (the same
-    // name the level-up line's {11} prints).
-    char nm[8]; int n = 0, cid = h->mem[0x0200];
-    for (int i = 0; i < 5 && n < 7 && cid < 8; i++) { uint8_t c = h->mem[0x2C23 + cid * 6 + i];
-      if (c == 0x00) break;
-      else if (c >= 0xA0 && c <= 0xB9) nm[n++] = (char)('A' + (c - 0xA0));
-      else if (c >= 0xBA && c <= 0xD3) nm[n++] = (char)('a' + (c - 0xBA));
-      else if (c >= 0xD4 && c <= 0xDD) nm[n++] = (char)('0' + (c - 0xD4)); }
-    nm[n] = 0;
-    snprintf(line, sizeof line, "%s got up!", nm);
-  } else if (h->mem[0xCCEC] == 0x10 && h->mem[0x020F] == 0xCC && h->mem[0x020D] == 0xC9 && h->mem[0x020E] == 0xCB) {
-    // The enemy tech's name box, CD/0295 -> C2/0003 over table CC:CBC9 (battle.c battleNameBoxPost): the same window
-    // while $CCEC = $10 -- "NeedleSpin / Yakra's needle attack." is CC:CBC9[06]. Read and decoded from the ROM.
-    long tp = 0x0CCBC9L + 2L * h->mem[0x020C];
-    if (rom && tp + 1 < romLen) fieldCtDecodeAt(0x0C0000L + (CtRomByte(rom, 0x400000L, (long)(tp)) | (CtRomByte(rom, 0x400000L, (long)(tp + 1)) << 8)), line, (int)sizeof line);
-  } else {
-    // still in the 3+64+7 hold battleResultsTick waits out, less the 64 when C1/35A9 returned early ($2989 bit 0: no
-    // celebration).
+  }
+}
+// The window is up while its band preset is: `$CCEC = $10` (CD/028C, CD/0302, CD/0332; cleared by CD/01FD and the dwell
+// service D1/E7EC), whatever the message -- the strip holds what the engine drew for it, typed or whole. The victory's
+// lines keep their box in the results machine's phases instead (battle.c battleResultsTick: up in a line's phases 0 and
+// 1, from the end of the 3+64+7 hold -- less the 64 when C1/35A9 returned early, $2989 bit 0); their text is the strip's
+// too (battleResultLinePost).
+// The window sits opposite the HUD strip: both are placed by the same band presets (battle_hud_strip_position.md) --
+// preset $12 the strip at renderY 8..55 and the window at 184..207, preset $13 the window at 8..31 and the strip at
+// 160..207.
+static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_t* font, const uint8_t* rom, long romLen) {
+  (void)font; (void)rom; (void)romLen;
+  if (!fb || !h || !h->mem) return;
+  if (h->mem[0xCCEC] != 0x10) {
     int vhold = (h->mem[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;
     if (!h->victoryHold || h->victoryHold < vhold) return;
     if (h->resultLine < 0 || h->resultLine >= h->resultN) return;
     // CD/01FD `STZ $CCEC` closes the window between lines: phases 2/3 are the 16-frame post-close hold plus the next
     // line's build, and the screen has no box for those 19-20 frames.
     if (h->resultPhase < 0 || h->resultPhase >= 2) return;
-    kind = h->resultKind[h->resultLine]; val = h->resultVal[h->resultLine];
   }
-  if      (kind == 0) snprintf(line, sizeof line, "Got %d experience point(s)!", val);   // CE/EF2D
-  else if (kind == 1) snprintf(line, sizeof line, "Got %d tech point(s)!", val);         // CE/EF44
-  else if (kind == 2) snprintf(line, sizeof line, "Found %dG!", val);                    // CE/EF56
-  else if (kind == 3) { char nm[16] = ""; CtMenuItemName(rom, romLen, val, nm, sizeof nm);   // CE/EF5E + $CC/0B5E name
-         snprintf(line, sizeof line, "Got 1x %s!", nm); }
-  else if (kind == 6 || kind == 7) {  // CE/EF80 "Learns Dual Tech, {12}!" / CE/EF93 "Learns Triple Tech, {12}!"
-    char tn[16] = ""; CtMenuTechName(rom, romLen, val & 0xFF, tn, sizeof tn);
-    snprintf(line, sizeof line, "Learns %s Tech, %s!", kind == 6 ? "Dual" : "Triple", tn);
-  }
-  else if (kind == 4 || kind == 5) {   // {name}-keyed lines; name from $7E2C23+id*6 CT glyph codes -> ASCII
-    int cid = (kind == 5) ? ((val >> 8) & 0xFF) : val;                                    // kind5 packs (cid<<8)|tid
-    char nm[8]; int n = 0;                                                                // (reverse of battleHudCtEncode)
-    for (int i = 0; i < 5 && n < 7; i++) { uint8_t c = h->mem[0x2C23 + cid * 6 + i];
-      if (c == 0x00) break;
-      else if (c >= 0xA0 && c <= 0xB9) nm[n++] = (char)('A' + (c - 0xA0));
-      else if (c >= 0xBA && c <= 0xD3) nm[n++] = (char)('a' + (c - 0xBA));
-      else if (c >= 0xD4 && c <= 0xDD) nm[n++] = (char)('0' + (c - 0xD4)); }
-    nm[n] = 0;
-    if (kind == 4) snprintf(line, sizeof line, "%s level up!", nm);                       // CE/EF68 "{11} level up!"
-    else { char tn[16] = ""; CtMenuTechName(rom, romLen, val & 0xFF, tn, sizeof tn);      // CE/EF74 "{11} learns {12}"
-           snprintf(line, sizeof line, "%s learns %s!", nm, tn); }                        //   (ASCII approx, see dossier;
-                                                                                          //   the cartridge: "Ayla learns Dino Tail!")
-  }
-  // The message box sits opposite the HUD strip: both are placed by the same HDMA band presets
-  // (battle_hud_strip_position.md). D1/FE5E indexes CE/EE6E with `$CA25 + $CA22 + $CCEC`, where $CA22 is the strip side
-  // ($2989 bit 1) and $CCEC ($10) is this window being open, which selects a preset with two bands ($CE:F24E[p*0x14] ->
-  // the ch0 header at $CE:F58E+X; the entries' counts are the scanline layout):
-  //   preset $02 (strip only, $CA22=0): renderY   8..55                    strip top
-  //   preset $03 (strip only, $CA22=1): renderY 160..207                   strip bottom
-  //   preset $12 (+window,   $CA22=0): renderY   8..55 strip + 184..207 window
-  //   preset $13 (+window,   $CA22=1): renderY   8..31 window + 160..207 strip
-  // Both window bands are 24 scanlines.
-  int sb = tbAnimBand, sc = tbCream, s0 = tbClipY0, s1 = tbClipY1;
-  tbAnimBand = 1 << 20; tbCream = 0; tbClipY0 = -1; tbClipY1 = 1 << 30;                   // full window, grey scheme
   int boxTop = battleWindowsBottom(h->mem) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM;
-  drawCtMsgWindow24(fb, boxTop);   // 24 = the band's own cnt=$18: the window is 24 scanlines (8..31 / 184..207),
-                                  // as the oracle's rows agree (sec. V1: top border 8, white 9, body 11-25,
-                                  // bottom border ~29). A known defect in both positions is pinned separately.
-  // The pen: the origin is $0234 = 8 (above) and the band's row 6, measured against the oracle at both band positions.
-  int x = TB_X0, y = boxTop + CT_BRESULT_TEXT_DY;
-  if (typed >= 0 && typed < (int)strlen(line)) line[typed] = 0;   // the typewriter's reach (CD/04DF, one per step)
-  for (const char* p = line; *p; p++) {
-    // The space is a glyph like any other: CT charset $EF (index 79), whose width in the ROM's table ($C2:60E6, baked
-    // into this font blob) is 4.
-    int gi = cGlyph(*p == ' ' ? 0xEF : (unsigned char)*p);
-    if (*p == ' ') { x += cGlyphW(font, gi); continue; }        // (its bitmap is blank -- nothing to draw)
-    x += (gi < 0) ? 5 : cDrawGlyph(fb, font, gi, x, y);
-  }
-  tbAnimBand = sb; tbCream = sc; tbClipY0 = s0; tbClipY1 = s1;
+  for (int y = boxTop + g_fillBoxDy; y < boxTop + g_fillBoxDy + CT_BRESULT_H; y++) if (y >= 0 && y < CAMH) g_bBoxRow[y] = 1;
+  battleMsgWindowDraw(fb, h->mem, boxTop);
 }
 // ---- Anim engine, stage 1: GATO's pose tick, assembly builder and tile gather (battle_anim_engine.md sec. B.1) ----
 // C1/3360 tick -> $967B -> C1/1C4A gather + CF/EB60 compose. The per-facing pose window (animeng_e4_gato.h) is a
@@ -10595,6 +10512,7 @@ int main(int argc, char** argv) {
                    hh.resultKind[0] = (uint8_t)kind; hh.resultVal[0] = val; hh.resultN = 1;
                    hh.resultLine = 0; hh.resultPhase = 1; hh.resultPhaseT = 0;
                    hh.victoryHold = CT_BATTLE_VICTORY_CELEBRATE;
+                   CtBattleResultLineText(&hh, 0);                 // (the line's text into the strip, as the machine's post)
                    long rrl = 0; (void)CtBattleRom(&rrl);
                    battleResultsRender(rfb, &hh, font, rrom, rrl); } }
       int rphase = (w[0x95D5] < 3) ? 1 : 0;
@@ -10647,21 +10565,18 @@ int main(int argc, char** argv) {
         }
         if (top >= 0) {
           bot = top;
-          for (int y = top; y < CAMH; y++) {                   // ...down while the row is still the band
-            int lit = 0;                                       // (its darkest rows do carry black pixels, so
-            for (int x = 0; x < CAMW; x++) { const uint8_t* p = rfb + ((size_t)y * CAMW + x) * 3;
-              if (p[0] | p[1] | p[2]) lit++; }                 //  count lit pixels, do not demand all 256)
-            if (lit < 64) break;
-            bot = y;
-          }
-          // row 13 is the row that tells the two patches apart: the 8/8/8 tile-row split takes it from
-          // bake row 13, the generic 12/18/10 nine-patch from bake row 41. rows 3 and 16 agree under both.
+          for (int y = top; y < CAMH && g_bBoxRow[y]; y++) bot = y;   // ...down the rows the window drew (its last
+                                                               //  lines are the subtract's black: no pixel tells them)
+          // Rows 3, 13 and 16 are the oracle's samples (battle_results_band.md); rows 19 and 20 are the two the lifted
+          // window could not reach (the field band had clipped them), now the frame's own colours through the math.
           const uint8_t* q3 = rfb + ((size_t)(top + 3) * CAMW + 210) * 3;
           const uint8_t* q13 = rfb + ((size_t)(top + 13) * CAMW + 210) * 3;
           const uint8_t* q16 = rfb + ((size_t)(top + 16) * CAMW + 210) * 3;
-          printf("renderwram: msgbox=%d..%d(%d) row3=%d,%d,%d row13=%d,%d,%d row16=%d,%d,%d\n", top, bot, bot - top + 1,
-                 q3[0] >> 3, q3[1] >> 3, q3[2] >> 3, q13[0] >> 3, q13[1] >> 3, q13[2] >> 3,
-                 q16[0] >> 3, q16[1] >> 3, q16[2] >> 3);
+          const uint8_t* q19 = rfb + ((size_t)(top + 19) * CAMW + 210) * 3;
+          const uint8_t* q20 = rfb + ((size_t)(top + 20) * CAMW + 210) * 3;
+          printf("renderwram: msgbox=%d..%d(%d) row3=%d,%d,%d row13=%d,%d,%d row16=%d,%d,%d row19=%d,%d,%d row20=%d,%d,%d\n", top, bot,
+                 bot - top + 1, q3[0] >> 3, q3[1] >> 3, q3[2] >> 3, q13[0] >> 3, q13[1] >> 3, q13[2] >> 3,
+                 q16[0] >> 3, q16[1] >> 3, q16[2] >> 3, q19[0] >> 3, q19[1] >> 3, q19[2] >> 3, q20[0] >> 3, q20[1] >> 3, q20[2] >> 3);
           // Where the text sits inside the band, from the pixels, relative to the band top so one signature holds
           // at both band positions: the pen starts at $0234 = 8 (C2/57DF; C2/5DE7 / C2/5E02 use $0234 as pixel X)
           // and the glyph cell tops out at band row 6 (oracle forest_battle_3hetake line 1: ink x 8..154 over

@@ -3058,3 +3058,26 @@ oracle from the shapes; a generator that gains a table without `python tools/gen
 platform while a developer's tree, which has the real files, never notices (5ebf30b's `ctMenuChromeExchTM`, PR #2). A
 FAIL is fixed by `python tools/gen/shapes.py make` and committing `tools/gen/shapes/`, never by re-pinning. It SKIPs in a
 tree with no generated files.
+
+### battle-message-window-target-name-vs-cartridge / battle-message-window-reward-line-vs-cartridge (`python tools/battle_msg_window_cmp.py <name>`)
+
+The battle's message window against the cartridge, bytes and picture (disasm/notes/battle_message_window.md). Both sides
+start from a cartridge state cut inside playthrough leg 117 in the field before a fight, so the port boots the fight
+itself, and play the leg's pad to a frame where the window stands: `target-name` the Att picker's target box of the
+first fight (message 0C of CE:EF11, the enemy's name typed a glyph a frame), `reward-line` the second fight's first
+reward line ("Got 468 experience point(s)!", FD/AD26's number through the template's code 0F, a line that crosses the
+strip's two halves). Graded: the boot's image of the window's tilemap rows (`$7E:7FFD`, 512 bytes -- `target-name`
+only: the fight reuses the bytes later), the text strip the engine drew (`$7E:B400`, 1024 bytes), the engine's own block
+and state (`$0200-$023F`), and the window's 24 lines of the picture -- all `0 ... differ`, with the count of the
+cartridge's text pixels so an empty window cannot pass. The window used to be a lift of the field box and host-drawn
+strings in fixed tones (996 px of the first frame). Seven mutations: no C2/0003 at the post, a wrong tile row in the image,
+BG3's palette, the text through BG1's colour math, the number's low byte only, a sixteen-glyph call, the strip's upper row only.
+Never re-pin a `differ`; the frame counts change only with the leg's route.
+
+The older render fixtures of the same window keep their role with new mutations: `battle-results-band-24-lines` /
+`-bottom` (the 24 lines and the ramp: channel 5's record per LINE, BG1's scroll record of the window's side; their
+`msgbox=` line now also carries `row19=0,1,2 row20=0,0,0`, the two rows the lifted window had 2/31 too bright) and
+`battle-results-text-origin` (the pen: `$0214` = 0, BG3's scroll record, the strip's right half). The whole-frame hashes
+of `field-battle-cantflee-box`, `field-battle-flee-ranaway-box`, `field-battle-results-box-onset` and
+`field-battle-results-autoadvance` were re-pinned on 2026-11-12: each changed in the window's rows 14-29 alone (the
+text's colours and the frame's last lines).

@@ -875,6 +875,12 @@ const uint8_t* CtBattleDumpRom(long* lenOut);
 void CtBattleAnimOpLens(int out[256]);
 void CtBattleAscCensus(void);                 // --asccensus: every PC anim script's opcodes (debug)
 const uint8_t* CtBattleRom(long* lenOut);        // the cached ROM (NULL if not loaded)
+// One staged results line's text into the window's strip $7E:B400 (FD/AD17's arguments, CD/025E, CD/027F): the machine
+// does it on the line's build; a render fixture that stages a line by hand calls it.
+void CtBattleResultLineText(CtBattleHost* h, int line);
+// The message window's tilemap rows as VRAM holds them from the boot on: twelve rows of 32 words, the rows 24.. of the
+// tilemap at $7800 (BG3's text rows 24-27, BG1's frame rows 28-30) -- the boot's image CC/E4FC-E563.
+const uint8_t* CtBattleMsgWindowRows(void);
 // How many times an effect program slot was killed by an opcode this port has not derived, over the whole process.
 // Zero is the assertion attract-0ad-xstrike-program-vs-rom pins (the host prints it at exit under CT_BATTLE_TRACE).
 int CtBattleFxProgStops(void);

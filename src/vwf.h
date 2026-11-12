@@ -21,4 +21,9 @@ void CtVwfBegin(uint8_t* wram, const uint8_t* rom, long romLen);
 // call stops there.
 int CtVwfRun(uint8_t* wram, const uint8_t* rom, long romLen);
 
+// The same two for a host that keeps bank $7E alone (the battle's): `w7e` is that bank's 64 KB and `w7f` stands for bank
+// $7F's first `w7fLen` bytes -- a read past them gives 0, a write there is dropped.
+void CtVwfBeginBanks(uint8_t* w7e, uint8_t* w7f, long w7fLen, const uint8_t* rom, long romLen);
+int CtVwfRunBanks(uint8_t* w7e, uint8_t* w7f, long w7fLen, const uint8_t* rom, long romLen);
+
 #endif

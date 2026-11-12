@@ -19,7 +19,8 @@ static int battleTechGroup(int techId);
 static int battleBuildHitSet(CtBattleHost* h, int group, int primary, int* out, int cap);
 #include "player.h"      // CtJoypadHeldWord: the battle NMI's C2/84D2 (the pad latch CD/0340 reads $F8)
 #include "objslot.h"
-#include "move.h"        // ctVmC1Gate: C1/D005, the drops' AddItem
+#include "vwf.h"         // C2/0003 / C2/0009: the message window's text (battleMsgVwfBegin / battleMsgVwfRun)
+#include "move.h"       // ctVmC1Gate: C1/D005, the drops' AddItem
 void CtHdmaTableBuild(uint8_t* wram128);   // ct_vm.c: `JSL FD/C2C1`, the field's HDMA table builder
 #include "lz.h"          // ct_lz_decompress: the CT LZ, used for the enemy sprite sheet (battle_sheet_decomp.md)
 #include "tables/battle_fx.h"   // action-feedback bake: CT_FX_RISE_N / CT_FX_LIFETIME (the popup aging bounds)
@@ -4768,13 +4769,62 @@ static void battleMenuPassTail(CtBattleHost* h, const CtBattleOamEntry* b1115) {
 // while $CCEC = $10.
 // CD/025E, the post's common tail: `STA $020C / STZ $CCED / STZ $02A1 / $0210-12 := 7E:B400 / STZ $0214 / JSR CD/0239`
 // (the box's tile buffer $B400-$B7FF cleared) / JSL C2/0003.
+// C2/0003 and C2/0009 are the text engine itself (vwf.c), on the battle's WRAM: the glyphs go into the box's tile strip
+// $7E:B400, which the window's BG3 rows show (tiles 100-11F and 130-14F, battleMsgWindowImage). The host keeps bank $7E
+// alone; the one byte of bank $7F the engine reads here is $7F:0200, the item of the results line "Got 1x {1F}!" (C2/5B9B;
+// FD/AD75 `STA $7F0200`), kept in g_btMsg7F.
+static uint8_t g_btMsg7F[0x201];
+static void battleMsgVwfBegin(CtBattleHost* h) {                // `JSL C2/0003`
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  if (rom) CtVwfBeginBanks(h->mem, g_btMsg7F, (long)sizeof g_btMsg7F, rom, rl);
+}
+static void battleMsgVwfRun(CtBattleHost* h, uint8_t quota) {   // `STA $0213 / JSL C2/0009`
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  h->mem[0x0213] = quota;
+  if (rom) CtVwfRunBanks(h->mem, g_btMsg7F, (long)sizeof g_btMsg7F, rom, rl);
+}
 static void battleMsgPostTail(CtBattleHost* h, uint8_t id) {
   uint8_t* s = h->mem;
   s[0x020C] = id; s[0xCCED] = 0; s[0x02A1] = 0;
   s[0x0210] = 0x00; s[0x0211] = 0xB4; s[0x0212] = 0x7E;
   s[0x0214] = 0;
   memset(s + 0xB400, 0, 0x400);                                // CD/0239
+  battleMsgVwfBegin(h);                                        // CD/0278 JSL C2/0003
   h->sysMsgOpenT = 0;                                          // (the typewriter's count: nothing typed yet)
+}
+// The message window's tilemap rows, CC/E4FC-E563 (the boot, after C1/1C3A's copy of the strip's frames): a WRAM image
+// of twelve rows at $7E:7FFD, the rows 24.. of the tilemap the band reads (VRAM $7800, the HDMA block $BE9B).
+//   E4FC  `LDA #FF / STA $7FFD,X / LDA #29 / STA $7FFE,X`, X < $100      rows 0-3: the blank glyph tile 1FF, palette 2, priority
+//   E50F  A = 00.., X = $40..$5F / A = 30.., X = $60..$7F               row 1: the strip's tiles 100-10F, 130-13F
+//   E52B  A = 10.., X = $80..$9F / A = 40.., X = $A0..$BF               row 2: tiles 110-11F, 140-14F (the glyphs' lower halves)
+//   E545  `LDA $D15D50,X / STA $80FD,X`, X < $C0                         rows 4-6: the window's frame
+//   E554  `LDA #FF / STA $80FD,X / LDA #29 / STA $80FE,X`, X = $C0..$1FF  rows 7-11
+// The frame's three rows are not in the data pack (D1:5D50, $C0 bytes); they are the field window's rows 0, 1 and 9 as
+// C0/29F7 writes them (F0 (F1 F2)x15 F3 / F4 (FC FD 3FC 3FD)x7 FC FD F5 / F8 (F9 FA)x15 FB) without the priority bit,
+// and are written here by that rule. The checks battle-message-window-* compare the image with the cartridge's bytes.
+// The image is the boot's alone: once uploaded the fight takes its bytes for other work (C1/54A1 copies the arena's grid
+// to $81FD and $7FFD during an action), and VRAM keeps the rows -- so the picture reads CtBattleMsgWindowRows, not WRAM.
+static void battleMsgWindowImageAt(uint8_t* b) {                 // b = the image's first byte ($7E:7FFD)
+  for (int x = 0; x < 0x100; x += 2) { b[x] = 0xFF; b[x + 1] = 0x29; }
+  for (int k = 0; k < 16; k++) {
+    b[0x40 + 2 * k] = (uint8_t)(0x00 + k); b[0x60 + 2 * k] = (uint8_t)(0x30 + k);
+    b[0x80 + 2 * k] = (uint8_t)(0x10 + k); b[0xA0 + 2 * k] = (uint8_t)(0x40 + k);
+  }
+  uint8_t* f = b + 0x100;
+  #define MW(row, col, w) do { f[(row) * 0x40 + (col) * 2] = (uint8_t)(w); f[(row) * 0x40 + (col) * 2 + 1] = (uint8_t)((w) >> 8); } while (0)
+  MW(0, 0, 0x00F0); MW(1, 0, 0x00F4); MW(2, 0, 0x00F8);
+  for (int k = 0; k < 15; k++) { MW(0, 1 + 2 * k, 0x00F1); MW(0, 2 + 2 * k, 0x00F2); MW(2, 1 + 2 * k, 0x00F9); MW(2, 2 + 2 * k, 0x00FA); }
+  for (int k = 0; k < 7; k++) { MW(1, 1 + 4 * k, 0x00FC); MW(1, 2 + 4 * k, 0x00FD); MW(1, 3 + 4 * k, 0x03FC); MW(1, 4 + 4 * k, 0x03FD); }
+  MW(1, 29, 0x00FC); MW(1, 30, 0x00FD);
+  MW(0, 31, 0x00F3); MW(1, 31, 0x00F5); MW(2, 31, 0x00FB);
+  #undef MW
+  for (int x = 0xC0; x < 0x200; x += 2) { f[x] = 0xFF; f[x + 1] = 0x29; }
+}
+static void battleMsgWindowImage(uint8_t* s) { battleMsgWindowImageAt(s + 0x7FFD); }
+const uint8_t* CtBattleMsgWindowRows(void) {
+  static uint8_t rows[0x300]; static int made = 0;
+  if (!made) { battleMsgWindowImageAt(rows); made = 1; }
+  return rows;
 }
 static void battleSysMsgPost(CtBattleHost* h, uint8_t id) {
   uint8_t* s = h->mem;
@@ -4847,9 +4897,14 @@ static void battleSysMsgFrame(CtBattleHost* h) {
     // dwell reloaded, so it only runs out after the last one). battle_top_message_box.md sec. 4.1/4.5.
     long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
     int idx = (s[0x2991] >> 3) & 7;                            // CD/01A5
-    s[0x0213] = 1;
     h->sysMsgOpenT++;                                          // characters typed
-    s[0xCD05] = (h->sysMsgOpenT <= CtBattleMsgLen(s)) ? 0x10 : 0x00;
+    if (rom) {
+      battleMsgVwfRun(h, 1);                                   // CD/04E4-04E9
+      if (getenv("CT_BATTLE_TRACE") && (s[0x0215] != 0) != (h->sysMsgOpenT <= CtBattleMsgLen(s)))
+        fprintf(stderr, "msgtype f%d step %d: the engine's $0215 = %02X, the count says %s (id %02X table %02X:%02X%02X)\n", h->frames,
+                h->sysMsgOpenT, s[0x0215], h->sysMsgOpenT <= CtBattleMsgLen(s) ? "more" : "end", s[0x020C], s[0x020F], s[0x020E], s[0x020D]);
+      s[0xCD05] = s[0x0215];                                   // CD/04ED-04F0
+    } else { s[0x0213] = 1; s[0xCD05] = (h->sysMsgOpenT <= CtBattleMsgLen(s)) ? 0x10 : 0x00; }   // (no text tables)
     s[0xCCEB] = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
     s[0xCCED]++;
     if (!s[0xCD05]) battleFleeTrace(h, "box-open");
@@ -11002,8 +11057,9 @@ static void battleMoveInit(CtBattleHost* h) {
   for (int i = 0; i < 0x180; i += 2) { s[0xA6E1 + i] = 0x00; s[0xA6E2 + i] = 0x29; }
   for (int i = 0; i < 0x4C0; i += 2) { s[0x0CC0 + i] = 0x00; s[0x0CC1 + i] = 0x29; }
   battleHudChromeBase(s);
-  // CC/E554-E563: `$80FD,X := 29FF` for X = $C0..$1FE -- among them $81BD..$81FC, the source of BG3 row 0 (CC/E0AF).
-  for (int x = 0xC0; x < 0x200; x += 2) { s[0x80FD + x] = 0xFF; s[0x80FE + x] = 0x29; }
+  // CC/E4FC-E563: the message window's tilemap rows $7FFD.., and `$80FD,X := 29FF` for X = $C0..$1FE -- among them
+  // $81BD..$81FC, the source of BG3 row 0 (CC/E0AF).
+  battleMsgWindowImage(s);
   for (int cmb = 0; cmb < 11; cmb++) { BT_MVEXTENT(h, cmb) = 8; BT_MVEXTENTY(h, cmb) = 8; BT_LIVEX(h, cmb) = 0; BT_LIVEY(h, cmb) = 0; }
   for (int seat = 0; seat < 3; seat++) {                           // PCs: $29B0 + 5*seat -> foot
     const uint8_t* r = s + 0x29B0 + seat * 5;
@@ -14145,7 +14201,8 @@ static int battleNameBoxPost(CtBattleHost* h, int id) {
   s[0x020C] = (uint8_t)id; s[0xCCED] = 0; s[0x02A1] = 0;           // CD/025E-0264
   s[0x0210] = 0x00; s[0x0211] = 0xB4; s[0x0212] = 0x7E; s[0x0214] = 0;   // CD/0267-0272
   for (int a = 0xB400; a < 0xB800; a++) s[a] = 0;                  // CD/0239: $B3FE + X (X = 80..2) in eight $80 stripes
-  s[0x0213] = 0x40;                                                // CD/027C-027F
+  battleMsgVwfBegin(h);                                            // CD/0278 JSL C2/0003
+  battleMsgVwfRun(h, 0x40);                                        // CD/027C-0282: `LDA #40 / STA $0213 / JSL C2/0009`
   h->nameBoxT = 0;
   if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "namebox f%d post id=%02X (CD/0295, CC:CBC9)\n", h->frames, id);
   return 11;                                                       // 2 (CD/3E7D x2) + 8 (CD/3E3B) + 1 (CD/3E75); C unpriced
@@ -15138,6 +15195,31 @@ static int battleFbe5Step(CtBattleHost* h) {
 }
 void CtBattleVictoryRewards(CtBattleHost* h);   // C1/83D2-83F2 (with the module's end tails, below)
 static void battleModuleTail(CtBattleHost* h, int path);
+// One results line's text: FD/AD17 stages the line's arguments and `JSL CD/0021` (CD/01B3) builds it -- `$020D-F :=
+// CE:EF11`, CD/025E (the id, the strip cleared, C2/0003) and CD/027F's `LDA #40 / STA $0213 / JSL C2/0009`.
+//   id 0 (experience)  AD26 `STX $0200 / STZ $0202` ($B28C)            id 4 (level up)  ADA6 `LDA $AEFF,X / STA $0200`
+//   id 1 (tech points) AD43 `STX $0200 / STA $0202` ($B2DB, $B2DD)     id 5 (learns)    ADE1 `$0200 := $AEFF,X`, ADEC `$0201 := $B3CE,X`
+//   id 2 (gold)        AD5B `STX $0200 / STZ $0202` ($B2A5)            id 6 (dual)      AE14 `LDA $B305,X / STA $0200`
+//   id 3 (an item)     AD75 `STA $7F0200` ($B2A7,Y)                    id 7 (triple)    AE37 `LDA $B310 / STA $0200`
+// The line's kind is the ROM's id. (The window's band request, CD/028C `$CCEC := 10 / INC $CA24`, is not made here: the
+// results' box stays the phase machine's, below.)
+static void battleResultLinePost(CtBattleHost* h, int line) {
+  uint8_t* s = h->mem;
+  if (line < 0 || line >= h->resultN) return;
+  int kind = h->resultKind[line]; unsigned val = (unsigned)h->resultVal[line];
+  switch (kind) {
+    case 0: case 2: s[0x0200] = (uint8_t)val; s[0x0201] = (uint8_t)(val >> 8); s[0x0202] = 0; break;
+    case 1: s[0x0200] = (uint8_t)val; s[0x0201] = (uint8_t)(val >> 8); s[0x0202] = (uint8_t)(val >> 16); break;
+    case 3: g_btMsg7F[0x200] = (uint8_t)val; break;
+    case 5: s[0x0200] = (uint8_t)(val >> 8); s[0x0201] = (uint8_t)val; break;
+    case 4: case 6: case 7: s[0x0200] = (uint8_t)val; break;
+    default: return;
+  }
+  s[0x020D] = 0x11; s[0x020E] = 0xEF; s[0x020F] = 0xCE;          // CD/01B6-01BE
+  battleMsgPostTail(h, (uint8_t)kind);                           // CD/01D2 JSR CD/025E
+  battleMsgVwfRun(h, 0x40);                                      // CD/01D5 JSR CD/027F
+}
+void CtBattleResultLineText(CtBattleHost* h, int line) { if (h && h->mem) battleResultLinePost(h, line); }
 static void battleResultsTick(CtBattleHost* h, int aHeld) {
   uint8_t* s = h->mem;
   // the 3+64+7 hold -- without the 64 when C1/35A9 returned early ($2989 bit 0: no celebration)
@@ -15161,7 +15243,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); }
     return;
   }
-  if (h->resultPhase < 0) { h->resultPhase = 0; h->resultPhaseT = 0; return; }      // this frame the box opens
+  if (h->resultPhase < 0) { h->resultPhase = 0; h->resultPhaseT = 0; battleResultLinePost(h, h->resultLine); return; }   // this frame the box opens
   // Every frame of a line from here on is a CD/3E75 wait (CD/020A: `LDA #10` x `JSR CD/3E75`; the dwell CD/01EF): `JSR
   // CD/3E7D` then `JSL C1/0012` = C1/10E3, the menu pass on the frame service's `$993A` -- the strip's seat refresh goes on
   // through the results.
@@ -15205,6 +15287,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
     default:                                                                         // the next line's build
       if (h->resultPhaseT >= CT_BATTLE_RESULT_BUILD) {
         h->resultLine++; h->resultPhase = 0; h->resultPhaseT = 0; battleTrace(h, "results-advance");
+        battleResultLinePost(h, h->resultLine);
       }
       break;
   }
@@ -16274,7 +16357,8 @@ static void battleLifelineMsgPost(CtBattleHost* h) {
   s[0x020C] = 0x09; s[0xCCED] = 0; s[0x02A1] = 0;                  // CD/025E-0264
   s[0x0210] = 0x00; s[0x0211] = 0xB4; s[0x0212] = 0x7E; s[0x0214] = 0;   // CD/0267-0272
   memset(s + 0xB400, 0, 0x400);                                    // CD/0275 JSR CD/0239
-  s[0x0213] = 0x40;                                                // CD/027C-027F
+  battleMsgVwfBegin(h);                                            // CD/0278 JSL C2/0003
+  battleMsgVwfRun(h, 0x40);                                        // CD/027C-0282: `LDA #40 / STA $0213 / JSL C2/0009`
   h->llMsgT = 0; h->llMsgClose = -1;
   if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "lifeline f%d msg-post id=09 char=%02X (CD/0021)\n", h->frames, s[0x0200]);
 }
@@ -21307,7 +21391,10 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
       int snd = (rom && rl > (long)(ROM_FLEE_MSG_SND_TBL + 8)) ? CtRomByte(rom, 0x400000L, (long)(ROM_FLEE_MSG_SND_TBL + 8)) : 0xFF;
       if (snd != 0xFF) battleSfxPost(h, 0x18, (uint8_t)snd, 0x80); }
     s[0x020C] = 0x08; s[0xCCED] = 0; s[0x02A1] = 0; s[0x0214] = 0;  // CD/025E-0272
-    s[0x0213] = 0x40;                                               // CD/027C -> CD/027F
+    s[0x0210] = 0x00; s[0x0211] = 0xB4; s[0x0212] = 0x7E;           // CD/0267-026F
+    memset(s + 0xB400, 0, 0x400);                                   // CD/0275 JSR CD/0239
+    battleMsgVwfBegin(h);                                           // CD/0278 JSL C2/0003
+    battleMsgVwfRun(h, 0x40);                                       // CD/027C -> CD/027F: `STA $0213 / JSL C2/0009`
     h->fleeStage = 1; h->fleeT = 0;
     battleFleeTrace(h, "ranaway-post");
     return 0;
