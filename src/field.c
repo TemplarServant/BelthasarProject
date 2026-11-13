@@ -7156,6 +7156,13 @@ static const uint16_t* battleFleeObjPal(const CtBattleHost* h, int cmb, const ui
 //   `fb` is W wide, the view's column 0 at its column vx (the blocks' columns are the view's); `above` = the composite's
 //   line above the picture (the run of line 0 anchors its first blocks there), NULL: the top row stands in for it.
 static uint8_t g_bMosSize[CAMH]; static int16_t g_bMosSrc[CAMH]; static int g_bMosOn;
+// The fight's sprites and strip as the NMI uploaded them (disasm/notes/battle_picture_lags.md): what a frame computes
+// for them is on the screen a frame later -- the OAM mirror the frame service's compose built (battle.c
+// CtBattleOamShown) and the strip's posted image (CF/E334-E3C0: g_bStripShown, the image as the frame before left it,
+// copied before the frame's tick on CD/088D's gates) -- while the registers HDMA feeds from the shadows the service
+// writes on line 64 (the mosaic, the bands, the effect layer's) are read in the frame itself.
+static CtBattleHost g_bOamHost; static uint8_t g_bStripShown[sizeof ((CtBattleHost*)0)->stripVram]; static int g_bStripOn;
+static int g_bTileStepPend;                        // a fight's tile step of the frame before: on the picture now
 static void battleMosaicApply(uint8_t* fb, int W, int vx, const uint8_t* above, uint8_t* pre) {
   memcpy(pre, fb, (size_t)W * CAMH * 3);
   for (int y = 0; y < CAMH; y++) {
@@ -17833,6 +17840,9 @@ int main(int argc, char** argv) {
         // set, `LDA $CD:3FFF` (a ROM zero) `BEQ ->0912 / LDA $BB00 / LSR A`; else `LDA $BB00` -- `STA $2100`.
         { const uint8_t* bm = CtSceneMem7E(f.vm);
           battleInidisp = bm[0xCD02] ? (uint8_t)(bm[0xBB00] >> 1) : bm[0xBB00]; }
+        // The strip's image the NMI at this frame's head uploads is the one the last frame left (CF/E334-E3C0).
+        if (liveHost.frames <= 1) g_bStripOn = 0;          // (a new fight: nothing of it uploaded yet)
+        if (CtBattleNmiUploads(&liveHost)) { memcpy(g_bStripShown, liveHost.stripVram, sizeof g_bStripShown); g_bStripOn = 1; }
         if (battleTailLeft > 0) {
           // The exit tail. CD/043E `JSL C0/000B` (C0/1BE6's chain, posted on the frame the module ended, below) and
           // CD/0444 run inside the battle: its main loop sits in the SPC handshake while its NMI keeps coming, C0/2C41
@@ -18371,6 +18381,7 @@ int main(int argc, char** argv) {
         bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);                  // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
       if (fieldIrqPreFlip) bw[0x0153] ^= 0x01;
       bgDirty |= CtFieldSceneSetCgram(f.sd, g_fieldCgram);
+      bgDirty |= g_bTileStepPend; g_bTileStepPend = 0;              // (a fight's last step, if the fight ended on it)
     } else if (battlePhase && f.sd) {
       // The battle's frames: the arena is the field's BG drawn with the CGRAM the battle's NMI uploaded (CD/08B4 JSL
       // C1/0009 -> CF/E3C0, the whole live page: liveHost.fxCgram), the colours its sprites are drawn with. Every record
@@ -18389,9 +18400,13 @@ int main(int argc, char** argv) {
         // ...and the frame the fight is called in (the module's tick 0: op D8 ran in this frame's VM pass) is the field's
         // whole: its main loop's C0/00C7 flip, its NMI and its IRQ. MEASURED, the rule's cartridge, playthrough leg 95
         // (loc 1BF, the transfer at f641): `$0153` 01 and `$051D` 11 -> 12 on f641, 00 and no step on f642.
-        if (liveHost.frames == 0 || (fieldRuleIfast() && liveHost.frames == 1))
-          bgDirty |= fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
-        else bgDirty |= fieldBattleIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+        // The step's tiles are DMA'd by the IRQ on line 211 and are on the screen in the next frame, like everything else a
+        // fight uploads (disasm/notes/battle_picture_lags.md): the arena is baked with them a frame after the step.
+        { int stepped;
+          if (liveHost.frames == 0 || (fieldRuleIfast() && liveHost.frames == 1))
+            stepped = fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+          else stepped = fieldBattleIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+          bgDirty |= g_bTileStepPend; g_bTileStepPend = stepped; }
       }
       // ...and with the battle's colour math, not the map header's: the arena's lines take CGWSEL/CGADSUB from the shadow
       // block the battle's NMI ships ($BE95 CGWSEL CGADSUB COLDATA SETINI, D1/E7BB: HDMA channel 3, CtBattleFxLayerCompose).
@@ -18549,6 +18564,7 @@ int main(int argc, char** argv) {
     memset(fb, 0, (size_t)g_fw * CAMH * 3);
     memset(front, 0, (size_t)g_fw * CAMH);
     memset(pmask, 0, (size_t)g_fw * CAMH);
+    if (battlePhase) CtBattlePictureTables(&liveHost, 1);   // (a side installed this frame: the picture's tables, to the HUD)
     // In battle the arena's BG1/BG2 scroll is the battle HDMA's (channels 1/2, CtBattleArenaScrollDelta): the shake and any
     // line wave move each row of the field picture by that row's (dx, dy). The field picture is one canvas of both layers,
     // so a row whose two layers move apart cannot be drawn from it: such a row keeps the staged view and is reported once.
@@ -19543,7 +19559,10 @@ int main(int argc, char** argv) {
         mot->canvasX0 = mot->canvasY0 = 0;
         g_mot = mot;
       }
-      battleCombatantsRender(fb, bmem, &liveHost);
+      // (the combatants as the NMI uploaded them: the last compose's -- until a fight's first upload, the live ones)
+      const uint8_t* bOamMem = bmem;
+      const int bOam = battlePhase && CtBattleOamShown(&liveHost, &g_bOamHost, &bOamMem);
+      battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
       if (bMot) { g_mot = NULL; g_motOwn = CT_MOT_FIXED; memcpy(g_motPic, fb, (size_t)CAMW * CAMH * 3); mot->valid = 1; }
       const int bPop0 = bMot ? mot->nspr : 0;         // (the popups' objects follow the combatants')
       g_bObjPrioMask = NULL;
@@ -19629,7 +19648,7 @@ int main(int argc, char** argv) {
       uint8_t* bpre = getenv("CT_BATTLESHOT_FIELD") ? (uint8_t*)malloc((size_t)CAMW * CAMH * 3) : NULL;
       if (bpre) memcpy(bpre, fb, (size_t)CAMW * CAMH * 3);
       int fdy = fillBoxBegin(fb, CT_BHUD_Y0 + (battleWindowsBottom(bs2) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0)), CT_BHUD_H);
-      CtBattleHudRender(fb, bs2, CtBattleStripVram(&liveHost));
+      CtBattleHudRender(fb, bs2, g_bStripOn ? g_bStripShown : CtBattleStripVram(&liveHost));   // (the image the NMI uploaded)
       fillBoxEnd(fb, fdy);
       if (bpre) {
         int bt = -1, bb2 = -1;
@@ -19643,6 +19662,7 @@ int main(int argc, char** argv) {
         free(bpre);
       }
     }
+    if (battlePhase) CtBattlePictureTables(&liveHost, 0);   // (the page as the tick left it again)
     // ...and the defeat wait's fade (C0/02B5 `DEC $19`) dims the whole picture, the fight's last sprites with the field.
     if (defeatHold) {
       if (defeatBr <= 0) memset(fb, 0, (size_t)CAMW * CAMH * 3);

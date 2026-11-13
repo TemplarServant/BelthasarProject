@@ -916,6 +916,13 @@ int CtBattleFxProgOpMem(uint8_t* mem, int X, int opAddr);
 int CtBattleFxOp88Mem(uint8_t* mem, int sub);
 void CtBattleShakeNmiMem(uint8_t* mem);   // ct --sweepshake: CD/06B4 + CD/0B51 (the scroll records, the screen shake, CD/0C48)
 void CtBattleArenaScrollDelta(const uint8_t* mem, int H, int16_t* d, uint8_t* arena);   // per fb row: BG1 dx dy, BG2 dx dy (HDMA ch1/ch2 - staged); arena = which rows read CD/06B4's records
+// Around a fight's compose: the layout tables the picture shows (a side installed this frame is on screen the next).
+void CtBattlePictureTables(CtBattleHost* h, int begin);
+// The combatants as the NMI uploaded them: the fight's state at the last compose the NMI shipped (battle.c
+// battleOamCompose). Fills *out (its mem -> *mem) and returns 1; 0 before a fight's first upload: draw the live host.
+int CtBattleOamShown(const CtBattleHost* live, CtBattleHost* out, const uint8_t** mem);
+// 1 when the NMI at the head of the next frame uploads the OAM mirror and the strip (CD/088D's gates, CF/E300).
+int CtBattleNmiUploads(const CtBattleHost* h);
 // The MOSAIC register per fb row (HDMA channel 6's table $7E:C975, the line cuts): size[r] the block size (1 = none),
 // src[r] the fb row the row's BG pixels are taken from (-1 = the line above the picture). Returns the rows with one.
 int CtBattleMosaicRows(const uint8_t* mem, int H, uint8_t* size, int16_t* src);

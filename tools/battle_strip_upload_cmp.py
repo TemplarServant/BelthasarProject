@@ -23,7 +23,9 @@ Graded from the band's settled frame (f296: the iris opens c281-c293, and its fr
 business, disasm/notes/battle_hud_band_anim.md) to the drive's end:
   the images     port frame f against cartridge frame f (the same logical frame);
   the VRAM       port frame f against cartridge frame f + 1 (the port's upload is the NMI that opens the next frame);
-  the picture    the strip's thumbnail rows (80..103) of port frame P against the cartridge's P + 2 (the frame alignment).
+  the picture    the strip's thumbnail rows (80..103) of port frame P against the cartridge's P + 1: the port draws the
+                 strip's image as the NMI at the frame's head uploaded it, the frame before's (field.c g_bOamHost,
+                 disasm/notes/battle_picture_lags.md) -- a fight's picture is the cartridge's a frame later, whole.
 And the frames where the strip's picture changes, on each side (the events: a key's effect a pass later, the HP refresh).
 """
 import os
@@ -170,16 +172,16 @@ def main():
         if (im or vr) and len(bad) < 6: bad.append('f%d %s' % (f, ' '.join(im + ['V' + a for a in vr])))
     pics = 0
     for f in range(FROM, last - 2):
-        a, b = pth.get(f), cth.get(f + 2)
+        a, b = pth.get(f), cth.get(f + 1)
         if a is None or b is None: continue
         pics += 1
         nt += int((np.abs(a[80:104] - b[80:104]).max(axis=2) > 0).sum()) == 0
     cch = strip_changes(cth, 560, last)
-    pch = [f + 2 for f in strip_changes(pth, 558, last - 2)]
+    pch = [f + 1 for f in strip_changes(pth, 559, last - 1)]
     print('strip-upload %s: images %s %d/%d frames identical, vram $7820/$7A00 %d/%d (port f = cartridge f+1), '
-          'strip %d/%d thumbnails identical (port P = cartridge P+2)' %
+          'strip %d/%d thumbnails identical (port P = cartridge P+1)' %
           (name, '/'.join(a for a, k in IMAGES), ni, n, nv, n, nt, pics))
-    print('strip-upload %s: the strip changes at cartridge %s; port (+2) %s -- %s' %
+    print('strip-upload %s: the strip changes at cartridge %s; port (+1) %s -- %s' %
           (name, ' '.join('c%d' % f for f in cch), ' '.join('c%d' % f for f in pch), 'SAME' if cch == pch else 'DIFFER'))
     for b in bad: print('   ' + b)
     return 0

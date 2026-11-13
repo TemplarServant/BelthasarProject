@@ -8,8 +8,10 @@ with the attract's clock. One interactive attract run (--scene 433, CT_AUDIO_LOC
 ct.exe --peek shoots the cartridge's under the rule (CT_ORACLE_LOGICAL / VIRTUAL_BEAM, from
 saves/attract_cena_inicial_rule.state: the attract from power-on + 2159, made by the recipe
 tools/fixtures/attract_rule.json), and each pair's box is compared (disasm/notes/battle_arena_cgram.md). The pairs
-sit on the fights' picture diagonal: port = cartridge + 2066 (P+1), + 2067 in 087's, whose visit is a frame longer in
-the port.
+sit on each fight's picture diagonal: port = cartridge + 2066 in 0AD's and 087's, + 2067 in 07D's. A fight's picture is
+one diagonal for everything on it since its sprites, strip and tiles are drawn as the NMI uploaded them
+(disasm/notes/battle_picture_lags.md): before, the uploads stood a frame ahead of the colours, and 07D's pairs sat a
+frame earlier on frames where only the colours moved.
 
   0AD entry     the battle's first frame, the PCs' box (Crono, (112,128)-(128,194)): the first compose must not read
                 h->fxCgram before a battle NMI has filled it (black PCs for one frame).
@@ -36,15 +38,15 @@ STATE = 'saves/attract_cena_inicial_rule.state'
 RULE = {'CT_ORACLE_LOGICAL': '1', 'CT_ORACLE_VIRTUAL_BEAM': '1'}
 PAIRS = [   # (label, port frame, cart frame, box)
     ('0AD entry, the PCs', 3807, 1741, (112, 128, 128, 194)),
-    ('07D before the tech', 6594, 4528, (0, 0, 256, 224)),
-    ('07D mid-tech', 6670, 4604, (0, 0, 256, 224)),
-    ('07D mid-tech', 6754, 4688, (0, 0, 256, 224)),
-    ('07D effect load, faded', 6608, 4542, (0, 0, 256, 224)),
-    ('087 Ice Sword darken', 9411, 7344, (0, 0, 256, 224)),
-    ('07D after the tech', 7092, 5026, (0, 0, 256, 224)),
-    ('07D after the tech', 7100, 5034, (0, 0, 256, 224)),
-    ('087 after the tech', 9779, 7712, (0, 0, 256, 224)),
-    ('087 after the tech', 9787, 7720, (0, 0, 256, 224)),
+    ('07D before the tech', 6595, 4528, (0, 0, 256, 224)),
+    ('07D mid-tech', 6671, 4604, (0, 0, 256, 224)),
+    ('07D mid-tech', 6755, 4688, (0, 0, 256, 224)),
+    ('07D effect load, faded', 6609, 4542, (0, 0, 256, 224)),
+    ('087 Ice Sword darken', 9410, 7344, (0, 0, 256, 224)),
+    ('07D after the tech', 7093, 5026, (0, 0, 256, 224)),
+    ('07D after the tech', 7101, 5034, (0, 0, 256, 224)),
+    ('087 after the tech', 9778, 7712, (0, 0, 256, 224)),
+    ('087 after the tech', 9786, 7720, (0, 0, 256, 224)),
 ]
 
 

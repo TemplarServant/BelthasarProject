@@ -3799,6 +3799,7 @@ static void battleHudChromeWindow(uint8_t* s, int dst, int skip) { // C1/0929: 6
 }
 
 
+static void battlePresetKeepOld(CtBattleHost* h);              // (below, with the line cuts)
 // One host frame of the animator + the D1/FE70 preset service. The service runs one tick behind the request
 // (battle_hud_band_anim.md sec. 5): the last open step raises $CA24 on frame N, D1/FE70 consumes it on N+1, and
 // the newly installed tables are on screen at N+2, so one extra full-band frame shows.
@@ -3807,7 +3808,9 @@ static void battleHudBandFrame(CtBattleHost* h) {
   // D1/FE4C: `LDA $CA21 / CMP $CA22 / BEQ` -- a changed layout installs at once; else a pending $CA24 does, both
   // through `LDA $CA25 / ADC $CA22 / ADC $CCEC / JSL CE:EE6E` (D1/FE5E-FE69) and `STZ $CA24`.
   { uint8_t* m = h->mem;
-    if (m[0xCA21] != m[0xCA22]) { m[0xCA22] = m[0xCA21]; battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF); m[0xCA24] = 0; }
+    if (m[0xCA21] != m[0xCA22]) {
+      battlePresetKeepOld(h);                                      // (the picture of this frame is still the old side's)
+      m[0xCA22] = m[0xCA21]; battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF); m[0xCA24] = 0; }
     else if (m[0xCA24]) battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF); }
   if (h->mem[0xCA24]) { h->mem[0xCA24] = 0; h->hudPresetPend = 1; }     // D1/FE70 consumes the request
   if (h->mem[0xCA1E] == 0xFF) h->hudLiveOpen = 1;                       // CE:EE6E puts the animator's tables up
@@ -15564,6 +15567,7 @@ static void battleShadowStage(uint8_t* m) {
   m[0xBE93] = 0xE0; m[0xC866] = 0xE0; m[0xBB00] = 0x0F;              // CD/0D1A-0D24
 }
 // Boot head: stage the battle data (stageAll), then set up the ATB loop state.
+static void battleOamReset(const CtBattleHost* h);              // (below, with the combatants' OAM mirror)
 void CtBattleBegin(CtBattleHost* h) {
   if (!h || !h->mem || !h->glb) return;
   // D1/F210-F29E, the module's HDMA/window init at the field-to-battle transition (60 frames before the wipe): a
@@ -15724,6 +15728,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->frames = 0; h->pcAttacks = 0; h->enemyAttacks = 0; h->pcMisses = 0; h->missReported = 0; h->missPopupSpawned = 0; h->endReason = 0;
   h->aiTurnMsg = 0; h->nameBoxT = -1;                           // no name box in flight (CD/0295)
   h->sysMsgOpenT = 0; h->fleeTriggered = 0; h->fleeHeldPrev = 0; h->fleeMaskPrev = 0; h->demoMaskPrev = 0; h->resetReq = 0; h->padF8Prev = 0;   // the run-away counter's host-side scratch (its bytes are WRAM)
+  battleOamReset(h);                                             // (another fight: no mirror of it composed or shipped yet)
   h->fleeStage = 0; h->fleeT = 0; h->fleeExitT = 0; h->actEndByScript = 0; h->actEndRel = 0; h->actScriptEnd = 0; h->actEndHold = 0; h->actCloseWiped = 0; h->actOpenWiped = 0; h->exitDemo = 0; h->exitCd0c = 0;
   h->fxTeardownT = 0; h->fxTeardownLong = 0; h->fxTeardownRuns = 0;
   for (int k = 0; k < 16; k++) { h->palK[k] = -1; h->palKind[k] = 0; }   // the live CGRAM page = the base page
@@ -18321,6 +18326,41 @@ uint8_t gBattleFxArenaRows[256];                                   // (a mod's: 
 static uint8_t gBattleLineCutRam[BT_LINE_CUTS][0x10000];
 const uint8_t* gBattleFxCutSnap[BT_LINE_CUTS];
 int gBattleFxCutLine[BT_LINE_CUTS], gBattleFxCutN = 0;
+// A preset is on the screen a frame after its install (battle_hud_band_anim.md sec. 5: the tables D1/FE70 installs on
+// N + 1 are on screen at N + 2). The layout's other side goes the same way -- D1/FE4C's `LDA $CA21 / CMP $CA22 / BEQ`
+// branch, the windows moved by the player's Y or by the target hand (C1/1A53): measured, `$CA22` of row r and the
+// strip on the other side from picture r + 2, one picture after the mosaic of the same row. The band animator has its
+// own latch for the installs it asks for (hudPresetPend); for the side, the picture of the install's own frame is drawn
+// from the nine tables and the `$CA22` the install replaced: battlePresetKeepOld saves them, and CtBattlePictureTables
+// swaps them into the page and into that frame's line-cut copies around the compose (the tick's entry swaps back
+// whatever a compose left).
+static uint8_t gPresetOld[0xC9ED - 0xC867], gPresetOldSide;
+static uint8_t gPresetNew[1 + BT_LINE_CUTS][0xC9ED - 0xC867], gPresetNewSide[1 + BT_LINE_CUTS];
+static const CtBattleHost* gPresetOldH; static int gPresetOldF = -1, gPresetSwapped, gPresetSwapN;
+static void battlePresetKeepOld(CtBattleHost* h) {
+  memcpy(gPresetOld, h->mem + 0xC867, sizeof gPresetOld); gPresetOldSide = h->mem[0xCA22];
+  gPresetOldH = h; gPresetOldF = h->frames;
+}
+void CtBattlePictureTables(CtBattleHost* h, int begin) {
+  if (!h || !h->mem || gPresetOldH != h) return;
+  if (begin) {
+    if (gPresetSwapped || gPresetOldF != h->frames) return;
+    gPresetSwapN = 1 + gBattleFxCutN;
+    for (int k = 0; k < gPresetSwapN; k++) {                       // the page, then each line cut's copy of it
+      uint8_t* m = k ? gBattleLineCutRam[k - 1] : h->mem;
+      memcpy(gPresetNew[k], m + 0xC867, sizeof gPresetOld); gPresetNewSide[k] = m[0xCA22];
+      memcpy(m + 0xC867, gPresetOld, sizeof gPresetOld); m[0xCA22] = gPresetOldSide;
+    }
+    gPresetSwapped = 1;
+  } else {
+    if (!gPresetSwapped) return;
+    for (int k = 0; k < gPresetSwapN; k++) {
+      uint8_t* m = k ? gBattleLineCutRam[k - 1] : h->mem;
+      memcpy(m + 0xC867, gPresetNew[k], sizeof gPresetOld); m[0xCA22] = gPresetNewSide[k];
+    }
+    gPresetSwapped = 0;
+  }
+}
 // The fixed colour carries over. COLDATA ($2132) is written only through channel 3's HDMA tables (no CPU store in the
 // battle code), and an entry writes only the components its bits 5-7 name, so a frame's top lines keep the others from
 // the previous frame's last run (HDMA runs on lines 0..224). The compose walks channel 3 to line 224 and leaves its
@@ -20279,6 +20319,9 @@ static void battleFxTilemapUpload(CtBattleHost* h) {
 // box grows two glyphs every other frame, and a closed window's tiles are blank within two frames. `$CE14` is never
 // initialised (the count runs on from fight to fight).
 static int battleBootBandArm(const CtBattleHost* h);   // (below, with the boot)
+static void battleOamCompose(CtBattleHost* h);                  // the combatants' OAM mirror (below, with the strip's upload)
+static void battleOamUpload(const CtBattleHost* h);
+static void battleOamComposeIfNone(CtBattleHost* h);
 static void battleMsgStripUpload(CtBattleHost* h) {
   uint8_t* s = h->mem;
   s[0xCE14]++;                                                     // CD/0650
@@ -20316,6 +20359,7 @@ static void battleNmiHead(CtBattleHost* h) {
   // combatants every frame, so entries 4-19 hold a program's sprite cloud only when CD/2BFC ran after it (vPos 155).
   memcpy(h->fxOamCloud, s + 0x0710, sizeof h->fxOamCloud);
   memcpy(h->objPalShown, h->objPalCmp, sizeof h->objPalShown);    // the combatants' attributes the compose wrote
+  battleOamUpload(h);                                             // ...and the mirror they are in: CF/E300-E330
   memcpy(h->dissolveStepShown, h->dissolveStep, sizeof h->dissolveStepShown);   // CD/3ED2's tiles: the corpse's dither level
   memcpy(h->fxObjShown, h->fxObjCmp, sizeof h->fxObjShown);       // ...and the effect objects' cells
   memcpy(h->fxObjMatShown, h->fxObjMatCmp, sizeof h->fxObjMatShown);
@@ -20659,6 +20703,7 @@ static int battleDefeatStageTick(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int t = h->defeatT++;
   battleMoveStepper(h);                                            // the NMI's CF/EFAF runs through the whole sequence
+  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A
   // The eight idle ticks are whole ones (C1/106E with $A10E set: C1/1071 skips the head): frame A (the walk dispatch
   // C1/10A9, C1/3714 + C1/283D, `STZ $E5`) and frame B (`INC $E5`, the menu pass, C1/3714 + C1/283D), so the walkers
   // keep moving.
@@ -20698,6 +20743,7 @@ static int battleFleeStageTick(CtBattleHost* h) {
   // "Ran away" box, until C1/4058 counts `$A0FD` up (the cartridge's forest flee: the post f849, CF:F9CE's feet stepping
   // on to f881, the last segment's end). No new segment starts -- C1/3714 is main-loop work.
   battleMoveStepper(h); battleLinkParts(h);                        // (the frame service's, under the flee's waits)
+  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A
   if (h->fleeStage == 1) {
     // The offsets from the post at t 0 (C1/8201 `JSL CD/0021`, `$020D` := 11 EF CE) are the rule's: the box at +2
     // (CD/3E7D x2, then CD/028C-0291; C2/0009's render is NMI-on CPU work, free under the rule), its close at +78, the
@@ -20809,7 +20855,11 @@ int CtBattleExitPoll(CtBattleHost* h) {
 
 static int battleBootIntro(const CtBattleHost* h);            // (below, with the boot's band arm)
 int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
+  CtBattlePictureTables(h, 0);                                  // (a compose that did not hand the page back)
   int r = battleTickBody(h, endRequest, input);
+  // (a frame whose path made no compose of its own -- the boot, a blocked exit, a stalled main thread: the service ran
+  //  it all the same, with the state the frame leaves)
+  battleOamComposeIfNone(h);
   if (h && h->mem && h->iterHead) {                            // frame B's tail is done: the next head, unless the tail
     h->iterHead = 0;                                           //   is inside an action (the head then waits for its end)
     // ...not once the fight is over: C1/8133's defeat and C1/817A's victory leave the loop for good (C1/8143 / C1/8186),
@@ -20899,6 +20949,51 @@ int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
 static int battleRuleNmiOnHold(void) {
   static int v = -1; if (v < 0) { const char* e = getenv("CT_ORACLE_NMION_HOLD"); v = !(e && *e == '0'); } return v;
 }
+// The combatants' OAM, as the compose built it and as the NMI uploaded it (disasm/notes/battle_picture_lags.md). The
+// frame service runs the walk stepper, then the part link, then the compose (CF/E748 `JSR CF/EFAF`, CF/E761 `JSR
+// CF/F9D3`, CF/E778 `JSR CF/E83A` behind `$A028`), before the frame's main-loop iteration: the OAM mirror $0700 it fills
+// holds the feet the stepper has just moved and everything else -- the cells, the poses, the offsets -- as the main
+// loop of the frame BEFORE left it. The NMI at the head of the next frame ships the mirror (CF/E300-E330, behind
+// CD/088D's gates). So a foot the stepper moves in frame F is on the screen in F + 1, and a pose the main loop sets in
+// frame F in F + 2 (measured, the forest's Hetakes: a foot of row r in picture r + 2, a cell in r + 3).
+// The port draws the combatants from their records, not from a mirror, so the mirror is the fight's state at the
+// compose: the host and its WRAM page copied there (battleOamCompose) and that copy handed over at the next NMI head
+// (battleOamUpload). CtBattleOamShown gives the
+// picture the uploaded copy -- with the host's own "as uploaded" members (the palette rows, the dither level, the
+// effect objects, the hand, the bracket, the cloud, CGRAM, the strip) taken from the live host, where the NMI head has
+// already put this frame's. The afterimage's entries stay the copy's: the trail is drawn with the body it trails
+// (the attract's Ice Sword: three whole frames 0 px with the copy's, 1100-1500 px with the live latch).
+static CtBattleHost gOamCmpHost, gOamShownHost;
+static uint8_t gOamCmpMem[0x10000], gOamShownMem[0x10000];
+static const CtBattleHost* gOamOwner;
+static int gOamCmpOn, gOamShownOn, gOamCmpF = -1;
+static void battleOamReset(const CtBattleHost* h) { gOamOwner = h; gOamCmpOn = gOamShownOn = 0; gOamCmpF = -1; }
+static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JSR CF/E83A (the caller tests `$A028`)
+  if (gOamOwner != h) battleOamReset(h);                           // (another host: nothing of it shipped yet)
+  gOamCmpHost = *h; memcpy(gOamCmpMem, h->mem, sizeof gOamCmpMem); gOamCmpOn = 1; gOamCmpF = h->frames;
+}
+static void battleOamComposeIfNone(CtBattleHost* h) {
+  if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) battleOamCompose(h);
+}
+static void battleOamUpload(const CtBattleHost* h) {               // CF/E300-E330, the NMI's
+  if (gOamOwner != h || !gOamCmpOn) return;
+  gOamShownHost = gOamCmpHost; memcpy(gOamShownMem, gOamCmpMem, sizeof gOamShownMem); gOamShownOn = 1;
+  // (the fade factors the sprites' colours are scaled by -- palK, the page FD/E39C rewrote -- are the copy's own: the
+  //  port's compose comes after its objslot service, and CF/E3C0 uploads that page at this NMI)
+}
+int CtBattleOamShown(const CtBattleHost* live, CtBattleHost* out, const uint8_t** mem) {
+  if (!live || !out || !mem || gOamOwner != live || !gOamShownOn) return 0;
+  *out = gOamShownHost; out->mem = gOamShownMem; *mem = gOamShownMem;
+#define OAM_LIVE(m) memcpy(&out->m, &live->m, sizeof out->m)
+  OAM_LIVE(fxWinSel); OAM_LIVE(fxWinTbl); OAM_LIVE(fxCgram);
+  OAM_LIVE(fxOamCloud); OAM_LIVE(fxOamCloudHi); OAM_LIVE(fxOamCloudOn);
+  OAM_LIVE(objPalShown); OAM_LIVE(fxScriptFlashMask); OAM_LIVE(dissolveStepShown);
+  OAM_LIVE(fxObjShown); OAM_LIVE(fxObjMatShown); OAM_LIVE(fxObjGateShown);
+  OAM_LIVE(brkOamShown); OAM_LIVE(brkOnShown); OAM_LIVE(handOamShown); OAM_LIVE(handVisShown); OAM_LIVE(handPageShown);
+  OAM_LIVE(stripVram); OAM_LIVE(msgStripVram); OAM_LIVE(msgStripLive);
+#undef OAM_LIVE
+  return 1;
+}
 static int battleBootBandArm(const CtBattleHost* h) {
   if (h->bootPostPending) return 0x7FFF;                           // C1/0000 not reached yet: nothing armed
   int priced = h->bootApuFrames > 0 || h->bootSyncFree;          // (free: the upload cost none, the boot's own frames stay)
@@ -20962,6 +21057,13 @@ static void battleStripBoot(CtBattleHost* h) {
   memcpy(h->stripVram + CT_BSTRIP_FRAME_OFS, s + 0x0B40, 0x180);   // CC/E1B0
 }
 const uint8_t* CtBattleStripVram(const CtBattleHost* h) { return h ? h->stripVram : NULL; }
+// Whether the NMI at the head of the next frame makes its uploads: CD/088D `LDA $7E:CE0F / BEQ` (set: CD/0893, no
+// upload), CD/08AF `LDA $CD02 / BNE` (the Start pause), else CD/08B4 `JSL C1/0009` = `JML CF/E300` -- the OAM mirror
+// (CF/E300-E330), the strip's image (battleStripNmiUpload). The boot's NMI (`$7E` = 0, CD/09F1) has no such call.
+int CtBattleNmiUploads(const CtBattleHost* h) {
+  if (!h || !h->mem || h->frames < battleBootBandArm(h)) return 0;
+  return !(h->mem[0xCE0F] || h->mem[0xCD02]);
+}
 const uint8_t* CtBattleStripVramLive(void) { return g_stripHost ? g_stripHost->stripVram : NULL; }
 // A WRAM-only fixture has no VRAM: the image is what the NMI would upload from it (the record's source, CF/E338, and
 // $0B40, CF/E384), with row 0 from $81BD and rows 7..8 the boot's 2900 (CC/E4DC; the item list's $0E80 is row 8's
@@ -21333,6 +21435,10 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // stored while its dispatch ran ahead of the stepper.
   if (!wasFrozen) battleMoveStepper(h);                            // CF/EFAF: the NMI's, whatever the main loop is doing
   battleLinkParts(h);                                              // CF/E75C -> CF/F9D3, every frame
+  // ...and the compose, the service's last step (CF/E778 JSR CF/E83A): everything above this line is the service's in
+  // the ROM too -- the action's engines CF/EC78 / CF/ECC2 / CF/E781 (battleAdvanceAction), the stepper, the link --
+  // and what follows is the main loop's iteration, whose poses the next frame's compose reads.
+  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A: the service's last step
   if (h->schedWalk && !battleDeathHold(h) && h->demoDispatchAt < 0) battleWalkDispatch(h);
   // C1/106E-1099 is the main loop's iteration head, and the head runs in the same frame as the previous iteration's
   // tail, after that frame's service (the INC) and its walk dispatch, before `JSR C1/007E` waits for the next NMI. The

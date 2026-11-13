@@ -3177,6 +3177,23 @@ run away from, 136 frames into the run-off action. The run-off's loops call the 
 and with no chooser left the first pass repaints the strip without the command list, the hand and the bracket.
 `0 px differ at port +0`; with no pass under the run-off, 1007 px at every lag. One mutation.
 
+### battle-picture-seq-forest-flee-vs-cartridge (`tools/battle_picture_seq_cmp.py forest-flee`)
+
+A fight's pictures frame by frame at ONE port lag (disasm/notes/battle_picture_lags.md): the forest recipe's fled
+fight, the cartridge's f840-f1140, every whole picture against the port's one frame earlier. What the NMI uploads
+(the OAM mirror the frame service composed, the strip's image) is a frame older on the screen than what HDMA reads
+from the frame's own shadows (the mosaic, the bands); the port draws the combatants from the state its compose
+copied and the next NMI head handed over (battle.c CtBattleOamShown) and the strip from the frame before.
+`301 of 301 whole frames ... at port -1` (250 before). Two mutations (the combatants live, the strip live). The
+single-picture checks cannot see this class: each takes its best lag. Re-pin only with every frame it loses
+explained against the cartridge. `battle-picture-seq-gato-idle-vs-cartridge` is GATO's fight left alone, f600-f840:
+the idle cells the main loop sets are a picture later than the feet (`241 of 241`, 104 before; one mutation: the
+compose at the frame's end).
+
+The same change moved a fight's picture to ONE diagonal, port P = the cartridge's P + 1: `battle-strip-upload-*`
+grade the strip's thumbnails there (it was P + 2), `attract-087-ice-sword-afterimage-vs-oracle` and
+`attract-battle-colours-entry-and-tech-vs-oracle` pair 07D at + 2067 and 0AD / 087 at + 2066.
+
 ### field-picture-run-off-mosaic-by-the-line-vs-cartridge (`tools/field_picture_cmp.py run-off-mosaic-by-the-line`)
 
 The run-off's mosaic as HDMA feeds it (disasm/notes/battle_flee.md sec. 10-11): the forest recipe's fight
