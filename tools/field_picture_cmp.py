@@ -24,6 +24,7 @@ Regression checks: the `field-picture-*` family (docs/TESTING.md).
 """
 import hashlib
 import os
+import shutil
 import struct
 import sys
 import zlib
@@ -34,6 +35,10 @@ import playthrough as P  # noqa: E402
 
 WORK = os.environ.get('FIELDPIC_TMP') or os.path.join(ROOT, 'build', '_fieldpic')
 P.TMP = WORK                                                  # (its own scratch: not the playthrough's)
+# One run's own files -- the port's seed, key file and shots, the cartridge's picture. The suite runs these checks side
+# by side, and two that share them read each other's pictures ("the port drew no picture"). The states cut inside a leg
+# stay in WORK: they are cached by their key.
+SCRATCH = os.path.join(WORK, 'run%d' % os.getpid())
 
 # name: the leg whose START state seeds both sides (its name in tools/playthrough/route.txt), `at` a frame inside the
 # leg instead, and the idle frames.
@@ -157,7 +162,10 @@ def run(name, want_png):
     i = P.find(legs, d['leg'])
     if i > 0:
         P.ensure_states(legs, i - 1)
+    P.TMP = WORK
     start = state_at(legs, i, d['at']) if d.get('at') else P.start_of(legs, i)
+    P.TMP = SCRATCH
+    os.makedirs(SCRATCH, exist_ok=True)
     own = bool(d.get('own'))
     pad = span(legs[i]['pad'], d['at'], d['frames']) if own else [(0, d['frames'])]
     keys = P.walkscript
@@ -191,8 +199,12 @@ def main():
         print('fieldpicture: no picture named %s (known: %s)' % (', '.join(bad), ', '.join(sorted(PICTURES))))
         return 1
     rc = 0
-    for name in args or sorted(PICTURES):
-        rc |= run(name, '--png' in sys.argv)
+    try:
+        for name in args or sorted(PICTURES):
+            rc |= run(name, '--png' in sys.argv)
+    finally:
+        P.TMP = WORK
+        shutil.rmtree(SCRATCH, ignore_errors=True)
     return rc
 
 
