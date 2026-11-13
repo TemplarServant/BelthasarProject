@@ -158,6 +158,18 @@ WINDOWS = {
     # (The run counter alone: the bit's own flip of the commit's frame is the load's, and the port loads one iteration
     # after the commit -- everything the load writes stands a frame later through the black.)
     'tile-animation-across-a-load': dict(leg='95_', start=1740, frames=70, cells=[('7E051D', 1)]),
+    # Leg 113's fight (the Bantam Imps and the Gargoyle), the strip at the bottom from the boot: an item's select opens
+    # on a party member low on the screen (f2427: Ayla, the hand's OAM row `$0701` = 9F) and the hand routine's single
+    # arm moves the windows out of its way -- C1/1A53-1A76: `$A4EE` (the hand was placed, counted by the open C1/14D2) and
+    # `$960A` (a list one hand walks, the handler's C1/2042) set, the strip at the bottom and the row at 9C or below ->
+    # `STZ $EC`.
+    # The NMI takes it (CD/093A: `$CA21` f2428) and the preset follows (`$CA22` f2429): the strip is at the top for the
+    # rest of the fight. The port wrote `$EC` at the boot alone: its strip stayed over the enemy, 24,577 px of every
+    # frame from there on. The cells: the side byte, the layout's two, the one-hand flag, the hand's move count (00 on
+    # every row: counted and cleared inside one pass).
+    # (The fight's boot is not graded: the port stages the layout two frames ahead of the cartridge there, the ledger's.)
+    'windows-side-follows-the-hand': dict(leg='113_', start=400, frames=2100, free=[(401, 600)],
+                                          cells=[('7E00EC', 1), ('7ECA21', 2), ('7E960A', 1), ('7EA4EE', 1)]),
 }
 
 

@@ -116,3 +116,60 @@ line, 249 = the full-width dialogue box's).
 **OPEN, pre-existing, not introduced by the placement fix:** the port draws that window **40 rows**
 tall where both presets give it **24** (8..31 / 184..207), and §V1's own oracle rows say 24 as well.
 Wrong in BOTH positions, and the six victory `battleshot` fnv pins are self-pinned around the 40.
+
+## 6. The windows move out of the target hand's way (2026-11-13)
+
+The side is not only the player's (the NMI's toggle, CD/0953-096B) and the boot's (`$2989` bit 1): the target select
+moves it. The single arm of the hand routine C1/1979 ends with
+
+    C1/1A53  LDA $A4EE / BEQ ->1A78        the hand was placed or moved since the last check
+    C1/1A58  STZ $A4EE
+    C1/1A5B  LDA $960A / BEQ ->1A78        a list one hand walks
+    C1/1A60  LDA $EC / BNE ->1A6F
+    C1/1A64  LDA $0701 / CMP #2D / BCS ->1A78 / INC $EC          strip at the top, the hand's OAM row above 2D: to the bottom
+    C1/1A6F  LDA $0701 / CMP #9C / BCC ->1A78 / STZ $EC          strip at the bottom, the hand at 9C or below: to the top
+    C1/1A78  JMP C1/1AFB
+
+(`$0701` = the hand's OAM Y, `$1D23,X + $9713,X`, C1/19CE-19D4). The NMI's CD/093A-094A then takes the new `$EC` on its
+next even `$7C` with no layout open (`$CA21 := ($CA21 + 1) & 1`), and D1/FE4C installs the other preset (`$CA22`).
+
+`$A4EE` is counted where the hand gets a new place: the select's opens -- C1/12B3 (Att, after `JSR C1/1F79`), C1/1386
+(a tech, behind `LDA $9613 / BPL`), C1/14D2 (an item, the same) -- and its walk, C1/15FF (`$EF & 05`) and C1/160E
+(`$EF & 0A`), both behind C1/15F4 `LDA $960C / BMI`. Only C1/1A58 clears it: a multi-hand pass (C1/1A7B) leaves it for
+the next single one.
+
+`$960A` is the pass's: C1/1F86 `STZ $960A` at the head of C1/1F79, then the group's handler (C1/1FF8[`$960D` & 7F], 21 and
+up -> 20):
+
+| handler | groups | `$960A` |
+|---|---|---|
+| C1/203A (`INC` at C1/2042) | 00 and the table's default (0E, 10, 15-17, 19, 1C-20) | 1 |
+| C1/20E0 | 03 | 1 |
+| C1/2136 / C1/2163 (`INC` at C1/213A) | 05, 06 | 1 |
+| C1/20A9 (`INC` at C1/20B1) | 07 | 1 |
+| C1/2169, C1/21AF, C1/2203, C1/225F, C1/22F5 (`JSR C1/20A9`, then `STZ $960A`) | 0B, 0D, 0C, 12 / 1A, 0F | 0 |
+| C1/209A, C1/20D6, C1/20B6, C1/20C6, C1/224B, C1/22A4, C1/2329, C1/22D3 | 01 / 04, 02, 08 / 0A, 09, 11, 13 / 14, 18, 1B | 0 |
+
+Measured on the rule's cartridge, playthrough leg 113 (the Bantam Imps and the Gargoyle, the strip at the bottom from
+the boot):
+
+    f626    `$960A` = 01 (C1:20B4, the first Att select; its hand, row 8B and above, moves nothing)
+    f2427   an item's select opens on the party (`$9609` 00 -> 01, `$A62D` = 02: Ayla, low on the screen): `$0701` = 9F
+            (C1:19D7), `$EC` 01 -> 00 (C1:1A78)
+    f2428   `$CA21` 01 -> 00 (the NMI)
+    f2429   `$CA22` 01 -> 00 (the preset): the strip is at the top from the next picture, for the rest of the fight
+    f2439   the select's walk (`$9614` 00 -> 01, `$A62D` = 00): `$0701` = 7F, between the two thresholds -- no move
+
+The port had the NMI's half (battleWindowSideFrame) and nothing that wrote `$EC` after the boot: its strip stayed at the
+bottom, over the enemy the hand pointed at -- 24,577 px of every frame from there on (leg 113 f3600; the same count in
+the picture audit's samples of legs 42, 65, 93 and 135). battle.c: `battleSelectOneHand` (the pass's `$960A`, from
+battleTargetLitFlag -- every stand-in for C1/1F79 ends there), the five `$A4EE` counts at their sites, and the single
+arm's check in battleTargetHandBuild.
+
+Measured: an item's open (C1/14D2) on the party's side, bottom -> top. Not measured (the ROM's listing only): the
+top -> bottom direction (C1/1A64), a move made by the walk's count (C1/15FF / C1/160E -- leg 113's walk lands between
+the thresholds), the Att's and a tech's opens (C1/12B3, C1/1386). `$960C` on the PC side's all-targets groups (01 / 04: C1/20A2 `LDA #80 / STA $960C`) is still
+written 00 by the port's battlePcTargetPublish -- its tick asks the group instead; no direction press in such a select
+has been measured.
+
+Check: `leg-window-windows-side-follows-the-hand-vs-cartridge`.

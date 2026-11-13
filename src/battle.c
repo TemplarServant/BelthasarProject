@@ -4695,7 +4695,22 @@ static void battleTargetHandBuild(CtBattleHost* h) {
       if (++sp == 4) break;
     }
     s[0x960B] = (p == 6) ? 0 : p;                                // C1/1AF1-1AF8
-  } else if (n == 1) battleTargetHandSprite(h, 0, set[0]);      // C1/19B4-19D4 ... C1/1A4B `AND #FE`
+  } else if (n == 1) {
+    battleTargetHandSprite(h, 0, set[0]);                        // C1/19B4-19D4 ... C1/1A4B `AND #FE`
+    // C1/1A53-1A76, the single arm's tail: a hand that has just been placed or moved (`$A4EE`, counted by the select's
+    // opens C1/12B3 / C1/1386 / C1/14D2 and its walk C1/15FF / C1/160E) in a one-hand list (`$960A`) moves the battle
+    // windows out of its way -- `LDA $EC / BNE ->1A6F / LDA $0701 / CMP #2D / BCS / INC $EC`: the strip at the top and
+    // the hand's OAM row above 2D, the strip goes to the bottom; `1A6F: LDA $0701 / CMP #9C / BCC / STZ $EC`: at the
+    // bottom and the hand at 9C or below, to the top. The NMI's CD/093A takes the new `$EC` (battleWindowSideFrame).
+    if (s[0xA4EE]) {                                             // C1/1A53 LDA $A4EE / BEQ
+      s[0xA4EE] = 0;                                             // C1/1A58
+      if (s[0x960A] && (h->handVis & 1)) {                       // C1/1A5B LDA $960A / BEQ
+        int y = h->handOam[0].y;                                 // $0701
+        if (!s[0x00EC]) { if (y < 0x2D) s[0x00EC]++; }           // C1/1A60-1A6B
+        else if (y >= 0x9C) s[0x00EC] = 0;                       // C1/1A6F-1A76
+      }
+    }
+  }
 }
 // C1/17DD, after the key (C1/1153's own bracket write C1/1115 came before it -- `b1115`, NULL when C1/1153 took another arm).
 // OAM entries 0-3 are one set of four sprites, the bracket's or the hand's, and the NMI ships whatever the pass left there:
@@ -5361,7 +5376,21 @@ static int battleGroupAll(int grp) { int g = grp & 0x7F; return g == 0x01 || g =
 // (C1/137C: `STZ $9614`, the list stays) and cancels a held select (C1/1564 -> C1/1577). The confirm's record takes
 // `$93F1 := $A62D[0]` (C1/1703), the target C1/BB85 puts in $B2AE. Returns the count.
 // C1/1F80 `STZ $9613`, then C1/1FCC-1FD9 after the group handler: no entry of `$A62D[0..0A]` lit -> `$9613 = FF`.
+// ...and `$960A`, the one-hand flag the hand's side check reads (C1/1A5B): C1/1F86 `STZ $960A` at the pass's head, then
+// the group's handler (C1/1FF8[$960D & 7F], 21 and up -> 20) -- `INC $960A` in the lists one hand walks: C1/203A ([00]
+// and the table's default; C1/2042), C1/20E0 [03], C1/2136 / C1/2163 [05] [06] (C1/213A), C1/20A9 [07] (C1/20B1); and
+// `STZ $960A` again in the handlers that build a set from C1/20A9's list ([0B] C1/216C, [0D] C1/21B2, [0C] C1/2206,
+// [12] [1A] C1/2262, [0F] C1/22F8). No other handler counts it ([01] [04] C1/209A, [02] C1/20D6, [08] [0A] C1/20B6,
+// [09] C1/20C6, [11] C1/224B, [13] [14] C1/22A4, [18] C1/2329, [1B] C1/22D3).
+static void battleSelectOneHand(uint8_t* s) {
+  static const uint8_t none[] = { 0x01, 0x02, 0x04, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0F, 0x11, 0x12, 0x13, 0x14, 0x18, 0x1A, 0x1B };
+  int g = s[0x960D] & 0x7F, one = 1;
+  if (g >= 0x21) g = 0x20;                                       // C1/1FC1-1FC5
+  for (unsigned i = 0; i < sizeof none; i++) if (g == none[i]) one = 0;
+  s[0x960A] = (uint8_t)one;
+}
 static void battleTargetLitFlag(uint8_t* s) {
+  battleSelectOneHand(s);
   s[0x9613] = 0;
   for (int x = 0; x < 0x0B && (s[0xA62D + x] & 0x80); x++)
     if (x == 0x0A) s[0x9613] = 0xFF;
@@ -5451,7 +5480,7 @@ static int battlePcTargetTick(CtBattleHost* h, int caster, int dir) {
   int idx = s[0x9614];
   battlePcTargetPublish(s, list, n, idx);
   if (n == 0 || idx >= n) { battleTargetCancel(h); battleTrace(h, "target-autocancel"); return 0; }
-  if (dir && !battleGroupAll(s[0x960D])) { idx = ((idx + dir) % n + n) % n; s[0x9614] = (uint8_t)idx; }
+  if (dir && !battleGroupAll(s[0x960D])) { s[0xA4EE]++; idx = ((idx + dir) % n + n) % n; s[0x9614] = (uint8_t)idx; }   // C1/15FF / C1/160E
   battlePcTargetPublish(s, list, n, idx);
   h->itemTgtSel = list[idx];
   return 1;
@@ -5472,6 +5501,7 @@ static int battlePcTargetOpen(CtBattleHost* h, int caster) {
   s[0x9614] = 0;
   battlePcTargetPublish(s, list, n, 0);
   if (n == 0) { battleTrace(h, "target-veto"); return 0; }
+  s[0xA4EE]++;                                                  // C1/1386 (tech) / C1/14D2 (item) INC $A4EE, with the open
   s[0x9609] = 1; h->itemTgtSel = list[0];
   return 1;
 }
@@ -5974,7 +6004,7 @@ static int battleEnemyGroupHandled(int grp) {
 static void battleEnemyTargetPass(CtBattleHost* h, int step) {
   uint8_t* s = h->mem;
   int g = s[0x960D] & 0x7F;
-  if (!battleEnemyGroupHandled(g)) return;
+  if (!battleEnemyGroupHandled(g)) { battleSelectOneHand(s); return; }   // (C1/1F86 and the handler's own count)
   int list[8], n = battleEnemyList(s, list);                     // C1/20A9 -> C1/2045 + C1/27C5
   if (step) battleTargetNav(s, step);                            // C1/27FA / C1/2814 (C1/282D: an entry at all)
   int cur = s[0x9614] < n ? list[s[0x9614]] : 0xFF;              // `$99C0[$9614]` (FF past the list's end)
@@ -6049,13 +6079,14 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
         s[0x960D] = s[0x9EE4];                            //   sec. 2.5: target group = $9EE4 (0x12) -> open target select
         if (battleGroupPcSide(s[0x960D])) battlePcTargetOpen(h, cur);   // the PC side: its list, or the veto (C1/1379)
         else if (battleGroupCasterRadius(s[0x960D])) {          // the radius around a party member: its set, or the veto
-          if (battleCasterRadiusBuild(h, cur)) s[0x9609] = 1;   //   (C1/137C `LDA $9613 / BPL` -> C1/1381 STZ $9614)
+          if (battleCasterRadiusBuild(h, cur)) { s[0xA4EE]++; s[0x9609] = 1; }   //   (C1/137C `LDA $9613 / BPL` -> C1/1381
+                                                                //    STZ $9614; else C1/1386 INC $A4EE / INC $9609)
           else { s[0x9614] = 0; battleTrace(h, "target-veto"); }
         } else {
           battleEnemyTargetPass(h, 0);                          //   C1/1379: C1/1F79, the group's handler
           if (battleEnemyGroupHandled(s[0x960D]) && (s[0x9613] & 0x80)) {   //   C1/137C `LDA $9613 / BPL`
             s[0x9614] = 0; battleTrace(h, "target-veto");      //   C1/1381 STZ $9614: the select never opens
-          } else s[0x9609] = 1;                                 //   C1/1389 INC $9609
+          } else { s[0xA4EE]++; s[0x9609] = 1; }                //   C1/1386 INC $A4EE / C1/1389 INC $9609
         }
         battleTechTrace(h, "tech-confirm", cur);
       } else battleTechTrace(h, "tech-grey-block", cur);   // A on a greyed tech = no-op (confirm blocked)
@@ -6080,7 +6111,8 @@ static void battleTechSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       battleEnemyTargetPass(h, step);
       if (battleEnemyTargetEmpty(h)) return;                 //   C1/1564
       if (step) battleTrace(h, "target-nav");
-      if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }   //   C1/15F9 (`$960C` clear)
+      if (dir) { s[0xA4EE]++; battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }   //   C1/15F9 (`$960C` clear):
+                                                             //   C1/15FF / C1/160E INC $A4EE, then the walk
     }
     if (aE)      battleCommitPcAction(h, cur);             // sec. 2.6 confirm -> commit (carries pendTechId, closes submenu)
     else if (bE) { battleTargetCancel(h); battleTechTrace(h, "target-cancel", cur); }   // B -> back to the tech list
@@ -6156,7 +6188,8 @@ static void battleItemSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
         s[0x960D] = s[0x1581 + x];                           //   C1/14BC: $960D = target group ($1581,X; Tonic 0x80)
         s[0x9F36] = (uint8_t)x; s[0x9F37] = (uint8_t)(x >> 8);   //   C1/14C2 `STX $9F36`: the record's offset
         if (battleGroupPcSide(s[0x960D])) battlePcTargetOpen(h, cur);   //   the PC list, or the veto (C1/14C5): Revive
-        else { s[0x9609] = 1; h->itemTgtSel = cur; }         //   with nobody fallen never opens -- nothing is spent
+        else { s[0xA4EE]++; s[0x9609] = 1; h->itemTgtSel = cur; }   //   with nobody fallen never opens -- nothing is spent
+                                                             //   (C1/14D2 INC $A4EE / C1/14D5 INC $9609)
         battleItemTrace(h, "item-confirm");
       } else battleItemTrace(h, "item-count-block");         // an empty record or a spent stack: nothing (sec. 2.4)
     } else if (bE) {                                         // sec. 2.5 cancel (C1/14DB-14E9): C1/1C3A, `$9920 := FF`
@@ -6174,6 +6207,7 @@ static void battleItemSubmenu(CtBattleHost* h, int cur, int aE, int bE, int upE,
       if (!battlePcTargetTick(h, cur, (aE || bE) ? 0 : dir)) return;   //   (disasm/notes/battle_target_select_pc_side.md)
       if (dir && !aE && !bE) battleItemTrace(h, "target-nav");
     } else if (dir) {
+      s[0xA4EE]++;                                           //   C1/15FF / C1/160E INC $A4EE
       for (int i = 0; i < 3; i++) { int n = (((h->itemTgtSel + dir * (i + 1)) % 3) + 3) % 3;
         if (!(s[0x2980 + n] & 0x80)) { h->itemTgtSel = n; break; } }   // first present seat in the nav direction
       battleItemTrace(h, "target-nav");
@@ -6312,6 +6346,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
         s[0x9609] = 1;                                           //   C1/12B6 INC $9609
         s[0x960D] = 7;                                           //   C1/12A8 `LDA #07 / STA $960D`
         battleEnemyTargetPass(h, 0);                             //   C1/12B0 JSR C1/1F79 (C1/1F83 `STZ $960C`, C1/20A9)
+        s[0xA4EE]++;                                             //   C1/12B3 INC $A4EE: the hand has a new place
         battleTrace(h, "target-select");
       } else battleOpenAction(h, cur, 0);                        //   (no enemy at all: never in a measured fight)
     } else if (k.a && s[0x95DC + cur] == 1) {                    // C1/12BC: the Tech list, behind $A0A7 bit 0
@@ -6336,7 +6371,7 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
     battleEnemyTargetPass(h, k.step);                            //   JSR C1/1F79 (07: C1/20A9, no pad of its own)
     if (battleEnemyTargetEmpty(h)) return;                       //   C1/1564: nothing lit -> the cancel tail
     int dir = k.dn ? 1 : k.up ? -1 : 0;                          //   C1/176C next / C1/1786 previous
-    if (dir) { battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }
+    if (dir) { s[0xA4EE]++; battleEnemyTargetWalk(h, dir); battleTrace(h, "target-nav"); }   // C1/15FF / C1/160E INC $A4EE
     if (k.a) battleCommitPcAction(h, cur);                       //   C1/161A: the confirm (queued; the dispatch runs it)
     else if (k.b) { battleTargetCancel(h); battleTrace(h, "target-cancel"); }   // C1/1577
   }

@@ -51472,6 +51472,58 @@
       ]
     },
     {
+      "name": "leg-window-windows-side-follows-the-hand-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "windows-side-follows-the-hand"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: windows-side-follows-the-hand leg 113 f400+2100: 4 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: windows-side-follows-the-hand "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fight's windows move out of the target hand's way: the side byte, the layout and the one-hand flag are the cartridge's step for step",
+      "notes": "THE BATTLE WINDOWS MOVE OUT OF THE TARGET HAND'S WAY (disasm/notes/battle_hud_strip_position.md sec. 6). The hand routine's single arm ends with C1/1A53-1A76: `LDA $A4EE / BEQ / STZ $A4EE / LDA $960A / BEQ`, then with the strip at the top (`$EC` 0) and the hand's OAM row `$0701` above 2D `INC $EC`, with it at the bottom and the row at 9C or below `STZ $EC`; the NMI's CD/093A takes the new side on its next even `$7C` and D1/FE4C installs the other preset. `$A4EE` is counted where the hand gets a new place (the select's opens C1/12B3 / C1/1386 / C1/14D2, its walk C1/15FF / C1/160E), `$960A` by the group's handler (one-hand lists: C1/2042, C1/20B1, C1/20E0, C1/213A). Playthrough leg 113's fight, the strip at the bottom from the boot: an item's select opens on a party member low on the screen at f2427 (Ayla, `$A62D` = 02, `$0701` = 9F; the open's count C1/14D2) -> `$EC` 01 -> 00, `$CA21` f2428, `$CA22` f2429, the strip at the top for the rest of the fight. The port wrote `$EC` at the boot alone: its strip stayed where it was, over the party -- 24,577 px of every frame from there on (the picture audit's samples of legs 42, 65, 93, 113 and 135).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  s[0xA4EE]++;                                                  // C1/1386 (tech) / C1/14D2 (item) INC $A4EE, with the open",
+          "replace": "  /* MUT: a PC-side select's open does not count the hand's move */",
+          "why": "C1/14D2 `INC $A4EE` after the item's open `JSR C1/1F79` (C1/1386 for a tech): without it C1/1A53 `LDA $A4EE / BEQ` skips the side check and the strip stays over the party member the hand points at"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "        else if (y >= 0x9C) s[0x00EC] = 0;                       // C1/1A6F-1A76",
+          "replace": "        else if (y >= 0xA0) s[0x00EC] = 0;                       // C1/1A6F-1A76",
+          "why": "C1/1A72 `CMP #9C / BCC`: the hand's row 9F is at or below 9C, so the strip leaves the bottom"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  s[0x960A] = (uint8_t)one;",
+          "replace": "  s[0x960A] = 0;   /* MUT: no handler counts the one-hand flag */",
+          "why": "the group's handler counts the one-hand flag (C1/20B1 for the Att's list at f626, C1/2042 for the item's party list at f2427): C1/1A5B `LDA $960A / BEQ` skips the check on a list that is not one hand's"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "      s[0xA4EE] = 0;                                             // C1/1A58",
+          "replace": "      /* MUT: $A4EE never cleared */",
+          "why": "C1/1A58 `STZ $A4EE`: the check runs once for each move of the hand; left set, the cell stands at its count where the cartridge's reads 00 on every row"
+        }
+      ]
+    },
+    {
       "name": "field-picture-death-peak-snow-vs-cartridge",
       "argv": [
         "python",

@@ -3154,6 +3154,14 @@ passes CT_SEED_LOADFADE=1, on which field.c goes on with the ramp. Five legs sta
 cartridge's (`55 steps compared, 0 differing`; all 55 differed). One mutation, the port's resume (the harness's
 answer is cached beside the state, so a mutation of the question is never run).
 
+### leg-window-windows-side-follows-the-hand-vs-cartridge (`tools/leg_window_cmp.py windows-side-follows-the-hand`)
+
+The battle windows move out of the target hand's way (disasm/notes/battle_hud_strip_position.md sec. 6): leg 113's
+fight from the field before it, 2100 frames (the boot's frames free). An item's select opens on a party member low on
+the screen and C1/1A53-1A76 clears the side byte `$EC`; the NMI's `$CA21` and the preset's `$CA22` follow on the next two
+frames. The cells: the side byte, the layout's two, the one-hand flag `$960A` and the move count `$A4EE` (00 on every
+row). Four mutations (the open's count, the threshold, the flag, the count's clear).
+
 ### leg-window-tile-animation-across-a-fight-vs-cartridge / leg-window-tile-animation-across-a-load-vs-cartridge (`python tools/leg_window_cmp.py <name>`)
 
 The field's tile animation step by step against the cartridge (disasm/notes/field_bg_anim.md, "The IRQ across a fight
