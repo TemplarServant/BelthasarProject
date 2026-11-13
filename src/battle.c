@@ -4884,14 +4884,44 @@ int CtBattleMsgLen(const uint8_t* s) {
 //   CD/04DF-04FC (the battle frame service's box tick): while $CD05 != 0, `LDA #01 / STA $0213 / JSL C2/0009 /
 //     LDA $0215 / STA $CD05`, and `JSR CD/01A5 / STA $CCEB / INC $CCED` arms the dwell from the message-speed
 //     table ($CD019D[$2991 >> 3 & 7] = $A0 at the default).
+// CD/04DF has two callers, and both are a wait's way back: CD/3E89, the tail of bank CD's own wait CD/3E7D (the sheet
+// packets' CD/3E75, the effect load, the results), and CD/04DB, the end of the service CD/0009 that bank C1 calls after
+// its wait C1/007E -- the main loop's C1/10A0 and C1/10C0, C1/10FA (after C1/40A0, 40B0, 40E1, 485B, 4864, 488D and
+// 4943), C1/354D, 356D and 3689. A C1/007E that hands back to neither types nothing on the frame it returns in. Of an
+// action's those are C1/405F (C1/4058 `INC $A0FD / JSL CC/F06B / JSR C1/007E`: the frame after `$A0FD` rises -- its
+// only other writer is the main loop's C1/1073 `STZ` --, the one before C1/40A6's `INC $A013`), C1/4841 (after the sheets' eight packets: the
+// rise + 9) and the close's C1/4116, C1/414B, C1/41B4 and C1/41B7 (from the frame after C1/40E4's service to `STZ
+// $A013`); of the victory's, the three seat removals' C1/358E, C1/3596 and C1/359E (C1/3686's loop has C1/3689's
+// service); and the module's exit CF/FBE5-FCE9 waits through its own CF/FCFB, which calls neither. Returns which (0: the
+// step runs). disasm/notes/battle_message_window.md sec. 6; tools/battle_typewriter_cmp.py counts them on the cartridge.
+static int battleTypewriterHeld(const CtBattleHost* h, int opened) {
+  // (`opened`: C1/4058 ran in the last frame's main thread. A path of the port that makes that INC at the action's own
+  // open has the wait two frames behind it already.)
+  if (opened && !(h->actActive && h->frames - h->actStart >= 1)) return 1;      // C1/405F
+  if (h->victoryHold >= 1 && h->victoryHold <= 3) return 4;                     // C1/358E, 3596, 359E (the count steps later in the frame)
+  if (h->handoffLeft > 0) return 5;                                             // CF/FCFB (battleFbe5Begin .. battleFbe5Step's end)
+  if (!h->actActive) return 0;
+  int rel = h->frames - h->actStart;
+  if (rel == 9) return 2;                                                       // C1/4841
+  if ((h->actEndByScript || h->actScriptEnd) && h->actEndRel > 0) {
+    int e2 = h->actEndRel + 1 + h->actEndHold;                                  // C1/40E1's last return (C1/40E4)
+    if (rel > e2 && rel <= h->actSpan) return 3;                                // C1/4116 .. C1/41B7
+  }
+  return 0;
+}
 static void battleSysMsgFrame(CtBattleHost* h) {
   uint8_t* s = h->mem;
+  int opened = s[0xA0FD] && !h->typeA0fd;                      // C1/4058's INC, since this service last ran
+  h->typeA0fd = s[0xA0FD];
+  int held = battleTypewriterHeld(h, opened);
+  if (held && getenv("CT_BATTLE_TRACE"))
+    fprintf(stderr, "typeheld f%d wait %d (rel %d, $CD05 %02X)\n", h->frames, held, h->frames - h->actStart, s[0xCD05]);
   if (s[0xCCED]) {                                             // D1/E7EC
     if (--s[0xCCEB] == 0) {
       if (s[0xCD1D]) s[0xCE17] = 0xFF;                           // D1/E7F6-E7FD: a name box's close forgets its id
       s[0xCD1D] = 0; s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "box-close"); }
   }
-  if (s[0xCD05]) {                                             // CD/04DF-04FC, one typewriter step:
+  if (s[0xCD05] && !held) {                                    // CD/04DF-04FC, one typewriter step:
     // `LDA #01 / STA $0213 / JSL C2/0009` types one decoded character; `LDA $0215 / STA $CD05` = 10 while the string
     // goes on, 00 on the call that reads the terminator; then on every step `JSR CD/01A5 / STA $CCEB / INC $CCED` (the
     // dwell reloaded, so it only runs out after the last one). battle_top_message_box.md sec. 4.1/4.5.
@@ -15201,8 +15231,9 @@ static void battleModuleTail(CtBattleHost* h, int path);
 //   id 1 (tech points) AD43 `STX $0200 / STA $0202` ($B2DB, $B2DD)     id 5 (learns)    ADE1 `$0200 := $AEFF,X`, ADEC `$0201 := $B3CE,X`
 //   id 2 (gold)        AD5B `STX $0200 / STZ $0202` ($B2A5)            id 6 (dual)      AE14 `LDA $B305,X / STA $0200`
 //   id 3 (an item)     AD75 `STA $7F0200` ($B2A7,Y)                    id 7 (triple)    AE37 `LDA $B310 / STA $0200`
-// The line's kind is the ROM's id. (The window's band request, CD/028C `$CCEC := 10 / INC $CA24`, is not made here: the
-// results' box stays the phase machine's, below.)
+// The line's kind is the ROM's id. The window's band request, CD/028C `$CCEC := 10 / INC $CA24`, follows CD/027F's two
+// waits: battleResultsTick makes it two frames after this post, and CD/01FD's `STZ $CCEC / STZ $CCED / INC $CA24` at the
+// dwell's end.
 static void battleResultLinePost(CtBattleHost* h, int line) {
   uint8_t* s = h->mem;
   if (line < 0 || line >= h->resultN) return;
@@ -15232,6 +15263,9 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
     CtBattleVictoryRewards(h);                                   // C1/83D2-83F2 (once)
     if (h->resultN <= 0 || h->resultLine < 0) { h->resultPhase = 3; h->resultPhaseT = 0;
       battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); return; }
+    // CD/01B3 on that frame: CD/01D2 `JSR CD/025E` and CD/027F's render, the line's text in the strip two waits before
+    // the window is asked for (below).
+    if (h->victoryHold == hold - 4) battleResultLinePost(h, h->resultLine);
   }
   // The first line's dwell takes a held A from post + 19, as every later line's does (CD/01B3: the post on frame 0, the box
   // on 2, CD/020A on 3-18): the model below counts 17 frames from the box's frame to the first A test, so the first box is
@@ -15243,7 +15277,8 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); }
     return;
   }
-  if (h->resultPhase < 0) { h->resultPhase = 0; h->resultPhaseT = 0; battleResultLinePost(h, h->resultLine); return; }   // this frame the box opens
+  if (h->resultPhase < 0) { h->resultPhase = 0; h->resultPhaseT = 0;
+                            s[0xCCEC] = 0x10; s[0xCA24]++; return; }   // CD/028C-0291: this frame the box is asked for
   // Every frame of a line from here on is a CD/3E75 wait (CD/020A: `LDA #10` x `JSR CD/3E75`; the dwell CD/01EF): `JSR
   // CD/3E7D` then `JSL C1/0012` = C1/10E3, the menu pass on the frame service's `$993A` -- the strip's seat refresh goes on
   // through the results.
@@ -15259,6 +15294,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       int dwell = (rom && rl > (long)(ROM_MSG_DWELL_TBL + idx)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_DWELL_TBL + idx)) : 0xA0;
       if (aHeld || h->resultPhaseT >= dwell) {
         h->resultPhase = 2; h->resultPhaseT = 0;
+        s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++;                                    // CD/01FD-0203: the window down
         if (getenv("CT_BATTLE_TRACE"))
           fprintf(stderr, "results f%d line%d dwell ends (%s)\n", h->frames, h->resultLine, aHeld ? "A held" : "timeout");
       }
@@ -15279,6 +15315,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
             if (getenv("CT_BATTLE_TRACE"))
               fprintf(stderr, "battlesfx f%d result-line msg=%d cmd=18 id=%02X pan=80 (CD/01CB)\n", h->frames, id, snd);
           }
+          battleResultLinePost(h, h->resultLine + 1);                                // CD/01D2 JSR CD/025E, CD/027F's render
         }
         else { h->resultPhase = 3;                                                    // the last line: hand off
                battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); }   // FD/AD17 returns: C1/83F9
@@ -15287,7 +15324,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
     default:                                                                         // the next line's build
       if (h->resultPhaseT >= CT_BATTLE_RESULT_BUILD) {
         h->resultLine++; h->resultPhase = 0; h->resultPhaseT = 0; battleTrace(h, "results-advance");
-        battleResultLinePost(h, h->resultLine);
+        s[0xCCEC] = 0x10; s[0xCA24]++;                                              // CD/028C-0291, after CD/027F's two waits
       }
       break;
   }
@@ -20152,6 +20189,24 @@ static void battleFxTilemapUpload(CtBattleHost* h) {
   s[0xA01F]++;                                                     // CD/0648
   if (battleFleeProgTraceOn()) fprintf(stderr, "fxupload f%d vram=%04X src=%04X\n", h->frames, va, src);
 }
+// CD/064B-06AF, where CD/0607 ends on every NMI it runs (the block request or not): `LDX #0200 / STX $45 / INC $CE14`,
+// then ONE HALF of the message window's text tiles, the half the count's bit 0 picks --
+//   the window up (`LDA $CCEC / CMP #10 / BEQ ->0694`): odd `LDX #B400 / LDY #5800`, even `LDX #B600 / LDY #5980`,
+//     `LDA #7E / JMP CD/3E8E` -- $200 bytes of the strip to VRAM (tiles 100-11F, or 130-14F);
+//   the window down (CD/065A-0693): a fixed-source DMA of CD:06B2's zero word to $5800 (odd) or $5980 (even).
+// So a line reaches the screen a half at a time: a box that opens shows one half of its text for a frame, a typed
+// box grows two glyphs every other frame, and a closed window's tiles are blank within two frames. `$CE14` is never
+// initialised (the count runs on from fight to fight).
+static int battleBootBandArm(const CtBattleHost* h);   // (below, with the boot)
+static void battleMsgStripUpload(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  s[0xCE14]++;                                                     // CD/0650
+  int odd = s[0xCE14] & 1;
+  uint8_t* v = h->msgStripVram + (odd ? 0 : 0x200);
+  if (s[0xCCEC] == 0x10) memcpy(v, s + (odd ? 0xB400 : 0xB600), 0x200);   // CD/0694-06AF
+  else memset(v, 0, 0x200);                                        // CD/065A-0693
+  h->msgStripLive = 1;
+}
 // The battle NMI's part the effect layer needs, in its order (D1/E780 -> CD/0C95 -> CD/088D):
 //   D1/E7AF  the staging commit: $BE8D/$BE8F := $BE89/$BE8B, $BE95/$BE97 := $BE91/$BE93 (16-bit pairs), so a
 //            program's TM/TS/TMW/TSW/CGWSEL/CGADSUB store reaches HDMA channels 4/5 one frame later
@@ -20165,6 +20220,10 @@ static void battleNmiHead(CtBattleHost* h) {
   s[0xBE8D] = s[0xBE89]; s[0xBE8E] = s[0xBE8A]; s[0xBE8F] = s[0xBE8B]; s[0xBE90] = s[0xBE8C];   // D1/E7AF-E7B8
   s[0xBE95] = s[0xBE91]; s[0xBE96] = s[0xBE92]; s[0xBE97] = s[0xBE93]; s[0xBE98] = s[0xBE94];   // D1/E7BB-E7C4
   if (s[0xCA1E] == 0) battleFxTilemapUpload(h);                    // CD/08A4
+  // CD/0607's tail, the message window's text tiles: CD/088D is the service of `$7E` = 1 / 2 (D1/E7DA `JSL CD/0C95`'s
+  // table CD:0C83 = 09F1, 088D, 088D) -- the boot's D1/F24B `STZ $7E` keeps CD/09F1 there until C1/0034's CD/0399, the
+  // band's arm in the port's frames (battleStripNmiUpload) -- and its `LDA $7ECE0F / BEQ`, `LDA $CA1E / BNE` lead to it.
+  if (h->frames >= battleBootBandArm(h) && s[0xCA1E] == 0 && !s[0xCE0F]) battleMsgStripUpload(h);
   for (int k = 0; k < 5; k++) h->fxWinSel[k] = s[0xC861 + k];      // CD/08B8-08D7
   s[0xBE93] = s[0xC866];                                           // CD/08DB
   s[0xC151] = s[0xC155]; s[0xC152] = s[0xC156]; s[0xC153] = s[0xC157]; s[0xC154] = s[0xC158];   // CD/08E1-08EA

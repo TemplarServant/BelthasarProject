@@ -577,6 +577,13 @@ typedef struct CtBattleHost {
   // and the fight NMI's CF/E338 (the `$A0` record: $0CC0, $A6E1 or $0E80 into rows 1..6) and CF/E384 (`$99E2`: $0B40).
   // field.c draws the strip from it, never from the live buffers.
   uint8_t stripVram[CT_BSTRIP_VRAM_SIZE];
+  // The message window's text tiles as VRAM holds them: [0..$1FF] tiles 100-11F (VRAM $5800), [$200..$3FF] tiles
+  // 130-14F ($5980) -- one half a frame from the strip $7E:B400 / $7E:B600 while the window is up, zeroes while it
+  // is down (CD/064B-06AF, battleMsgStripUpload). msgStripLive: an upload has run (a host a fixture staged by hand
+  // has none: its picture reads the WRAM strip).
+  uint8_t msgStripVram[0x400];
+  uint8_t typeA0fd;          // `$A0FD` as the last frame's typewriter service found it (battleSysMsgFrame: C1/4058's edge)
+  uint8_t msgStripLive;
   // The afterimage (op A4 C1/691B, CF/ED18, CF/E92C): the frame's compose drew combatant c's current cells at its four
   // recorded positions (trailCmp[c] = 1, the 16-bit screen points newest first), published at the NMI like the rest.
   uint8_t trailCmp[11], trailShown[11];

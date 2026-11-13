@@ -7524,7 +7524,7 @@ static uint16_t battleMsgWindowWord(int row, int col) {
   const uint8_t* b = CtBattleMsgWindowRows() + (row - 24) * 0x40 + (col & 31) * 2;
   return (uint16_t)(b[0] | (b[1] << 8));
 }
-static void battleMsgWindowDraw(uint8_t* fb, const uint8_t* mem, int top) {
+static void battleMsgWindowDraw(uint8_t* fb, const uint8_t* mem, const uint8_t* tiles, int top) {
   long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
   const uint8_t* frame = CtRomPtr(rom, romLen, 0x3F9E10L + (long)(mem[0x2991] & 7) * 0x280, 0x280);   // the Window Color's tiles
   int below = (top == CT_BRESULT_Y_BOTTOM);
@@ -7555,8 +7555,8 @@ static void battleMsgWindowDraw(uint8_t* fb, const uint8_t* mem, int top) {
       { int bx = (x + h3) & 0xFF;
         uint16_t w = battleMsgWindowWord(l3 >> 3, bx >> 3);
         int t = w & 0x3FF;
-        const uint8_t* g = (t >= 0x100 && t < 0x120) ? mem + 0xB400 + (t - 0x100) * 16
-                         : (t >= 0x130 && t < 0x150) ? mem + 0xB600 + (t - 0x130) * 16 : NULL;
+        const uint8_t* g = (t >= 0x100 && t < 0x120) ? tiles + (t - 0x100) * 16
+                         : (t >= 0x130 && t < 0x150) ? tiles + 0x200 + (t - 0x130) * 16 : NULL;
         if ((w & 0x2000) && g) {
           int fy = (w & 0x8000) ? 7 - (l3 & 7) : (l3 & 7), bit = (w & 0x4000) ? (bx & 7) : 7 - (bx & 7);
           int v = ((g[fy * 2] >> bit) & 1) | (((g[fy * 2 + 1] >> bit) & 1) << 1);
@@ -7584,10 +7584,33 @@ static void battleMsgWindowDraw(uint8_t* fb, const uint8_t* mem, int top) {
 // The window sits opposite the HUD strip: both are placed by the same band presets (battle_hud_strip_position.md) --
 // preset $12 the strip at renderY 8..55 and the window at 184..207, preset $13 the window at 8..31 and the strip at
 // 160..207.
+// The window's band is the installed table's: the presets with `$CCEC` = $10 in their id (D1/FE5E) put a second $BE9B
+// entry in $7E:C867, outside the strip's rows (ctBattleHudBand). D1/FE70 installs a preset on the NMI after its request
+// (`INC $CA24`), so the band opens and closes a frame after `$CCEC` changes -- while the text tiles follow the strip a
+// half a frame (battle.c battleMsgStripUpload). Returns the entry's lines (0: no window on screen), *top its first row.
+static int ctBattleMsgBand(const uint8_t* mem, int* top) {
+  int acc = 0;
+  int y0 = CT_BHUD_Y0 + (battleWindowsBottom(mem) ? 0 : (CT_BHUD_Y0_TOP - CT_BHUD_Y0));
+  for (int a = 0xC867; a + 2 < 0xC867 + 0x1E; a += 3) {
+    int c = mem[a];
+    if (!c) break;
+    int n = (c & 0x80) ? ((c & 0x7F) ? (c & 0x7F) : 0x80) : c;
+    if ((mem[a + 1] | (mem[a + 2] << 8)) == 0xBE9B && !(acc < y0 + CT_BHUD_H && acc + n > y0)) { *top = acc; return n; }
+    acc += n;
+  }
+  return 0;
+}
 static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_t* font, const uint8_t* rom, long romLen) {
   (void)font; (void)rom; (void)romLen;
   if (!fb || !h || !h->mem) return;
-  if (h->mem[0xCCEC] != 0x10) {
+  int bandTop = 0;
+  // (...once the fight's own NMI has run CD/088D: until the boot's CD/0399 the table in WRAM is whatever the last
+  // fight left, and the cartridge's NMI, on CD/09F1, shows none of it.)
+  int band = h->msgStripLive ? ctBattleMsgBand(h->mem, &bandTop) : 0;
+  // No window in the table: a live fight has none on screen. A host staged by hand has no installed table to read, and
+  // its window is the preset byte's or the results machine's phase (CT_BATTLE_RENDER_RESULTLINE).
+  if (!band && h->msgStripLive) return;
+  if (!band && h->mem[0xCCEC] != 0x10) {
     int vhold = (h->mem[0x2989] & 0x01) ? CT_BATTLE_VICTORY_CELEBRATE - CT_BATTLE_VICTORY_LADDER : CT_BATTLE_VICTORY_CELEBRATE;
     if (!h->victoryHold || h->victoryHold < vhold) return;
     if (h->resultLine < 0 || h->resultLine >= h->resultN) return;
@@ -7596,8 +7619,11 @@ static void battleResultsRender(uint8_t* fb, const CtBattleHost* h, const uint8_
     if (h->resultPhase < 0 || h->resultPhase >= 2) return;
   }
   int boxTop = battleWindowsBottom(h->mem) ? CT_BRESULT_Y_TOP : CT_BRESULT_Y_BOTTOM;
+  if (band) boxTop = bandTop;
   for (int y = boxTop + g_fillBoxDy; y < boxTop + g_fillBoxDy + CT_BRESULT_H; y++) if (y >= 0 && y < CAMH) g_bBoxRow[y] = 1;
-  battleMsgWindowDraw(fb, h->mem, boxTop);
+  // The text tiles: VRAM's copy where the fight's NMI keeps one (battle.c battleMsgStripUpload: a half a frame), else
+  // the strip itself ($7E:B400-$B7FF is the two halves in VRAM's order) -- a host staged by hand.
+  battleMsgWindowDraw(fb, h->mem, h->msgStripLive ? h->msgStripVram : h->mem + 0xB400, boxTop);
 }
 // ---- Anim engine, stage 1: GATO's pose tick, assembly builder and tile gather (battle_anim_engine.md sec. B.1) ----
 // C1/3360 tick -> $967B -> C1/1C4A gather + CF/EB60 compose. The per-facing pose window (animeng_e4_gato.h) is a

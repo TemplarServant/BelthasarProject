@@ -5547,6 +5547,155 @@
       ]
     },
     {
+      "name": "battle-message-window-typed-boxes-sequence-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_msg_window_cmp.py",
+        "typed-boxes"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_ring_cmp.py",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "msgwindow: typed-boxes leg 117 f600 frames +180..+236: the window's 24 lines (rows 184-207) of 57 cartridge frames, each against the port's frame before it: 0 differ; the cartridge's picture changes on 12 of them (+189 +191 +193 +195 +197 +199 +219 +221 +223 +225 +227 +229)"
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "notes": "HOW A TYPED BOX COMES UP, FRAME BY FRAME (disasm/notes/battle_message_window.md sec. 6): the Att picker's target box of leg 117's first fight, twice -- every one of 57 consecutive cartridge frames against the port's frame before it (a fight's picture lag), the window's 24 lines to the pixel. The band opens empty the frame after D1/FE70 installs its table; the name grows two glyphs' worth every other frame, because CD/064B uploads one half of the text tiles an NMI (`$CE14`'s bit 0) and the name sits in the first half; the second box is typed under an action's prologue, where C1/4841's return types nothing (f820) and the box grows on the other phase (its pictures +225 and +227 are not the first box's). Before: the port drew the strip from WRAM (a glyph a frame, pictures the cartridge never shows), the band from `$CCEC` at once (two frames early), and typed through C1/4841.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->frames >= battleBootBandArm(h) && s[0xCA1E] == 0 && !s[0xCE0F]) battleMsgStripUpload(h);",
+          "replace": "  if (s[0xCA1E] == 0 && !s[0xCE0F]) battleMsgStripUpload(h);   /* MUT: the boot's NMIs count too */",
+          "why": "The boot's D1/F24B `STZ $7E` keeps the NMI on CD/09F1 (table CD:0C83) until C1/0034's CD/0399 `LDA #01 / STA $7E`: CD/088D -- and CD/0650's `INC $CE14` -- does not run on the boot's nineteen frames. Counted, the upload's parity is the other one for the whole fight"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (rel == 9) return 2;                                                       // C1/4841",
+          "replace": "  /* MUT: C1/4841 types */",
+          "why": "C1/4841 `JSR C1/007E` follows the sheets' eight CD/3E75 packets: its return (the rise + 9) reaches neither CD/3E89 nor CD/0009, so that frame types nothing and the second box's later glyphs reach the strip a frame after the first box's did -- on the other upload phase (its pictures +225 and +227). Typed through, the second box grows exactly as the first. (WHICH frame is held is the census's to grade, battle-typewriter-action-waits-vs-cartridge: a hold one frame late lands the glyph inside the same upload interval and moves no picture.)"
+        },
+        {
+          "file": "src/field.c",
+          "find": "  if (!band && h->msgStripLive) return;",
+          "replace": "  if (!band && h->msgStripLive && h->mem[0xCCEC] != 0x10) return;   /* MUT: the band from $CCEC at once */",
+          "why": "The window's band is the table's second $BE9B entry, which D1/FE70 installs on the NMI AFTER `INC $CA24`: the picture has it a frame after `$CCEC` = $10. Drawn from `$CCEC` it opens a frame early"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  int odd = s[0xCE14] & 1;",
+          "replace": "  int odd = !(s[0xCE14] & 1);   /* MUT: the halves swapped */",
+          "why": "CD/0650 `INC $CE14`, then bit 0 set -> `LDX #B400 / LDY #5800` (tiles 100-11F, the window's left half), clear -> `LDX #B600 / LDY #5980` (130-14F, the right). Swapped, each half of the text shows on the other's frame"
+        }
+      ]
+    },
+    {
+      "name": "battle-message-window-reward-line-sequence-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_msg_window_cmp.py",
+        "reward-line-comes-and-goes"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_ring_cmp.py",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "msgwindow: reward-line-comes-and-goes leg 117 f5100 frames +2670..+2895: the window's 24 lines (rows 184-207) of 226 cartridge frames, each against the port's frame before it: 0 differ; the cartridge's picture changes on 7 of them (+2673 +2689 +2696 +2697 +2872 +2881 +2890)"
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "notes": "HOW A REWARD LINE COMES AND GOES (disasm/notes/battle_message_window.md sec. 6): leg 117's second fight, 226 consecutive cartridge frames from before its first reward line to after the second is up, each against the port's frame before it. CD/01B3's order is the port's: the text in the strip on the post's frame (CD/025E, CD/027F's render), `$CCEC := 10 / INC $CA24` two waits later, and CD/01FD's `STZ $CCEC / STZ $CCED / INC $CA24` at the dwell's end -- so the window opens with HALF its text (+2696: the NMI that installs the table uploads one half), all of it a frame later, and comes down at +2872. Before: the results machine drew its own box from its phases (the whole line on the first frame, no request in `$CCEC` / `$CA24`, the post two frames late).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (s[0xCCEC] == 0x10) memcpy(v, s + (odd ? 0xB400 : 0xB600), 0x200);   // CD/0694-06AF",
+          "replace": "  if (s[0xCCEC] == 0x10) memcpy(h->msgStripVram, s + 0xB400, 0x400);   /* MUT: both halves every NMI */",
+          "why": "CD/064B uploads ONE half of the text tiles an NMI ($200 bytes: `$CE14`'s bit 0 picks $7E:B400 -> VRAM $5800 or $7E:B600 -> $5980). Both at once and a line that crosses the halves is whole on its first frame -- the cartridge shows half of it for one"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "        s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++;                                    // CD/01FD-0203: the window down",
+          "replace": "        s[0xCCEC] = 0; s[0xCCED] = 0;   /* MUT: no INC $CA24 at the close */",
+          "why": "CD/01FD-0203 `STZ $CCEC / STZ $CCED / INC $CA24`: the request is what has D1/FE70 install the preset without the window. Without it the band stays up while the NMI blanks its tiles"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "                            s[0xCCEC] = 0x10; s[0xCA24]++; return; }   // CD/028C-0291: this frame the box is asked for",
+          "replace": "                            s[0xCCEC] = 0x10; return; }   /* MUT: no INC $CA24 at the open */",
+          "why": "CD/028C-0291 `LDA #10 / STA $CCEC / INC $CA24`, after CD/027F's two waits: without the request no preset with the window is installed and the first reward line never shows"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  else memset(v, 0, 0x200);                                        // CD/065A-0693",
+          "replace": "  else { }   /* MUT: no zero fill while the window is down */",
+          "why": "CD/065A-0693: with `$CCEC` != $10 the NMI fills the half with zeroes (a fixed-source DMA of CD:06B2), so a window that opens shows nothing in the half its first upload has not reached. Without it the second reward line opens (+2890) with the first line's other half beside its own"
+        }
+      ]
+    },
+    {
+      "name": "battle-typewriter-action-waits-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_typewriter_cmp.py",
+        "action-waits"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "typewriter: action-waits leg 117_kajar_restock f780-4010: the cartridge returns from 46 waits with no CD/04DF, the port holds the step on 46 frames; 0 differ",
+        "typewriter: action-waits the port's waits: C1/405F 10, C1/4841 10, C1/4116..41B7 16, C1/358E..359E 3, CF/FCFB 7"
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "notes": "WHERE THE TYPEWRITER DOES NOT STEP (disasm/notes/battle_message_window.md sec. 6): CD/04DF has two callers, both a wait's way back -- CD/3E89 (bank CD's wait CD/3E7D) and CD/04DB (the service CD/0009 bank C1 calls after C1/007E in the main loop, in C1/10FA and at C1/354D / 356D / 3689). A wait that hands back to neither types nothing on its frame. The cartridge's side is counted by `--hookpc CD04DF` over leg 117's first fight (3230 frames: twelve actions, the victory, the exit): 46 frames with no return through CD/04DF, and the port holds its step on those 46 and no other -- ten C1/405F (the frame after `$A0FD` rises), ten C1/4841 (the rise + 9), sixteen of the close (C1/4116 alone, or with C1/414B / 41B4 / 41B7 when a PC is among the targets), the victory's three seat removals and the seven of the module's own CF/FCFB. Before: the port typed on every frame.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (rel == 9) return 2;                                                       // C1/4841",
+          "replace": "  /* MUT: C1/4841 types */",
+          "why": "C1/4841's return reaches neither CD/3E89 nor CD/0009: ten of the fight's frames"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (opened && !(h->actActive && h->frames - h->actStart >= 1)) return 1;      // C1/405F",
+          "replace": "  (void)opened;   /* MUT: C1/405F types */",
+          "why": "C1/4058 `INC $A0FD / JSL CC/F06B / JSR C1/007E` goes on to C1/4062 with no service: the frame after `$A0FD` rises types nothing"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    if (rel > e2 && rel <= h->actSpan) return 3;                                // C1/4116 .. C1/41B7",
+          "replace": "    if (rel > e2 + 1 && rel <= h->actSpan) return 3;   /* MUT: C1/4116 types */",
+          "why": "C1/4116 `JSR C1/007E` goes on to C1/4119's wipe with no service (C1/40E1's does, C1/40E4): the close's first quiet frame"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->victoryHold >= 1 && h->victoryHold <= 3) return 4;                     // C1/358E, 3596, 359E (the count steps later in the frame)",
+          "replace": "  if (h->victoryHold >= 1 && h->victoryHold <= 2) return 4;   /* MUT: C1/359E types */",
+          "why": "C1/358E, C1/3596 and C1/359E close the three seat removals; C1/3689's service comes only in the copier's loop after them"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->handoffLeft > 0) return 5;                                             // CF/FCFB (battleFbe5Begin .. battleFbe5Step's end)",
+          "replace": "  /* MUT: the exit's waits type */",
+          "why": "CF/FBE5-FCE9 waits through CF/FCFB, which calls neither CD/3E7D nor CD/0009: seven frames of this fight's exit"
+        }
+      ]
+    },
+    {
       "name": "battle-results-band-24-lines-bottom",
       "tier": "quick",
       "argv": [
@@ -5600,6 +5749,51 @@
       "env": {
         "CT_BATTLE_MASHA": "1",
         "CT_BATTLESHOT": "build/res_notyet.raw",
+        "CT_BATTLESHOT_ON": "victory+69",
+        "CT_BATTLESHOT_RESULTS": "1",
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/forest_pre.raw.wram",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "expect": [
+        "battleshot: on victory#1+69 fnv=C9BA4E1B"
+      ],
+      "pin": [
+        "^battleshot: on victory#1\\+69 fnv="
+      ],
+      "tier": "quick",
+      "timeout_s": 180,
+      "exclusive": true,
+      "mutations": [
+        {
+          "file": "src/battle.h",
+          "find": "#define CT_BATTLE_VICTORY_CELEBRATE 72",
+          "replace": "#define CT_BATTLE_VICTORY_CELEBRATE 71   /* MUT: the box opens one frame EARLY */",
+          "why": "the companion side of the onset pin -- one frame early and the +69 shot already carries the window (its first, half-text frame)"
+        }
+      ],
+      "note_pass": "one frame BEFORE the ROM's onset the screen is still box-free -- the other half of the pin",
+      "notes": "The negative half of field-battle-results-box-onset. fnv C9BA4E1B is the box-free victory screen (the same value the old engine held for 141 consecutive frames). Without this side an onset constant that is merely EARLIER than 72 would still show a box at +71 and pass. See battle_results_box_timing.md PART 2. ==== 2026-11-12, MOVED TO victory+69 (the same box-free fnv): the window's first frame is the cartridge's now -- half its text, the NMI that installs the table uploading one half of the tiles (CD/064B; check field-battle-results-box-half-text, graded on the cartridge by battle-message-window-reward-line-sequence-vs-cartridge) -- and it is victory+70; the whole box stays at +71."
+    },
+    {
+      "name": "field-battle-results-box-half-text",
+      "argv": [
+        "build/Belthasar.exe",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "19",
+        "--battletest",
+        "saves/battle_re/forest_pre.raw.wram"
+      ],
+      "env": {
+        "CT_BATTLE_MASHA": "1",
+        "CT_BATTLESHOT": "build/res_half.raw",
         "CT_BATTLESHOT_ON": "victory+70",
         "CT_BATTLESHOT_RESULTS": "1",
         "SDL_VIDEODRIVER": "dummy",
@@ -5612,7 +5806,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "battleshot: on victory#1+70 fnv=C9BA4E1B"
+        "battleshot: on victory#1+70 fnv=0AF4AF3E"
       ],
       "pin": [
         "^battleshot: on victory#1\\+70 fnv="
@@ -5622,14 +5816,20 @@
       "exclusive": true,
       "mutations": [
         {
-          "file": "src/battle.h",
-          "find": "#define CT_BATTLE_VICTORY_CELEBRATE 72",
-          "replace": "#define CT_BATTLE_VICTORY_CELEBRATE 71   /* MUT: the box opens one frame EARLY */",
-          "why": "the companion side of the onset pin -- one frame early and the +70 shot already carries the box"
+          "file": "src/battle.c",
+          "find": "  if (s[0xCCEC] == 0x10) memcpy(v, s + (odd ? 0xB400 : 0xB600), 0x200);   // CD/0694-06AF",
+          "replace": "  if (s[0xCCEC] == 0x10) memcpy(h->msgStripVram, s + 0xB400, 0x400);   /* MUT: both halves every NMI */",
+          "why": "CD/064B uploads ONE half of the text tiles an NMI ($200 bytes: `$CE14`'s bit 0 picks $7E:B400 -> VRAM $5800 or $7E:B600 -> $5980). Both at once and a line that crosses the halves is whole on its first frame -- the cartridge shows half of it for one"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  int odd = s[0xCE14] & 1;",
+          "replace": "  int odd = !(s[0xCE14] & 1);   /* MUT: the halves swapped */",
+          "why": "CD/0650 `INC $CE14`, then bit 0 set -> `LDX #B400 / LDY #5800` (tiles 100-11F, the window's left half), clear -> `LDX #B600 / LDY #5980` (130-14F, the right). Swapped, each half of the text shows on the other's frame"
         }
       ],
-      "note_pass": "one frame BEFORE the ROM's onset the screen is still box-free -- the other half of the pin",
-      "notes": "The negative half of field-battle-results-box-onset. fnv C9BA4E1B is the box-free victory screen (the same value the old engine held for 141 consecutive frames). Without this side an onset constant that is merely EARLIER than 72 would still show a box at +71 and pass. See battle_results_box_timing.md PART 2."
+      "note_pass": "the reward window opens with one half of its text: the NMI that installs its table uploads one half of the tiles",
+      "notes": "The window's first frame (disasm/notes/battle_message_window.md sec. 6): CD/064B uploads one half of the text tiles an NMI, and the NMI that installs the window's table is the first with `$CCEC` = $10, so the line shows half its text for one frame -- victory+70 here, the frame before field-battle-results-box-onset's whole box. A frame canary; the cartridge's own frame is graded by battle-message-window-reward-line-sequence-vs-cartridge (leg 117's +2696)."
     },
     {
       "name": "field-battle-results-box-closes",
@@ -5690,7 +5890,7 @@
       "env": {
         "CT_BATTLE_SCRIPT": "n:200,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:14,a:1,n:4",
         "CT_BATTLESHOT": "build/res_adv3.raw",
-        "CT_BATTLESHOT_ON": "results-advance#3+0",
+        "CT_BATTLESHOT_ON": "results-advance#3+2",
         "CT_BATTLESHOT_RESULTS": "1",
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
@@ -5702,11 +5902,11 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "battleshot: on results-advance#3+0 fnv=480F0544",
+        "battleshot: on results-advance#3+2 fnv=480F0544",
         "battleloop: victory f2013 pcAttacks=3 cronoHP=66 marleHP=65"
       ],
       "pin": [
-        "^battleshot: on results-advance#3\\+0 fnv=",
+        "^battleshot: on results-advance#3\\+2 fnv=",
         "^battleloop: victory "
       ],
       "tier": "quick",
@@ -5721,7 +5921,7 @@
         }
       ],
       "note_pass": "with NO input the reward lines advance by themselves on the ROM's 195-frame period and the battle ends",
-      "notes": "THE LIVENESS CHECK, and the one that grades the DWELL. The drive script is exhausted ~80 frames before the win, so the ENTIRE results sequence runs on ZERO input -- which is how the ROM plays it. battle_results_window.md SS-V2's 'each line holds indefinitely until A' was a SAMPLING ARTIFACT: an idle --peek sweep coarser than the 195-frame line period lands on some line every time and looks like one permanent box. With --diff --writer and no input the oracle's message id $020C walks 00 -> 01 -> 02 -> 03 at f841 / f1038 / f1234 / f1429 and the module acks at f1715 (period 195 = 16 open ramp + 160 dwell + 16 close ramp + ~3 build). The dwell is CD/019D[($2991 >> 3) & 7] -- read from the ROM at run time (bytes `20 40 60 80 A0 C0 E0 FF`; the last entry is 0xFF, not 0x100, so `32 << i` would be an invented approximation) and both fixtures carry $2991 = 0xA0 -> index 4 -> 160. The event-ANCHORED shot is the liveness half: if the A-gate is reinstated the third advance never happens, the anchor never fires and the line is simply absent. Every MASHA-driven battle check would stay green through that regression, because MASHA supplies the edges -- which is exactly why this check drives with none.\nOPEN (not graded here, recorded in the dossier): the ROM's ~90-frame module teardown between the last line and the field ack (C1/83F9 -> JSL FD/AAB0 -> C1/0006 -> CF/FBE5) is still unported -- ours goes straight to the 11-frame handoff. RE-PIN 2026-09-03 (the overworld player sprite, defect #21): the player is drawn from the sprite object's own descriptor (block $0F30's two-pose 12-frame loop, two frames of OAM pipeline) with an atlas re-captured on that key (8 frames; assets rebuilt), so every overworld frame's Crono pose and its frame hash moved. Only the frame hash token changed -- verified token by token before this re-pin. Reference: check ow-player-pose-cycle. ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): its content moved with the fight: a fixed frame now falls where GATO / the Hetakes stand at another point of their wander, or where the actions came in another order, and the HUD's gauges read other values. Sampled against the old binary at the same event (the song: same spotlight, GATO displaced; the Ice shot's strike#2 is now GATO's song), NOT re-graded against the cartridge one by one. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18 (c), RE-PINNED (an enemy action closes at its script's op 01, disasm/notes/battle_boot_turns.md sec. 5): An enemy action now ends as every action does in the ROM -- C1/40CE's `$9876` test after the script's op 01 (C1/4CF7 -> C1/4D00) plus C1/40D3-41BA's tail -- instead of on a stored span (CT_SPAN_ENEMY_AVG 202 for every non-GATO enemy, GATO's 157 / 224 / 311). Measured on the cartridge: every enemy action closes `$9876 = 1` + 5 frames with a PC victim; the forest Hetake's six spans are now the cartridge's (177 202 188 189 192 187, were 202 each). GATO's attack A is 153 (cartridge 157), attack B 213 (222 / 226), the song 300 (311): the difference is the cartridge's LAG frames -- the action loop's every-8th-frame job (C1/10FA -> C1/0C2D, C1/1C3A's 384-byte copy) overrunning the NMI through his flurry, the C0/C4 pre-roll's decompressions -- a CPU overrun the port has no clock for (named, not fitted). The close then exposed the EFFECT TEARDOWN the main loop runs (C1/10A0 JSL CD/0009 -> CD/04AA -> CD/0453, ported): after an action whose programs ran (`$CCEA` set), 21 frames with no main-loop iteration, `$CCEA` / `$CCA2` cleared, the colours and layer shadows put back -- the port had never cleared `$CCEA` (a second program held its action forever) and lost none of those frames. Song end -> GATO's next attack is 281 frames against the cartridge's 279 (was 257). So the fight after each GATO action runs 4 / 11 frames earlier, and where that changes which ATB fills first, the order of later actions and the RNG draws that ride on it. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-25, RE-PINNED (fnv only; every trace line unchanged): the location load now stages C0/00F4's legs inside fieldLoad, ahead of CtSceneCreateIn, and C0/7084's pass there runs fieldWindowFromRom -- so a --battletest draws its message window with the ROM's style ($2991 & 7 = 0, C0/29F7 + C0/6E5C's $FF:9E10 characters) instead of the baked stand-in it used when nothing had called it; the seed path now re-applies the seed's own $2991 as --loadwram does. Old/new diffed: 15 px, all in ONE 8x8 cell of the window (x 5-7, y 16-23), the same in the forest and GATO shots. GRADED on the cartridge: forest_battle_3hetake.state held L+R ('C00'), `Ran away!` at $020C = 08 f499 / $CCEC = 10 f502, frame f525 (= ranaway-open + 23): the 15 changed pixels equal the cartridge's 15/15 (old 0/15), the cell 64/64 (old 49/64). ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). ==== 2026-09-30, RE-PINNED (THE PC COMMAND'S DISPATCH, disasm/notes/battle_menu_pass.md sec. 8): a confirmed command is run by the ATB's handler (C1/8461 -> C1/8570: an odd iteration whose cursor entry is a ready PC or an enemy that does not take its turn; `$99D4` popped, C1/B967), then C1/4058's `INC $A0FD` and two waits, `$A013` rising on the second -- where the port ran it a fixed latency (CT_BATTLE_DISPATCH_LAT) after the confirm. The rule's oracle (Lucca from gato_wait): confirm f680 on the pass, `$99D4` popped and `$A0FD` INC'd at f682's tail ($0027 = 4D), `$A013` f684. Every PC action now starts on that clock, so the fight's interleaving of turns, the ATB gauges at a given event, the enemies' wander at an approach and the frame numbers after the first command moved with it; at a fixed event anchor the picture differs where GATO's idle cycle / a Hetake's position / a gauge is at another phase. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). 2026-10-15: THE SCRIPT IS CUT TO ITS FIRST 1000 FRAMES. The dwell's A gate now reads the fight's own latch ($CC99 = this frame's $F8, CD/0348) instead of the host keyboard alone, and the full script reached into the results (its last A at ~f1550, the first line at f1221): the dwell ended on A, as CD/01F2 does. Cut, the drive ends before the win and the four lines run on no input again -- the same signature as before (victory f2006, every line a timeout). ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). RE-PINNED 2026-10-19 (the results' cadence, the rule's cartridge): every results line's dwell takes a held A from its post + 19 (CD/01B3: the post on frame 0, CD/027F's two waits -- `$CCEC = 10` on frame 2 --, CD/020A's 16, the dwell from 19; under the rule the VWF build costs no frame). MEASURED on the playthrough's leg 20 (the forest ambushes: posts 3074 / 8424, boxes +2, an A held at 8443 closing line 0, the next post 16 later) and on the GATO fight of this check family (post 2549, box 2551, close 2569). The port tested from post + 21 (the first line) / + 20 (the rest: CT_BATTLE_RESULT_BUILD 3 -> 2). The fight ends 3-5 frames earlier with it; battle_module_tail_cmp (Black Hole on GATO) went from +3 to +0 on every quantity. And no C1/8120 head after the victory or the defeat (`$0027` stops on the victory's frame on the cartridge). ==== MUTATION [0] RE-DERIVED 2026-10-24: its find was gone after a refactor; the same break on the code that does it now (battleResultsTick case 1 (~line 16661, CD/01B3's dwell): the condition now opens a block (the trace sits inside); the lifeline twin at 17957 reads `t >= 18 + dwell` and does not match)."
+      "notes": "THE LIVENESS CHECK, and the one that grades the DWELL. The drive script is exhausted ~80 frames before the win, so the ENTIRE results sequence runs on ZERO input -- which is how the ROM plays it. battle_results_window.md SS-V2's 'each line holds indefinitely until A' was a SAMPLING ARTIFACT: an idle --peek sweep coarser than the 195-frame line period lands on some line every time and looks like one permanent box. With --diff --writer and no input the oracle's message id $020C walks 00 -> 01 -> 02 -> 03 at f841 / f1038 / f1234 / f1429 and the module acks at f1715 (period 195 = 16 open ramp + 160 dwell + 16 close ramp + ~3 build). The dwell is CD/019D[($2991 >> 3) & 7] -- read from the ROM at run time (bytes `20 40 60 80 A0 C0 E0 FF`; the last entry is 0xFF, not 0x100, so `32 << i` would be an invented approximation) and both fixtures carry $2991 = 0xA0 -> index 4 -> 160. The event-ANCHORED shot is the liveness half: if the A-gate is reinstated the third advance never happens, the anchor never fires and the line is simply absent. Every MASHA-driven battle check would stay green through that regression, because MASHA supplies the edges -- which is exactly why this check drives with none.\nOPEN (not graded here, recorded in the dossier): the ROM's ~90-frame module teardown between the last line and the field ack (C1/83F9 -> JSL FD/AAB0 -> C1/0006 -> CF/FBE5) is still unported -- ours goes straight to the 11-frame handoff. RE-PIN 2026-09-03 (the overworld player sprite, defect #21): the player is drawn from the sprite object's own descriptor (block $0F30's two-pose 12-frame loop, two frames of OAM pipeline) with an atlas re-captured on that key (8 frames; assets rebuilt), so every overworld frame's Crono pose and its frame hash moved. Only the frame hash token changed -- verified token by token before this re-pin. Reference: check ow-player-pose-cycle. ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): its content moved with the fight: a fixed frame now falls where GATO / the Hetakes stand at another point of their wander, or where the actions came in another order, and the HUD's gauges read other values. Sampled against the old binary at the same event (the song: same spotlight, GATO displaced; the Ice shot's strike#2 is now GATO's song), NOT re-graded against the cartridge one by one. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18 (c), RE-PINNED (an enemy action closes at its script's op 01, disasm/notes/battle_boot_turns.md sec. 5): An enemy action now ends as every action does in the ROM -- C1/40CE's `$9876` test after the script's op 01 (C1/4CF7 -> C1/4D00) plus C1/40D3-41BA's tail -- instead of on a stored span (CT_SPAN_ENEMY_AVG 202 for every non-GATO enemy, GATO's 157 / 224 / 311). Measured on the cartridge: every enemy action closes `$9876 = 1` + 5 frames with a PC victim; the forest Hetake's six spans are now the cartridge's (177 202 188 189 192 187, were 202 each). GATO's attack A is 153 (cartridge 157), attack B 213 (222 / 226), the song 300 (311): the difference is the cartridge's LAG frames -- the action loop's every-8th-frame job (C1/10FA -> C1/0C2D, C1/1C3A's 384-byte copy) overrunning the NMI through his flurry, the C0/C4 pre-roll's decompressions -- a CPU overrun the port has no clock for (named, not fitted). The close then exposed the EFFECT TEARDOWN the main loop runs (C1/10A0 JSL CD/0009 -> CD/04AA -> CD/0453, ported): after an action whose programs ran (`$CCEA` set), 21 frames with no main-loop iteration, `$CCEA` / `$CCA2` cleared, the colours and layer shadows put back -- the port had never cleared `$CCEA` (a second program held its action forever) and lost none of those frames. Song end -> GATO's next attack is 281 frames against the cartridge's 279 (was 257). So the fight after each GATO action runs 4 / 11 frames earlier, and where that changes which ATB fills first, the order of later actions and the RNG draws that ride on it. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-25, RE-PINNED (fnv only; every trace line unchanged): the location load now stages C0/00F4's legs inside fieldLoad, ahead of CtSceneCreateIn, and C0/7084's pass there runs fieldWindowFromRom -- so a --battletest draws its message window with the ROM's style ($2991 & 7 = 0, C0/29F7 + C0/6E5C's $FF:9E10 characters) instead of the baked stand-in it used when nothing had called it; the seed path now re-applies the seed's own $2991 as --loadwram does. Old/new diffed: 15 px, all in ONE 8x8 cell of the window (x 5-7, y 16-23), the same in the forest and GATO shots. GRADED on the cartridge: forest_battle_3hetake.state held L+R ('C00'), `Ran away!` at $020C = 08 f499 / $CCEC = 10 f502, frame f525 (= ranaway-open + 23): the 15 changed pixels equal the cartridge's 15/15 (old 0/15), the cell 64/64 (old 49/64). ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). ==== 2026-09-30, RE-PINNED (THE PC COMMAND'S DISPATCH, disasm/notes/battle_menu_pass.md sec. 8): a confirmed command is run by the ATB's handler (C1/8461 -> C1/8570: an odd iteration whose cursor entry is a ready PC or an enemy that does not take its turn; `$99D4` popped, C1/B967), then C1/4058's `INC $A0FD` and two waits, `$A013` rising on the second -- where the port ran it a fixed latency (CT_BATTLE_DISPATCH_LAT) after the confirm. The rule's oracle (Lucca from gato_wait): confirm f680 on the pass, `$99D4` popped and `$A0FD` INC'd at f682's tail ($0027 = 4D), `$A013` f684. Every PC action now starts on that clock, so the fight's interleaving of turns, the ATB gauges at a given event, the enemies' wander at an approach and the frame numbers after the first command moved with it; at a fixed event anchor the picture differs where GATO's idle cycle / a Hetake's position / a gauge is at another phase. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). 2026-10-15: THE SCRIPT IS CUT TO ITS FIRST 1000 FRAMES. The dwell's A gate now reads the fight's own latch ($CC99 = this frame's $F8, CD/0348) instead of the host keyboard alone, and the full script reached into the results (its last A at ~f1550, the first line at f1221): the dwell ended on A, as CD/01F2 does. Cut, the drive ends before the win and the four lines run on no input again -- the same signature as before (victory f2006, every line a timeout). ==== 2026-10-15, RE-PINNED (frames only; the values unchanged): every enemy death routine is CD/0043's 43 frames from the delist (the port's were 40: the palette copy a frame late, a 9-frame hold from the delist) and the battle's loop head waits for the last one, the idle tick on the frame after (battle_death_dissolve_order.md last addendum; graded against the rule's cartridge by battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge, battle-roly-rider-dissolves-vs-oracle, battle-sim-blue-shield-pack-staged-by-op83-vs-rule-cartridge, battle-lavos-mimic-fight-vs-rule-cartridge). Each death moves what follows by +4; a death sound posts on the delist + 1 as the cartridge's; a picture inside a dissolve shows the dither at the cartridge's level (drawn from the tiles the NMI uploaded). RE-PINNED 2026-10-19 (the results' cadence, the rule's cartridge): every results line's dwell takes a held A from its post + 19 (CD/01B3: the post on frame 0, CD/027F's two waits -- `$CCEC = 10` on frame 2 --, CD/020A's 16, the dwell from 19; under the rule the VWF build costs no frame). MEASURED on the playthrough's leg 20 (the forest ambushes: posts 3074 / 8424, boxes +2, an A held at 8443 closing line 0, the next post 16 later) and on the GATO fight of this check family (post 2549, box 2551, close 2569). The port tested from post + 21 (the first line) / + 20 (the rest: CT_BATTLE_RESULT_BUILD 3 -> 2). The fight ends 3-5 frames earlier with it; battle_module_tail_cmp (Black Hole on GATO) went from +3 to +0 on every quantity. And no C1/8120 head after the victory or the defeat (`$0027` stops on the victory's frame on the cartridge). ==== MUTATION [0] RE-DERIVED 2026-10-24: its find was gone after a refactor; the same break on the code that does it now (battleResultsTick case 1 (~line 16661, CD/01B3's dwell): the condition now opens a block (the trace sits inside); the lifeline twin at 17957 reads `t >= 18 + dwell` and does not match). ==== 2026-11-12, THE SHOT MOVED TO results-advance#3+2 (the same fnv): `results-advance` is the frame of CD/028C's request, and the window is the installed table's now -- on the port's picture a frame later with half its text (CD/064B), whole at +2 (battle_message_window.md sec. 6)."
     },
     {
       "name": "field-battle-menu-sfx-unfrozen",
@@ -50222,7 +50422,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "snd-machine: quick: 409 runs (58 with sound), PCM identical in 409 / 409 (27331188 samples), stdout identical in 409 / 409"
+        "snd-machine: quick: 410 runs (58 with sound), PCM identical in 410 / 410 (27331188 samples), stdout identical in 410 / 410"
       ],
       "pin": [
         "^snd-machine: "
@@ -50555,7 +50755,7 @@
         "playthrough: 106_end_of_time SAME -- locs 133 1F3 116 1F3 112 111 110 1D0 | story A8 AB 40 AB | party 000105 | gold 2954 | hp 436 (4) | ctrl 8 | end picture 0 px at port -1",
         "playthrough: 107_keepers_dome DIFFERENT -- locs 1D0 0E3 0E2 1F2 0E1 0E0 0DF 1F2 0EC 0ED 0EC 1F2 0F1 0F2 0F3 | story AB 40 AB | party 000105 | gold 4034 | hp 335 (5) | ctrl 49 | end picture 57344 px at port +0",
         "playthrough: 108_epoch SAME -- locs 0F3 0F2 0F3 | story AB | party 000105 | gold 4034 | hp 335 (1) | ctrl 7 | end picture 0 px at port +0",
-        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53722 px at port -5",
+        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53722 px at port -3",
         "playthrough: 110_mt_woe_summit SAME -- locs 188 189 18B 18D 18B | story B4 | party 000105 | gold 7434 | hp 457 (3) | ctrl 17 | end picture 0 px at port +0",
         "playthrough: 111_mt_woe_chests SAME -- locs 18B 189 | story B4 | party 000105 | gold 8934 | hp 376 (2) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 112_mt_woe_189 SAME -- locs 189 188 | story B4 | party 000105 | gold 11934 | hp 310 (2) | ctrl 7 | end picture 0 px at port +0",
@@ -50614,7 +50814,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 633 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 634 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

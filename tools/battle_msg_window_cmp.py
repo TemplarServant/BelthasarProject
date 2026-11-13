@@ -27,10 +27,20 @@ battle's page, as the cartridge shows them), so a window with no text in it cann
 the port frame whose window is nearest the cartridge's (a fight runs a frame or two off the field's alignment).
 --png writes build/_msgwindow/<name>.png: the cartridge, the port, the pixels apart.
 
+A SEQUENCE case (SEQUENCES below) compares the window's 24 lines on EVERY frame of a span instead -- how the window
+comes and goes: the band opens on the frame after the NMI installs its table (D1/FE70, a frame after `INC $CA24`), the
+text reaches VRAM a half a frame (CD/064B: `$CE14`'s bit 0 picks $7E:B400 -> $5800 or $7E:B600 -> $5980), a typed box
+grows by what the typewriter CD/04DF added since that half's last upload, and CD/04DF itself steps only where the main
+thread's wait hands back through CD/3E7D or CD/0009 (tools/battle_typewriter_cmp.py). The port's frame for the
+cartridge's frame f is f - 1, a fight's picture lag:
+
+    msgwindow: <name> leg <leg> f<at> frames +<a>..+<b>: the window's 24 lines (rows <y0>-<y1>) of <n> cartridge frames, each against the port's frame before it: <d> differ; the cartridge's picture changes on <k> of them (+f ...)
+
 Regression checks: `battle-message-window-*` (docs/TESTING.md).
 """
 import os
 import shutil
+import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,6 +62,17 @@ WINDOWS = {
     'reward-line': dict(leg='117_kajar_restock', at=5100, frames=2700, top=184),
 }
 AREAS = (('image', 0x7FFD, 0x200), ('strip', 0xB400, 0x400), ('engine', 0x0200, 0x40))
+# name: the leg, the cut, the span's first and last frame counted from the cut, the window's first row.
+SEQUENCES = {
+    # Leg 117's first fight, the Att picker's target box twice: f789-f799 typed in the main loop (a glyph a frame, two
+    # glyphs' worth of picture every other frame -- the name sits in the strip's first half), then f819-f829 typed under an
+    # action's prologue, where the sheets' last wait C1/4841 (f820) types nothing and the box grows on the other phase.
+    'typed-boxes': dict(leg='117_kajar_restock', at=600, a=180, b=236, top=184),
+    # The same leg's second fight, its first reward line from before it opens to after the second one is up: the window
+    # opens with half its text (f7796), all of it a frame later, and closes at the dwell's end (f7972).
+    'reward-line-comes-and-goes': dict(leg='117_kajar_restock', at=5100, a=2670, b=2895, top=184),
+}
+LAG = -1                                                      # the port's frame for a cartridge frame of a fight
 
 
 def run(name, want_png):
@@ -115,16 +136,77 @@ def run(name, want_png):
     return 0
 
 
+def run_sequence(name):
+    d = SEQUENCES[name]
+    legs = P.route()
+    i = P.find(legs, d['leg'])
+    if i > 0:
+        P.ensure_states(legs, i - 1)
+    P.TMP = F.WORK
+    os.makedirs(F.WORK, exist_ok=True)
+    start = F.state_at(legs, i, d['at'])
+    P.TMP = SCRATCH
+    os.makedirs(SCRATCH, exist_ok=True)
+    a, b = d['a'], d['b']
+    pad = F.span(legs[i]['pad'], d['at'], b + 1)
+    keys, shots = P.walkscript, P.SHOTS
+    prev = F.span(legs[i]['pad'], d['at'] - 1, 1)             # the port's first key: the leg's pad frame before the cut
+    P.walkscript = lambda p: ','.join('H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in prev + p)
+    P.SHOTS = tuple(range(a - 1 - (b + 1), 1))                # port frames a-1 .. b+1, as offsets from the end
+    try:
+        _, pics = P.port_timeline(start, pad)
+    finally:
+        P.walkscript, P.SHOTS = keys, shots
+    env = dict(P.RULE, PEEK_SHOTS=os.path.join(SCRATCH, 'c'), PEEK_SHOTS_AT=','.join(str(f) for f in range(a, b + 1)))
+    subprocess.run([P.CT, '--peek', start, os.path.join(SCRATCH, 'c_end.raw'), '--frames', str(b + 1), '--btnscript',
+                    P.btnscript(pad)], cwd=ROOT, env=env, capture_output=True)
+    y0 = d['top']
+    leg = legs[i]['name'].split('_')[0]
+
+    def cart(f):                                              # the window's rows of the cartridge's frame f, as rgb
+        fn = os.path.join(SCRATCH, 'c_f%d.raw' % f)
+        if not os.path.exists(fn):
+            return None
+        o = open(fn, 'rb').read()
+        os.remove(fn)
+        px = bytearray()
+        for y in range(y0, y0 + 24):
+            r = (y + 8) * 1024
+            row = o[r * 4:(r + 512) * 4]
+            px += bytes(row[k] for x in range(256) for k in (x * 8 + 3, x * 8 + 2, x * 8 + 1))
+        return bytes(px)
+    end = b + 1
+    differ, changes, missing, last = [], [], 0, None
+    for f in range(a, b + 1):
+        c = cart(f)
+        q = pics.get(f + LAG - end)
+        if c is None or q is None:
+            missing += 1
+            continue
+        if last is not None and c != last:
+            changes.append(f)
+        last = c
+        if c != q[y0 * 768:(y0 + 24) * 768]:
+            differ.append(f)
+    print("msgwindow: %s leg %s f%d frames +%d..+%d: the window's 24 lines (rows %d-%d) of %d cartridge frames, each against the "
+          "port's frame before it: %d differ; the cartridge's picture changes on %d of them (%s)%s" % (
+              name, leg, d['at'], a, b, y0, y0 + 23, b + 1 - a - missing, len(differ), len(changes),
+              ' '.join('+%d' % f for f in changes), '; %d frames have no picture' % missing if missing else ''))
+    if differ:
+        print('msgwindow: %s   the frames that differ: %s' % (name, ' '.join('+%d' % f for f in differ[:40])))
+    return 0
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    bad = [a for a in args if a not in WINDOWS]
+    bad = [a for a in args if a not in WINDOWS and a not in SEQUENCES]
     if bad:
-        print('msgwindow: no case named %s (known: %s)' % (', '.join(bad), ', '.join(sorted(WINDOWS))))
+        print('msgwindow: no case named %s (known: %s)' % (', '.join(bad), ', '.join(sorted(WINDOWS) + sorted(SEQUENCES))))
         return 1
     rc = 0
     try:
         for name in args or sorted(WINDOWS):
-            rc |= run(name, '--png' in sys.argv)
+            rc |= run_sequence(name) if name in SEQUENCES else run(name, '--png' in sys.argv)
     finally:
         shutil.rmtree(SCRATCH, ignore_errors=True)
     return rc

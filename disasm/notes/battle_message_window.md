@@ -130,13 +130,91 @@ the render fixtures now read `row19=0,1,2 row20=0,0,0` there, rows 3 / 13 / 16 a
 
 ## 5. Open
 
-- **The strip reaches VRAM half a frame at a time.** The battle NMI's CD/0607 (from CD/08A4, while `$CA1E = 0`) ends in
-  CD/064B: `INC $CE14`, then -- with the window up -- `$7E:B400 -> VRAM $5800` on an odd count or `$7E:B600 -> $5980` on
-  an even one ($200 bytes, CD/0694), and with it down a fixed-source DMA of zeroes to the same half (CD/065A). So a line
-  that opens shows one half of its text for one frame (leg 117: the cartridge's frame 7796, the whole line from 7797),
-  and a typed glyph appears with its half. The port draws the strip as WRAM holds it: those single frames differ.
-- **When the band opens.** The window is drawn while `$CCEC = $10` (and, for the reward lines, in the results machine's
-  phases 0-1); the cartridge shows it from the frame after the NMI that installs the preset. The results machine does
-  not make CD/028C's band request (`$CCEC := 10 / INC $CA24`), so the HDMA tables in WRAM differ during a reward line.
 - **The grid copies at `$7FFD` / `$81FD`** (C1:54A1) are not made: WRAM differs there during a fight.
 - `D1:5D50` in the data pack (sec. 2).
+- **`$CA24` reads 1 for a frame in the port.** D1/FE70 takes a request on the NMI after it; the cartridge's row shows
+  the count back at 0 on the request's own frame, the port's on the next (its frame is the NMI first, then the main
+  thread). The picture and the tables are the cartridge's (sec. 6); the byte is a frame off, as for the HUD's presets.
+- **Other waits.** Sec. 6.3's list is every wait an action, the victory and the exit reach in the fights counted (legs
+  117, 50, 70, 122). A `JSL C7/0004` the SPC keeps past a vblank (the port's `sndStall`) and the defeat's and the
+  run-away's own sequences were not counted: the port types through them.
+
+## 6. How the window comes and goes
+
+Measured on leg 117 (the rule's cartridge; `tools/battle_msg_window_cmp.py typed-boxes` / `reward-line-comes-and-goes`
+and `tools/battle_typewriter_cmp.py action-waits` are the checks).
+
+### 6.1 The text tiles reach VRAM a half an NMI
+
+The battle NMI D1/E780 dispatches `JSL CD/0C95` = `LDA $7E / ASL / TAX / JSR ($0C83,X)`, table `09F1, 088D, 088D`.
+`$7E` has two writers: the boot's D1/F24B `STZ $7E` and C1/0034's `JSL CD/0003` = CD/0399 `LDA #01 / STA $7E`, a frame
+before the HUD band's seed. So the boot's NMIs run CD/09F1 and the fight's run CD/088D:
+
+    CD/088D  LDA $7ECE0F / BEQ ->08A0        (else CD/09CE + CD/3EB4, no upload)
+    CD/08A4  LDA $CA1E / BNE ->08AC          the HUD band animating: no upload
+    CD/08A9  JSR CD/0607                     the tilemap block when `$CA17`, then always CD/064B:
+    CD/064B  LDX #0200 / STX $45 / INC $CE14
+             LDA $CCEC / CMP #10 / BEQ ->0694
+             CD/065A  the window down: a fixed-source DMA of CD:06B2's zero word, $200 bytes, to VRAM $5800 when
+                      `$CE14` is odd, $5980 when even
+             CD/0694  the window up: `$7E:B400 -> $5800` (odd: tiles 100-11F, the window's left 16 columns) or
+                      `$7E:B600 -> $5980` (even: tiles 130-14F, the right 16), $200 bytes (CD/3E8E)
+
+`$CE14` has no other writer (CD/0650's INC; CD/065F and CD/0694 read it): it is whatever the field left in
+`$7E:CE14` plus the fight's counted NMIs. Leg 117's first fight: 00 at the boot, one count at f703 (the NMI between
+CD/0399 and the band's seed), none while the band opens (`$CA1E` != 0, f704-f716), one a frame from f717.
+
+The port: `battleMsgStripUpload` (battle.c, from battleNmiHead) keeps the two halves in `CtBattleHost.msgStripVram`
+and the window draws its text from them. Its gate is `h->frames >= battleBootBandArm(h)` (the port's `$7E` != 0, as
+battleStripNmiUpload's) with the same `$CA1E` / `$CE0F` tests; the port seeds the band a frame ahead of the
+cartridge's main thread and so counts no NMI at the arm and one earlier at the band's end -- the count is the
+cartridge's from the first frame the window can show.
+
+### 6.2 The band is the installed table's
+
+The presets D1/FE5E builds with `$CCEC` = $10 in their id put a second `$BE9B` entry in `$7E:C867`, on the side
+opposite the HUD strip. D1/FE70 installs a preset on the NMI after `INC $CA24`, so a request of main-thread frame N is
+on the cartridge's picture at N + 2 -- with whatever half of the text that same NMI uploaded:
+
+    typed box    request f787 -> the band, empty, at f789; the name ("Red Scout", in the left half) two glyphs' worth
+                 every other frame: f791 f793 f795 f797, whole at f799
+    reward line  post f7792 (CD/025E + CD/027F's render), request f7794 (after CD/027F's two waits) -> the window with
+                 HALF its text at f7796, all of it at f7797; CD/01FD (`STZ $CCEC / STZ $CCED / INC $CA24`) at f7970 ->
+                 down at f7972; the next line's post at f7986 (CD/020A's sixteen waits), its request at f7988
+
+The port: `ctBattleMsgBand` (field.c) reads the entry; `battleResultsRender` draws the window where it stands and
+nothing where it does not. The results machine makes CD/01B3's requests in its order (battleResultsTick: the post at
+hold - 4 and at each close's sixteenth frame, `$CCEC := 10 / INC $CA24` two frames later, CD/01FD at the dwell's end).
+A host staged by hand (CT_BATTLE_RENDERWRAM, CT_BATTLE_RENDER_RESULTLINE) has no uploads and no installed table: it
+keeps the preset byte's / the phase's gate and the WRAM strip.
+
+### 6.3 The typewriter steps only where a wait hands back through it
+
+CD/04DF (`LDA $CD05 / BEQ` -- one glyph: `$0213 := 1 / JSL C2/0009`, `$CD05 := $0215`, `JSR CD/01A5 / STA $CCEB`,
+`INC $CCED`) has two callers:
+
+    CD/3E89   the tail of bank CD's own wait CD/3E7D (`INC $CA20`, spin on it through CD/3E44, then `JSR CD/04DF`):
+              every wait of bank CD -- the sheet packets' CD/3E75 (which adds `JSL C1/0012`, the menu pass), the effect
+              load, the results' CD/020A and dwell
+    CD/04DB   the end of the service CD/0009 (CD/04AA), which bank C1 calls after its wait C1/007E (`INC $9E / JSL
+              CD/0036 / LDA $9E / BNE`): the main loop's C1/10A0 and C1/10C0, C1/10FA (after C1/40A0, 40B0, 40E1, 485B,
+              4864, 488D, 4943), C1/354D, C1/356D and C1/3689
+
+A C1/007E that hands back to neither types nothing on the frame it returns in (the NMI's D1/E7EC dwell still counts
+`$CCEB` down). `--hookpc CD04DF` over leg 117's first fight, f780-f4010 (twelve actions, the victory, the exit): 46
+such frames, in five kinds --
+
+    C1/405F              C1/4058 `INC $A0FD / JSL CC/F06B / JSR C1/007E`: the frame after `$A0FD` rises (its only other
+                         writer is the main loop's C1/1073 `STZ`), one before C1/40A6's `INC $A013`           f810 f1016 ..
+    C1/4841              after the sheets' eight packets: the rise + 9                                        f820 f1026 ..
+    C1/4116 .. C1/41B7   the close: C1/40E1's return has C1/40E4's service, C1/4116's does not, nor C1/414B /
+                         41B4 / 41B7's when a PC is among the targets -- one frame, or four, ending on `STZ $A013`  f1011, f1712-f1715 ..
+    C1/358E 3596 359E    the victory's three seat removals (C1/3686's loop has C1/3689's service)             f3156-f3158
+    CF/FCFB              the module's exit CF/FBE5-FCE9 waits through its own routine                         f3999-f4005
+
+The second target box of that fight is typed under an action's prologue: `$CCED` steps f818, f819, f821 (the cartridge's
+rows), `$CCEB` reads 9F at f820, and the box's pictures from there are on the other upload phase.
+
+The port: `battleTypewriterHeld` (battle.c) names the five from the state the port already keeps (`$A0FD`'s edge, the
+action's `rel`, `actEndRel` / `actEndHold` / `actSpan`, `victoryHold`, `handoffLeft`), and `battleSysMsgFrame` skips
+CD/04DF's step on them. Legs 50 (27 frames), 70's first fight (2) and 122 (80) count the same on both sides.

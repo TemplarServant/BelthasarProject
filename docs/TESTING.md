@@ -3059,6 +3059,32 @@ platform while a developer's tree, which has the real files, never notices (5ebf
 FAIL is fixed by `python tools/gen/shapes.py make` and committing `tools/gen/shapes/`, never by re-pinning. It SKIPs in a
 tree with no generated files.
 
+### battle-message-window-typed-boxes-sequence-vs-cartridge / battle-message-window-reward-line-sequence-vs-cartridge (`python tools/battle_msg_window_cmp.py typed-boxes | reward-line-comes-and-goes`)
+
+How the battle's message window comes and goes, frame by frame (disasm/notes/battle_message_window.md sec. 6): the
+window's 24 lines on EVERY cartridge frame of a span against the port's frame before it (a fight's picture lag), to
+the pixel. `typed-boxes` is leg 117's first fight, the Att picker's target box twice (57 frames): the band opens empty
+the frame after D1/FE70 installs its table, the name grows two glyphs' worth every other frame (CD/064B uploads one
+half of the text tiles an NMI), and the second box is typed under an action's prologue, where C1/4841's return types
+nothing. `reward-line-comes-and-goes` is the second fight's first reward line (226 frames): the window opens with half
+its text, all of it a frame later, and comes down at the dwell's end -- CD/01B3's post, request and close in the
+results machine. Both start from a cartridge state cut in the field before the fight (the route's own states). Re-pin
+only with the cartridge's sequence in hand (`the cartridge's picture changes on ...` is the cartridge's alone).
+
+### battle-typewriter-action-waits-vs-cartridge (`python tools/battle_typewriter_cmp.py action-waits`)
+
+Where the typewriter CD/04DF does not step (battle_message_window.md sec. 6.3): the frames of leg 117's first fight
+(f780-f4010) on which the cartridge's main thread returns from a wait without `JSR CD/04DF` -- counted with `--hookpc
+CD04DF` -- against the frames the port holds its step on (`typeheld` under CT_BATTLE_TRACE). 46 on both sides, none
+apart: the action's C1/405F, C1/4841 and close, the victory's three seat removals, the exit's CF/FCFB. `--span <leg> <a>
+<b>` counts any other fight (its frames are the hook's: see the tool's note before reading a one-frame difference).
+
+### field-battle-results-box-half-text (frame canary)
+
+The reward window's first frame carries half its text (victory+70; the whole box is field-battle-results-box-onset's
++71, the box-free screen field-battle-results-box-not-yet's +69). The cartridge's own frame is graded by
+battle-message-window-reward-line-sequence-vs-cartridge; this pins the same transient on the forest fixture.
+
 ### battle-message-window-target-name-vs-cartridge / battle-message-window-reward-line-vs-cartridge (`python tools/battle_msg_window_cmp.py <name>`)
 
 The battle's message window against the cartridge, bytes and picture (disasm/notes/battle_message_window.md). Both sides
