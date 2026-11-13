@@ -3154,6 +3154,14 @@ passes CT_SEED_LOADFADE=1, on which field.c goes on with the ramp. Five legs sta
 cartridge's (`55 steps compared, 0 differing`; all 55 differed). One mutation, the port's resume (the harness's
 answer is cached beside the state, so a mutation of the question is never run).
 
+### field-picture-fight-sprites-through-the-mist-vs-cartridge (`tools/field_picture_cmp.py fight-sprites-through-the-mist`)
+
+A fight's sprites under the room's screens (disasm/notes/field_bg3_wave_and_obj_under_bg.md sec. 8): Magus's castle,
+loc 1BF, the Vamps' fight of leg 95, played by the port from the cartridge's state in the field before it (f600). The
+mist is BG3's priority tiles, half-added to the sub screen, and the combatants under it are its sub pixels -- the lone
+Vamp and Marle's head seen through it. `0 px differ at port +0`; plotted over the mist they were 408 px, at every
+lag. Three mutations.
+
 ### field-picture-effect-lock-parks-the-colour-cycles-vs-cartridge (`tools/field_picture_cmp.py effect-lock-parks-the-colour-cycles`)
 
 The effect lock stops the scene's colour cycles (disasm/notes/battle_effect_lock_park.md): D1/F426 zeroes every

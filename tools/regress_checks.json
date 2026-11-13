@@ -7583,7 +7583,7 @@
       ],
       "expect": [
         "battleprio f79 $A5E3=30 cells over priority tiles: 549 in front (OBJ 3), 0 covered",
-        "battleshotfield: f79 fnv=8257A02C hudband=160..207(48)"
+        "battleshotfield: f79 fnv=8E2FBA3D hudband=160..207(48)"
       ],
       "pin": [
         "^battleprio f79 ",
@@ -7592,7 +7592,7 @@
       "tier": "quick",
       "timeout_s": 120,
       "note_pass": "a combatant cell of OBJ priority 3 is drawn in FRONT of the field's BG1/BG2 priority tiles (mode 1: OBJ3 > BG1H > BG2H > OBJ2): Manoria's Naga-ettes over the altar's table",
-      "notes": "USER DEFECT LIST 2026-09-26 #13 ('in the battle against the nagga ettes, they have lower priority than the table') and #18 ('battles in general have priority problems'). THE ROM: every combatant cell's OAM attribute is `$9930,X | $99A9,X` with X = cmb + $0C (CF/EB1E), i.e. palette | $99B5 + cmb; CC/E3F9 `LDX #000A / LDA $A5E3 / STA $99B5,X / STA $9F3B,X` gives all eleven the fight's one priority, $A5E3 = ($2989 & 10) | 20 (CF/FBAE); the anim-script ops at C1/7555 / C1/7595 set or restore it per role (ported, battle.c). MEASURED on the oracle from this fixture: `$A5E3 = 30` by CF/FBB8 at f392 (PEEK_WRITEWATCH=A5E3:1). The forest's is 20 ($2989 bit 4 clear) and GATO's 30 (battle_sprite_zorder.md). In mode 1 an OBJ of priority 3 is in front of BG1/BG2 priority tiles; priority 2 is behind them. THE PORT punched every field priority tile over every combatant cell -- right for the forest, wrong for 3: the Naga-ettes' heads went behind the altar's table and Crono/Lucca behind the floor's tiles. Now battleCombatantsRender records, per pixel, the priority of the combatant whose cells won it (painted back to front, the lowest OAM index in front), and the punch skips pixels won by a priority-3 cell. NOT graded against the cartridge's picture: this fixture is an s9x splice (WRAM + CPU, not VRAM), so the oracle shows the teleport base's tilemap until the field redraws it, and no attract fight puts a priority-3 cell over a priority tile (CT_BATTLE_PRIOTRACE prints nothing there). The trace line counts the cell pixels over priority tiles (the rule's input); the hash pins the composed frame. ==== 2026-09-27 (c), RE-PINNED EDD1BCDC -> B7223419, the priority line unchanged (552 in front, 0 covered): the arena is now drawn with the battle's CGRAM (liveHost.fxCgram, the page CD/08B4 -> CF/E3C0 uploads each battle NMI) instead of the field's last CGRAM frozen at the entry -- 2465 px of the altar's top, (83,0)-(172,77), one 5-bit step brighter, where the battle's page differs from the field's last upload. Not gradeable against the cartridge's picture (the s9x splice, above). disasm/notes/battle_arena_cgram.md. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/battle.json): Fixed-frame field composite (90 -> 79 with the -11 boot): 552 cells in front at priority 3, 0 covered, and the old fnv B7223419. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). ==== 2026-10-12 RE-PINNED (fnv B7223419 -> EDD1BCDC): the fight now runs FD/E39C's colour modes (battle.c battleObjSlotFrame, colourModes), so loc 081's own records 0/1 (mode 1: CGRAM $3C, period 7; $11-$14, period 8) keep animating the light shafts through the fight. MEASURED, the rule's cartridge from saves/field_re/m81_nuns_lake.state: `$7E:2278` 0800 1000 1700 1F00 1700 1000 0800 0000 every 7 frames and `$2222` toggling every 8 through the fight; the port's same values on the same periods at a constant offset. Only the shafts' pixels changed (2465, rows 0-77); the cells over priority tiles are unchanged (552 in front). || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (saves/field_re/m81_nuns_lake.lakewram = tools/recipes/fxr_m81_nuns.json; the owner's capture is retired): the subject holds -- $A5E3 = 30 (the rule's cartridge sets it at its battle start, c434, ct.exe --monitor 7EA5E3:1) and every combatant cell over a priority tile is in front, none covered (549 cells on the twin's camera, 552 on the capture's). The picture's hash moved with the state. It could not be set against the cartridge on the capture (its spliced VRAM was another camera's: 31096/57344 at any frame); on the twin the battle's frame f79 (presented field f465) is 56818/57344 the cartridge's c514, the 526 differing pixels on four Naga-ette sprites' pose frames, all drawn in front of the table on both sides.",
+      "notes": "USER DEFECT LIST 2026-09-26 #13 ('in the battle against the nagga ettes, they have lower priority than the table') and #18 ('battles in general have priority problems'). THE ROM: every combatant cell's OAM attribute is `$9930,X | $99A9,X` with X = cmb + $0C (CF/EB1E), i.e. palette | $99B5 + cmb; CC/E3F9 `LDX #000A / LDA $A5E3 / STA $99B5,X / STA $9F3B,X` gives all eleven the fight's one priority, $A5E3 = ($2989 & 10) | 20 (CF/FBAE); the anim-script ops at C1/7555 / C1/7595 set or restore it per role (ported, battle.c). MEASURED on the oracle from this fixture: `$A5E3 = 30` by CF/FBB8 at f392 (PEEK_WRITEWATCH=A5E3:1). The forest's is 20 ($2989 bit 4 clear) and GATO's 30 (battle_sprite_zorder.md). In mode 1 an OBJ of priority 3 is in front of BG1/BG2 priority tiles; priority 2 is behind them. THE PORT punched every field priority tile over every combatant cell -- right for the forest, wrong for 3: the Naga-ettes' heads went behind the altar's table and Crono/Lucca behind the floor's tiles. Now battleCombatantsRender records, per pixel, the priority of the combatant whose cells won it (painted back to front, the lowest OAM index in front), and the punch skips pixels won by a priority-3 cell. NOT graded against the cartridge's picture: this fixture is an s9x splice (WRAM + CPU, not VRAM), so the oracle shows the teleport base's tilemap until the field redraws it, and no attract fight puts a priority-3 cell over a priority tile (CT_BATTLE_PRIOTRACE prints nothing there). The trace line counts the cell pixels over priority tiles (the rule's input); the hash pins the composed frame. ==== 2026-09-27 (c), RE-PINNED EDD1BCDC -> B7223419, the priority line unchanged (552 in front, 0 covered): the arena is now drawn with the battle's CGRAM (liveHost.fxCgram, the page CD/08B4 -> CF/E3C0 uploads each battle NMI) instead of the field's last CGRAM frozen at the entry -- 2465 px of the altar's top, (83,0)-(172,77), one 5-bit step brighter, where the battle's page differs from the field's last upload. Not gradeable against the cartridge's picture (the s9x splice, above). disasm/notes/battle_arena_cgram.md. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/battle.json): Fixed-frame field composite (90 -> 79 with the -11 boot): 552 cells in front at priority 3, 0 covered, and the old fnv B7223419. Under the switches the --battletest fixture's pinned boot arms the band 11 frames sooner (module f58 = CT_BHUD_ARM_FRAME - 11, src/battle.c battleBootBandArm) and the whole fight follows; the rule's cartridge runs the same fight 17 frames sooner than the valve's (gato_wait: C1/0000 at f222 in every model, `$CA1E = FF` f296 -> f279, `$0027 = 01` f372 -> f355) and tools/gato_logical_cmp.py grades the fixture identical to it on all 1564 frames at offset 221 ($A013, the three ATBs, GATO's ATB, $B185, $0027, $00A4, $00E5, every GATO mover step). ==== 2026-10-12 RE-PINNED (fnv B7223419 -> EDD1BCDC): the fight now runs FD/E39C's colour modes (battle.c battleObjSlotFrame, colourModes), so loc 081's own records 0/1 (mode 1: CGRAM $3C, period 7; $11-$14, period 8) keep animating the light shafts through the fight. MEASURED, the rule's cartridge from saves/field_re/m81_nuns_lake.state: `$7E:2278` 0800 1000 1700 1F00 1700 1000 0800 0000 every 7 frames and `$2222` toggling every 8 through the fight; the port's same values on the same periods at a constant offset. Only the shafts' pixels changed (2465, rows 0-77); the cells over priority tiles are unchanged (552 in front). || RE-PINNED 2026-10-22 ON THE RECIPE TWIN (saves/field_re/m81_nuns_lake.lakewram = tools/recipes/fxr_m81_nuns.json; the owner's capture is retired): the subject holds -- $A5E3 = 30 (the rule's cartridge sets it at its battle start, c434, ct.exe --monitor 7EA5E3:1) and every combatant cell over a priority tile is in front, none covered (549 cells on the twin's camera, 552 on the capture's). The picture's hash moved with the state. It could not be set against the cartridge on the capture (its spliced VRAM was another camera's: 31096/57344 at any frame); on the twin the battle's frame f79 (presented field f465) is 56818/57344 the cartridge's c514, the 526 differing pixels on four Naga-ette sprites' pose frames, all drawn in front of the table on both sides. ==== 2026-11-13, RE-PINNED (fnv only; the battleprio line unchanged): a fight's sprites are the room's OBJ layer under the room's screens (field_bg3_wave_and_obj_under_bg.md sec. 8) -- in the cathedral (TM BG3, TS BG1 BG2 OBJ, CGADSUB $24) the Naga-ettes under the sunbeams are the beams' sub pixels, brightened, as the field's sprites already were. GRADED on the cartridge from this fixture's state (saves/field_re/m81_nuns_lake.state, idle): the whole frame at cartridge f450 and f480 is 0 px away now (90 px before, the same at every lag at f480).",
       "mutations": [
         {
           "file": "src/field.c",
@@ -50725,7 +50725,7 @@
         "playthrough: 40_guardian SAME -- locs 0D6 0D8 0DD 0DB | story 34 35 | party 000201 | gold 1339 | hp 95 (2) | ctrl 7 | end picture 0 px at port +0",
         "playthrough: 41_arris_password SAME -- locs 0DB 158 0DB 0DD 0D8 0D7 | story 35 | party 000201 | gold 1339 | hp 95 (1) | ctrl 13 | end picture 0 px at port -1",
         "playthrough: 42_arris_beyond SAME -- locs 0D7 0D9 | story 35 | party 000201 | gold 1384 | hp 88 (2) | ctrl 7 | end picture 0 px at port -1",
-        "playthrough: 43_arris_info_center DIFFERENT -- locs 0D9 0DA | story 35 | party 000201 | gold 1584 | hp 101 (4) | ctrl 11 | end picture 49697 px at port +3",
+        "playthrough: 43_arris_info_center DIFFERENT -- locs 0D9 0DA | story 35 | party 000201 | gold 1584 | hp 101 (4) | ctrl 11 | end picture 49682 px at port +4",
         "playthrough: 44_day_of_lavos SAME -- locs 0DA 1F2 0DA 1F7 0DA | story 35 36 | party 000201 | gold 1584 | hp 101 (1) | ctrl 5 | end picture 0 px at port -3",
         "playthrough: 45_bike_key DIFFERENT -- locs 0DA 0D9 0D7 0D8 0D6 | story 36 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 7 | end picture 55587 px at port +0",
         "playthrough: 46_johnny SAME -- locs 0D6 1F2 0DF | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
@@ -51676,6 +51676,52 @@
           "find": "      if ((m & 0x80) || (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }         //   AND #F0 / CMP #10 / BNE ->F44C / F449 STZ $0520,X`",
           "replace": "      if (!(m & 0x80) && (m & 0xF0) == 0x10) s[0x0520 + k * 12] = 0; }   /* MUT: the 1x records alone */",
           "why": "D1/F441 `BMI ->F449`: a mode with bit 7 is zeroed too -- the scene's colour cycles stop under the lock. Left running, the floor's cycle is 15 frames ahead of the cartridge's when the lock drops"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fight-sprites-through-the-mist-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fight-sprites-through-the-mist"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fight-sprites-through-the-mist leg 95 f600 +130 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: fight-sprites-through-the-mist "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Magus's castle, loc 1BF: the Vamps and Marle's head are seen through the mist in the fight, as on the cartridge",
+      "notes": "A FIGHT'S SPRITES ARE THE ROOM'S OBJ LAYER, UNDER THE ROOM'S SCREENS (disasm/notes/field_bg3_wave_and_obj_under_bg.md sec. 8). Magus's castle, loc 1BF, the Vamps' fight of playthrough leg 95 (the port boots it from the cartridge's state in the field, f600): TM 1D (BG1 BG3 OBJ), TS 19 (BG1 OBJ), the sub screen half-added, BGMODE 09 -- the mist is BG3's priority tiles, above every sprite on the main screen, and a sprite under one is its SUB pixel: seen through the mist. The field's sprites were drawn so (drawSprite, g_objSubMask); the fight's combatants were plotted over the mist -- the lone Vamp whole and bright, Marle's hair orange: 408 px of this frame, the same at every lag. plot() gives a battle sprite's pixel the same rule with its own OBJ priority (the combatant's $99B5, the shadow's and the bracket's attribute bits 4-5).",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (g_bObjSubPrio >= 0 && g_objSubOn) {                // a battle sprite's pixel (above)",
+          "replace": "    if (0) {   /* MUT: a battle sprite is never a sub pixel */",
+          "why": "Where the main screen's BG pixel beats the sprite and has the colour math, the sprite is that pixel's sub pixel (ppu_handlePixel: main +/- sub, halved): plotted plain, the combatants stand in front of the mist"
+        },
+        {
+          "file": "src/field.c",
+          "find": "                  ? (((g_bDrawOnly < 11 ? mem[0x99B5 + g_bDrawOnly] : mem[0xA5E3]) >> 4) & 3) : -1;",
+          "replace": "                  ? 4 : -1;   /* MUT: every combatant above BG3's priority tiles */",
+          "why": "CF/EB1E gives the cells the OBJ priority of $99B5 + cmb (CC/E3F9's $A5E3, 2 or 3): under BG3's priority-1 pixels (level 4) in BGMODE 09. A priority no BG pixel beats is never mixed"
+        },
+        {
+          "file": "src/field.c",
+          "find": "          int d = m[k] >> 3, sv = c[k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;",
+          "replace": "          int d = m[k] >> 3, sv = c[k] >> 3, r5 = d + d; (void)sv;   /* MUT: the mist alone, no sub pixel */",
+          "why": "The pixel is main5 + sub5 (subtracted with CGADSUB bit 7), halved with bit 6: the mist's colour and the sprite's. Without the sprite's share the Vamp under the mist is not there at all"
         }
       ]
     },

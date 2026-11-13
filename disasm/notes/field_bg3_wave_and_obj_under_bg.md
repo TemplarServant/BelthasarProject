@@ -157,3 +157,36 @@ Measured:
 Checks: `field-picture-bg3-above-every-sprite-vs-cartridge`,
 `field-picture-sprites-on-the-sub-screen-under-bg3-vs-cartridge` (the guard of the first form's mistake) and
 `attract-0a5-bats-behind-the-trees-vs-rule-cartridge`.
+
+## 8. A fight's sprites are the same OBJ layer
+
+The room's screens stand through a fight outside the HUD's lines. Measured on the rule's cartridge, Magus's castle
+loc 1BF, the Vamps' fight of playthrough leg 95 -- `--ppuregs` in the field (f600) and in the fight (f730) reads the
+same: mode 1, TM 1D (BG1 BG3 OBJ), TS 19 (BG1 OBJ), `addSub` 1, `half` 1. The mist is BG3's priority tiles: above
+every sprite on the main screen, half-added to the sub screen, where the combatants are. So a Vamp or a head under
+the mist is seen THROUGH it (sec. 3's rule), in the fight as in the field.
+
+The port plotted its battle sprites over the composed room: the lone Vamp whole and bright, Marle's hair orange
+(leg 95 f730: 408 px, the same at lags -2..+1; f900: 182 px of the Vamps' wings). `plot()` (field.c) now gives a
+battle sprite's pixel sec. 3's rule against the frame's own g_objSubMask / g_objSubTop / g_objSubRgb (built with the
+arena's row scroll): `g_bObjSubPrio` is the OBJ priority of the sprite being drawn -- a combatant's `$99B5 + cmb`
+bits 4-5 (CF/EB1E), the shadow's `$A5E3 | $9F46`, the bracket's attribute -- and the pixel is the sub pixel where
+that priority is below the mask and at or above the sub screen's own level. The foreground's re-draw leaves a mixed
+pixel, as the field's does. After: f730 0 px, f900 the bracket's 52 px alone (open, below).
+
+The other setup, OBJ on the sub screen alone: Manoria's cathedral (loc 081, TM BG3, TS BG1 BG2 OBJ, CGADSUB $24),
+the Naga-ettes' fight from saves/field_re/m81_nuns_lake.state played idle. The combatants under the sunbeams are the
+beams' sub pixels, brightened: the whole frame at the cartridge's f450 and f480 went from 90 px (at every lag at
+f480) to 0. The frame canary `battle-obj-priority-3-over-priority-tiles` was re-pinned with it.
+
+Open:
+
+- **BG3's priority-1 pixels with no math** (sec. 7's case, Magus's lair's trees) under a fight's combatants: not
+  measured in a fight; the port still draws the combatants over them.
+- **The target hand, the popups and a program's sprite cloud** are plotted without a priority (never mixed).
+- **The bracket's pulse is a frame early.** Leg 95 f900: the cartridge's bracket shows CGRAM `$233C` = 35AD, the word
+  CF/E5AA wrote two frames before (rows f898 / f899 / f900 = 35AD / 318C / 2D6B on both sides); the port's picture
+  shows 318C, while the Vamps' wings match at the same frame. Not derived yet (the NMI's upload against the port's
+  frame: battleNmiHead ships the page before battlePulseFrame writes it, as CD/08B4 before CF/E5AA).
+
+Check: `field-picture-fight-sprites-through-the-mist-vs-cartridge`.

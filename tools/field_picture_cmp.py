@@ -100,6 +100,12 @@ PICTURES = {
     # there. The port parked the 1x records alone: the floor cycled through the lock and stood 15 frames out of step for
     # the rest of the fight and of the room (731 px on most frames). The picture 75 frames after the lock.
     'effect-lock-parks-the-colour-cycles': dict(leg='117_kajar_restock', at=5100, frames=2460, own=True),
+    # Magus's castle, loc 1BF, the Vamps' fight of leg 95 (cut at f600 in the field; the fight boots at f641). The room's
+    # screens stand through the fight: TM 1D (BG1 BG3 OBJ), TS 19 (BG1 OBJ), the sub screen half-added -- the mist is
+    # BG3's priority tiles, above every sprite on the main screen, and a sprite under it is the mist pixel's SUB pixel.
+    # The fight's sprites are that OBJ layer too: the lone Vamp and Marle's head are seen through the mist. The port drew
+    # its combatants over it (408 px of this frame, at every lag).
+    'fight-sprites-through-the-mist': dict(leg='95_magus', at=600, frames=130, own=True),
 }
 
 

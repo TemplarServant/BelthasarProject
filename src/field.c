@@ -2936,9 +2936,31 @@ static uint8_t g_objSubMask[FIELD_WMAX * CAMH], g_objSubRgb[FIELD_WMAX * CAMH * 
 // the foreground's re-draw to leave them (g_objSubBoth: OBJ on both screens).
 static uint8_t g_objSubTop[FIELD_WMAX * CAMH], g_objSubDone[FIELD_WMAX * CAMH], g_objSubBoth;
 static int g_objSubMixed;                        // sprite pixels mixed that way this frame (OBJ on both screens)
+// ...and a fight's sprites are the same OBJ layer under the same screens (the field's TM / TS / CGADSUB stand through a
+// fight outside the HUD's lines): g_bObjSubPrio is the OBJ priority of the battle sprite being drawn (its attribute's bits
+// 4-5; -1: not one), and plot() makes its pixel the sub pixel of a main-screen BG pixel that beats it and has the math, as
+// drawSprite does for the field's. MEASURED, the rule's cartridge, Magus's castle loc 1BF (playthrough leg 95: TM 1D, TS 19,
+// half-add of the sub screen): the Vamps and Marle's head are seen THROUGH the mist, BG3's priority tiles.
+static int g_bObjSubPrio = -1;
 static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
-  if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3; fb[o] = r; fb[o + 1] = g; fb[o + 2] = b;
-    if (g_bObjPalMask) g_bObjPalMask[(size_t)y * g_fw + x] = (uint8_t)(g_bObjPalCur < 0 ? 0xFF : g_bObjPalCur);
+  if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3;
+    int sub = 0;
+    if (g_bObjSubPrio >= 0 && g_objSubOn) {                // a battle sprite's pixel (above)
+      size_t i = (size_t)y * g_fw + x;
+      g_objSubDone[i] = 0;
+      if (g_bObjSubPrio < g_objSubMask[i] && g_bObjSubPrio >= g_objSubTop[i]) {
+        const uint8_t* m = g_objSubRgb + i * 3; int c[3] = { r, g, b };
+        for (int k = 0; k < 3; k++) {                       // ppu_handlePixel: main5 +/- sub5, halved, clamped
+          int d = m[k] >> 3, sv = c[k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;
+          if (g_objSubHalf) r5 >>= 1;
+          if (r5 < 0) r5 = 0; if (r5 > 31) r5 = 31;
+          c[k] = (r5 << 3) | (r5 >> 2);
+        }
+        r = c[0]; g = c[1]; b = c[2]; sub = 1; g_objSubDone[i] = 1;
+      }
+    }
+    fb[o] = r; fb[o + 1] = g; fb[o + 2] = b;
+    if (g_bObjPalMask) g_bObjPalMask[(size_t)y * g_fw + x] = (uint8_t)((g_bObjPalCur < 0 || sub) ? 0xFF : g_bObjPalCur);   // (a BG pixel is on top of a mixed one)
     if (g_mot) { g_mot->own[(size_t)y * g_fw + x] = (uint8_t)g_motOwn; int n0 = g_mot->nspx; CtMotSpritePixel(g_mot, x, y, r, g, b, g_motOwn);
                  if (g_mot->nspx > n0) g_mot->spx[n0].pal = (uint8_t)(g_bObjPalCur < 0 ? 0xFF : g_bObjPalCur & 7); } }
 }
@@ -8721,8 +8743,9 @@ static void battleShadowRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   for (int q = 0; q < 4; q++) { const uint8_t* s = CtBattleShadowTile(q); if (!s) return; memcpy(win[name[q]], s, 32); }
   int ox = ((BT_LIVEX(h, cmb) & 0xFF) - 8) & 0xFF, oy = ((BT_LIVEY(h, cmb) & 0xFF) - 4) & 0xFF;   // CF/EA97-EAA5
   { int keep = g_bObjPalCur; g_bObjPalCur = ((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7;   // its attribute's palette (1)
+    int keepPr = g_bObjSubPrio; if (g_bObjPrioMask) g_bObjSubPrio = ((mem[0xA5E3] | mem[0x9F46]) >> 4) & 3;   // ...and priority
     battleBlitCell(fb, win, 0x12, 0, ox, oy, palw, 0, 0);
-    g_bObjPalCur = keep; }
+    g_bObjPalCur = keep; g_bObjSubPrio = keepPr; }
   // CT_BATTLE_ASCTRACE: the shadow's OAM (X,Y) on every frame it moves, comparable with the oracle's $0700 mirror entry
   if (getenv("CT_BATTLE_ASCTRACE")) {
     static int lastO[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
@@ -8770,6 +8793,8 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     if (battleHiddenObj(mem, h, g_bDrawOnly)) continue;   // CF/FE28 `LDA $9FF7,X / BNE skip`: no OAM for a hidden object
     if (g_bObjPrioMask) memcpy(prevFb, fb, sizeof prevFb);
     g_motOwn = battleMotOwn(h, g_bDrawOnly);
+    g_bObjSubPrio = (g_bObjPrioMask && mem)                // its cells' OBJ priority (below), for the screens' math
+                  ? (((g_bDrawOnly < 11 ? mem[0x99B5 + g_bDrawOnly] : mem[0xA5E3]) >> 4) & 3) : -1;
     g_bObjPalCur = battleCmbObjPal(mem, h, g_bDrawOnly);  // its cells' palette (an effect object's own: battleFxDrawOam)
     battleFxObjRender(fb, h, g_bDrawOnly, 0x40);     // CF/EDF7: the effect objects drawn after it (behind)
     battleGatoRender(fb, mem, h);                     // GATO idle bob/claw-swap or rear-up attack
@@ -8793,6 +8818,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   }
   g_bDrawOnly = -1;
   g_bObjPalCur = -1;
+  g_bObjSubPrio = -1;
   g_motOwn = CT_MOT_FIXED;
 }
 
@@ -8830,8 +8856,9 @@ static void battleBracketRender(uint8_t* fb, const uint8_t* mem, const CtBattleH
       palw[i] = (uint16_t)(h->fxCgram[c] | (h->fxCgram[c + 1] << 8));
     }
     g_bObjPalCur = pal;                                  // the entry's palette (the sprites' colour math)
+    g_bObjSubPrio = h->mvInited ? (e[k].attr >> 4) & 3 : -1;   // ...and its priority (a live fight's screens)
     battleBlitCell(fb, win, 0x12, 0, e[k].x, e[k].y, palw, (e[k].attr >> 6) & 1, (e[k].attr >> 7) & 1);
-    g_bObjPalCur = -1;
+    g_bObjPalCur = -1; g_bObjSubPrio = -1;
   }
 }
 
@@ -19497,6 +19524,7 @@ int main(int argc, char** argv) {
             // clear: the canopy covers the fighters), 3 at GATO and in Manoria's cathedral.
             if (objPrio[y * CAMW + x] == 3) continue;
             if (bgWinAt(x, y)) continue;
+            if (g_objSubOn && g_objSubDone[(size_t)y * g_fw + x]) continue;   // the sprite under it is its sub pixel: mixed
             memcpy(fb + ((size_t)y * CAMW + x) * 3, f.base + bo * 3, 3);
             objPal[y * CAMW + x] = 0xFF;                 // the BG tile is on top here, not the sprite
           }
