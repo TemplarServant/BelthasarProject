@@ -221,3 +221,10 @@ carried on by mechanisms that quantise time:
   two `EB 20 00 / ED` fades end on the SPC's lattice, two frames later each. The room's exit went from the cartridge's
   f4349 + 2 to + 5. The song command `EA 3A` after `04 2C 58` shows its own address in `$1180` for the upload's seven
   frames in the port only: the cartridge stores the address when the object yields, after the JSL.
+- **Leg 91, DIFFERENT by its end picture since 2026-11-13 (120 px, the room's animated tiles).** With the tile animation's
+  run counter exact across fights and loads (field_bg_anim.md), legs 07, 48, 83 and 86 lost their end-picture differences
+  and this one gained one: loc 0A9's load is a frame longer in the port (the counter resumes on f287 for the cartridge's
+  f286), so the field's `$0153` runs on the other phase, and at the fight's transfer (f2388) the cartridge has the bit
+  clear on the frame the fight is called in and set on the module's tick 1 -- steps on f2387, f2389, f2391, an even
+  cadence through the transfer -- while the port has it set on the transfer's frame: f2386, f2388, f2391. One run behind
+  from there. Before, the port ran no step on the transfer's frame at all and the two errors cancelled on this leg.

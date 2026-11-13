@@ -184,9 +184,12 @@ Open:
 - **BG3's priority-1 pixels with no math** (sec. 7's case, Magus's lair's trees) under a fight's combatants: not
   measured in a fight; the port still draws the combatants over them.
 - **The target hand, the popups and a program's sprite cloud** are plotted without a priority (never mixed).
-- **The bracket's pulse is a frame early.** Leg 95 f900: the cartridge's bracket shows CGRAM `$233C` = 35AD, the word
-  CF/E5AA wrote two frames before (rows f898 / f899 / f900 = 35AD / 318C / 2D6B on both sides); the port's picture
-  shows 318C, while the Vamps' wings match at the same frame. Not derived yet (the NMI's upload against the port's
-  frame: battleNmiHead ships the page before battlePulseFrame writes it, as CD/08B4 before CF/E5AA).
+- **A fight's picture is not one lag.** Leg 95 f900: the cartridge's bracket shows CGRAM `$233C` = 35AD, the word
+  CF/E5AA wrote two frames before (rows f898 / f899 / f900 = 35AD / 318C / 2D6B on both sides), and the port's picture
+  shows 318C: the pulse leads the cartridge's by one frame. The combatants and the room's tiles lead it by two to
+  three (a Vamp's frames change on the cartridge's f888, f891 ... f912 and on the port's f885, f889 ... f909; f900
+  itself is a frame both sides hold, which is why it reads the same at lag 0). So within the port's own picture the
+  pulse -- and the message window, which leads by one too -- stands a frame or two behind the sprites. Not derived
+  (disasm/notes/field_bg_anim.md, "The IRQ across a fight and a load", has the tiles' side).
 
 Check: `field-picture-fight-sprites-through-the-mist-vs-cartridge`.

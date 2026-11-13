@@ -3154,6 +3154,14 @@ passes CT_SEED_LOADFADE=1, on which field.c goes on with the ramp. Five legs sta
 cartridge's (`55 steps compared, 0 differing`; all 55 differed). One mutation, the port's resume (the harness's
 answer is cached beside the state, so a mutation of the question is never run).
 
+### leg-window-tile-animation-across-a-fight-vs-cartridge / leg-window-tile-animation-across-a-load-vs-cartridge (`python tools/leg_window_cmp.py <name>`)
+
+The field's tile animation step by step against the cartridge (disasm/notes/field_bg_anim.md, "The IRQ across a fight
+and a load"): FD/E022's run counter `$051D` (and `$0153` across the fight) in playthrough leg 95. Across the Vamps'
+fight (f600 + 740: the transfer's frame steps the tiles as a field frame, the return's waits flip before line 211) and
+across the door out of the room (f1740 + 70: no step on the commit's frame, on the load's, or on the first frame after
+it). `0 differing` each; two mutations each.
+
 ### field-picture-fight-sprites-through-the-mist-vs-cartridge (`tools/field_picture_cmp.py fight-sprites-through-the-mist`)
 
 A fight's sprites under the room's screens (disasm/notes/field_bg3_wave_and_obj_under_bg.md sec. 8): Magus's castle,

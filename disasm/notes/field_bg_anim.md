@@ -161,3 +161,53 @@ on party3 (vmdiff-wmask-party3): seven more modelled bytes -- the torches' colou
   not the map.
 - Two sprite pixels, older than this work: tbcolour/tkfield's bottom-left NPC group on f1/f9/f10/f30/f34/f70, and
   party3 (68,110) -- a colour of Crono's that the port draws one pixel over.
+
+## The IRQ across a fight and a load (2026-11-13)
+
+Measured on the rule's cartridge (`$051D`, FD/E022's run counter, and `$0153`, rows of playthrough legs 95, 130 and 78).
+
+**The frame the fight is called in is the field's whole.** Op D8 runs in a field frame's VM pass; that frame's NMI and
+line-211 IRQ are still the field's. Leg 95, loc 1BF, the transfer at f641: `$0153` 01 and `$051D` 11 -> 12 on f641
+(C0/ECDB `LDA $0153 / AND #01 / BNE` -> C0/ED08 `JSL FD/FFFD`); f642 is the module's tick 1 (C0/18A4's flip to 00, no
+step), and from f644 the fight's IRQ D1/FE97 steps on an odd `$7C`, every other frame of the whole fight.
+
+**The return's waits flip before line 211.** C0/0304's five C0/00EB waits each run `JSR C0/00DE` (FD/C2C1's flip). On
+the real cartridge the three heavy segments push the flip past line 211; under the infinitely fast CPU they cost no
+beam time, and the IRQ reads the flipped bit on every wait: leg 95's return, `$0153` 01 / 00 / 01 / 00 / 01 on
+f1315-f1319 and `$051D` 59 / 5A / 5B on f1315 / f1317 / f1319.
+
+**No IRQ on a load's frames, nor on the first after it.** The commit's iteration goes straight into the load (C0/0C9A
+`LDX #06FF / TXS / BRL C0/0000` -> C0/00F4), which runs with the NMI and the IRQ off; the line-211 IRQ is the NMI's to
+arm (C0/EA70 re-arms it on every field NMI). Cartridge PCs, leg 130's load: frame f1107 `C0:00BF` (no FD/C2C1: the
+pass ends at the change), `C0:ECCC` -> `FD:E022` (the bit still set: B0 -> B1); frame f1108 `C0:EA63` then `C0:00F4`
+at once, no IRQ. `$051D` stays B1 through f1147 -- the first frame after the load, `$0153` bit 0 set again and no step
+-- and reads B2 on f1149. Leg 95's door: 3A from f1765 to f1791, 3B on f1792. Leg 78's first load: the bit 01 on f277
+and f278 with no step, the ramp's first INC on f279, 16 on f280.
+
+The port (field.c): the battle's branch runs the field's IRQ on the module's tick 0; `fieldIrqPreFlip` is the real
+CPU's only (`!fieldRuleIfast()`); `fieldIrqCommit` (the fade machine at black with its transition's kind set: the
+drain's commit, or a change the VM committed with the screen already black, which the poll learns) and `fade == 3`
+take the IRQ off, and `fieldIrqLoadPrev` the frame after.
+Before, the IRQ model ran on every field frame and not on the transfer's: one run short from every transfer, another
+at every return, and one or two ahead at every load -- a room's torches or water two to four frames off the
+cartridge's for as long as the room stood (leg 95: 16 of the first 29 audit samples, 98 px a torch).
+
+**The picture: a step is drawn on its own frame, in the field and under a fight.** The port's pictures lead the
+cartridge's by two frames in the field (the field's alignment) and by two to three in a fight -- the combatants too:
+leg 95's fight, one Vamp's frames change on f888, f891 ... f912, f920 on the cartridge and on f885, f889 ... f909,
+f917 in the port, and a torch's on f884, f888 ... against f882, f886 .... So the tiles and the sprites stand on one
+picture, as they do on nine consecutive whole frames of the attract's 07D fight (port f7090-f7098 against the
+cartridge's c5024-c5032, 57344 / 57344 px each). (A two-frame queue for the steps made under a fight was tried and
+taken out: it put the torches on the cartridge's own frame numbers and two frames behind everything else in the
+port's picture -- 116 px on four of those nine frames.)
+
+Open: a fight's picture is not one lag. Its sprites and tiles lead the cartridge's by two to three frames; what the
+battle's NMI uploads (the message window, the bracket's pulse) leads by one. In leg 95 a colour of the room's cycle
+(pixel 154,56: 250A -> 1CE9) changes on the port's f693 and the cartridge's f696. Not derived.
+
+Left as it is: `$0153`'s own flip of the commit's frame (the load's FD/C2C1) stands a frame later in the port, with
+everything else the load writes -- the port loads one iteration after the commit (field_load_cost.md).
+
+Checks: `leg-window-tile-animation-across-a-fight-vs-cartridge`, `leg-window-tile-animation-across-a-load-vs-cartridge`.
+CT_TILEANIMTRACE prints `tileanim battle f<N> tick <k> ...` for a fight's first ticks and `tileanim irq off f<N> ...`
+for a frame the IRQ is off on; `=2` adds the fade state of every frame.

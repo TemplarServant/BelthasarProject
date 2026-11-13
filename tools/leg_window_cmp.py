@@ -143,6 +143,21 @@ WINDOWS = {
     # the brightness, the control byte and the lead's position words.
     'seed-inside-the-load-fade': dict(leg='121_', start=1, frames=170,
                                       cells=[('7E0119', 1), ('7E011F', 1), ('7E1802', 2), ('7E1882', 2)]),
+    # Magus's castle, loc 1BF, the Vamps' fight of leg 95: the field's tile animation across a fight. The line-211 IRQ
+    # C0/ECCC steps FD/E022 (`INC $051D`) on a frame whose `$0153` bit 0 is set; the fight's IRQ D1/FE97 steps it on an odd
+    # `$7C`. The frame the fight is called in (f641) is the field's whole -- its IRQ steps the tiles (11 -> 12, the bit
+    # set) -- and the return's five waits flip the bit before line 211 under the infinitely fast CPU, so f1315 / f1317 /
+    # f1319 step. The port ran neither the transfer frame's step (the battle's branch had the frame) nor the return's
+    # first (the IRQ read the bit before the flip, the CPU's time against the beam): two runs short after every fight,
+    # the room's torches four frames behind (98 px each on most frames of the leg). The cells: the run counter and the bit.
+    'tile-animation-across-a-fight': dict(leg='95_', start=600, frames=740, cells=[('7E051D', 1), ('7E0153', 1)]),
+    # The same leg's door out of the room (f1751 the fade, f1766 the commit, f1791 the new room's ramp): a location load
+    # runs with the NMI and the IRQ off (C0/00F4), and the IRQ is the NMI's to arm (C0/EA70), so no tile step falls on
+    # the commit's frame, on the load's, or on the first frame after it. `$051D` 3A from f1765 to f1791, 3B on f1792.
+    # The port stepped on the commit's frame and on the frame before the ramp: the new room's tiles two runs ahead.
+    # (The run counter alone: the bit's own flip of the commit's frame is the load's, and the port loads one iteration
+    # after the commit -- everything the load writes stands a frame later through the black.)
+    'tile-animation-across-a-load': dict(leg='95_', start=1740, frames=70, cells=[('7E051D', 1)]),
 }
 
 

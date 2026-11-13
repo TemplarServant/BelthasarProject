@@ -11320,6 +11320,8 @@ int main(int argc, char** argv) {
   int battleReturnHold = 0;   // frames the field's return from a battle still owes (C0/0304's reload, after the ack)
   int battleReturnWait = -1;  // under the rule: which of the chain's five C0/00EB this frame ends in (0 = the ack's), else -1
   int fieldIrqPreFlip = 0;    // this frame's line-211 IRQ came before its main thread's C0/00DE flip (see the return chain)
+  int fieldIrqLoadPrev = 0;   // the last frame was inside a location load (fade == 3): no NMI has armed this frame's IRQ
+  int fieldIrqCommit = 0;     // this frame's iteration committed a location change (C0/0C9A): the load starts in it
   int battleExitPoll = 0;     // the module is in CD/0428-0436's SPC poll (CtBattleExitPoll), before CD/043E's chain
   int battleBootPostAt = -1;  // the rule: the host frame C1/0000 posts C0/1BAB's JSL (the entry + 2)
   int battleTailLeft = 0;     // frames of the module's exit tail still to run before the ack (CD/043E's upload + CD/0444)
@@ -11727,6 +11729,7 @@ int main(int argc, char** argv) {
   g_owObjFromCapture = 0;
   while (running && !g_shotsExit) {
     fieldIrqPreFlip = 0;                             // set by this frame's return-chain wait, if any (the battle's ack)
+    fieldIrqCommit = 0;
     // C0/000E, the cold init, reached from a running game this frame (the demo battle's CF/E702, the defeat's C0/02CA):
     // requested where the ROM jumps, performed once below the battle block.
     int coldResetReq = 0; const char* coldResetWhy = "";
@@ -17657,7 +17660,7 @@ int main(int argc, char** argv) {
       if (fieldRuleNmiOnHold() && f.vm && battleReturnWait >= 0) {
         battleReturnWait++;
         fieldBattleResume(f.vm, &liveHost, battleReturnWait);   // C0/0304's leg after this C0/00EB (fieldBattleResume)
-        fieldIrqPreFlip = battleReturnWait <= 2;       // C0/0327's and C0/0340's segments: the IRQ first (see the ack)
+        fieldIrqPreFlip = !fieldRuleIfast() && battleReturnWait <= 2;   // C0/0327's and C0/0340's segments: the IRQ first (see the ack)
         CtSceneReturnWaitFrame(f.vm);
         if (!battleReturnHold) battleReturnWait = -1;
       }
@@ -17871,7 +17874,10 @@ int main(int argc, char** argv) {
               // C0/0327's: C0/09DD; C0/0340's: C0/56D4 + C0/595C + C0/A712), each past line 211's ~288k cycles from its
               // frame's start, and after it in the gate's (C0/2B78) and C0/18CA's (C0/28E1 + C0/E935): the cycles of
               // sequence_table.md 11.10.
-              if (ruleReturn) { battleReturnHold = 5 - 1; battleReturnWait = 0; fieldIrqPreFlip = 1;
+              // (That is the CPU's time against the beam. Under the infinitely fast CPU the segments cost none: every
+              // flip lands before line 211 and the IRQ steps the tiles on each wait whose flip sets the bit. MEASURED,
+              // leg 95's return: `$0153` 01 / 00 / 01 / 00 / 01 on f1315-f1319 and `$051D` stepping on f1315, f1317, f1319.)
+              if (ruleReturn) { battleReturnHold = 5 - 1; battleReturnWait = 0; fieldIrqPreFlip = !fieldRuleIfast();
                                 if (f.vm) CtSceneReturnWaitFrame(f.vm); }
               // ...and a defeat owes none of it: C0/0289's dispatch sends `$7F01EC = 1` with `$2A1F` bit 5 clear straight to
               // C0/02A0 (no C0/0304 reload), whose first pass is C0/00EB on the next frame (the gameOver branch below).
@@ -18330,6 +18336,12 @@ int main(int argc, char** argv) {
     // ...the resume after a menu included (C0/2824 runs under the field's own NMI and IRQ: its frames step the animated
     // tiles as the main loop's do, through C0/ECDB's `$0153` gate, which the loop's C0/00DE flips).
     int fieldNmi = f.sd && f.vm && !battlePhase && !inWorld && (!menuPhase || fieldResume);
+    const int fieldIrqLoadWas = fieldIrqLoadPrev;   // (kept for this frame's IRQ below; the latch moves on every frame)
+    // The commit's frame (C0/0C9A `LDX #06FF / TXS / BRL C0/0000`: the load, from this iteration): the fade machine at black
+    // with its transition's kind set -- the drain's commit, or a change the VM committed in this frame's tick with the screen
+    // already black, which the host learns from the poll after the machine ran.
+    if (fade == 1 && fadeBri <= 0 && pendKind) fieldIrqCommit = 1;
+    fieldIrqLoadPrev = (fade == 3) || fieldIrqCommit;
     // C0/712E, the NMI that ends this frame: the page goes to CGRAM (g_fieldCgram) unless a style tilemap takes that NMI
     // (CtFieldNmiTilemapArm on the $46 this frame left). The other programs' NMIs upload their page every frame.
     if (f.vm) {
@@ -18342,7 +18354,20 @@ int main(int argc, char** argv) {
       // (on a frame whose main thread flipped $0153 after line 211 -- the return chain's heavy segments -- the IRQ read the
       //  value before the flip: fieldIrqPreFlip, set at the battle's ack)
       if (fieldIrqPreFlip) bw[0x0153] ^= 0x01;
-      if (!dbg.noAnim) bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);   // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
+      // The line-211 IRQ is the NMI's to arm -- C0/EA70 re-arms it on every field NMI -- and a location load runs with
+      // both off (C0/00F4): none fires on a frame of the load, the commit's included (under the infinitely fast CPU the
+      // load's `STZ $4200` lands before line 211), nor on the first frame after it, whose vblank has armed none yet.
+      // MEASURED, the rule's cartridge: leg 130's load at f1108 (`$0153` 01 on f1107 with `$051D` B0 -> B1; no step on
+      // f1108, nor on f1147 with the bit set again; B2 on f1149), leg 95's at f1766 (3A to f1791, 3B on f1792).
+      const int irqLoad = (fade == 3) || fieldIrqCommit;
+      { static int tr = -1; if (tr < 0) tr = getenv("CT_TILEANIMTRACE") ? 1 : 0;
+        if (tr && (irqLoad || fieldIrqLoadWas))
+          printf("tileanim irq off f%d (load %d, the frame before %d) $0153=%02X\n", frameNo, irqLoad, fieldIrqLoadWas, bw[0x0153]);
+        if (tr && getenv("CT_TILEANIMTRACE")[0] == '2')
+          printf("tileanim irq f%d fade %d bri %d pend %d $0100=%02X%02X $0112=%02X%02X $0117=%02X $010F=%02X $0153=%02X\n", frameNo, fade,
+                 (int)fadeBri, pendKind, bw[0x0101], bw[0x0100], bw[0x0113], bw[0x0112], bw[0x0117], bw[0x010F], bw[0x0153]); }
+      if (!dbg.noAnim && !irqLoad && !fieldIrqLoadWas)
+        bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);                  // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
       if (fieldIrqPreFlip) bw[0x0153] ^= 0x01;
       bgDirty |= CtFieldSceneSetCgram(f.sd, g_fieldCgram);
     } else if (battlePhase && f.sd) {
@@ -18357,7 +18382,14 @@ int main(int argc, char** argv) {
       // before line 211, so the field's IRQ finds bit 0 set and steps the tiles (C0/ECDB `LDA $0153 / AND #01 / BNE` ->
       // C0/ED08 JSL FD/FFFD).
       if (!dbg.noAnim) {
-        if (fieldRuleIfast() && liveHost.frames == 1) bgDirty |= fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+        { static int tr = -1; if (tr < 0) tr = getenv("CT_TILEANIMTRACE") ? 1 : 0;
+          if (tr && liveHost.frames <= 3) printf("tileanim battle f%d tick %d $0153=%02X $7C=%02X ifast=%d\n", frameNo, liveHost.frames,
+                                                 CtSceneMem7E(f.vm)[0x0153], CtSceneMem7E(f.vm)[0x007C], fieldRuleIfast()); }
+        // ...and the frame the fight is called in (the module's tick 0: op D8 ran in this frame's VM pass) is the field's
+        // whole: its main loop's C0/00C7 flip, its NMI and its IRQ. MEASURED, the rule's cartridge, playthrough leg 95
+        // (loc 1BF, the transfer at f641): `$0153` 01 and `$051D` 11 -> 12 on f641, 00 and no step on f642.
+        if (liveHost.frames == 0 || (fieldRuleIfast() && liveHost.frames == 1))
+          bgDirty |= fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
         else bgDirty |= fieldBattleIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
       }
       // ...and with the battle's colour math, not the map header's: the arena's lines take CGWSEL/CGADSUB from the shadow
