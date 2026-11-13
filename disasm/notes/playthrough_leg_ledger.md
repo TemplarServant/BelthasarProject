@@ -202,3 +202,22 @@ from the first frame and the leg is off before it begins. Found with the whole-r
 - **Inside a fight** (leg 120): the port cannot be seeded there at all.
 
 None of these is the game: a continuous run (tools: build/_pt77/chain5.py) never starts inside them.
+
+## What a load a few frames short does downstream (2026-11-12, the picture re-audit)
+
+The whole-run picture audit after the day's fixes (7351 samples: 3419 differing before, 2398 after; 47 legs better) had
+two legs with MORE differing samples. Both are the load clock's class (a room's load a few frames short in the port),
+carried on by mechanisms that quantise time:
+
+- **Leg 78, the fight of loc 11D.** The room loads at f760 for the cartridge's f763; the enemies' field walks run those
+  three frames more, and at the transfer (f1233, C0/0616's records) the second enemy stands one pixel lower (`$29CE` 0F
+  for 0E -> its foot `$1D27` 7F for 7E). Its mode-1 walk never reaches its spot, so C1/3833's `INC $9829,X` -- the
+  arrival latch C1/84B8 tests (`LDA $9826,X / BEQ`: no turn) -- does not come, and the fight's fourth action is another
+  combatant's (the cartridge's f1957, the port's f2094). Three actions in, everything was a frame apart.
+- **Leg 130, loc 1A7's cutscene.** The controller's first op runs at f2164 for the cartridge's f2167 (f2163 before
+  c834524: the load function's waits). From there: the text boxes close on the pad's own A but on a two-frame lattice
+  from their opening (144 frames on the cartridge, 148 in the port, both even); a call that waits on an object with a
+  three-frame visit divisor (`$1000,X` counting 3-2-1: obj 22, `04 2C 69`) takes 6 frames or 4 by the phase; and the
+  two `EB 20 00 / ED` fades end on the SPC's lattice, two frames later each. The room's exit went from the cartridge's
+  f4349 + 2 to + 5. The song command `EA 3A` after `04 2C 58` shows its own address in `$1180` for the upload's seven
+  frames in the port only: the cartridge stores the address when the object yields, after the JSL.
