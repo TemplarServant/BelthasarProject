@@ -3079,6 +3079,13 @@ CD04DF` -- against the frames the port holds its step on (`typeheld` under CT_BA
 apart: the action's C1/405F, C1/4841 and close, the victory's three seat removals, the exit's CF/FCFB. `--span <leg> <a>
 <b>` counts any other fight (its frames are the hook's: see the tool's note before reading a one-frame difference).
 
+### battle-boot-fill-vs-cartridge (`python tools/battle_wram_cmp.py boot-fill`)
+
+What the fight's boot fills with FF, byte for byte against the cartridge 217 frames into leg 117's first fight: `$AECC-$AEE2`
+(FD/B78E-B799: the resolved-target list and the literal path's replay `$AED8`) and `$B242-$B249` (C1/80D8-80E2: every
+enemy slot's re-eval mark). `tools/battle_wram_cmp.py` compares any named ranges of a fight's WRAM the same way (a case
+is a leg, a cut in the field before the fight, a frame count and the ranges).
+
 ### field-battle-results-box-half-text (frame canary)
 
 The reward window's first frame carries half its text (victory+70; the whole box is field-battle-results-box-onset's

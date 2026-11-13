@@ -15743,6 +15743,12 @@ void CtBattleBegin(CtBattleHost* h) {
   h->mem[0x9877] = 0; h->mem[0xAE93] = 0;                     // the anim selector; $AE93 is driven by the AI
                                                                //   interpreter's own actions (T1.C)
   h->mem[0xAEE3] = 0; h->mem[0xAEE4] = 0; h->mem[0xAEE5] = 0;  // AI-decoded action op/p1/p2 (T1.D cross-check)
+  // FD/B78E-B799 `LDA #FF / STA $AECC,X / STA $AED8,X` for X < $0B: the resolved-target list and the eleven bytes after
+  // it. `$AED8` is the literal path's replay (C1/AC24 `LDA $AED8 / STA $AECC`; its one writer in the fight is C1/AF13):
+  // FF, no target, until a resolution has stored one. C1/80D8-80E2 `LDA #FF / STA $B242,X` for X < 8 closes the boot's
+  // shuffles: every slot's re-eval mark.
+  for (int x = 0; x < 0x0B; x++) { h->mem[0xAECC + x] = 0xFF; h->mem[0xAED8 + x] = 0xFF; }
+  for (int x = 0; x < 8; x++) h->mem[0xB242 + x] = 0xFF;
   for (int ai = 0; ai < 8; ai++) {                             // bank-CC AI interpreter state (T1 + P2.A)
     // the action pointer (battleAiTurn): FD:A989 clears $B1D4/$B1E4/$B2B6 and FD:B7DB fills $B26B with FF (no
     // section chosen -- the boot eval's first choice is then always "another section"); $B16E is the boot

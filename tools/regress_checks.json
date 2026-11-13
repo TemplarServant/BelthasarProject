@@ -5696,6 +5696,42 @@
       ]
     },
     {
+      "name": "battle-boot-fill-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_wram_cmp.py",
+        "boot-fill"
+      ],
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_ring_cmp.py",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "expect": [
+        "battlewram: boot-fill leg 117 f600 +300 frames of the leg's pad: $AECC-$AEE2 0 of 23 bytes differ, $B242-$B249 0 of 8 bytes differ"
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "notes": "WHAT THE FIGHT'S BOOT FILLS WITH FF: FD/B78E-B799 `LDA #FF / STA $AECC,X / STA $AED8,X` for X < $0B (the resolved-target list and the eleven bytes after it -- `$AED8` is the literal path's replay, C1/AC24 `LDA $AED8 / STA $AECC`, written in a fight only by C1/AF13) and C1/80D8-80E2 `LDA #FF / STA $B242,X` for X < 8 (every enemy slot's re-eval mark, at the end of the boot's two shuffles). The cartridge's writers, leg 78: FD:B796 at f1287, C1:80DF at f1367. Compared 217 frames into leg 117's first fight, before any enemy turn: 31 bytes, none apart. Before: the port left 00 in `$AED8-$AEE2` and in the marks no action had written (16 of the 31).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  for (int x = 0; x < 0x0B; x++) { h->mem[0xAECC + x] = 0xFF; h->mem[0xAED8 + x] = 0xFF; }",
+          "replace": "  /* MUT: no FD/B78E fill */",
+          "why": "FD/B78E-B799 fills $AECC,X and $AED8,X with FF for X < $0B: without it $AED8-$AEE2 keep the last fight's bytes (00 from a fresh host) -- and the literal path's first replay names combatant 0 instead of no target"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  for (int x = 0; x < 8; x++) h->mem[0xB242 + x] = 0xFF;",
+          "replace": "  /* MUT: no C1/80D8 fill */",
+          "why": "C1/80D8-80E2 `LDA #FF / STA $B242,X` for X < 8: every slot's re-eval mark is FF when the fight opens; without it the slots no action has written read 00"
+        }
+      ]
+    },
+    {
       "name": "battle-results-band-24-lines-bottom",
       "tier": "quick",
       "argv": [
