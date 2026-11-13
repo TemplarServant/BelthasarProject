@@ -916,6 +916,9 @@ int CtBattleFxProgOpMem(uint8_t* mem, int X, int opAddr);
 int CtBattleFxOp88Mem(uint8_t* mem, int sub);
 void CtBattleShakeNmiMem(uint8_t* mem);   // ct --sweepshake: CD/06B4 + CD/0B51 (the scroll records, the screen shake, CD/0C48)
 void CtBattleArenaScrollDelta(const uint8_t* mem, int H, int16_t* d, uint8_t* arena);   // per fb row: BG1 dx dy, BG2 dx dy (HDMA ch1/ch2 - staged); arena = which rows read CD/06B4's records
+// The MOSAIC register per fb row (HDMA channel 6's table $7E:C975, the line cuts): size[r] the block size (1 = none),
+// src[r] the fb row the row's BG pixels are taken from (-1 = the line above the picture). Returns the rows with one.
+int CtBattleMosaicRows(const uint8_t* mem, int H, uint8_t* size, int16_t* src);
 // The battle effect layer over an arena composite `fb` (W x H RGB888, row y = PPU line y+1): the HDMA tables in `mem`,
 // BG3 from h->fxBg3Map/fxBg3Chr, windows + colour math. field.c draws it before the sprites; ct --sweepfxcompose grades it.
 void CtBattleFxLayerCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h);

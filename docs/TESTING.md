@@ -3162,6 +3162,22 @@ fight (f600 + 740: the transfer's frame steps the tiles as a field frame, the re
 across the door out of the room (f1740 + 70: no step on the commit's frame, on the load's, or on the first frame after
 it). `0 differing` each; two mutations each.
 
+### field-picture-run-off-closes-the-command-menu-vs-cartridge (`tools/field_picture_cmp.py run-off-closes-the-command-menu`)
+
+Running away closes the command menu (disasm/notes/battle_flee.md, "The menu under the run-off"): leg 95's fight,
+run away from, 136 frames into the run-off action. The run-off's loops call the menu pass C1/10FA like any action's,
+and with no chooser left the first pass repaints the strip without the command list, the hand and the bracket.
+`0 px differ at port +0`; with no pass under the run-off, 1007 px at every lag. One mutation.
+
+### field-picture-run-off-mosaic-by-the-line-vs-cartridge (`tools/field_picture_cmp.py run-off-mosaic-by-the-line`)
+
+The run-off's mosaic as HDMA feeds it (disasm/notes/battle_flee.md sec. 10-11): the forest recipe's fight
+(`saves/battle_re/forest_holdleft_pre.state`, a recipe's state played under its own pad, not a leg), run away from,
+on a frame the program raised the size -- the runs above line 64 keep the old size, each run anchors its own grid,
+the canopies are blocks too, and the Hetakes stand where the frame service's walk stepper left them under the
+"Ran away" box. `0 px differ at port -1`; 31844 px before. Five mutations (the cut, the anchor, the line above the
+picture, the priority tiles, the stepper). Re-pin only with a whole-frame grade against the cartridge.
+
 ### field-picture-fight-sprites-through-the-mist-vs-cartridge (`tools/field_picture_cmp.py fight-sprites-through-the-mist`)
 
 A fight's sprites under the room's screens (disasm/notes/field_bg3_wave_and_obj_under_bg.md sec. 8): Magus's castle,

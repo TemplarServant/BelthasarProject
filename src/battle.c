@@ -3533,6 +3533,7 @@ static int battleCounterTurn(CtBattleHost* h, int k, int v, int by, int* tgt) {
 // strip's rebuild mark `$A6DF` and seat rotation `$A6E0` (C1/0C4E, C1/05BC). `$A6DE` is the boot wipe's 00 (CF/FB92).
 static void battleQueueClear(uint8_t* s) {            // battle-start: every slot empty, no head cursor, count 0
   s[0xA6D9] = 0xFF; s[0xA6DA] = 0xFF; s[0xA6DB] = 0xFF; s[0xA6DD] = 0xFF; s[0xA6DE] = 0;
+  s[0xA6DC] = 0xFF; s[0x95D2] = 0xFF;                 // CC/E32D, CC/E31B: the same run's (the byte after the three slots; $95D2)
   s[0xA6DF] = 0xFF; s[0xA6E0] = 0xFF;
   s[0x95D6] = s[0x95D7] = s[0x95D8] = s[0x95D9] = 0xFF; s[0x95DA] = 0;   // the pending list, empty (CC/E33F, the setup)
 }
@@ -18290,6 +18291,45 @@ int gBattleFxCutLine[BT_LINE_CUTS], gBattleFxCutN = 0;
 // the previous frame's last run (HDMA runs on lines 0..224). The compose walks channel 3 to line 224 and leaves its
 // components here for the next compose (--sweepfxcompose sets them from the oracle's PPU). R | G << 5 | B << 10.
 int gBattleFxFixCarry = 0;
+// The MOSAIC register row by row. $2106 has no CPU store in the battle code: HDMA channel 6 feeds it (CD/0A91-0A9B: `$4360
+// = 41`, mode 1 indirect -> $2105 / $2106, table $7E:C975 -- battle_flee.md, "The MOSAIC"). The installed table is `50
+// [BE99] / 50 [BE99] / 30 [C14F] / 04 [BE99] / 00`: the arena's lines take the shadow `$BE9A` on the runs of lines 0, 80
+// and 208, the band's lines `$C150`. A run on line L sets the register for the lines after it, and the oracle's PPU
+// anchors the blocks' rows on that line (snes/ppu.c:953 `mosaicStartLine = vPos`, :425 `ly -= (ly - mosaicStartLine) %
+// mosaicSize`): the first row of blocks after a run is the BG line the run was made on -- one line short on the screen
+// for the run of line 0, whose BG line is the one above the picture. The runs above a line cut read that cut's copy: the
+// service's op 90 (CD/2EF7) writes `$BE9A` on line 64, so the run of line 0 reads the size the frame began with and the
+// run of line 80 the new one (the forest flee, cartridge picture f1000: 9-line blocks down to row 79, 10-line blocks
+// from row 80).
+// size[r]: the block size on fb row r (PPU line r + 1), 1 = no mosaic; src[r]: the fb row its BG pixels are taken from
+// (-1 = the line above the picture). Returns the number of rows with a mosaic.
+int CtBattleMosaicRows(const uint8_t* mem, int H, uint8_t* size, int16_t* src) {
+  int n = 0, val = 0, start = 0, term = 0, doT = 1;
+  for (int r = 0; r < H; r++) { size[r] = 1; src[r] = (int16_t)r; }
+  if (!mem) return 0;
+  const uint8_t* mrd = gBattleFxCutN ? gBattleFxCutSnap[0] : mem; // dma_initHdma (line 0: before the cut)
+  uint16_t tbl = 0xC975, ind = 0;
+  uint8_t rep = mrd[tbl++];
+  if (!rep) return 0;                                              // no table: nothing feeds the register
+  ind = (uint16_t)(mrd[tbl] | (mrd[(uint16_t)(tbl + 1)] << 8)); tbl += 2;
+  for (int line = 0; line < H; line++) {
+    mrd = mem;                                                     // this run is line `line`'s (h 1104): the cuts
+    for (int k = 0; k < gBattleFxCutN; k++) if (line < gBattleFxCutLine[k]) { mrd = gBattleFxCutSnap[k]; break; }
+    if (!term) {
+      if (doT) { val = mrd[(uint16_t)(ind + 1)]; ind += 2; start = line; }   // dma_doHdma: $2105, $2106
+      rep--; doT = (rep & 0x80) != 0;
+      if ((rep & 0x7F) == 0) {
+        rep = mrd[tbl++];
+        if (!rep) term = 1;                                        // the table's end: the register holds
+        else { ind = (uint16_t)(mrd[tbl] | (mrd[(uint16_t)(tbl + 1)] << 8)); tbl += 2; }
+        doT = 1;
+      }
+    }
+    int sz = (val >> 4) + 1;                                       // row `line` of the fb = PPU line line + 1
+    if (sz > 1 && (val & 0x0F)) { size[line] = (uint8_t)sz; src[line] = (int16_t)(line + 1 - (line + 1 - start) % sz - 1); n++; }
+  }
+  return n;
+}
 // gBattleFxFront[y * 256 + x] = 1 where the pixel this compositor wrote is BG3 in front of the sprites: mode 1 with $2105
 // bit 3 (ppu.c's actMode 8: BG3's priority tiles ahead of OBJ priority 3). field.c puts those pixels back after drawing
 // the combatants (the attract 07D's Frog Squash frog covers the enemies that way).
@@ -20618,6 +20658,11 @@ static int battleFleeStageTick(CtBattleHost* h) {
   uint8_t* s = h->mem;
   h->fleeT++;
   int t = h->fleeT;
+  // The frame service's walk stepper and part link run under the blocked main loop as under any other (CF/EFAF-EFBA, its
+  // own gate `$A013 | $A0FD`; CF/E75C -> CF/F9D3): the segments in flight at the trigger walk on to their ends under the
+  // "Ran away" box, until C1/4058 counts `$A0FD` up (the cartridge's forest flee: the post f849, CF:F9CE's feet stepping
+  // on to f881, the last segment's end). No new segment starts -- C1/3714 is main-loop work.
+  battleMoveStepper(h); battleLinkParts(h);                        // (the frame service's, under the flee's waits)
   if (h->fleeStage == 1) {
     // The offsets from the post at t 0 (C1/8201 `JSL CD/0021`, `$020D` := 11 EF CE) are the rule's: the box at +2
     // (CD/3E7D x2, then CD/028C-0291; C2/0009's render is NMI-on CPU work, free under the rule), its close at +78, the
@@ -20642,6 +20687,11 @@ static int battleFleeStageTick(CtBattleHost* h) {
     if (t == 96 + CT_FLEE_FX_ARM) battleFxActionLoad(h, h->mem[0x987C]);   // C1/4833: sheets, CD/0F2C/CD/15D5, frames
   }
   battleAdvanceAction(h);                                          // C1/40B0-40CE: the pose engine, the interpreter, the close
+  // The run-off is an action like any other: its loops call the menu pass themselves (C1/10FA at C1/40A3, after the
+  // pre-roll's waits and in the script loop's C1/40B6 / C1/40E4), so a request the frame service raises under it is
+  // consumed on its frame -- and with `$95D5` = FF from C1/820A's teardown the pass repaints the strip with no chooser:
+  // the command menu comes down four frames into the run-off. (From C1/4116 on there is none: menuPassHold.)
+  if (h->fleeStage == 1 && t >= 96 && !h->menuPassHold && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
   if (h->fleeStage == 1 && t > 96 && !h->actActive) {
     battleFleeTrace(h, "run-off-end");
     battleModuleTail(h, 3);                                        // C1/8212-821E -> C1/8423

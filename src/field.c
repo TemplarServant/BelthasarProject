@@ -7148,23 +7148,25 @@ static const uint16_t* battleFleeObjPal(const CtBattleHost* h, int cmb, const ui
 // drawn here: the arena is baked with the battle's CGRAM itself, word by word (main's `battlePhase` leg:
 // CtFieldSceneSetCgram(liveHost.fxCgram)).
 //   Mosaic: the program's op 90 (CD/2EF7) keeps $BE9A, the $2106 shadow (size-1 in the high nibble, the BG enables in
-//   the low one). The PPU applies it per BG before priority and to the HUD's BG1 too; the port's single composite
-//   takes it whole and its HUD strip (drawn after) stays crisp, a known residual. Blocks are anchored at the frame's
-//   top-left (the write lands in vblank).
-static void battleFleeFxRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
-  if (!fb || !mem || !h) return;
-  int mz = mem[0xBE9A], size = (mz >> 4) + 1;
-  if (size > 1 && (mz & 0x0F)) {
-    for (int by = 0; by < CAMH; by += size)
-      for (int bx = 0; bx < CAMW; bx += size) {
-        const uint8_t* src = fb + ((size_t)by * CAMW + bx) * 3;
-        uint8_t c0 = src[0], c1 = src[1], c2 = src[2];
-        for (int y = by; y < by + size && y < CAMH; y++)
-          for (int x = bx; x < bx + size && x < CAMW; x++) {
-            uint8_t* d = fb + ((size_t)y * CAMW + x) * 3;
-            d[0] = c0; d[1] = c1; d[2] = c2;
-          }
-      }
+//   the low one), and HDMA channel 6 feeds the register from it on the arena's lines (CtBattleMosaicRows: the size and
+//   the anchor row of each fb row, g_bMosSize / g_bMosSrc). The PPU applies it per BG before priority: every BG pixel of
+//   a block is the block's first column's on the anchored row. Every value the programs write enables BG1, BG2 and BG3
+//   together (x7, xF), so the blocks are the composite's -- and a block's priority tile covers the sprites over the
+//   whole block (the compose's foreground pass reads the same rows). The HUD's lines read their own shadow.
+//   `fb` is W wide, the view's column 0 at its column vx (the blocks' columns are the view's); `above` = the composite's
+//   line above the picture (the run of line 0 anchors its first blocks there), NULL: the top row stands in for it.
+static uint8_t g_bMosSize[CAMH]; static int16_t g_bMosSrc[CAMH]; static int g_bMosOn;
+static void battleMosaicApply(uint8_t* fb, int W, int vx, const uint8_t* above, uint8_t* pre) {
+  memcpy(pre, fb, (size_t)W * CAMH * 3);
+  for (int y = 0; y < CAMH; y++) {
+    int sz = g_bMosSize[y];
+    if (sz <= 1) continue;
+    const uint8_t* srow = g_bMosSrc[y] >= 0 ? pre + (size_t)g_bMosSrc[y] * W * 3 : above ? above : pre;
+    for (int x = 0; x < W; x++) {
+      int v = x - vx, o = v - ((v % sz) + sz) % sz + vx;           // ppu.c:424 `lx -= lx % mosaicSize`
+      if (o < 0) o = 0;
+      memcpy(fb + ((size_t)y * W + x) * 3, srow + (size_t)o * 3, 3);
+    }
   }
 }
 
@@ -7522,7 +7524,7 @@ static int battleGatoSinging(const uint8_t* mem, const CtBattleHost* h) {
   return h && h->actActive && h->actAttacker >= 3 && mem[0x9877] == 0x10;
 }
 // Cyclone's screen darken is the script's `80 02 F0` / `80 12 F0`: two objslot fade records on CGRAM $10-$7F (battle.c
-// battleFxPalStage), drawn through the live page by battleFleeFxRender, the same pass as the run-off's fade and
+// battleFxPalStage), drawn through the live page (the arena baked with the battle's CGRAM), as the run-off's fade and
 // X-Strike's `80 02 C0`.
 
 // The song's spotlight is the arena's own colour math (CtBattleFxLayerCompose): its program's BG3 beam on the sub
@@ -9176,7 +9178,6 @@ static int battleShotAtCb(void* ctx0) {
     uint8_t* buf = (uint8_t*)calloc((size_t)CAMW * CAMH * 3, 1);
     if (buf) {
       const uint8_t* smem = CtSceneMem7E(c->vm);
-      battleFleeFxRender(buf, smem, c->h);                            // the objslot fade page + mosaic (before sprites)
       battleCritFlashRender(buf, c->h);                               // battle_crit.md sec. C: crit flash (before sprites)
       battleCombatantsRender(buf, smem, c->h);        // the ROM's own OAM order (Y sort)
       battleFxCloudRender(buf, c->h);                                 // a program's sprite cloud (CD/2BFC), OAM 4-19
@@ -19421,7 +19422,22 @@ int main(int argc, char** argv) {
       const size_t bRow = (size_t)CAMW * 3;
       if (bRaise) { memcpy(bRaiseTop, fb, bRow * (size_t)bRaise); memmove(fb, fb + bRow * (size_t)bRaise, bRow * (size_t)(CAMH - bRaise)); }
       const int bcamy = camy + bRaise;                 // (the SNES's origin, for what is drawn raised)
-      if (!defeatHold) battleFleeFxRender(fb, bmem, &liveHost);       // the objslot fade page (Cyclone/X-Strike `80 ..`, the run-off) + MOSAIC
+      // The run-off's mosaic (battleMosaicApply), before the effect layer and the sprites. The line above the picture is
+      // the arena's own, as the rows below were drawn: the canvas at the row's scroll, under the frame's brightness.
+      static uint8_t mosFb[CAMW * CAMH * 3];           // (the mosaic's picture: the foreground pass puts its blocks back)
+      g_bMosOn = !defeatHold && CtBattleMosaicRows(bmem, CAMH, g_bMosSize, g_bMosSrc) > 0;
+      if (g_bMosOn) {
+        static uint8_t mosPre[CAMW * CAMH * 3]; uint8_t mosAbove[CAMW * 3];
+        if (bRaise) memcpy(mosAbove, bRaiseTop + bRow * (size_t)(bRaise - 1), bRow);
+        else if (!f.base) memcpy(mosAbove, fb, bRow);
+        else
+          for (int x = 0; x < CAMW; x++) {
+            const uint8_t* c = f.base + fieldBaseAt(&f, camx + x + arenaD[0], camy - 1 + arenaD[1]) * 3;
+            for (int k = 0; k < 3; k++) mosAbove[x * 3 + k] = (uint8_t)(defeatBr <= 0 ? 0 : defeatBr < 15 ? c[k] * defeatBr / 15 : c[k]);
+          }
+        battleMosaicApply(fb, CAMW, 0, mosAbove, mosPre);
+        memcpy(mosFb, fb, sizeof mosFb);
+      }
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (cvs && !defeatHold) {
           for (int y = 0; y < CAMH; y++)
@@ -19496,15 +19512,8 @@ int main(int argc, char** argv) {
             memmove(g_bwFb, g_bwFb + bwRow * (size_t)bRaise, bwRow * (size_t)(CAMH - bRaise));
             memmove(bcov, bcov + (size_t)bwW * bRaise, (size_t)bwW * (CAMH - bRaise));
           }
-          int mz = bmem[0xBE9A], msz = (mz >> 4) + 1;  // the flee's mosaic, on the view's own block grid
-          if (msz > 1 && (mz & 0x0F))
-            for (int by = 0; by < CAMH; by += msz)
-              for (int bx = -((bx0 + msz - 1) / msz) * msz; bx < bwW - bx0; bx += msz) {
-                int ox = bx + bx0 < 0 ? 0 : bx + bx0;
-                uint8_t c[3]; memcpy(c, g_bwFb + ((size_t)by * bwW + ox) * 3, 3);
-                for (int y = by; y < by + msz && y < CAMH; y++)
-                  for (int x = bx + bx0; x < bx + bx0 + msz && x < bwW; x++) if (x >= 0) memcpy(g_bwFb + ((size_t)y * bwW + x) * 3, c, 3);
-              }
+          if (g_bMosOn)                                // the flee's mosaic, on the view's own block grid
+            battleMosaicApply(g_bwFb, bwW, bx0, bRaise ? bwRaiseTop + bwRow * (size_t)(bRaise - 1) : NULL, g_bwPre);
           if (cvs) CtBattleFxLayerComposeWide(g_bwFb, bwW, CAMH, bcov, bmem, &liveHost, bx0);
           battleCritFlashRenderN(g_bwFb, (size_t)bwW * CAMH, &liveHost);
           if (bRaise) {
@@ -19547,7 +19556,10 @@ int main(int argc, char** argv) {
         for (int y = 0; y < ch; y++)
           for (int x = 0; x < cw; x++) {
             const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;   // (raised: the SNES's line y is the held row y + bRaise)
-            size_t bo = fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);   // the row's battle scroll
+            // (under the mosaic the tile on top of a block is its first pixel's, on the anchored row: battleMosaicApply)
+            const int mz = g_bMosOn ? g_bMosSize[y] : 1;
+            size_t bo = mz > 1 ? fieldBaseAt(&f, camx + x - x % mz + arenaD[ry * 4], bcamy + g_bMosSrc[y] + arenaD[ry * 4 + 1])
+                               : fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);   // the row's battle scroll
             if (!f.prio[bo]) continue;
             if (objPrio[y * CAMW + x] != 0xFF) { if (objPrio[y * CAMW + x] == 3) prioKept++; else prioCovered++; }
             // ...but only over a cell of OBJ priority 0-2. Mode 1's order is OBJ3 > BG1H > BG2H > OBJ2 > ...: a
@@ -19557,7 +19569,7 @@ int main(int argc, char** argv) {
             if (objPrio[y * CAMW + x] == 3) continue;
             if (bgWinAt(x, y)) continue;
             if (g_objSubOn && g_objSubDone[(size_t)y * g_fw + x]) continue;   // the sprite under it is its sub pixel: mixed
-            memcpy(fb + ((size_t)y * CAMW + x) * 3, f.base + bo * 3, 3);
+            memcpy(fb + ((size_t)y * CAMW + x) * 3, mz > 1 ? mosFb + ((size_t)y * CAMW + x) * 3 : f.base + bo * 3, 3);
             objPal[y * CAMW + x] = 0xFF;                 // the BG tile is on top here, not the sprite
           }
       if ((prioKept || prioCovered) && getenv("CT_BATTLE_PRIOTRACE"))

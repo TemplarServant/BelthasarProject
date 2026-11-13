@@ -343,3 +343,117 @@ cartridge case of them was measured.
 Checks: `field-battle-flee-end-forest` (251 of its 263 lines one frame earlier; the shot at open+170 unchanged),
 `field-battle-flee-counter-forest` (the five lines after the open), `field-battle-flee-objfade` (the same picture at
 open+59, hash unchanged; the window f883-902). Leg 107's alignment loses the warp f11933+1 with it (16 warps left, all loads, fight exits and one first window; the fled fight's exit is f12008+2).
+
+## 9. The menu under the run-off (2026-11-13)
+
+The run-off is an action like any other, and an action's loops call the menu pass themselves: C1/10FA (`LDA $993A /
+BEQ ->1110 / STZ $993A / STZ $E5 / JSR C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD`, then `JSL CD/0009`) at
+C1/40A3, after the pre-roll's waits (C1/485E, 4867, 4890, 4946) and in the script loop's C1/40B6 and C1/40E4. C1/820A's
+teardown (C1/B7F2) has left no chooser by then, so the first pass repaints the strip without the command menu.
+
+Measured on the rule's cartridge, playthrough leg 95 (loc 1BF, the Vamps, run away from with L + R held):
+
+    f1062   `$95D5` = FF (the teardown, the stage's t 94)
+    f1064   `$A013` = 1 (C1/40A6, t 96)
+    f1066   `$A6DF` FE -> FF: C1/0C2D's repaint, the request the frame service raised (`$993A`, every fourth frame)
+            consumed on its frame -- `$993A` reads 00 on every row of the run-off
+    f1068   the picture: the strip's left panel is the enemy's name alone ("Vamp"), the hand and the bracket gone, to
+            the exit at f1283
+
+The port's flee stage ran the pass on `$993A` only up to the dispatch (`t < 94`, CD/01B3's CD/3E75 waits): under the
+run-off the requests piled up (`$993A` 01, 02, 03 ... on f1066, f1070, f1074) and the command menu, the hand and the
+bracket stood for the whole run-off -- 1007 px of leg 95's f1200, the same at every lag. battleFleeStageTick now makes
+the action loop's pass from t 96 on (not from C1/4116 on: menuPassHold, as every action).
+
+Also staged, the boot's CC/E31B `STA $95D2` and CC/E32D `STA $A6DC` (A = FF, the run that fills `$A6D9-$A6DB`, `$A6DD`,
+`$A6DF`, `$A6E0`): the cartridge writes both at f659 and the port left 00.
+
+Open: the strip's close after the run-off -- the cartridge's left panel shows two pictures on f1286 / f1287 that the
+port's f1285 / f1286 do not (the frames before and after are the same, a frame apart).
+
+Check: `field-picture-run-off-closes-the-command-menu-vs-cartridge`.
+
+## 10. The walkers under the box (2026-11-13)
+
+The walk stepper is the frame service's, not the main loop's: CF/EFAF-EFBA (`LDA $A013 / ORA $A0FD / BNE skip`, then
+`JMP CF/F978`) runs on every NMI whatever the main thread waits in, and CF/F978's loop (`LDA $98A7,X / BEQ next / DEC
+$9819,X / BNE next / ... / STA $1D26,X` CF/F9C2, `STA $1D0F,X` CF/F9CB) moves every segment in flight. C1/81EC's
+blocking chain stops the main loop -- no C1/3714, so no new segment starts -- but not the NMI: the segments in flight at
+the flee's trigger walk on to their ends under the "Ran away" box, until C1/4058 counts `$A0FD` up.
+
+Measured on the rule's cartridge, the forest recipe's twin (saves/battle_re/forest_holdleft_pre.state, 120 frames left
+into the Hetakes, L + R held from f350; the post at f849):
+
+    f849    `$1D0F/10` = 70 5A (the post's frame; writer CF:F9CE)
+    f850    70 5B, `$1D27` 5E -> 5D
+    f853    6F 5B      f854  6F 5C      ... one step every fourth frame on each axis ...
+    f866    6C 5F      f869  6B 5F      f873  6A 5F      f877  69 5F
+    f881    68 5F (the last segment's end; nothing moves after)
+
+The port's flee stage returned before the turn machinery's stepper call (battle.c: `if (h->fleeStage) return
+battleFleeStageTick(h)`), so its enemies froze on the post's frame: the two left Hetakes stood up to 9 px from the
+cartridge's for the rest of the fight (1257 px of every frame from f900 on, the same at every lag). battleFleeStageTick
+now runs the stepper and the part link (CF/E75C -> CF/F9D3, the same service) at its top, on the stepper's own gate;
+the feet are the cartridge's on every row f849-f881 and the pictures between two steps are 0 px whole.
+
+Not measured: a multi-part enemy (CF/F9D3's link) in a fled fight.
+
+## 11. The mosaic by the line (2026-11-13)
+
+Section 5's "The MOSAIC" has the feed: `$2106` is written by HDMA channel 6 alone, from the shadow `$BE9A` through the
+table $7E:C975. What the picture needs beyond the shadow's value:
+
+**The table's runs.** Bottom-HUD layout (the forest, cartridge f1000): `50 [BE99] / 50 [BE99] / 30 [C14F] / 04 [BE99] /
+00` -- runs on lines 0, 80, 160 (the band's own shadow `$C150` = 00: no mosaic on the HUD) and 208 (the four arena
+lines under the band). Top-HUD layout (leg 95, loc 1BF): `08 [BE99] / 30 [C14F] / 54 [BE99] / 48 [BE99] / 00` -- runs on
+lines 0, 8 (the band), 56 and 140. A run on line L sets the register for the lines after it (the line is drawn before
+its H-blank's run), i.e. picture rows L and down.
+
+**The line cut.** The program's op 90 (CD/2EF7) writes `$BE9A` inside the NMI's service, which under the rule lands on
+line 64 (CD/09AA's wait; CLAUDE.md "The battle NMI's line wait"). The runs above line 64 were made before it and read
+the size the frame began with; the runs below read the new one. Forest, `$BE9A` 87 -> 97 on monitor row f999: cartridge
+picture f1000 has 9-line blocks down to row 79 and 10-line blocks from row 80 (the block rows change at 8, 17, ... 71,
+80, 89, 99, 109 ...); picture f1001 is 10-line throughout. Leg 95, 27 -> 37: rows 0-139 keep the old size (the runs of
+lines 0 and 56), rows 140-211 take the new one.
+
+**The anchor.** The oracle's PPU anchors a BG's mosaic rows on the line of the last `$2106` write (snes/ppu.c:953
+`mosaicStartLine = vPos`; :425 `ly -= (ly - mosaicStartLine) % mosaicSize`, :424 `lx -= lx % mosaicSize`). So every run
+starts its own grid: the run of line 0 anchors on PPU line 0, the BG line ABOVE the picture, and the first row of blocks
+is that line's pixels, one line short on the screen (size 9: rows 0-7, then 8-16 ...); the run of line 80 starts a new
+grid at row 80 whatever the size above it. (ppu.c carries a `TODO: mosaic line reset specifics` on that write. The
+port matches the oracle, as everywhere; whether the S-PPU restarts the row counter on a mid-frame write is not something
+this project can measure.)
+
+**The layers.** Every value the run-off's program writes enables BG1, BG2 and BG3 together (17 ... F7 on the way up,
+EF ... 0F on the way down), and the PPU applies the mosaic per BG before priority (ppu.c:423). With all three under one
+size the blocks are the arena composite's -- priority tiles included: a canopy is a block like the ground, and it
+covers the sprites wherever its block's first pixel is a canopy's. The sprites are never in a block.
+
+**The port.** `CtBattleMosaicRows` (battle.c) walks channel 6's table as the effect layer's compose walks the others,
+the line cuts' copies above each cut, and gives each picture row its block size and the row its BG pixels come from
+(-1 = the line above the picture, which field.c draws from the canvas at the top row's scroll under the frame's
+brightness). `battleMosaicApply` (field.c) replaces each BG pixel by its block's first on the anchored row, before the
+effect layer and the sprites; the compose's foreground pass (the priority tiles over the sprites) reads the tile and the
+colour of the same block. Before: one size for the whole frame from the live shadow, anchored on the top row, and the
+canopies redrawn sharp over it -- 32,000 px of every frame of the forest's rise.
+
+Measured, the forest twin: every whole frame f949-f999 is 0 px at port -1 (the rise 17 -> 97, each size-change frame's
+two sizes included). From f1000 the frames on which the enemies' palette does not step are 0 px and the others differ in
+the Hetakes' pixels alone: the two fade records are byte-equal on both sides (`$0598` stepping on odd rows, `$05A4` on
+even ones), but the cartridge shows the OBJ palettes' step two pictures after its row and the port one -- a frame ahead
+of the arena's mosaic within the port's own picture. That is the open item on a fight's lags (sprites and their palette
+against what HDMA and the NMI's uploads feed), not the mosaic's.
+
+Open:
+* a block whose rows have different scrolls (a shake under the mosaic): the PPU takes the block's first pixel at the
+  CURRENT line's scroll; the port takes the anchored row as it was drawn. Not met in a measured frame.
+* the line above the picture in a room that draws BG3 planes or a colour window over its canvas (leg 95's mist): the
+  port's row is the canvas alone. Leg 95's rise shows 13-90 px a frame at port -1 on rows 121-129, where a sprite is
+  seen through the mist -- the sprite's sub-screen mix reads the mist's un-mosaiced pixels (field.c g_objSub*).
+* leg 95's size-change frames differ by 1700-3800 px at every lag: the mist's own scroll leads the cartridge's by two
+  pictures and the mosaic by one (the same lag item).
+* the widescreen's sides (a mod) take the top row for the line above.
+
+Checks: `field-picture-run-off-mosaic-by-the-line-vs-cartridge` (five mutations: the cut, the anchor, the line above,
+the priority tiles, the stepper of sec. 10); the forest's frame canaries `field-battle-flee-ranaway-box`,
+`field-battle-flee-objfade` and `field-battle-flee-end-forest` re-pinned with these three changes.

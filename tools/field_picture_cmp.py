@@ -106,6 +106,22 @@ PICTURES = {
     # The fight's sprites are that OBJ layer too: the lone Vamp and Marle's head are seen through the mist. The port drew
     # its combatants over it (408 px of this frame, at every lag).
     'fight-sprites-through-the-mist': dict(leg='95_magus', at=600, frames=130, own=True),
+    # The same fight, run away from (L + R held): 136 frames into the run-off action. The run-off is an action like any
+    # other -- its loops call the menu pass C1/10FA -- and C1/820A's teardown has left no chooser (`$95D5` = FF), so the
+    # first pass under it repaints the strip without the command menu: the enemy's name alone, no hand, no bracket, from
+    # the fourth frame of the run-off to the exit. The port ran no pass after the run-off's dispatch and kept the menu,
+    # the hand and the bracket on the screen for the whole run-off (1007 px of this frame, at every lag).
+    'run-off-closes-the-command-menu': dict(leg='95_magus', at=600, frames=600, own=True),
+    # The forest's fight run away from (the recipe's state: walk left into the Hetakes, hold L + R), 51 frames into the
+    # run-off action, on a frame the program's op 90 raised the mosaic: `$BE9A` 77 -> 87 on line 64, so HDMA channel 6's
+    # run of line 0 read the old size and its run of line 80 the new one -- 8-line blocks down to row 79, 9-line blocks
+    # from row 80, each run anchoring its blocks on its own line (the first row of blocks one line short at the top).
+    # BG1, BG2 and BG3 take it together: the canopies (priority tiles) are blocks like the ground, over the sprites
+    # wherever a block's first pixel is a canopy's. And the Hetakes stand where the frame service's walk stepper left
+    # them under the "Ran away" box. The port's mosaic was the whole frame's, anchored on its top row with the new size,
+    # its canopies sharp over it, and its Hetakes stood where the flee's trigger found them (32,000 px of this frame).
+    'run-off-mosaic-by-the-line': dict(state='saves/battle_re/forest_holdleft_pre.state',
+                                       pad=[(0x40, 120), (0, 230), (0xC00, 646)]),
 }
 
 
@@ -164,6 +180,23 @@ def state_at(legs, i, at):
 
 def run(name, want_png):
     d = PICTURES[name]
+    if d.get('state'):                                        # a recipe's state played under its own pad
+        P.TMP = SCRATCH
+        os.makedirs(SCRATCH, exist_ok=True)
+        start = os.path.join(ROOT, d['state'])
+        _, pics = P.port_timeline(start, d['pad'])
+        c = P.oracle_picture(start, d['pad'])
+        if not pics:
+            print('fieldpicture: %s: the port drew no picture' % name)
+            return 1
+        k, n = P.picture_grade(c, pics)
+        print('fieldpicture: %s %s +%d frames of its pad: %d px differ at port %+d' % (
+            name, os.path.basename(d['state']), sum(q for _, q in d['pad']), n, k))
+        if want_png:
+            out = os.path.join(WORK, name + '.png')
+            png(out, c, pics[k])
+            print('  -> %s' % out)
+        return 0
     legs = P.route()
     i = P.find(legs, d['leg'])
     if i > 0:
