@@ -53,7 +53,7 @@ single-picture checks never saw it (each takes its best lag); frame by frame at 
 
 | | whole frames identical at port -1, before | after |
 |---|---|---|
-| the forest's fled fight f172-f1140 (969) | 688 | 938 |
+| the forest's fled fight f172-f1140 (969) | 688 | 968 |
 | its flee f840-f1140 (301) | 250 | 301 |
 | GATO idling f600-f840 (241) | 104 | 241 |
 
@@ -79,6 +79,13 @@ and its new cell is on the cartridge's picture f442. So are, each measured on th
   Hetake back from its hop, `$1D27` 5E on row f714 (the step) and 5F on row f715 (C1:5639), the mirror's on rows
   f714 and f716: pictures f716 and f718 with a held picture between them (gOamPosScript marks the feet a teleport
   wrote).
+
+The boot is on the same diagonal since 2026-11-13 (the check `battle-picture-seq-forest-boot-vs-cartridge`, 97 -> 127
+of 127; the forest's f231-f278 had been a frame or two AHEAD): the entrance ladder's stepper C1/369A is the main
+thread's too (C1/3686's loop waits a frame and calls it; it publishes through C1/1C66 -- `$9907` 30 on row f244,
+Crono's ready cell on picture f247), so its poses, and the ladder's own copy of them, are put back like a script's;
+the band's seed stands a whole frame and its settled tables are the V-IRQ's install (battle_hud_band_anim.md
+sec. 9).
 
 `battleOamUpload`, at the next NMI head beside the other shown-latches,
 hands the copy over (its feet and its fade factors `palK` are the frame's own: the port's compose point is past its
@@ -117,18 +124,23 @@ frames where the singer's cell led the spotlight.
 
 ## 4. Open
 
-* The boot (the forest f172-f300): the best lag is -3 / -2 there -- the port stages the boot ahead of the cartridge.
-  It is all that is left of the forest's fight: f173 and 30 frames of f231-f278. Two things in it, both AHEAD of the
-  fight's diagonal: the band's opening ladder (f231-f243: 1024 px, the band two lines wider on each edge -- rows
-  172-173 and 194-195; the cartridge's picture f is the port's f - 2), and the PCs' ready poses (f245-f278, 135-578
-  px: the cartridge's pair [f245, f246] is the port's [f242, f243]). The boot's frames compose with the state they
-  leave (sec. 3), so a pose of the main loop's is a frame early there by construction; the second frame and the
-  ladder's are not derived.
+* (Not a difference: the forest's f173, the one frame of f172-f1140 that is not the port's a frame earlier, is the
+  FIELD's last picture -- on the field's diagonal, the port's f171, as f172 is its f170. The fight's own pictures
+  start on f174, whole from there.)
 * The OBJ priority a script's op D9 / DA writes (`$99B5,X`, C1/753A / C1/7579) is the main loop's too: the forest's
   `$99B9` 30 -> 20 by C1:7598 on row f717, the mirror's attribute `$0733` 32 -> 22 on row f718. The port takes it with
   the frame; no measured picture shows the difference yet (nothing over the Hetake there), so it is not changed.
 * (Read wrongly before, for the record: "the choosing PC's head under L + R", f520-f545, was the damage number over
   it a frame early; "a cell's tiles", f442, was the ground shadow's flag. Both are sec. 3's now.)
+* GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
+  the ladders' gate, field.c battleGatoRender: a scripted action shows the published pose only -- check
+  `battle-picture-seq-gato-first-attack-vs-cartridge`). Left: one frame of the song's pre-roll, f1018 (436 px, not
+  looked at), and the song's lit window f1049-f1230, 443 px a picture at the cone's top -- lines 0-14 between
+  x 150 and 185, where the cartridge's beam reaches the top of the screen and tints the tent's edge and the port's
+  does not (f1050, f1058, f1066 and f1082 have 842-884 px, not looked at). The beam is BG3 TILES there, not a window: the
+  cartridge's lines 0-160 of a lit frame are one band (`--hdma` at f1093: TM 13, TS 04, CGADSUB 03, BG3's scroll
+  (985,123), no window enabled), so the port's BG3 map lacks cells of the rows those lines show (map rows 15-16, about
+  columns 13-18). Not derived: who writes them.
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * The effect sprites have not been measured against either class with a frame-by-frame tool.

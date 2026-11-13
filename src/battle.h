@@ -470,7 +470,7 @@ typedef struct CtBattleHost {
                              //   Sec. 5: the last open step raises the preset-2 request on frame N, D1/FE70
                              //   consumes it on N+1, and the preset's tables show from N+2 -- so the full
                              //   band is drawn with the opening ramp for one frame past $CA1E=0.
-  int hudPresetPend;         // that request, seen by the next tick (the install lag above)
+  int hudPresetPend;         // (unused since the preset service moved to the V-IRQ, battle.c battleIrqFrame; kept for the layout)
   int hudClosePosted;        // the CD/03D6 close has been armed at the handoff (CD/03DA then spins)
   // ---- The PC pose-window ladder (disasm/notes/battle_pc_pose_ladder.md). One ROM machine drives the battle
   // entrance, the victory celebration and the defeat pose; they differ only by the window offset written into

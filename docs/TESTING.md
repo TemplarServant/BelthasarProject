@@ -3198,7 +3198,13 @@ compose at the frame's end). `battle-picture-seq-forest-turn-pose-vs-cartridge` 
 its animation script publishes is the main loop's too, and the ground shadow it switches on (`13 of 13`; two
 mutations). `battle-picture-seq-forest-commands-vs-cartridge` is the command phase whole, f300-f840 (`541 of 541`, 486
 before): the damage numbers' spawn and rise and the foot a script's teleport snaps are a frame late in the mirror like
-the poses, and the victim's white flash ends with its mask (four mutations).
+the poses, and the victim's white flash ends with its mask (four mutations). `battle-picture-seq-forest-boot-vs-cartridge`
+is the boot, f174-f300 (`127 of 127`, 97 before): the band's seed stands a whole frame (CD/04FD seeds after its wait),
+the settled tables are the V-IRQ's install on an even `$7C` (D1/FE97 -> D1/FE4C: disasm/notes/battle_hud_band_anim.md
+sec. 9), and the entrance ladder's poses are the main thread's (four mutations).
+`battle-picture-seq-gato-first-attack-vs-cartridge` is GATO's fight left alone from its boot through his first attack,
+f232-f1008 (`777 of 777`): a scripted action shows the published pose only -- the idle cell through the attack's
+pre-roll, where the port's reconstructed rear-up ladder stood 23 pictures early (one mutation).
 
 The same change moved a fight's picture to ONE diagonal, port P = the cartridge's P + 1: `battle-strip-upload-*`
 grade the strip's thumbnails there (it was P + 2), `attract-087-ice-sword-afterimage-vs-oracle` and

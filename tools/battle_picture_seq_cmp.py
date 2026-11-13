@@ -57,6 +57,16 @@ SEQUENCES = {
     # the victim's white flash ends with its mask (f476, f687): the single-victim view of it is as uploaded too.
     'forest-commands': dict(state='saves/battle_re/forest_holdleft_pre.state', pad=[(0x40, 120), (0, 230), (0xC00, 900)],
                             a=300, b=840, lag=-1),
+    # The forest's boot, from the fight's second picture to the command phase: the band's opening ladder (the seed
+    # FF 17 stands a whole frame: CD/04FD seeds after its wait, past that frame's NMI), the settled tables two
+    # pictures after the open's last step (D1/FE4C is the V-IRQ's and runs on an even `$7C` only: f244), the PCs'
+    # ready poses a picture after the entrance ladder publishes them (C1/369A is the main thread's: f246-f278).
+    'forest-boot': dict(state='saves/battle_re/forest_holdleft_pre.state', pad=[(0x40, 120), (0, 230), (0xC00, 900)],
+                        a=174, b=300, lag=-1),
+    # GATO's fight left alone, from its boot through his first attack to the frame before his song: the boot as the
+    # forest's, and the attack's pre-roll -- before the script's first playAnim the ROM holds the previous publish,
+    # the idle cell through picture f460 (the port's fallback ladder had him reared up from f438).
+    'gato-first-attack': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=232, b=1008, lag=-1),
 }
 
 

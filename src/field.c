@@ -8043,7 +8043,7 @@ static void battleGatoRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost
   // 068/06A, not the idle branch's claw swap nor the fxEnemyRearup branch's claw swipe (fxEnemyRearup is set for any
   // enemy action's first 49 frames), so the song is intercepted here. The note sprites are the script's effect objects
   // (battleFxObjRender). Not ported: the mouth's 2-state tile stream (the C1/CC streamer; one rep frame is baked).
-  if (battleGatoSinging(mem, h) && !h->deadStanding[3]) {
+  if (battleGatoSinging(mem, h) && !h->deadStanding[3] && !h->ascOwnsFlash) {   // (a host with no live script: see the rear-up's gate below)
     // Anim engine, stage 2: the sway cycles 0x0D -> 0x0E -> 0x0F -> 0x0E at dwell 15 in the lit window (rel 42..236);
     // else the arms-out idle rest (0x04).
     int footX = CT_GATO_FOOT_X + gdx, footY = CT_GATO_FOOT_Y + gdy;
@@ -8062,7 +8062,7 @@ static void battleGatoRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost
   // Cadence: windup (the facing's idle rest) rel 0..25, then 6 cycles of fist (8f) / retract (8f) over rel +26..+121,
   // then idle rest to the span's end (dossier 2.1). Up/left (fac 0/2) fall through to the fxEnemyRearup directional
   // rear -> strike. Attack-A ($9877 = 0x31) is unaffected.
-  if (h->actActive && h->actAttacker >= 3 && mem[0x9877] == 0x34 && !h->deadStanding[3]) {
+  if (h->actActive && h->actAttacker >= 3 && mem[0x9877] == 0x34 && !h->deadStanding[3] && !h->ascOwnsFlash) {
     int fac = h->mvFacing[3];                          // GATO faces his target (front=Crono, right=Marle)
     if (fac == 1 || fac == 3) {
       const CtAnimengGatoFlurry* fl = &ctAnimengGatoFlurryPair[fac & 3];
@@ -8086,7 +8086,14 @@ static void battleGatoRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost
   }
   // The walking GATO's leg poses come from the E3 leg-cycle assemblies (idx06-0B, the per-facing window in the idle
   // branch below).
-  if (h->fxEnemyRearup) {                              // enemy action rear-up/strike animation phase
+  // The three ladders (the song's, the flurry's above, the rear-up here) are for a host with no live script. While
+  // the action's own script drives (h->ascOwnsFlash = the parsed script, battle.c) the picture is the published
+  // pose only: before the script's first playAnim the ROM holds the previous publish. Measured on the rule's
+  // cartridge, GATO's fight left alone (gato_wait, A on f0-7): his first attack shows the idle cell through picture
+  // f460 and the script's first pose on f461 -- the rear-up ladder stood there from f438, the action's whole
+  // pre-roll (1741 px a picture); his song the idle cell through f1048 where the song's ladder had its arms-out
+  // cell from f1009 (1156 px).
+  if (h->fxEnemyRearup && !h->ascOwnsFlash) {          // enemy action rear-up/strike animation phase
     // Anim engine, stage 2 (battle_anim_engine.md sec. B.2): GATO's directional attack (all four facings) and the
     // attack-A claw swipe from the E3 engine. The CD action script's selector ($9877 / the walk-arrival facing
     // $96DE = mvFacing[3]) picks the assembly; its E3 record supplies the pose (12 dx,dy + the 48 cell-word tile
@@ -9201,6 +9208,7 @@ static int battleShotAtCb(void* ctx0) {
     uint8_t* buf = (uint8_t*)calloc((size_t)CAMW * CAMH * 3, 1);
     if (buf) {
       const uint8_t* smem = CtSceneMem7E(c->vm);
+      CtBattlePictureTables(c->h, 1);                                 // (a preset the V-IRQ installed this frame is the NEXT picture's)
       battleCritFlashRender(buf, c->h);                               // battle_crit.md sec. C: crit flash (before sprites)
       battleCombatantsRender(buf, smem, c->h);        // the ROM's own OAM order (Y sort)
       battleFxCloudRender(buf, c->h);                                 // a program's sprite cloud (CD/2BFC), OAM 4-19
@@ -9216,6 +9224,7 @@ static int battleShotAtCb(void* ctx0) {
         long rl2 = 0; const uint8_t* rr2 = CtBattleRom(&rl2);
         battleResultsRender(buf, c->h, g_font, rr2, rl2);
       }
+      CtBattlePictureTables(c->h, 0);
       FILE* of = isShot ? fopen(c->path, "wb") : NULL;
       if (of) { uint32_t wh[2] = { (uint32_t)CAMW, (uint32_t)CAMH };
                 fwrite(wh, 4, 2, of); fwrite(buf, (size_t)CAMW * CAMH * 3, 1, of); fclose(of); }

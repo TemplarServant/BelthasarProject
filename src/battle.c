@@ -3800,21 +3800,40 @@ static void battleHudChromeWindow(uint8_t* s, int dst, int skip) { // C1/0929: 6
 
 
 static void battlePresetKeepOld(CtBattleHost* h);              // (below, with the line cuts)
-// One host frame of the animator + the D1/FE70 preset service. The service runs one tick behind the request
-// (battle_hud_band_anim.md sec. 5): the last open step raises $CA24 on frame N, D1/FE70 consumes it on N+1, and
-// the newly installed tables are on screen at N+2, so one extra full-band frame shows.
+// One host frame of the animator, the NMI's two calls. (The preset service D1/FE4C is not the NMI's: battleIrqFrame.)
 static void battleHudBandFrame(CtBattleHost* h) {
-  if (h->hudPresetPend) { h->hudLiveOpen = 0; h->hudPresetPend = 0; }   // the install of the previous tick
-  // D1/FE4C: `LDA $CA21 / CMP $CA22 / BEQ` -- a changed layout installs at once; else a pending $CA24 does, both
-  // through `LDA $CA25 / ADC $CA22 / ADC $CCEC / JSL CE:EE6E` (D1/FE5E-FE69) and `STZ $CA24`.
-  { uint8_t* m = h->mem;
-    if (m[0xCA21] != m[0xCA22]) {
-      battlePresetKeepOld(h);                                      // (the picture of this frame is still the old side's)
-      m[0xCA22] = m[0xCA21]; battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF); m[0xCA24] = 0; }
-    else if (m[0xCA24]) battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF); }
-  if (h->mem[0xCA24]) { h->mem[0xCA24] = 0; h->hudPresetPend = 1; }     // D1/FE70 consumes the request
   if (h->mem[0xCA1E] == 0xFF) h->hudLiveOpen = 1;                       // CE:EE6E puts the animator's tables up
   battleHudAnimTick(h); battleHudAnimTick(h);                           // CD/08F5 + CD/08F8
+}
+// The fight's V-IRQ, D1/FE97 (D1's NMI re-arms it every frame: D1/E792 `LDA #A1 / STA $4200`): `INC $7F`, the ack,
+// `LDA #81 / STA $4200`, `STZ $420C` (no HDMA below its line), the H-blank wait D1/FEB8, `LDA #80 / STA $2100` (the
+// picture's last lines are blanked), then
+//     D1/FEC4  LDA $7C / AND #01 / BNE ->FED3
+//     D1/FECA  (bank 7E) JSR D1/FE4C               an EVEN $7C: the preset service
+//     D1/FED3  LDA $7E:CD02 / BNE / JSL FD/FFFD    an odd one: FD's service, not under the Start pause
+// and `JSL D1/FE71`, `STZ $7F`, RTI. D1/FE4C whole: `LDA $CA21 / CMP $CA22 / BEQ ->FE59 / STA $CA22 / BRA ->FE5E`,
+// `FE59 LDA $CA24 / BEQ RTS`, `FE5E LDA $CA25 / CLC / ADC $CA22 / CLC / ADC $CCEC / JSL CE:EE6E / STZ $CA24` -- a
+// changed side or a pending request installs the preset. So an install waits for an even frame, and it is made at the
+// bottom of the picture: the tables are on the screen from the NEXT frame (battlePresetKeepOld, CtBattlePictureTables).
+// Measured on the rule's cartridge, the forest recipe (`$7C` equal on both sides in every row):
+//   - the open's last step, the NMI's (CD/05C6), raises `$CA24` on row f242 with `$7C` = 43: not consumed; row f243
+//     (`$7C` 44) has `$CA24` 00 and the settled tables (`$C8F5` 89BD), which are on picture f245 -- the open's last
+//     ramp stands two pictures, f243 and f244;
+//   - the "ran away" box: `$CCEC` 10 on row f851 with `$7C` = 2A4 and `$CA24` already 00 in that row -- raised and
+//     consumed in one frame; the box's band is on picture f853.
+// The port ran D1/FE4C at the head of every tick: a request always waited a frame (right by accident on an even
+// frame, where the missing picture delay cancelled it) and an odd frame's install was on the screen a picture early.
+static int battleFightNmiOn(const CtBattleHost* h);
+static void battleIrqFrame(CtBattleHost* h) {
+  if (!h || !h->mem || !battleFightNmiOn(h)) return;                    // (D1's NMI is what arms it)
+  uint8_t* m = h->mem;
+  if (m[0x7C] & 1) return;                                              // D1/FEC4-FEC8
+  if (m[0xCA21] == m[0xCA22] && !m[0xCA24]) return;                     // D1/FE4C-FE52, D1/FE59-FE5C
+  battlePresetKeepOld(h);                                               // (this frame's picture is above the IRQ's line)
+  m[0xCA22] = m[0xCA21];                                                // D1/FE54 (the changed side; as it was on the `$CA24` arm)
+  battleHdmaPreset(m, (m[0xCA25] + m[0xCA22] + m[0xCCEC]) & 0xFF);      // D1/FE5E-FE69
+  m[0xCA24] = 0;                                                        // D1/FE6D
+  h->hudLiveOpen = 0;                                                   // (the settled tables are up)
 }
 
 // ---- Status-icon machine (battle_status_render.md sec. 3) ----
@@ -18329,14 +18348,13 @@ uint8_t gBattleFxArenaRows[256];                                   // (a mod's: 
 static uint8_t gBattleLineCutRam[BT_LINE_CUTS][0x10000];
 const uint8_t* gBattleFxCutSnap[BT_LINE_CUTS];
 int gBattleFxCutLine[BT_LINE_CUTS], gBattleFxCutN = 0;
-// A preset is on the screen a frame after its install (battle_hud_band_anim.md sec. 5: the tables D1/FE70 installs on
-// N + 1 are on screen at N + 2). The layout's other side goes the same way -- D1/FE4C's `LDA $CA21 / CMP $CA22 / BEQ`
-// branch, the windows moved by the player's Y or by the target hand (C1/1A53): measured, `$CA22` of row r and the
-// strip on the other side from picture r + 2, one picture after the mosaic of the same row. The band animator has its
-// own latch for the installs it asks for (hudPresetPend); for the side, the picture of the install's own frame is drawn
-// from the nine tables and the `$CA22` the install replaced: battlePresetKeepOld saves them, and CtBattlePictureTables
-// swaps them into the page and into that frame's line-cut copies around the compose (the tick's entry swaps back
-// whatever a compose left).
+// A preset is on the screen a frame after its install: D1/FE4C is the V-IRQ's, at the bottom of the picture
+// (battleIrqFrame). Both of its arms -- a pending `$CA24` (the band animator's, a system box's) and the layout's other
+// side, `LDA $CA21 / CMP $CA22 / BEQ` (the windows moved by the player's Y or by the target hand, C1/1A53): measured,
+// `$CA22` of row r and the strip on the other side from picture r + 2, one picture after the mosaic of the same row.
+// The picture of the install's own frame is drawn from the nine tables and the `$CA22` the install replaced:
+// battlePresetKeepOld saves them, and CtBattlePictureTables swaps them into the page and into that frame's line-cut
+// copies around the compose (the tick's entry swaps back whatever a compose left).
 static uint8_t gPresetOld[0xC9ED - 0xC867], gPresetOldSide;
 static uint8_t gPresetNew[1 + BT_LINE_CUTS][0xC9ED - 0xC867], gPresetNewSide[1 + BT_LINE_CUTS];
 static const CtBattleHost* gPresetOldH; static int gPresetOldF = -1, gPresetSwapped, gPresetSwapN;
@@ -20708,7 +20726,7 @@ static int battleDefeatStageTick(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int t = h->defeatT++;
   battleMoveStepper(h);                                            // the NMI's CF/EFAF runs through the whole sequence
-  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A
+  if (!h->composeHeld) { battleOamCompose(h); battleOamPosesKeep(h); }   // CF/E778 JSR CF/E83A (the ladder's poses: the main thread's)
   // The eight idle ticks are whole ones (C1/106E with $A10E set: C1/1071 skips the head): frame A (the walk dispatch
   // C1/10A9, C1/3714 + C1/283D, `STZ $E5`) and frame B (`INC $E5`, the menu pass, C1/3714 + C1/283D), so the walkers
   // keep moving.
@@ -20748,7 +20766,7 @@ static int battleFleeStageTick(CtBattleHost* h) {
   // "Ran away" box, until C1/4058 counts `$A0FD` up (the cartridge's forest flee: the post f849, CF:F9CE's feet stepping
   // on to f881, the last segment's end). No new segment starts -- C1/3714 is main-loop work.
   battleMoveStepper(h); battleLinkParts(h);                        // (the frame service's, under the flee's waits)
-  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A
+  if (!h->composeHeld) { battleOamCompose(h); battleOamPosesKeep(h); }   // CF/E778 JSR CF/E83A (the ladder's poses: the main thread's)
   if (h->fleeStage == 1) {
     // The offsets from the post at t 0 (C1/8201 `JSL CD/0021`, `$020D` := 11 EF CE) are the rule's: the box at +2
     // (CD/3E7D x2, then CD/028C-0291; C2/0009's render is NMI-on CPU work, free under the rule), its close at +78, the
@@ -20862,6 +20880,7 @@ static int battleBootIntro(const CtBattleHost* h);            // (below, with th
 int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
   CtBattlePictureTables(h, 0);                                  // (a compose that did not hand the page back)
   int r = battleTickBody(h, endRequest, input);
+  battleIrqFrame(h);                                           // D1/FE97, at the bottom of the frame's picture
   // (a frame whose path made no compose of its own -- the boot, a blocked exit, a stalled main thread: the service ran
   //  it all the same, with the state the frame leaves)
   battleOamComposeIfNone(h);
@@ -20988,19 +21007,25 @@ static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JS
 // hop's offset `$A4AF` is the service's own, CF/F158-F18B: it stays the frame's.)
 static uint8_t gOamPrePub[0x26]; static int gOamPreAscOn; static int gOamPreAscPose[11]; static int gOamPreF = -1;
 static uint8_t gOamPreShadow[11]; static CtFxPopup gOamPrePopups[CT_BATTLE_FX_POOL]; static uint8_t gOamPreX[11], gOamPreY[11];
+static int gOamPreLadder[3];
+static const CtBattleHost* gOamPreOwner;
 static void battleOamPosesBefore(const CtBattleHost* h) {
+  if (gOamPreOwner == h && gOamPreF == h->frames) return;          // (the frame's first caller: the state its main thread found)
+  gOamPreOwner = h;
   memcpy(gOamPrePub, h->mem + 0x9907, sizeof gOamPrePub);          // $9907.. the published poses, $9922.. their deferrals
   gOamPreAscOn = h->ascOn; for (int c = 0; c < 11; c++) gOamPreAscPose[c] = h->ascPmPose[c];
   for (int c = 0; c < 11; c++) gOamPreShadow[c] = (uint8_t)h->ascShadow[c];
   memcpy(gOamPrePopups, h->popups, sizeof gOamPrePopups);
   memcpy(gOamPreX, h->mem + 0x1D0C, 11); memcpy(gOamPreY, h->mem + 0x1D23, 11); gOamPosScript = 0;
+  for (int c = 0; c < 3; c++) gOamPreLadder[c] = h->pcLadderPose[c];   // (the ladder's own copy of what it published)
   gOamPreF = h->frames;
 }
 static void battleOamPosesKeep(const CtBattleHost* h) {
-  if (gOamOwner != h || !gOamCmpOn || gOamPreF != h->frames) return;
+  if (gOamOwner != h || !gOamCmpOn || gOamPreOwner != h || gOamPreF != h->frames) return;
   memcpy(gOamCmpMem + 0x9907, gOamPrePub, sizeof gOamPrePub);
   gOamCmpHost.ascOn = gOamPreAscOn; for (int c = 0; c < 11; c++) gOamCmpHost.ascPmPose[c] = gOamPreAscPose[c];
   for (int c = 0; c < 11; c++) gOamCmpHost.ascShadow[c] = gOamPreShadow[c];   // D0 / D1: the script's
+  for (int c = 0; c < 3; c++) gOamCmpHost.pcLadderPose[c] = gOamPreLadder[c];  // C1/36F6: the entrance / victory ladder's publish
   // The numbers are a frame behind as well, spawn and rise: the script's ShowDamage spawns them (C1/5B3B-5CD4, the main
   // loop) and the animator CF/E781 steps their rows in the staging table `$922E..`, not in the mirror -- a step of
   // row r is on picture r + 3 like a pose (the forest's hit on Crono: `$A3D2` 01 on row f520, the number first on the
@@ -21015,7 +21040,7 @@ static void battleOamPosesKeep(const CtBattleHost* h) {
     if (gOamPosScript & (1 << c)) { gOamCmpMem[0x1D0C + c] = gOamPreX[c]; gOamCmpMem[0x1D23 + c] = gOamPreY[c]; }
 }
 static void battleOamComposeIfNone(CtBattleHost* h) {
-  if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) battleOamCompose(h);
+  if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) { battleOamCompose(h); battleOamPosesKeep(h); }
 }
 static void battleOamUpload(const CtBattleHost* h) {               // CF/E300-E330, the NMI's
   if (gOamOwner != h || !gOamCmpOn) return;
@@ -21287,9 +21312,8 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     if (battleSfxPost(h, 0x18, 0x08, 0x80) || !gBattleSndOn)
       if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battlesfx f%d battle-start id=08 pan=80 (CD/04FD)\n", h->frames);
   }
-  if (h->frames == battleBootBandArm(h) && !h->hudLiveOpen && s[0xCA1E] == 0) {
-    s[0xCA1F] = 0x17; s[0xCA1E] = 0xFF;                        // CD/0507-050F
-  }
+  // (the seed itself is the main thread's, after this frame's NMI: below, past battleHudBandFrame)
+  const int bandSeed = h->frames == battleBootBandArm(h) && !h->hudLiveOpen && s[0xCA1E] == 0;
   // ---- The $A4 group scheduler (battle_facing_engine.md). The counter is four instructions in bank CF:
   //     CF/E477  INC $A4 / CF/E479 LDA $A4 / CMP #04 / BNE / CF/E47F STZ $A4     free-running 0->1->2->3->0
   // Bank C1 only borrows it: C1/10A4 snapshots it into $993B, C1/10A9 dispatches the group (A = $A4, from C1/2DA2;
@@ -21347,6 +21371,15 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     h->fxObjGateCmp = (uint8_t)(((!m[0xA3D1] && (m[0xA013] || m[0xA0FE])) ? 1 : 0)      // CF/EDB8-EDCA
                               | ((m[0xA013] && !m[0xA3D1]) ? 2 : 0)); }                  // CF/EDF7-EDFF
   battleHudBandFrame(h);                                       // CD/08F5 + CD/08F8, every frame
+  // CD/04FD whole: `LDA #08 / LDX #0080 / JSR CD/3B71` (the post), `JSR CD/3E7D` (a frame's wait), `LDA #17 / STA $CA1F
+  // / LDA #FF / STA $CA1E` (the seed), `JSR CD/3E7D`, `RTL`. The seed is written by the main thread when its wait
+  // returns -- after the NMI of that frame has made its two animator calls on an idle band -- and the animator first
+  // meets it in the NEXT frame's NMI (FF -> 01 on the first call, one step on the second). Measured on the rule's
+  // cartridge, the forest recipe: `$1E01` 08 on row f229, `$CA1E/$CA1F` FF 17 on row f230, 01 16 on f231, 01 14 on
+  // f232 .. 01 00 on f242, 00 00 on f243, where `$E5` first reads 1 (the entrance loop). The port seeded ahead of the
+  // frame's animator: 01 16 on row f230, the band and the entrance loop a frame early and an idle frame before the
+  // main loop's first head (row f306 on both sides).
+  if (bandSeed) { s[0xCA1F] = 0x17; s[0xCA1E] = 0xFF; }        // CD/0507-050F
   // ---- The entrance pose ladder, the last thing the boot does ----
   // C1/0023's boot ends `JSL CD/000C / JSL CD/0012 / BNE ->1003C / JMP C1/34DB`: the entry-fade loop blocks until the
   // band's steps are done, and the fall-through arms the pose ladder with window 0x30 (C1/34F7 `LDA #30 /
@@ -21355,6 +21388,10 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // The stepper runs before the arm in the frame: the copier's loop (the only caller of C1/369A) begins on the frame
   // after the arm, so the arm frame itself does not tick. It is placed ahead of every gate below because the ROM's loop
   // blocks the boot (pre-combat) or the end-of-fight code (the victory/defeat arms): nothing else runs while it steps.
+  // The stepper is the main thread's (C1/3686-3693: the loop's frame wait, then C1/369A, publishing through C1/1C66): its
+  // pose is in the NEXT frame's mirror like an action script's (battleOamPosesBefore / battleOamPosesKeep). Measured on
+  // the rule's cartridge, the forest recipe's entrance: `$9907` 30 on row f244 and Crono's ready cell on picture f247.
+  if (h->pcLadderLoop > 0) battleOamPosesBefore(h);
   CtBattlePcLadderTick(h);                                     // C1/3686-3693: frame-wait / service / C1/369A
   int cfPass = h->frames >= battleBootBandArm(h);              // the bank-CF frame-service pass, from the band's arm on
   battleDemoAbortFrame(h, cfPass);                             // CF/E6D9-E705: the demo battle's button -> RESET

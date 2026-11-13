@@ -179,7 +179,7 @@ Thirteen non-settled frames in all: twelve at s = 1,3,...,23 and one more at s =
 
 `src/battle.c battleHudAnimTick()` is `CD/05B2` byte-for-byte, run twice per host tick, writing the
 ROM's own `$CA1E/$CA1F/$CA24/$CA25`. `CtBattleHudRender` reads those four bytes and clips the strip
-to `[23-s, 24+s]`; `h->hudLiveOpen` carries the one-frame install lag of §5.
+to `[23-s, 24+s]`. (The install lag of §5 is §9's: the V-IRQ's service and the picture a frame after it.)
 
 The arm frame is `82 - 13 = 69`: 82 is the existing oracle-pinned settle offset (`battle_hud_render.md`
 Q6, module-boot f222 -> settled f304) and 13 is the ladder length measured here, so the arm is
@@ -231,3 +231,54 @@ frame). Residual: during the opening the cartridge shows the strip content one l
 port has it at 31) -- preset 00's scroll tables, which the strip renderer does not read. Open: after the close the ROM
 requests 0E, waits, requests 08 and spins on CD/044A until APU port $2141 reads 0 (CD/0428-0436): about 30 frames the
 cartridge holds the battle picture, while the port hands back to the field on the close's last frame.
+
+## 9. 2026-11-13: the seed stands a frame; the install is the V-IRQ's, on an even `$7C`
+
+Two things §5's table already shows and the port did not do, found on the forest recipe's boot frame by frame
+(`tools/battle_picture_seq_cmp.py forest-boot`; rows are `--monitor` rows, the same on both sides unless said).
+
+**The seed.** `CD/04FD` whole:
+
+    CD/04FD  LDA #08 / LDX #0080 / JSR CD/3B71      the battle-start post
+    CD/0505  JSR CD/3E7D                            a frame's wait
+    CD/0508  LDA #17 / STA $CA1F / LDA #FF / STA $CA1E
+    CD/0512  JSR CD/3E7D
+    CD/0515  RTL
+
+The main thread seeds when its wait returns -- after the NMI of that frame has made its two animator calls
+(`CD/08F5`, `CD/08F8`) on an idle band -- and the animator first meets the seed in the next frame's NMI (FF -> 01 on
+the first call, one step on the second). Forest: `$1E01` 08 on row f229; `$CA1E/$CA1F` FF 17 on f230, 01 16 on f231,
+01 14 on f232 .. 01 00 on f242, 00 00 on f243, where `$E5` first reads 1 (the entrance loop C1/3681, 64 frames) and
+`$0027` 1 on f306 = seed + 76. The port seeded ahead of the frame's animator: 01 16 on row f230, the band and the
+entrance loop a row early, an idle frame before the first head.
+
+**The install.** `D1/FE4C` (the preset service: `LDA $CA21 / CMP $CA22 / BEQ ->FE59 / STA $CA22 / BRA ->FE5E`,
+`FE59 LDA $CA24 / BEQ RTS`, `FE5E LDA $CA25 / CLC / ADC $CA22 / CLC / ADC $CCEC / JSL CE:EE6E / STZ $CA24`) has one
+caller, `D1/FECE`, inside the fight's V-IRQ handler `D1/FE97`:
+
+    D1/FE97  (push) / INC $7F / LDA $4211 / LDA #81 / STA $4200 / STZ $420C     no HDMA below the IRQ's line
+    D1/FEB8  LDA $4212 / AND #40 / BEQ ->FEB8                                    the H-blank
+    D1/FEBF  LDA #80 / STA $2100                                                 the picture's last lines blanked
+    D1/FEC4  LDA $7C / AND #01 / BNE ->FED3
+    D1/FECA  LDA #7E / PHA / PLB / JSR D1/FE4C / BRA ->FEDF                      an EVEN $7C: the preset service
+    D1/FED3  LDA $7E:CD02 / BNE ->FEDF / PHP / JSL FD/FFFD / PLP                 an odd one (not under the pause)
+    D1/FEDF  .. JSL D1/FE71 / STZ $7F / (pull) / RTI
+
+D1's NMI re-arms it every frame (`D1/E792 LDA #A1 / STA $4200`). So an install waits for an even frame, and it is
+made at the bottom of the picture with HDMA already off: its tables are read from the NEXT frame on. That is §5's
+"one extra opening frame", and it is one or two depending on the parity:
+
+| | raised | `$7C` there | consumed | on the picture |
+|---|---|---|---|---|
+| the forest's open, last step (NMI, CD/05C6) | row f242 | 43 | row f243 (`$7C` 44; `$C8F5` 89BD) | f245: the last ramp stands on f243 and f244 |
+| the forest's "ran away" box | row f851 (`$CCEC` 10) | 2A4 | the same row (`$CA24` reads 00) | f853 |
+
+(`$7C` is equal on the two sides in every row of that fight.) The port ran D1/FE4C at the head of every tick, so a
+request always waited one frame and its tables were on the screen at once: right by accident when the request was
+raised on an even frame, a picture early on an odd one (the forest's f244: 3828 px, the ramp a row off on every third
+line of the strip). `battle.c battleIrqFrame` runs the service at the tick's end on an even `$7C`; the picture of the
+install's own frame keeps the tables it replaced (`battlePresetKeepOld`, `CtBattlePictureTables`).
+
+Not examined: the odd frame's `JSL FD/FFFD` = `JMP FD/E022`, a VRAM DMA service (`$4370` 41, `$4371` 18, `INC $1D` and
+its two halves on `$1D`'s parity, FD/E160 the other) -- which of a fight's tile uploads ride it, and whether the port's
+are on that parity.
