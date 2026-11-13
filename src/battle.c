@@ -20322,6 +20322,8 @@ static int battleBootBandArm(const CtBattleHost* h);   // (below, with the boot)
 static void battleOamCompose(CtBattleHost* h);                  // the combatants' OAM mirror (below, with the strip's upload)
 static void battleOamUpload(const CtBattleHost* h);
 static void battleOamComposeIfNone(CtBattleHost* h);
+static void battleOamPosesBefore(const CtBattleHost* h);
+static void battleOamPosesKeep(const CtBattleHost* h);
 static void battleMsgStripUpload(CtBattleHost* h) {
   uint8_t* s = h->mem;
   s[0xCE14]++;                                                     // CD/0650
@@ -20972,6 +20974,23 @@ static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JS
   if (gOamOwner != h) battleOamReset(h);                           // (another host: nothing of it shipped yet)
   gOamCmpHost = *h; memcpy(gOamCmpMem, h->mem, sizeof gOamCmpMem); gOamCmpOn = 1; gOamCmpF = h->frames;
 }
+// battleAdvanceAction is both halves of an action's frame: the service's engines (CF/EC78's feet, the trail, the effect
+// objects) and the main loop's script with its pose machine (C1/423A -> C1/42C4, whose C1/4307 `JSR C1/1C4A` publishes
+// `$9907,X`). The poses that script sets are the main loop's: the mirror of this frame holds the ones the frame before
+// left (the forest's Hetake: `$990A` 03 on row f439, the new cell on the cartridge's picture f442 -- a picture after
+// a foot of that row would be). battleOamPosesBefore keeps them from ahead of the action's step and battleOamPosesKeep
+// puts them back into the compose's copy.
+static uint8_t gOamPrePub[0x26]; static int gOamPreAscOn; static int gOamPreAscPose[11]; static int gOamPreF = -1;
+static void battleOamPosesBefore(const CtBattleHost* h) {
+  memcpy(gOamPrePub, h->mem + 0x9907, sizeof gOamPrePub);          // $9907.. the published poses, $9922.. their deferrals
+  gOamPreAscOn = h->ascOn; for (int c = 0; c < 11; c++) gOamPreAscPose[c] = h->ascPmPose[c];
+  gOamPreF = h->frames;
+}
+static void battleOamPosesKeep(const CtBattleHost* h) {
+  if (gOamOwner != h || !gOamCmpOn || gOamPreF != h->frames) return;
+  memcpy(gOamCmpMem + 0x9907, gOamPrePub, sizeof gOamPrePub);
+  gOamCmpHost.ascOn = gOamPreAscOn; for (int c = 0; c < 11; c++) gOamCmpHost.ascPmPose[c] = gOamPreAscPose[c];
+}
 static void battleOamComposeIfNone(CtBattleHost* h) {
   if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) battleOamCompose(h);
 }
@@ -21412,6 +21431,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     else battleStatusActOpen(h);                                   // a status timer's action 7F (C1/895B)
     h->stActKind = 0;
   }
+  battleOamPosesBefore(h);                                         // (the action's script is the main loop's: below)
   battleAdvanceAction(h);
   if (!battleDeathHold(h)) {
     battleReactiveCounterTick(h, 1);   // the close's counter loop, before C1/881C's scan (below)
@@ -21438,7 +21458,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // ...and the compose, the service's last step (CF/E778 JSR CF/E83A): everything above this line is the service's in
   // the ROM too -- the action's engines CF/EC78 / CF/ECC2 / CF/E781 (battleAdvanceAction), the stepper, the link --
   // and what follows is the main loop's iteration, whose poses the next frame's compose reads.
-  if (!h->composeHeld) battleOamCompose(h);                        // CF/E778 JSR CF/E83A: the service's last step
+  if (!h->composeHeld) { battleOamCompose(h); battleOamPosesKeep(h); }   // CF/E778 JSR CF/E83A: the service's last step
   if (h->schedWalk && !battleDeathHold(h) && h->demoDispatchAt < 0) battleWalkDispatch(h);
   // C1/106E-1099 is the main loop's iteration head, and the head runs in the same frame as the previous iteration's
   // tail, after that frame's service (the INC) and its walk dispatch, before `JSR C1/007E` waits for the next NMI. The

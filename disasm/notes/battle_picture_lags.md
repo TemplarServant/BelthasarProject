@@ -53,7 +53,7 @@ single-picture checks never saw it (each takes its best lag); frame by frame at 
 
 | | whole frames identical at port -1, before | after |
 |---|---|---|
-| the forest's fled fight f172-f1140 (969) | 688 | 865 |
+| the forest's fled fight f172-f1140 (969) | 688 | 879 |
 | its flee f840-f1140 (301) | 250 | 301 |
 | GATO idling f600-f840 (241) | 104 | 241 |
 
@@ -62,7 +62,11 @@ single-picture checks never saw it (each takes its best lag); frame by frame at 
 `battleOamCompose` (battle.c) copies the host and its WRAM page where the ROM composes: after the tick's service-side
 steps -- the action's engines (battleAdvanceAction), the stepper, the part link -- and before its main-loop iteration,
 behind `$A028` (h->composeHeld). A frame whose path has no such point (the boot, a blocked exit, a stalled main
-thread) composes with the state it leaves. `battleOamUpload`, at the next NMI head beside the other shown-latches,
+thread) composes with the state it leaves. One part of the port's service-side call is the main loop's in the ROM: an
+action's script and its pose machine (C1/423A -> C1/42C4, publishing through C1/4307 `JSR C1/1C4A`), which
+battleAdvanceAction steps with the engines. The poses it sets (`$9907..`, `ascPmPose`) are put back as the frame
+before left them (battleOamPosesBefore / battleOamPosesKeep): the forest's Hetake publishes `$990A` = 03 on row f439
+and its new cell is on the cartridge's picture f442. `battleOamUpload`, at the next NMI head beside the other shown-latches,
 hands the copy over (its feet and its fade factors `palK` are the frame's own: the port's compose point is past its
 movers and its objslot service, as the ROM's is past CF/EFAF). `CtBattleOamShown` gives the picture that copy, with
 the host's own "as uploaded" members -- the palette rows, the dither level, the effect objects, the hand, the bracket,
@@ -100,14 +104,11 @@ frames where the singer's cell led the spotlight.
   forest f520-f545 and f577-f578: 46-50 px on rows 41-50 inside the bracket, at every lag): a cell of the run-away
   attempt, not a lag.
 * The boot (the forest f172-f300): the best lag is -3 / -2 there -- the port stages the boot ahead of the cartridge.
-* A cell that needs new tiles is on the cartridge's screen one or two pictures after the port's: the forest's command
-  phase (f300-f840) keeps 26 such frames -- f441 / f442, the Hetake that starts its travel at f444: the port's picture
-  has the new cell (1048 px, the whole sprite) where the cartridge still shows the old one, and every other pixel but
-  the bracket's fits two pictures earlier. The feet of that travel are equal row by row and picture by picture, so
-  it is the cell's TILES, not its timing in RAM: the NMI ships a combatant's rebuilt tiles in packets (CD/3EB4, a
-  request `$CA26` the main thread raises through CD/3ED2 -- $400 bytes a frame, $1000 with `$CE0F` -- and waits on with
-  CD/3E75). To derive: which pose changes go through it, how many packets a cell takes, and what the screen shows
-  between the first packet and the last.
+* A cell's tiles: on the first picture of a new cell the cartridge still shows part of the old one -- the forest's
+  f442, 68 px on six rows of the Hetake's cell, complete on f443 (the forest's command phase keeps 12 such frames).
+  The tile builder C1/1C4A writes the cell into the OBJ shadow at `$7E:63AD..` (row f439: `$6BAD`, C1:1D6F) and the
+  NMI ships the shadow; `$CA26` / CD/3ED2's packets are NOT what carries it (no request on those rows). To derive:
+  the DMA that ships the shadow and how much of it a frame.
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * The damage numbers and the effect sprites have not been measured against either class with a frame-by-frame tool.

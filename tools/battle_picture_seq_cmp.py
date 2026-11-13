@@ -44,6 +44,13 @@ SEQUENCES = {
     # cell was two pictures ahead of the bands (104 of these 241 pictures fitted); from a copy taken at the frame's
     # END, one (161).
     'gato-idle': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=600, b=840, lag=-1),
+    # The forest's command phase, a Hetake's turn: its animation script publishes a new pose on row f439 (`$990A` 03, the
+    # pose machine C1/42C4's C1/4307 `JSR C1/1C4A`) and its travel starts on f444. The script is the main loop's, so
+    # the pose is in the NEXT frame's mirror -- on the cartridge's picture f442, a picture after a foot of the same
+    # row. The port steps an action's script and the service's engines together (battleAdvanceAction), ahead of its
+    # compose's copy: battleOamPosesKeep puts the poses of the frame before back into the copy.
+    'forest-turn-pose': dict(state='saves/battle_re/forest_holdleft_pre.state', pad=[(0x40, 120), (0, 230), (0xC00, 900)],
+                             a=436, b=448, lag=-1),
 }
 
 

@@ -3188,7 +3188,9 @@ copied and the next NMI head handed over (battle.c CtBattleOamShown) and the str
 single-picture checks cannot see this class: each takes its best lag. Re-pin only with every frame it loses
 explained against the cartridge. `battle-picture-seq-gato-idle-vs-cartridge` is GATO's fight left alone, f600-f840:
 the idle cells the main loop sets are a picture later than the feet (`241 of 241`, 104 before; one mutation: the
-compose at the frame's end).
+compose at the frame's end). `battle-picture-seq-forest-turn-pose-vs-cartridge` is a Hetake's turn, f436-f448: the pose
+its animation script publishes is the main loop's too (`12 of 13; not: f442`, a pinned residual of 68 px -- the cell's
+tiles; one mutation).
 
 The same change moved a fight's picture to ONE diagonal, port P = the cartridge's P + 1: `battle-strip-upload-*`
 grade the strip's thumbnails there (it was P + 2), `attract-087-ice-sword-afterimage-vs-oracle` and
