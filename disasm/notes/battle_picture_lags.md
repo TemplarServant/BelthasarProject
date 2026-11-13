@@ -53,7 +53,7 @@ single-picture checks never saw it (each takes its best lag); frame by frame at 
 
 | | whole frames identical at port -1, before | after |
 |---|---|---|
-| the forest's fled fight f172-f1140 (969) | 688 | 879 |
+| the forest's fled fight f172-f1140 (969) | 688 | 938 |
 | its flee f840-f1140 (301) | 250 | 301 |
 | GATO idling f600-f840 (241) | 104 | 241 |
 
@@ -66,12 +66,29 @@ thread) composes with the state it leaves. One part of the port's service-side c
 action's script and its pose machine (C1/423A -> C1/42C4, publishing through C1/4307 `JSR C1/1C4A`), which
 battleAdvanceAction steps with the engines. The poses it sets (`$9907..`, `ascPmPose`) are put back as the frame
 before left them (battleOamPosesBefore / battleOamPosesKeep): the forest's Hetake publishes `$990A` = 03 on row f439
-and its new cell is on the cartridge's picture f442. `battleOamUpload`, at the next NMI head beside the other shown-latches,
+and its new cell is on the cartridge's picture f442. So are, each measured on the forest's command phase (the check
+`battle-picture-seq-forest-commands-vs-cartridge`, 486 -> 541 of 541):
+
+* the ground shadow's flag, ops D0 / D1 `$A5D8,X` (h->ascShadow), read by the compose's CF/EA8A: the Hetake's new cell
+  on f442 and the shadow under it on f443 (the hop's offset `$A4AF` is the service's own, CF/F158-F18B);
+* the damage numbers, spawn and rise: ShowDamage (C1/5B3B-5CD4) spawns them and CF/E781 steps their rows in the
+  staging table `$922E..`, not in the mirror -- `$A3D2` 01 on row f520, the number first on picture f522, its bounce
+  on f527-f533, gone on f579 (field.c draws them from the copy too);
+* the foot a script's teleport writes (ops 19 / 1A / 1B end in C1/561F `STA $1D0C,X / STA $1D23,X`): a slide's steps
+  are the service's (CF:F13F / CF:F149) and stay the frame's, the snap to the goal after them is the script's -- the
+  Hetake back from its hop, `$1D27` 5E on row f714 (the step) and 5F on row f715 (C1:5639), the mirror's on rows
+  f714 and f716: pictures f716 and f718 with a held picture between them (gOamPosScript marks the feet a teleport
+  wrote).
+
+`battleOamUpload`, at the next NMI head beside the other shown-latches,
 hands the copy over (its feet and its fade factors `palK` are the frame's own: the port's compose point is past its
 movers and its objslot service, as the ROM's is past CF/EFAF). `CtBattleOamShown` gives the picture that copy, with
 the host's own "as uploaded" members -- the palette rows, the dither level, the effect objects, the hand, the bracket,
 the cloud, CGRAM, the strips -- taken from the live host, where this frame's NMI head has already put them. The
-afterimage's entries stay the copy's: the trail is drawn with the body it trails.
+afterimage's entries stay the copy's: the trail is drawn with the body it trails. The single-victim view of a
+script's white flash (flashTarget / fxFlashPal) is live with its mask while a script owns the flash: both project
+the uploaded `$993C` (objPalShown), and the copy's pair kept the victim white a picture after the mask went (the
+forest: `$993C` 08 on row f457, 0A on row f473; white on the cartridge's f460-f475).
 
 field.c draws from it:
 
@@ -100,18 +117,21 @@ frames where the singer's cell led the spotlight.
 
 ## 4. Open
 
-* The choosing PC's head differs from the cartridge's for stretches of the command phase while L + R are held (the
-  forest f520-f545 and f577-f578: 46-50 px on rows 41-50 inside the bracket, at every lag): a cell of the run-away
-  attempt, not a lag.
 * The boot (the forest f172-f300): the best lag is -3 / -2 there -- the port stages the boot ahead of the cartridge.
-* A cell's tiles: on the first picture of a new cell the cartridge still shows part of the old one -- the forest's
-  f442, 68 px on six rows of the Hetake's cell, complete on f443 (the forest's command phase keeps 12 such frames).
-  The tile builder C1/1C4A writes the cell into the OBJ shadow at `$7E:63AD..` (row f439: `$6BAD`, C1:1D6F) and the
-  NMI ships the shadow; `$CA26` / CD/3ED2's packets are NOT what carries it (no request on those rows). To derive:
-  the DMA that ships the shadow and how much of it a frame.
+  It is all that is left of the forest's fight: f173 and 30 frames of f231-f278. Two things in it, both AHEAD of the
+  fight's diagonal: the band's opening ladder (f231-f243: 1024 px, the band two lines wider on each edge -- rows
+  172-173 and 194-195; the cartridge's picture f is the port's f - 2), and the PCs' ready poses (f245-f278, 135-578
+  px: the cartridge's pair [f245, f246] is the port's [f242, f243]). The boot's frames compose with the state they
+  leave (sec. 3), so a pose of the main loop's is a frame early there by construction; the second frame and the
+  ladder's are not derived.
+* The OBJ priority a script's op D9 / DA writes (`$99B5,X`, C1/753A / C1/7579) is the main loop's too: the forest's
+  `$99B9` 30 -> 20 by C1:7598 on row f717, the mirror's attribute `$0733` 32 -> 22 on row f718. The port takes it with
+  the frame; no measured picture shows the difference yet (nothing over the Hetake there), so it is not changed.
+* (Read wrongly before, for the record: "the choosing PC's head under L + R", f520-f545, was the damage number over
+  it a frame early; "a cell's tiles", f442, was the ground shadow's flag. Both are sec. 3's now.)
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
-* The damage numbers and the effect sprites have not been measured against either class with a frame-by-frame tool.
+* The effect sprites have not been measured against either class with a frame-by-frame tool.
 * CD/088D's gates on the OAM upload (`$CE0F`, `$CD02`) are the strip upload's own; no measured frame has them set
   while a sprite moves.
 * A re-bake for another reason (a CGRAM change) on the frame of a tile step shows that step a frame early.

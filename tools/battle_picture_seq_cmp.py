@@ -51,6 +51,12 @@ SEQUENCES = {
     # compose's copy: battleOamPosesKeep puts the poses of the frame before back into the copy.
     'forest-turn-pose': dict(state='saves/battle_re/forest_holdleft_pre.state', pad=[(0x40, 120), (0, 230), (0xC00, 900)],
                              a=436, b=448, lag=-1),
+    # The forest's command phase whole: two Hetakes hop to Crono, hit him and hop back. More of the main loop's state
+    # the mirror has a frame late: the ground shadow's flag (ops D0 / D1; f442), the damage numbers' spawn and rise
+    # (f521-f545, f578, f741-f765, f798), the foot a script's teleport snaps to the slide's goal (C1/561F; f717). And
+    # the victim's white flash ends with its mask (f476, f687): the single-victim view of it is as uploaded too.
+    'forest-commands': dict(state='saves/battle_re/forest_holdleft_pre.state', pad=[(0x40, 120), (0, 230), (0xC00, 900)],
+                            a=300, b=840, lag=-1),
 }
 
 

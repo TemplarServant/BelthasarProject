@@ -11901,6 +11901,7 @@ static void battleAscGetPos(const CtBattleHost* h, int t, int* x, int* y) {
 // C1/6299 (98/99/9A/9B): `LDA $A010 / CMP #08 / BCS effect-object / CMP #04 / BEQ every-victim / TAX / LDA
 // $A014,X / TAX` then `$A35D,X := $1D0C,X ... CF/F113 writes $1D0C,X/$1D23,X` -- with no test of who the
 // combatant is. So a co-actor's track moves the co-actor and a PC caster's track moves the PC.
+static uint16_t gOamPosScript;   // bit c: a script's teleport (ops 19 / 1A / 1B, C1/561F) wrote combatant c's foot this frame
 static void battleAscSetPos(CtBattleHost* h, int t, int x, int y) {
   int c = (t >= 0 && t < 16) ? h->ascRole[t] : -1;
   if (c >= 0 && c < 11) { BT_LIVEX(h, c) = x & 0xFF; BT_LIVEY(h, c) = y & 0xFF; }
@@ -13619,11 +13620,11 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           break; }
         case 0x19: {                                                 // `19 xx yy`: teleport to a literal point (C1/5611)
           if (t == 4) { int cs[11], nc = battleAscCmbs(h, t, cs);
-            for (int i = 0; i < nc; i++) { BT_LIVEX(h, cs[i]) = a1; BT_LIVEY(h, cs[i]) = a2;
+            for (int i = 0; i < nc; i++) { BT_LIVEX(h, cs[i]) = a1; BT_LIVEY(h, cs[i]) = a2; gOamPosScript |= (uint16_t)(1 << cs[i]);
                                            h->mem[0x1D0C + cs[i]] = (uint8_t)a1; h->mem[0x1D23 + cs[i]] = (uint8_t)a2; } }
           else { battleAscSetPos(h, t, a1, a2);
             if (t >= 8) { h->mem[0xA241 + 2 * (t - 8)] = 0; h->mem[0xA251 + 2 * (t - 8)] = 0; }
-            else { int c = h->ascRole[t]; if (c >= 0 && c < 11) { h->mem[0x1D0C + c] = (uint8_t)a1; h->mem[0x1D23 + c] = (uint8_t)a2; } } }
+            else { int c = h->ascRole[t]; if (c >= 0 && c < 11) { h->mem[0x1D0C + c] = (uint8_t)a1; h->mem[0x1D23 + c] = (uint8_t)a2; gOamPosScript |= (uint16_t)(1 << c); } } }
           isFree = 0;
           break; }
         case 0x25: {                                                 // `25 nn`: end the track unless target nn exists
@@ -13659,7 +13660,8 @@ static void battleAscTick(CtBattleHost* h, int rel) {
                            h->mem[0x5D80 + a1] = (v < 0) ? 0 : (v > 255) ? 255 : v; }
           break;
         case 0x1B:                                                   // teleport to resolve(a1) (C1/567D)
-          if (battleAscResolve(h, t, a1, &gx, &gy)) battleAscSetPos(h, t, gx, gy);
+          if (battleAscResolve(h, t, a1, &gx, &gy)) { battleAscSetPos(h, t, gx, gy);
+            if (t < 8 && h->ascRole[t] >= 0 && h->ascRole[t] < 11) gOamPosScript |= (uint16_t)(1 << h->ascRole[t]); }
           break;
         // ---- The links. 1C rr (C1/5694, an effect track only): $A437[$A2B6] = $A014[rr] for rr < 9, else (rr - 9) | 40 --
         // the object then takes that combatant's (or object's) point every frame (CF/ECC2). 1D kk (C1/56BB): $A437[kk] = FF.
@@ -13683,6 +13685,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // end in, with the point taken from the store ($5D9E/$5D9F = $5D80[0x1E]/[0x1F]). C1/561F splits on the track
           // index -- < 8 writes the combatant's $1D0C/$1D23, >= 8 the effect object's $A240/$A250 -- as battleAscSetPos does.
           battleAscSetPos(h, t, h->mem[0x5D80 + 0x1E], h->mem[0x5D80 + 0x1F]);
+          if (t < 8 && h->ascRole[t] >= 0 && h->ascRole[t] < 11) gOamPosScript |= (uint16_t)(1 << h->ascRole[t]);
           break;
         case 0x44: {                                                 // 44: store the track's own position (C1/5A3E)
           // `LDA $A010 / CMP #08 / BCS`: a combatant track copies $1D0C/$1D23 of $A014[track], an effect object its
@@ -20980,16 +20983,36 @@ static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JS
 // left (the forest's Hetake: `$990A` 03 on row f439, the new cell on the cartridge's picture f442 -- a picture after
 // a foot of that row would be). battleOamPosesBefore keeps them from ahead of the action's step and battleOamPosesKeep
 // puts them back into the compose's copy.
+// ...and so is the ground shadow's flag: the script's ops D0 / D1 write `$A5D8,X` (h->ascShadow), which the compose's
+// CF/EA8A reads -- the Hetake's hop: the cell on picture f442 and its shadow under it on f443, a picture later. (The
+// hop's offset `$A4AF` is the service's own, CF/F158-F18B: it stays the frame's.)
 static uint8_t gOamPrePub[0x26]; static int gOamPreAscOn; static int gOamPreAscPose[11]; static int gOamPreF = -1;
+static uint8_t gOamPreShadow[11]; static CtFxPopup gOamPrePopups[CT_BATTLE_FX_POOL]; static uint8_t gOamPreX[11], gOamPreY[11];
 static void battleOamPosesBefore(const CtBattleHost* h) {
   memcpy(gOamPrePub, h->mem + 0x9907, sizeof gOamPrePub);          // $9907.. the published poses, $9922.. their deferrals
   gOamPreAscOn = h->ascOn; for (int c = 0; c < 11; c++) gOamPreAscPose[c] = h->ascPmPose[c];
+  for (int c = 0; c < 11; c++) gOamPreShadow[c] = (uint8_t)h->ascShadow[c];
+  memcpy(gOamPrePopups, h->popups, sizeof gOamPrePopups);
+  memcpy(gOamPreX, h->mem + 0x1D0C, 11); memcpy(gOamPreY, h->mem + 0x1D23, 11); gOamPosScript = 0;
   gOamPreF = h->frames;
 }
 static void battleOamPosesKeep(const CtBattleHost* h) {
   if (gOamOwner != h || !gOamCmpOn || gOamPreF != h->frames) return;
   memcpy(gOamCmpMem + 0x9907, gOamPrePub, sizeof gOamPrePub);
   gOamCmpHost.ascOn = gOamPreAscOn; for (int c = 0; c < 11; c++) gOamCmpHost.ascPmPose[c] = gOamPreAscPose[c];
+  for (int c = 0; c < 11; c++) gOamCmpHost.ascShadow[c] = gOamPreShadow[c];   // D0 / D1: the script's
+  // The numbers are a frame behind as well, spawn and rise: the script's ShowDamage spawns them (C1/5B3B-5CD4, the main
+  // loop) and the animator CF/E781 steps their rows in the staging table `$922E..`, not in the mirror -- a step of
+  // row r is on picture r + 3 like a pose (the forest's hit on Crono: `$A3D2` 01 on row f520, the number first on the
+  // cartridge's f522 and still there on f523; its bounce on f527-f533; gone on f579).
+  memcpy(gOamCmpHost.popups, gOamPrePopups, sizeof gOamPrePopups);
+  // ...and the foot a script's teleport writes (ops 19 / 1A / 1B end in C1/561F `STA $1D0C,X / STA $1D23,X`): the
+  // main loop's, where a slide's steps are the service's (CF/F13F / CF/F149) and stay the frame's. Measured, the
+  // forest's Hetake back from its hop: the slide's last step `$1D27` 5E on row f714 (CF:F149) and the script's snap
+  // to the goal, 5F, on row f715 (C1:5639), both sides; the cartridge's mirror has the step on row f714 and the snap
+  // on row f716 -- pictures f716 and f718, a held picture between them that the port did not have.
+  for (int c = 0; c < 11; c++)
+    if (gOamPosScript & (1 << c)) { gOamCmpMem[0x1D0C + c] = gOamPreX[c]; gOamCmpMem[0x1D23 + c] = gOamPreY[c]; }
 }
 static void battleOamComposeIfNone(CtBattleHost* h) {
   if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) battleOamCompose(h);
@@ -21010,6 +21033,11 @@ int CtBattleOamShown(const CtBattleHost* live, CtBattleHost* out, const uint8_t*
   OAM_LIVE(fxObjShown); OAM_LIVE(fxObjMatShown); OAM_LIVE(fxObjGateShown);
   OAM_LIVE(brkOamShown); OAM_LIVE(brkOnShown); OAM_LIVE(handOamShown); OAM_LIVE(handVisShown); OAM_LIVE(handPageShown);
   OAM_LIVE(stripVram); OAM_LIVE(msgStripVram); OAM_LIVE(msgStripLive);
+  // The single-victim view of a script's flash (flashTarget / fxFlashPal / flashLeft) is a projection of objPalShown
+  // like the mask: as uploaded. Left the copy's, the white outlived the mask by a picture (the forest's Hetake on
+  // Crono: `$993C` 08 on row f457 and 0A on row f473, both sides; white on the cartridge's f460-f475, and through
+  // the port's f475 where its diagonal ends it on f474). A flash no script owns keeps the copy's timing.
+  if (live->ascOwnsFlash || out->ascOwnsFlash) { OAM_LIVE(flashTarget); OAM_LIVE(fxFlashPal); OAM_LIVE(flashLeft); }
 #undef OAM_LIVE
   return 1;
 }

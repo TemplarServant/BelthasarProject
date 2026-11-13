@@ -19615,7 +19615,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
       if (bMot) g_mot = mot;
       // (the numbers are OAM too: CF/E781 animates them in the frame service, ahead of the compose -- the mirror's)
-      if (!defeatHold) battleFxPopupsRender(fb, &liveHost);           // rising damage numbers (top)
+      if (!defeatHold) battleFxPopupsRender(fb, bOam ? &g_bOamHost : &liveHost);   // rising damage numbers (top)
       if (bMot) {                                      // ...their pixels are theirs in the owners' picture, not fixed
         g_mot = NULL;
         for (int i = 0; i < CAMW * CAMH; i++) { int o = mot->own[i] & 0x7F;
