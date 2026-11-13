@@ -67,6 +67,11 @@ SEQUENCES = {
     # forest's, and the attack's pre-roll -- before the script's first playAnim the ROM holds the previous publish,
     # the idle cell through picture f460 (the port's fallback ladder had him reared up from f438).
     'gato-first-attack': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=232, b=1008, lag=-1),
+    # GATO's song, from its pre-roll to the frame before its damage lands: the arena darkened and lit by the beam
+    # (BG3 on the sub screen added to BG1 / BG2). A BG1 / BG2 priority tile is under that math like any other pixel
+    # (the tree's canopy and the tent's edge at the cone's top: 443 px a picture from the raw tiles), and the fair's
+    # pennants step on frames the song's records fade the page: a fight's tile DMAs are held a frame as DMAs.
+    'gato-song': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=1009, b=1315, lag=-1),
 }
 
 
@@ -91,6 +96,7 @@ def port_rgb(path):
 def run(name):
     d = SEQUENCES[name]
     os.makedirs(SCRATCH, exist_ok=True)
+    P.TMP = SCRATCH                                    # (P.wram_of's files: the suite runs these checks side by side)
     st = os.path.join(ROOT, d['state'])
     a, b, lag = d['a'], d['b'], d['lag']
     n = b + 4

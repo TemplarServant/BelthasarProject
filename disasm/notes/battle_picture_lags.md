@@ -132,7 +132,16 @@ frames where the singer's cell led the spotlight.
   the frame; no measured picture shows the difference yet (nothing over the Hetake there), so it is not changed.
 * (Read wrongly before, for the record: "the choosing PC's head under L + R", f520-f545, was the damage number over
   it a frame early; "a cell's tiles", f442, was the ground shadow's flag. Both are sec. 3's now.)
-* GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
+* (CLOSED 2026-11-13, kept for the numbers.) GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 at ef43df7
+  -> 1368 of 1369 (f232-f1600): the song's 443 px were the arena's PRIORITY TILES, repainted over the sprites from the
+  raw tile and not from the arena as composed (the beam's math on the canopy and the tent's edge), and the single
+  frames were the pennants' tile steps drawn at once on a frame that re-bakes the arena (a fight's tile DMAs are
+  held a frame as DMAs now) -- check `battle-picture-seq-gato-song-vs-cartridge`. Left: f1316, 33 px on the strip's
+  lines 183-190 -- a gauge's repaint a frame late in the port: from row f1310 the cartridge consumes the rebuild
+  request `$993A` in the frame that raises it (rows f1310 / f1314 / f1318 read 00) where the port's reads 01 and is
+  consumed a row later; `$E5` 00 and `$0027` F8 stand on both sides there (the main thread is not in the idle
+  iteration). Not derived: which loop the main thread is in. The entry before these fixes:
+  GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
   the ladders' gate, field.c battleGatoRender: a scripted action shows the published pose only -- check
   `battle-picture-seq-gato-first-attack-vs-cartridge`). Left: one frame of the song's pre-roll, f1018 (436 px, not
   looked at), and the song's lit window f1049-f1230, 443 px a picture at the cone's top -- lines 0-14 between
@@ -146,4 +155,3 @@ frames where the singer's cell led the spotlight.
 * The effect sprites have not been measured against either class with a frame-by-frame tool.
 * CD/088D's gates on the OAM upload (`$CE0F`, `$CD02`) are the strip upload's own; no measured frame has them set
   while a sprite moves.
-* A re-bake for another reason (a CGRAM change) on the frame of a tile step shows that step a frame early.

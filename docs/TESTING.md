@@ -3205,6 +3205,9 @@ sec. 9), and the entrance ladder's poses are the main thread's (four mutations).
 `battle-picture-seq-gato-first-attack-vs-cartridge` is GATO's fight left alone from its boot through his first attack,
 f232-f1008 (`777 of 777`): a scripted action shows the published pose only -- the idle cell through the attack's
 pre-roll, where the port's reconstructed rear-up ladder stood 23 pictures early (one mutation).
+`battle-picture-seq-gato-song-vs-cartridge` is his song, f1009-f1315 (`307 of 307`, 121 before): the arena's priority
+tiles are under the beam's colour math like every other BG pixel, and a fight's tile DMAs are held a frame as DMAs
+(the pennants' steps on the frames the song fades the page) -- three mutations.
 
 The same change moved a fight's picture to ONE diagonal, port P = the cartridge's P + 1: `battle-strip-upload-*`
 grade the strip's thumbnails there (it was P + 2), `attract-087-ice-sword-afterimage-vs-oracle` and

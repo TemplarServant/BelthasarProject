@@ -279,6 +279,5 @@ raised on an even frame, a picture early on an odd one (the forest's f244: 3828 
 line of the strip). `battle.c battleIrqFrame` runs the service at the tick's end on an even `$7C`; the picture of the
 install's own frame keeps the tables it replaced (`battlePresetKeepOld`, `CtBattlePictureTables`).
 
-Not examined: the odd frame's `JSL FD/FFFD` = `JMP FD/E022`, a VRAM DMA service (`$4370` 41, `$4371` 18, `INC $1D` and
-its two halves on `$1D`'s parity, FD/E160 the other) -- which of a fight's tile uploads ride it, and whether the port's
-are on that parity.
+The odd frame's `JSL FD/FFFD` = `JMP FD/E022` is the room's tile animation (the field IRQ's own service, without its
+`$0153` gate): field.c runs it on that parity (fieldBattleIrqTiles) and holds its DMAs a frame (fieldTileDmaHoldCb).

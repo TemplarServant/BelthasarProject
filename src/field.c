@@ -5806,6 +5806,34 @@ static void fieldTileDmaCb(void* ctx, int vramWord, int bank, int src, int bytes
   for (int i = 0; i < bytes / 2; i++) g_fieldVram[(vramWord + i) & 0x7FFF] = (uint16_t)(buf[2 * i] | (buf[2 * i + 1] << 8));
   if (CtFieldSceneTileDma(c->sd, vramWord, buf, bytes)) c->dirty = 1;
 }
+// A fight's tile step, held a frame. The battle's IRQ makes these DMAs on line 211, under its forced blank: they are on
+// the screen in the NEXT frame, like everything else a fight uploads (disasm/notes/battle_picture_lags.md). The DMAs are
+// kept as issued (the bytes of that frame) and reach the port's VRAM image and the scene's characters at the head of the
+// next battle frame (fieldTileDmaFlush). Holding only the re-bake did not do: a frame that re-bakes the arena for
+// another reason -- a CGRAM step of a fade -- drew the stepped tiles at once. Measured on the rule's cartridge, GATO's
+// song (gato_wait): the fair's pennants step on the frames the song's records fade the page, and each such step was a
+// picture early (f1050, f1058, f1066, f1082 ..: 399-441 px).
+static struct { int vw, bytes; uint8_t buf[0x100]; } g_bTileQ[16];
+static int g_bTileQn, g_bTileHold;
+static void fieldTileDmaHoldCb(void* ctx, int vramWord, int bank, int src, int bytes) {
+  FieldTileDma* c = (FieldTileDma*)ctx;
+  if ((bank != 0x7E && bank != 0x7F) || g_bTileQn >= (int)(sizeof g_bTileQ / sizeof g_bTileQ[0])) return;
+  const uint8_t* p = c->w + (bank == 0x7F ? 0x10000 : 0);
+  if (bytes > (int)sizeof g_bTileQ[0].buf) bytes = (int)sizeof g_bTileQ[0].buf;
+  for (int i = 0; i < bytes; i++) g_bTileQ[g_bTileQn].buf[i] = p[(src + i) & 0xFFFF];
+  g_bTileQ[g_bTileQn].vw = vramWord; g_bTileQ[g_bTileQn].bytes = bytes; g_bTileQn++;
+}
+static int fieldTileDmaFlush(void* sd) {
+  int dirty = 0;
+  for (int k = 0; k < g_bTileQn; k++) {
+    const uint8_t* b = g_bTileQ[k].buf;
+    for (int i = 0; i < g_bTileQ[k].bytes / 2; i++)
+      g_fieldVram[(g_bTileQ[k].vw + i) & 0x7FFF] = (uint16_t)(b[2 * i] | (b[2 * i + 1] << 8));
+    if (sd && CtFieldSceneTileDma(sd, g_bTileQ[k].vw, b, g_bTileQ[k].bytes)) dirty = 1;
+  }
+  g_bTileQn = 0;
+  return dirty;
+}
 // A seed's VRAM is not in its WRAM: what each animated record shows is the frame of the step its accumulator took last
 // (CtTileAnimShown) -- until the runner's own next DMA replaces it. A record whose step does not say is left as loaded.
 static int fieldTileAnimSeedShown(void* sd, const uint8_t* w) {
@@ -5928,7 +5956,7 @@ static int fieldBattleIrqTiles(void* sd, uint8_t* w, int frameNo) {
 }
 static int fieldTileAnimRun(void* sd, uint8_t* w, int frameNo) {
   FieldTileDma tc = { sd, w, 0 };
-  CtTileAnimRun(w, fieldTileDmaCb, &tc);
+  CtTileAnimRun(w, g_bTileHold ? fieldTileDmaHoldCb : fieldTileDmaCb, &tc);
   { static int tr = -1; if (tr < 0) tr = getenv("CT_TILEANIMTRACE") ? 1 : 0;
     if (tr) { printf("tileanim f%d 051D=%02X 05B0=", frameNo, w[0x051D]);
               for (int k = 0; k < 60; k++) printf("%02X", w[0x05B0 + k]);
@@ -7178,7 +7206,6 @@ static uint8_t g_bMosSize[CAMH]; static int16_t g_bMosSrc[CAMH]; static int g_bM
 // copied before the frame's tick on CD/088D's gates) -- while the registers HDMA feeds from the shadows the service
 // writes on line 64 (the mosaic, the bands, the effect layer's) are read in the frame itself.
 static CtBattleHost g_bOamHost; static uint8_t g_bStripShown[sizeof ((CtBattleHost*)0)->stripVram]; static int g_bStripOn;
-static int g_bTileStepPend;                        // a fight's tile step of the frame before: on the picture now
 static void battleMosaicApply(uint8_t* fb, int W, int vx, const uint8_t* above, uint8_t* pre) {
   memcpy(pre, fb, (size_t)W * CAMH * 3);
   for (int y = 0; y < CAMH; y++) {
@@ -18406,7 +18433,7 @@ int main(int argc, char** argv) {
         bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);                  // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
       if (fieldIrqPreFlip) bw[0x0153] ^= 0x01;
       bgDirty |= CtFieldSceneSetCgram(f.sd, g_fieldCgram);
-      bgDirty |= g_bTileStepPend; g_bTileStepPend = 0;              // (a fight's last step, if the fight ended on it)
+      bgDirty |= fieldTileDmaFlush(f.sd);                           // (a fight's last step, if the fight ended on it)
     } else if (battlePhase && f.sd) {
       // The battle's frames: the arena is the field's BG drawn with the CGRAM the battle's NMI uploaded (CD/08B4 JSL
       // C1/0009 -> CF/E3C0, the whole live page: liveHost.fxCgram), the colours its sprites are drawn with. Every record
@@ -18426,12 +18453,14 @@ int main(int argc, char** argv) {
         // whole: its main loop's C0/00C7 flip, its NMI and its IRQ. MEASURED, the rule's cartridge, playthrough leg 95
         // (loc 1BF, the transfer at f641): `$0153` 01 and `$051D` 11 -> 12 on f641, 00 and no step on f642.
         // The step's tiles are DMA'd by the IRQ on line 211 and are on the screen in the next frame, like everything else a
-        // fight uploads (disasm/notes/battle_picture_lags.md): the arena is baked with them a frame after the step.
-        { int stepped;
-          if (liveHost.frames == 0 || (fieldRuleIfast() && liveHost.frames == 1))
-            stepped = fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
-          else stepped = fieldBattleIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
-          bgDirty |= g_bTileStepPend; g_bTileStepPend = stepped; }
+        // fight uploads (disasm/notes/battle_picture_lags.md): the DMAs of the frame before reach the scene now, this
+        // frame's are held (fieldTileDmaHoldCb).
+        bgDirty |= fieldTileDmaFlush(f.sd);
+        g_bTileHold = 1;
+        if (liveHost.frames == 0 || (fieldRuleIfast() && liveHost.frames == 1))
+          fieldIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+        else fieldBattleIrqTiles(f.sd, CtSceneMem7E(f.vm), frameNo);
+        g_bTileHold = 0;
       }
       // ...and with the battle's colour math, not the map header's: the arena's lines take CGWSEL/CGADSUB from the shadow
       // block the battle's NMI ships ($BE95 CGWSEL CGADSUB COLDATA SETINI, D1/E7BB: HDMA channel 3, CtBattleFxLayerCompose).
@@ -19587,6 +19616,10 @@ int main(int argc, char** argv) {
       // (the combatants as the NMI uploaded them: the last compose's -- until a fight's first upload, the live ones)
       const uint8_t* bOamMem = bmem;
       const int bOam = battlePhase && CtBattleOamShown(&liveHost, &g_bOamHost, &bOamMem);
+      // (the arena as it stands under the sprites -- its tiles under the rows' colour math, the mosaic, a flash: what a
+      //  BG1 / BG2 priority tile shows where it covers a sprite, below)
+      static uint8_t bArenaFb[CAMW * CAMH * 3];
+      memcpy(bArenaFb, fb, sizeof bArenaFb);
       battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
       if (bMot) { g_mot = NULL; g_motOwn = CT_MOT_FIXED; memcpy(g_motPic, fb, (size_t)CAMW * CAMH * 3); mot->valid = 1; }
       const int bPop0 = bMot ? mot->nspr : 0;         // (the popups' objects follow the combatants')
@@ -19613,7 +19646,12 @@ int main(int argc, char** argv) {
             if (objPrio[y * CAMW + x] == 3) continue;
             if (bgWinAt(x, y)) continue;
             if (g_objSubOn && g_objSubDone[(size_t)y * g_fw + x]) continue;   // the sprite under it is its sub pixel: mixed
-            memcpy(fb + ((size_t)y * CAMW + x) * 3, mz > 1 ? mosFb + ((size_t)y * CAMW + x) * 3 : f.base + bo * 3, 3);
+            // The tile's pixel is the arena's as composed, not the raw tile: a priority tile is a BG1 / BG2 pixel
+            // like any other to the rows' colour math. Measured on the rule's cartridge, GATO's song (gato_wait,
+            // f1049-f1230): the beam -- BG3 on the sub screen added to BG1 / BG2, CGADSUB 03 -- tints the tree's
+            // canopy and the tent's edge at the top of the cone, where the raw tiles left 443 px a picture
+            // (lines 0-14, x 150-185) untinted. The port's BG3 map and tiles are the cartridge's VRAM word for word.
+            memcpy(fb + ((size_t)y * CAMW + x) * 3, bArenaFb + ((size_t)y * CAMW + x) * 3, 3);
             objPal[y * CAMW + x] = 0xFF;                 // the BG tile is on top here, not the sprite
           }
       if ((prioKept || prioCovered) && getenv("CT_BATTLE_PRIOTRACE"))
