@@ -3796,15 +3796,23 @@ static const uint8_t* menuFont = NULL;           // CT_ASSET_MENUFONT: raw 2bpp,
 // (CtMenuFontOverlayC9FC) -- the Config editor's arrow is tile 0x31. The battle HUD's VRAM is the plain font.
 static uint8_t menuFontC2Buf[256 * 16];
 static const uint8_t* menuFontC2 = NULL;
+// The shell's screen $0D (the selector, the naming) was measured on, and its bakes cut from, the oracle's FRAME
+// (ct.exe --peek's buffer), which centres the 224-line picture in a 239-line frame: snes/ppu.c ppu_putPixels puts the
+// picture's line y at frame row 2y + 16, eight frame lines down. The bakes (CT_ASSET_NAMEWIN, CT_ASSET_NAMEMSG,
+// tables/atbsel.h) keep that 8-line head; the positions below are the PICTURE's lines (the frame's minus NS_HEAD), and
+// the bakes are drawn NS_HEAD lines up. Measured on the rule's cartridge, playthrough leg 49 (Robo's naming, f11160):
+// the windows' ink on the picture's lines 8-214 (BG2's V scroll 1023: the name window is tile rows 1-8), where the
+// port, drawing the frame's lines as the picture's, had 16-222 -- the whole screen identical 8 lines up.
+#define NS_HEAD 8
 #define NS_GX 52                                 // keyboard glyph (8x8) top-left col0/row0 (oracle x52)
-#define NS_GY 92
+#define NS_GY 84
 #define NS_PITCH 16
 #define NS_NX 160                                // name field: char i at x = NS_NX + i*8
-#define NS_NAMETOP 48                            //   glyph top (baseline y54, oracle y48)
+#define NS_NAMETOP 40                            //   glyph top (baseline y46)
 #define NS_PX 88                                 // portrait top-left
-#define NS_PY 24
-#define NS_HANDX 36                              // grid hand sprite top-left, measured from the fb (the
-#define NS_HANDY 91                              //   OAM Y is fb-offset); points at the selected letter
+#define NS_PY 16
+#define NS_HANDX 36                              // grid hand sprite top-left, measured from the oracle's frame;
+#define NS_HANDY 83                              //   points at the selected letter
 static int asciiToCt(char a);   // fwd: ASCII -> CT char code (defined below, via the keyboard grid)
 // One 8x8 menu-font glyph (2bpp, tile = char code) in the menu text palette (CGRAM row 0):
 // 1 = shadow, 2 = anti-alias, 3 = white body -- so the drop shadow is part of the glyph.
@@ -3959,11 +3967,12 @@ static void drawNameScreen(uint8_t* fb, const uint8_t* font, int charId, const c
   if (nsWin) {                                            // the window background (BG2 isolated
     int ww = nsWin[0] | (nsWin[1] << 8), wh = nsWin[2] | (nsWin[3] << 8);  // from the oracle: weave and
     const uint8_t* wp = nsWin + 4;                        //   HDMA gradient, both windows, black elsewhere)
-    int n = ww < CAMW ? ww : CAMW, m = wh < 224 ? wh : 224;
-    for (int y = 0; y < m; y++) memcpy(fb + (size_t)y * CAMW * 3, wp + (size_t)y * ww * 3, (size_t)n * 3);
+    int n = ww < CAMW ? ww : CAMW, m = wh < 224 + NS_HEAD ? wh : 224 + NS_HEAD;
+    for (int y = NS_HEAD; y < m; y++)                     //   (the bake's row y is the picture's line y - NS_HEAD)
+      memcpy(fb + (size_t)(y - NS_HEAD) * CAMW * 3, wp + (size_t)y * ww * 3, (size_t)n * 3);
   } else {                                                // fallback: the procedural windows
-    drawCtWindowRect(fb, 80, 16, 144, 58);
-    drawCtWindowRect(fb, 32, 80, 192, 144);
+    drawCtWindowRect(fb, 80, 8, 144, 58);
+    drawCtWindowRect(fb, 32, 72, 192, 144);
   }
   for (int r = 0; r < 8; r++) for (int c = 0; c < 10; c++)   // the keyboard, in the menu font
     drawMenuGlyph(fb, NAME_GRID[r * 10 + c], NS_GX + c * NS_PITCH, NS_GY + r * NS_PITCH);
@@ -3978,12 +3987,12 @@ static void drawNameScreen(uint8_t* fb, const uint8_t* font, int charId, const c
   for (int i = 0; i < 5; i++)                             // the entered name (menu font, with shadow)
     if (buf[i] && buf[i] != ' ') drawMenuGlyph(fb, asciiToCt(buf[i]), NS_NX + i * 8, NS_NAMETOP);
   { int tx = NS_NX + pos * 8 - 2;                         // name-edit cursor = the 11x12 triangle
-    nsBlitTri(fb, nsTri, tx, 33, 1);                      //   above the name (V-flipped), apex down
-    nsBlitTri(fb, nsTri, tx, 55, 0); }                    //   below the name, apex up; both move with pos
+    nsBlitTri(fb, nsTri, tx, 25, 1);                      //   above the name (V-flipped), apex down
+    nsBlitTri(fb, nsTri, tx, 47, 0); }                    //   below the name, apex up; both move with pos
   nsBlitSprite(fb, nsHand, NS_HANDX + curCol * NS_PITCH, NS_HANDY + curRow * NS_PITCH);  // grid hand
   if (msg && nsMsg) {                                    // the "Enter a name, then push the Start Button."
-    int mx = nsMsg[0] | (nsMsg[1] << 8), my = nsMsg[2] | (nsMsg[3] << 8);  // prompt box (new-game Crono only):
-    int mw = nsMsg[4] | (nsMsg[5] << 8), mh = nsMsg[6] | (nsMsg[7] << 8);  // an overlay over the keyboard
+    int mx = nsMsg[0] | (nsMsg[1] << 8), my = (nsMsg[2] | (nsMsg[3] << 8)) - NS_HEAD;  // prompt box (new-game Crono only;
+    int mw = nsMsg[4] | (nsMsg[5] << 8), mh = nsMsg[6] | (nsMsg[7] << 8);  // its rect is in the frame's lines):
     const uint8_t* mb = nsMsg + 8;
     for (int j = 0; j < mh; j++) for (int i = 0; i < mw; i++) {
       int dx = mx + i, dy = my + j;
@@ -4267,8 +4276,10 @@ static void menuShellPrelude(uint8_t* m, const char* who) {
 // x < TEXT_X + pen and the empty box where x >= it. The pens are ROM data (the $C2:60E6 width table over the $FF:CF3B
 // string, from the $0DD2 = 8 indent).
 // Returns the number of drawn frames a full reveal takes, so the caller knows when it is over.
+// Both in the bake's rows (the oracle frame's lines, NS_HEAD below the picture's):
 #define ATBSEL_LINE1_Y 161   // the band split, measured: line 0 inks y146..159, line 1 y162..173
-#define ATBSEL_DESC_Y0 128    // the description window's top line ($FF:C429 op 04, tile row 16)
+#define ATBSEL_DESC_Y0 128    // the top of the rows the typewriter may blank: 8 above the description window's
+                              // ($FF:C429 op 04, tile row 16 = the picture's line 128, the bake's row 136)
 static int atbSelRevealFrames(int row) {
   return ctAtbSelPenN[row][0] + 1 + ctAtbSelPenN[row][1] + 1;   // +1 newline, +1 terminator
 }
@@ -4287,7 +4298,11 @@ static int atbSelLineCut(int row, int li, int step) {
 }
 
 static void drawAtbSelScreen(uint8_t* fb, int row, int fade, int step) {
-  for (int y = 0; y < CT_ATBSEL_HGT; y++) {
+  // The bake is the oracle's FRAME, its row y the picture's line y - NS_HEAD (see NS_HEAD): the frame's 8-line head is
+  // not drawn, and the picture's last 8 lines -- below the bake, black on the cartridge (its ink ends on line 206) --
+  // are cleared.
+  memset(fb + (size_t)(224 - NS_HEAD) * CAMW * 3, 0, (size_t)NS_HEAD * CAMW * 3);
+  for (int y = NS_HEAD; y < CT_ATBSEL_HGT; y++) {
     for (int x = 0; x < CT_ATBSEL_W; x++) {
       uint8_t pidx = ctAtbSelFrame0[y][x];
       if (row == 1 && x >= CT_ATBSEL_PATCH_X && x < CT_ATBSEL_PATCH_X + CT_ATBSEL_PATCH_W &&
@@ -4295,8 +4310,9 @@ static void drawAtbSelScreen(uint8_t* fb, int row, int fade, int step) {
         pidx = ctAtbSelPatch1[y - CT_ATBSEL_PATCH_Y][x - CT_ATBSEL_PATCH_X];
       // mid-reveal: right of the write head the line still shows the empty box, inside the description window only.
       // The typewriter's text is BG1 in that window ($FF:C429, C2/E576's display list: op 04 at tile (2,16), 28 x 10;
-      // BG1/BG2 V scroll 1023: screen lines 128-207); the hand is a sprite above it, which the typewriter never
-      // touches. (The empty-box bake spans the patch rect y93-173 with the hand on WAIT, so it is used from line 128.)
+      // BG1/BG2 V scroll 1023: the picture's lines 128-207, the bake's rows 136-215); the hand is a sprite above it,
+      // which the typewriter never touches. (The empty-box bake spans the patch rect y93-173 with the hand on WAIT, so
+      // it is used from row 128.)
       if (step >= 0 && x >= CT_ATBSEL_EMPTY_X && x < CT_ATBSEL_EMPTY_X + CT_ATBSEL_EMPTY_W &&
                        y >= ATBSEL_DESC_Y0 && y < CT_ATBSEL_EMPTY_Y + CT_ATBSEL_EMPTY_H) {
         int li = (y >= ATBSEL_LINE1_Y) ? 1 : 0;         // the two text bands
@@ -4304,7 +4320,7 @@ static void drawAtbSelScreen(uint8_t* fb, int row, int fade, int step) {
           pidx = ctAtbSelEmpty[y - CT_ATBSEL_EMPTY_Y][x - CT_ATBSEL_EMPTY_X];
       }
       const uint8_t* c = ctAtbSelPal[pidx];
-      plot(fb, x, y, c[0], c[1], c[2]);
+      plot(fb, x, y - NS_HEAD, c[0], c[1], c[2]);
     }
   }
   if (fade < 16) {                                       // fade in/out: mirrors drawNameScreen's ramp
@@ -19598,6 +19614,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
       if (bMot) g_mot = mot;
+      // (the numbers are OAM too: CF/E781 animates them in the frame service, ahead of the compose -- the mirror's)
       if (!defeatHold) battleFxPopupsRender(fb, &liveHost);           // rising damage numbers (top)
       if (bMot) {                                      // ...their pixels are theirs in the owners' picture, not fixed
         g_mot = NULL;

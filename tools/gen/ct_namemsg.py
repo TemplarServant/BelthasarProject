@@ -11,7 +11,8 @@ saves/crononame.state).
 
     python tools/gen/ct_namemsg.py [--state S] [--out saves/ct_namemsg.bin]
 
-Output: [x0 u16][y0 u16][w u16][h u16] + w*h*3 RGB (224x48 at 16,104).
+Output: [x0 u16][y0 u16][w u16][h u16] + w*h*3 RGB (224x48 at 16,104). The rect is in the oracle FRAME's lines (its
+8-line head included): the picture's lines 96-143. field.c draws it NS_HEAD lines up.
 """
 import argparse
 import os

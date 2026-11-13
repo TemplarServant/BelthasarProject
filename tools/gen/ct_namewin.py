@@ -13,7 +13,9 @@ screen before its Start; it stands in for saves/luccaname.state).
 
     python tools/gen/ct_namewin.py [--state S] [--out saves/ct_namewin.bin]
 
-Output: [w u16 LE][h u16 LE] + w*h*3 RGB (256x224).
+Output: [w u16 LE][h u16 LE] + w*h*3 RGB (256x224): the oracle FRAME's first 224 lines, i.e. its 8-line head (the
+frame centres the 224-line picture, snes/ppu.c ppu_putPixels) and the picture's lines 0-215. field.c draws row y at the
+picture's line y - 8 (NS_HEAD).
 """
 import argparse
 import os

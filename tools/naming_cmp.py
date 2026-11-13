@@ -108,9 +108,9 @@ def run(name, peeks):
                     '--frames', str(BASE + end), '--walkscript', ','.join(walk)], cwd=ROOT, env=penv,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     O, P = M.load_thumbs(ot), M.load_thumbs(pt)
-    # The naming screen sits at the cartridge's own lines: the port's line y is the oracle frame's line y (offset 0
-    # matches; 1 and the other menus' 8 do not), so the oracle's thumbnail, made past the 8-line head, is the port's
-    # four thumbnail rows lower: rows 0-107 of the one against rows 4-111 of the other
+    # The port's line y is the PICTURE's line y, as on every other screen: the oracle's thumbnail (made past its
+    # frame's 8-line head) against the port's, row for row. (Until 2026-11-13 the screen was drawn at the oracle
+    # FRAME's lines, 8 below the picture's, and this compare was made four thumbnail rows off to fit it.)
     report(name, f0, f1, lambda f: O.get(f + M.SHIFT), lambda f: P.get(BASE + f))
     for f in peeks:
         of = os.path.join(out, '_o_%d.raw' % f)
@@ -125,7 +125,7 @@ def report(name, f0, f1, ofn, pfn):
     diff = []
     for f in range(f0, f1 + 1):
         o, p = ofn(f), pfn(f)
-        if o is not None and p is not None and o[:108 * R] != p[4 * R:112 * R]:
+        if o is not None and p is not None and o[:112 * R] != p[:112 * R]:
             diff.append(f)
     print('naming-cmp: %s f%d-f%d: %d of %d frame(s) differ' % (name, f0, f1, len(diff), f1 - f0 + 1))
     runs = []
@@ -144,8 +144,8 @@ def peek_cmp(out, f, of, pf):
         return
     ow, oh, o = fb.load(of)
     pw, ph, p = fb.load(pf)
-    n = sum(1 for y in range(ph) for x in range(pw)                           # (offset 0: see above)
-            if p[(y * pw + x) * 3:(y * pw + x) * 3 + 3] != o[(y * ow + x) * 3:(y * ow + x) * 3 + 3])
+    n = sum(1 for y in range(ph) for x in range(pw)                           # (the frame's 8-line head)
+            if p[(y * pw + x) * 3:(y * pw + x) * 3 + 3] != o[((y + 8) * ow + x) * 3:((y + 8) * ow + x) * 3 + 3])
     print('naming-cmp: peek f%d -> %d px differ' % (f, n))
     fb.fb_to_png(of, os.path.join(out, 'o_%d.png' % f))
     fb.fb_to_png(pf, os.path.join(out, 'p_%d.png' % f))

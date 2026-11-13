@@ -48,7 +48,8 @@ def regen():
             peek(BTNE, os.path.join(SP, 'atbsel_empty.raw')))
 
 # oracle --peek fb = 512x480, 2x pixel-doubled, [pad,B,G,R] per px (R at +3). Sample the true (non-doubled)
-# 256x224 grid.
+# 256x224 grid -- the FRAME's first 224 lines: its 8-line head (the frame centres the 224-line picture, snes/ppu.c
+# ppu_putPixels) and the picture's lines 0-215. field.c's drawAtbSelScreen draws row y at the picture's line y - 8.
 def load_fb(path):
     d = open(path, 'rb').read()
     px = [[None] * W for _ in range(H)]

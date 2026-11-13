@@ -352,6 +352,12 @@ to press through it -- the selector no longer auto-resolves under `--selftest`. 
 f13, the selector's P is f45 (first call, A dropped, f46), and an A at f60 puts the prompt up from f74: that is why
 every `field-naming-*` drive starts `wait:60; a:1;`.
 
+* The screen is drawn at the PICTURE's lines. Its bakes (CT_ASSET_NAMEWIN, CT_ASSET_NAMEMSG, src/data/atbsel.h) were
+  cut from the oracle's FRAME, which centres the 224-line picture in a 239-line frame (snes/ppu.c ppu_putPixels:
+  line y at frame row 2y + 16), and keep its 8-line head: field.c draws them `NS_HEAD` lines up. Until 2026-11-13 the
+  whole screen was 8 lines below the cartridge's (leg 49, Robo's naming: ink on lines 16-222 for the cartridge's
+  8-214) and `tools/naming_cmp.py` compared it four thumbnail rows off to fit; it compares row for row now. The
+  mutation `NS_HEAD 0` turns the keyboard's and the selector's checks red.
 * The PICTURE is graded against the cartridge frame by frame by `tools/naming_cmp.py`: `menu-naming-screen-vs-oracle`
   (the keyboard), `menu-naming-boot-selector-vs-oracle` (a blank cart from power-on through the selector, the prompt,
   the keyboard and the close), `menu-naming-boot-confirm-in-fade-vs-oracle` (A inside the fade-in),
