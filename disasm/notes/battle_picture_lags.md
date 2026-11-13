@@ -96,11 +96,18 @@ frames where the singer's cell led the spotlight.
 
 ## 4. Open
 
-* The choosing PC's pointer bobs out of phase with the cartridge's for stretches of the command phase (the forest
-  f520-f545, 46-50 px at every lag): not a lag.
+* The choosing PC's head differs from the cartridge's for stretches of the command phase while L + R are held (the
+  forest f520-f545 and f577-f578: 46-50 px on rows 41-50 inside the bracket, at every lag): a cell of the run-away
+  attempt, not a lag.
 * The boot (the forest f172-f300): the best lag is -3 / -2 there -- the port stages the boot ahead of the cartridge.
-* The forest's command phase (f300-f840) keeps 26 frames that fit the cartridge two pictures earlier but for the
-  bracket (52 px): a stretch where the whole picture holds and the bracket's pulse does not -- not examined.
+* A cell that needs new tiles is on the cartridge's screen one or two pictures after the port's: the forest's command
+  phase (f300-f840) keeps 26 such frames -- f441 / f442, the Hetake that starts its travel at f444: the port's picture
+  has the new cell (1048 px, the whole sprite) where the cartridge still shows the old one, and every other pixel but
+  the bracket's fits two pictures earlier. The feet of that travel are equal row by row and picture by picture, so
+  it is the cell's TILES, not its timing in RAM: the NMI ships a combatant's rebuilt tiles in packets (CD/3EB4, a
+  request `$CA26` the main thread raises through CD/3ED2 -- $400 bytes a frame, $1000 with `$CE0F` -- and waits on with
+  CD/3E75). To derive: which pose changes go through it, how many packets a cell takes, and what the screen shows
+  between the first packet and the last.
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * The damage numbers and the effect sprites have not been measured against either class with a frame-by-frame tool.
