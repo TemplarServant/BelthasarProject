@@ -3209,6 +3209,17 @@ pre-roll, where the port's reconstructed rear-up ladder stood 23 pictures early 
 tiles are under the beam's colour math like every other BG pixel, and a fight's tile DMAs are held a frame as DMAs
 (the pennants' steps on the frames the song fades the page) -- three mutations.
 
+`field-picture-magus-is-drawn-from-his-raw-sheet-vs-cartridge` (`tools/field_picture_cmp.py`): playthrough leg 95,
+f10500 of Magus's fight. His sheet pointer `$1C60` names the ROM (D2:0000, the raw sheet he has as a party member),
+and the port, decompressing every enemy's sheet by its id, drew nobody (544 px). `0 px differ at port -1`; one
+mutation. disasm/notes/battle_sheet_decomp.md sec. 6.
+
+`field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
+portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
+record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one
+mutation. The portrait is in the container (`pack_portraits`, eight entries): a container built before 2026-11-13
+has seven and the check fails on it. disasm/notes/naming_screen_sfx.md, "The Epoch's portrait".
+
 The same change moved a fight's picture to ONE diagonal, port P = the cartridge's P + 1: `battle-strip-upload-*`
 grade the strip's thumbnails there (it was P + 2), `attract-087-ice-sword-afterimage-vs-oracle` and
 `attract-battle-colours-entry-and-tech-vs-oracle` pair 07D at + 2067 and 0AD / 087 at + 2066.

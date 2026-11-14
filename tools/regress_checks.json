@@ -51862,6 +51862,74 @@
       ]
     },
     {
+      "name": "field-picture-magus-is-drawn-from-his-raw-sheet-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "magus-is-drawn-from-his-raw-sheet"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: magus-is-drawn-from-his-raw-sheet leg 95 f600 +9900 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: magus-is-drawn-from-his-raw-sheet "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Magus stands in his fight: an enemy whose sheet pointer names the ROM is drawn from it",
+      "notes": "AN ENEMY WITH A RAW SHEET (disasm/notes/battle_sheet_decomp.md sec. 6). The port did not draw Magus at all: through his whole fight in playthrough leg 95 (called on f9962; the audit's samples f10200-f22500) the cartridge has him at the room's centre and the port's picture had nobody there -- 544 px of this frame (f10500), at every lag. Both sides' RAM agreed: enemy block 0 id F9, `$990A` EB (the published pose), `$967C` type 0, the alive list F9, `$9FF7` 0, the foot (78,6F) -- and the sheet pointer `$1C60..$1C62` = 00 00 D2. The staging hands an enemy the sheet its field object carried (CC/EAC4-EACF: `$1C60,Y` = `$29C8,X`, `$1C62,Y` = `$29CA,X`): for every other enemy that is its decompressed sheet in bank $7F, for Magus the ROM's own address D2:0000 = E4:2000[6], the raw 4bpp sheet he has as a party member (E4:F600's record for F9 is `06 06 06 AE ..`; ids F9 / FA / FB carry index 6, F8 index 3). The tile builder C1/1C4A reads the cells' tiles through that pointer wherever it points. The port's renderer ignored the pointer and LZ-decompressed the id's E4:2000 source -- raw tiles read as a compressed stream: nothing. It now reads the tile through the combatant's pointer when its bank is a ROM bank (battle.c CtBattleCmbSheetRaw / CtBattleCmbRawSheetTile; field.c battleEnemySheetTile, the dissolve too). The cut is the mist case's (f600), 9900 frames of the leg's own pad. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  return mem && cmb >= 0 && cmb < 11 && mem[0x1C59 + cmb * 3] >= 0xC0;\n",
+          "replace": "  (void)mem; (void)cmb; return 0;   /* MUT: every enemy's sheet is its id's decompressed source */\n",
+          "why": "C1/1C4A reads `[$1C57,X]`: Magus's pointer is D2:0000, a raw sheet in the ROM (CC/EAC4 copied it from his field object), not a decompressed one in bank $7F"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "naming-portrait-of-the-epoch"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: naming-portrait-of-the-epoch leg 108 f35300 +400 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: naming-portrait-of-the-epoch "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Epoch's naming screen has the Epoch's portrait: the eighth name id's own tiles and palette",
+      "notes": "THE EIGHTH NAME ID (disasm/notes/naming_screen_sfx.md, 'The Epoch's portrait'). The naming screen's portrait frame is filled by C2/EC38 from the name id `$0D46`: 6x6 tile words counting up from the base tile `$FFCE70,X`, the 16 colours through the pointer `$FFCE78,X*2`. Ids 0-6 are the party, whose 36 tiles each stand in the set the screen loads; id 7, the Epoch, has base tile 01 like Crono, and its own tiles are sent over his: C2/E44D `CMP #07 / BCC C2/E457 / LDX #FC68 / JSR C2/8385` queues the transfer record C2:FC68 = `10 20 | 88 EB FF | 80 04 | 00` -- $0480 bytes from FF:EB88 to VRAM word $2010 -- and FF:CE78's eighth pointer is FF:CE50. The port's container packed seven portraits and the screen drew ids 0-6: on the Epoch's naming (playthrough leg 108, the screen up from f35404) the frame stood empty -- 2295 px of this frame, f35700. assets/extract_assets.py pack_portraits packs the eighth from the record itself; field.c loads and draws eight. The cut is in the field at f35300, 400 frames of the leg's own pad. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (charId >= 0 && charId < 8 && nsPortrait[charId]) {\n",
+          "replace": "  if (charId >= 0 && charId < 7 && nsPortrait[charId]) {   /* MUT: the party's seven portraits only */\n",
+          "why": "C2/EC38 reads `$FFCE70,X` / `$FFCE78,X*2` for every name id, 7 included: the Epoch's naming shows the Epoch (its tiles sent by the record C2:FC68, C2/E44D)"
+        }
+      ]
+    },
+    {
       "name": "field-picture-run-off-closes-the-command-menu-vs-cartridge",
       "argv": [
         "python",
@@ -52085,7 +52153,7 @@
         "saves/battle_re/gato_wait.state"
       ],
       "note_pass": "GATO's song, 307 pictures in a row -- the darkened arena, the beam, the notes, the pennants: every one is the cartridge's at the fight's one lag",
-      "notes": "THE ARENA UNDER A FIGHT'S COLOUR MATH AND ITS OWN TILE STEPS (disasm/notes/battle_picture_lags.md sec. 3). GATO's song, f1009-f1315 of the fight left alone (gato_wait, A on f0-7), was 121 of 307 at ef43df7. Three things, each measured on the rule's cartridge. (1) A PRIORITY TILE IS UNDER THE ROWS' MATH. The beam is BG3 on the sub screen added to BG1 / BG2 (`--hdma` at f1093: lines 0-160 one band, TM 13, TS 04, CGADSUB 03, BG3's scroll (985,123), no window); the port's BG3 map and tiles are the cartridge's VRAM word for word (CT_BATTLE_FXDUMP against the `.vram` of f1100: 0 of 0x400 map words, 0 of 0x1000 tile bytes). What differed, 443 px on every lit picture (f1049-f1230: lines 0-14, x 150-185, and the tent's edge), was the BG1 / BG2 PRIORITY tiles: field.c repaints them over the sprites, and took the raw tile for it -- the canopy and the tent's edge untinted. They are repainted from the arena as composed (bArenaFb: the tiles under the rows' colour math, the mosaic, a flash). (2) A FIGHT'S TILE DMAs ARE HELD A FRAME AS DMAs. The fair's pennants step in the battle's IRQ (D1/FE97's odd frame, FD/E022) and are on the screen in the next frame; the port held only the arena's re-bake, so a frame that re-baked for another reason -- every frame the song's records fade the page -- drew the stepped tiles at once (f1050, f1058, f1066, f1082, f1210 ..: 399-441 px a step). The DMAs are queued as issued and reach the scene at the head of the next battle frame (fieldTileDmaHoldCb / fieldTileDmaFlush). (3) THE SONG'S PRE-ROLL shows the idle cell (f1009-f1048: battle-picture-seq-gato-first-attack-vs-cartridge's gate, on the song's ladder here). NOT IN THIS CHECK: f1316, 33 px on the strip's lines 183-190 -- a gauge's repaint a frame late in the port (the rebuild request `$993A` of rows f1310 / f1314 / f1318 is consumed inside its frame on the cartridge and a row later in the port; open, battle_picture_lags.md sec. 4). The whole fight f232-f1600 is 1368 of 1369 whole pictures at one lag with this. Re-pin only with every frame it loses explained against the cartridge.",
+      "notes": "THE ARENA UNDER A FIGHT'S COLOUR MATH AND ITS OWN TILE STEPS (disasm/notes/battle_picture_lags.md sec. 3). GATO's song, f1009-f1315 of the fight left alone (gato_wait, A on f0-7), was 121 of 307 at ef43df7. Three things, each measured on the rule's cartridge. (1) A PRIORITY TILE IS UNDER THE ROWS' MATH. The beam is BG3 on the sub screen added to BG1 / BG2 (`--hdma` at f1093: lines 0-160 one band, TM 13, TS 04, CGADSUB 03, BG3's scroll (985,123), no window); the port's BG3 map and tiles are the cartridge's VRAM word for word (CT_BATTLE_FXDUMP against the `.vram` of f1100: 0 of 0x400 map words, 0 of 0x1000 tile bytes). What differed, 443 px on every lit picture (f1049-f1230: lines 0-14, x 150-185, and the tent's edge), was the BG1 / BG2 PRIORITY tiles: field.c repaints them over the sprites, and took the raw tile for it -- the canopy and the tent's edge untinted. They are repainted from the arena as composed (bArenaFb: the tiles under the rows' colour math, the mosaic, a flash). (2) A FIGHT'S TILE DMAs ARE HELD A FRAME AS DMAs. The fair's pennants step in the battle's IRQ (D1/FE97's odd frame, FD/E022) and are on the screen in the next frame; the port held only the arena's re-bake, so a frame that re-baked for another reason -- every frame the song's records fade the page -- drew the stepped tiles at once (f1050, f1058, f1066, f1082, f1210 ..: 399-441 px a step). The DMAs are queued as issued and reach the scene at the head of the next battle frame (fieldTileDmaHoldCb / fieldTileDmaFlush). (3) THE SONG'S PRE-ROLL shows the idle cell (f1009-f1048: battle-picture-seq-gato-first-attack-vs-cartridge's gate, on the song's ladder here). NOT IN THIS CHECK: f1316, 33 px on the strip's lines 183-190 -- a gauge's repaint a frame late in the port: the effect teardown's menu pass (CD/3E75 = the NMI, then `JSL C1/0012`) consumes the rebuild request `$993A` inside its frame on the cartridge (rows f1310 / f1314 / f1318 read 00) and a row later in the port. OPEN: moving the pass closes this frame (GATO f232-f1900 1669 of 1669) and moves playthrough leg 65's fight exits off the cartridge's frames (battle_picture_lags.md sec. 4). The whole fight f232-f1600 is 1368 of 1369 whole pictures at one lag with this. Re-pin only with every frame it loses explained against the cartridge.",
       "mutations": [
         {
           "file": "src/field.c",

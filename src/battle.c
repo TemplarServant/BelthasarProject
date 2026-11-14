@@ -491,6 +491,22 @@ const uint8_t* CtBattlePcSheetTile(int charId, int src) {
   if ((long)(fl + 0x20) > gRomLen) return NULL;
   return CtRomPtr(gRom, gRomLen, fl, 0x20);
 }
+// A combatant's sheet as the tile builder C1/1C4A reads it: through the 24-bit pointer `$1C57 + 3 * cmb`. The staging
+// (CC/EAC4-EACF) gives an enemy the sheet its field object carried (`$29C8,X` / `$29CA,X`): the decompressed sheet in
+// bank $7F for a compressed source -- or the ROM's own address when the object's sheet is a raw 4bpp one, as a PC's
+// is. Magus as an enemy is that case (id F9: E4:F600 record `06 ..`, E4:2000[6] = D2:0000, his own sheet): measured on
+// the rule's cartridge, playthrough leg 95 f10800, `$1C60..$1C62` = 00 00 D2 with `$990A` EB (the port's bytes too --
+// which then LZ-decompressed that address by the id and drew nothing).
+int CtBattleCmbSheetRaw(const uint8_t* mem, int cmb) {
+  return mem && cmb >= 0 && cmb < 11 && mem[0x1C59 + cmb * 3] >= 0xC0;
+}
+const uint8_t* CtBattleCmbRawSheetTile(const uint8_t* mem, int cmb, int src) {
+  if (!gRom || src <= 0 || !CtBattleCmbSheetRaw(mem, cmb)) return NULL;
+  long fl = (((long)mem[0x1C59 + cmb * 3] - 0xC0) << 16) | ((long)mem[0x1C58 + cmb * 3] << 8) | mem[0x1C57 + cmb * 3];
+  fl += (long)src * 0x20;
+  if (fl + 0x20 > gRomLen) return NULL;
+  return CtRomPtr(gRom, gRomLen, fl, 0x20);
+}
 int CtBattleEnemyE3Rec(int id, int idx, int type, uint16_t cw[96], int8_t pos[48]) {
   CtEnemyPoseStage st;
   if (!CtBattleEnemyPoseStage(id, &st)) return 0;
@@ -20616,6 +20632,11 @@ static int battleFxTeardownStep(CtBattleHost* h) {
   int t = h->fxTeardownT++ - 1;
   // Every frame of CD/0453 after its first ends in CD/3E75: `JSR CD/3E7D` (the NMI) then `JSL C1/0012` = C1/10E3, the
   // menu pass when the frame service raised `$993A`, so the strip's seat refresh and posts go on through it.
+  // OPEN (disasm/notes/battle_picture_lags.md sec. 4): on the cartridge the pass comes after that frame's NMI, so a
+  // request is consumed in the frame that raises it (GATO's song: rows f1310 / f1314 / f1318 read 00); here it runs
+  // ahead of the tick's NMI section and consumes it a row later (a gauge's repaint a picture late, f1316). Moving the
+  // pass past the NMI section closes that frame and moves playthrough leg 65's fight exits a frame or two off the
+  // cartridge's (control back on f80968 for f80966, exact before): not understood, not changed.
   if (t >= 1 && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
   if (t == 4) {
     s[0xCD0C] = 0; s[0xCA92] = 0;                                   // CD/0463-0466

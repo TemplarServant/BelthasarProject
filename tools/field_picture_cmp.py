@@ -112,6 +112,19 @@ PICTURES = {
     # the fourth frame of the run-off to the exit. The port ran no pass after the run-off's dispatch and kept the menu,
     # the hand and the bracket on the screen for the whole run-off (1007 px of this frame, at every lag).
     'run-off-closes-the-command-menu': dict(leg='95_magus', at=600, frames=600, own=True),
+    # Magus himself, f10500 of the leg (his fight is called on f9962): an enemy whose sheet is a RAW one. The staging hands
+    # an enemy the sheet pointer its field object carried (CC/EAC4-EACF: `$1C60,Y` = `$29C8,X` / `$29CA,X`), and his is
+    # the ROM's own address, D2:0000 -- E4:2000[6], the sheet he has as a party member -- where every other enemy's is
+    # its decompressed sheet in bank $7F. The tile builder reads through that pointer wherever it points. The port
+    # LZ-decompressed the address by the enemy's id and drew nothing: no Magus on the screen for the whole fight (544 px
+    # of this frame, at every lag).
+    'magus-is-drawn-from-his-raw-sheet': dict(leg='95_magus', at=600, frames=9900, own=True),
+    # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
+    # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
+    # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX
+    # #FC68 / JSR C2/8385`) queues the record C2:FC68 -- $0480 bytes from FF:EB88 to VRAM $2010 -- and its palette is
+    # FF:CE50. The port packed and drew seven portraits: the Epoch's frame stood empty (2295 px of this frame).
+    'naming-portrait-of-the-epoch': dict(leg='108_epoch', at=35300, frames=400, own=True),
     # The forest's fight run away from (the recipe's state: walk left into the Hetakes, hold L + R), 51 frames into the
     # run-off action, on a frame the program's op 90 raised the mosaic: `$BE9A` 77 -> 87 on line 64, so HDMA channel 6's
     # run of line 0 read the old size and its run of line 80 the new one -- 8-line blocks down to row 79, 9-line blocks

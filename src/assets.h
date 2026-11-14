@@ -34,8 +34,9 @@
 #define CT_ASSET_WINDOW         19  // id 0: the dialogue window bitmap lifted from the oracle fb:
                                     //   [h u8] + 256*h*3 RGB rows (default grey scheme, 256x85)
 #define CT_ASSET_MOVER          20  // id 0: C0/F300 atan(0x400) + C0/F700 facing(0x100) + C0/F800 sine(0x140)
-#define CT_ASSET_PORTRAIT       22  // id = char-id 0-6 (Crono..Magus): the 48x48 name-screen portrait,
-                                    //   [w u8][h u8] + w*h*3 RGB (ROM gfx $FF:0000 + per-char palette)
+#define CT_ASSET_PORTRAIT       22  // id = name id 0-7 (Crono..Magus, the Epoch): the 48x48 name-screen portrait,
+                                    //   [w u8][h u8] + w*h*3 RGB (ROM gfx $FF:0000 + per-id palette; the Epoch's
+                                    //   tiles are the record C2:FC68's, $FF:EB88)
 #define CT_ASSET_NAMESPRITES    23  // id 0: name-screen grid hand pointer (16x16; ROM $FF:9CF0).
                                     //   id 1: the name-cursor triangle (11x12, bevelled, pointing up; ROM $FF:9D70,
                                     //   V-flipped to point down). Both [w u8][h u8] + w*h*4 RGBA.

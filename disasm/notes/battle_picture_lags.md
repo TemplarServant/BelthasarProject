@@ -136,11 +136,17 @@ frames where the singer's cell led the spotlight.
   -> 1368 of 1369 (f232-f1600): the song's 443 px were the arena's PRIORITY TILES, repainted over the sprites from the
   raw tile and not from the arena as composed (the beam's math on the canopy and the tent's edge), and the single
   frames were the pennants' tile steps drawn at once on a frame that re-bakes the arena (a fight's tile DMAs are
-  held a frame as DMAs now) -- check `battle-picture-seq-gato-song-vs-cartridge`. Left: f1316, 33 px on the strip's
-  lines 183-190 -- a gauge's repaint a frame late in the port: from row f1310 the cartridge consumes the rebuild
-  request `$993A` in the frame that raises it (rows f1310 / f1314 / f1318 read 00) where the port's reads 01 and is
-  consumed a row later; `$E5` 00 and `$0027` F8 stand on both sides there (the main thread is not in the idle
-  iteration). Not derived: which loop the main thread is in. The entry before these fixes:
+  held a frame as DMAs now) -- check `battle-picture-seq-gato-song-vs-cartridge`. Left, and OPEN: f1316 (33 px on the
+  strip's lines 183-190), a gauge's repaint a frame late. It is the effect teardown's menu pass: every CD/0453 frame
+  after its first ends in CD/3E75 = `JSR CD/3E7D` (the NMI) and THEN `JSL C1/0012` (C1/10E3), so the request the
+  service raises is consumed in its own frame -- `$993A` 01 on row f1306 (CF:E748; the entry's frame has no pass), 00
+  on f1307 (C1:10EB), and rows f1310 / f1314 / f1318 / f1322 / f1326 all read 00, the main loop's next head on f1328.
+  The port makes the pass ahead of its tick's NMI section: 01 on those rows, consumed a row later. TRIED 2026-11-13:
+  the pass moved past the NMI section closes it (GATO f232-f1900: 1669 of 1669) but moves playthrough leg 65's fight
+  exits off the cartridge's frames, which were exact (control back f68297 / f69712 / f80719 / f80873 / f80968 for the
+  cartridge's f68301 / f69711 / f80718 / f80872 / f80966; before: f68299 / f69711 / f80718 / f80872 / f80966) and adds
+  a control blip at the leg's end -- the pass also clears `$E5`, which gates the NMI's `$A4` step, so its place in the
+  frame moves the scheduler's phase. Not landed: the pass and the `$A4` step have to be derived together. The entry before these fixes:
   GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
   the ladders' gate, field.c battleGatoRender: a scripted action shows the published pose only -- check
   `battle-picture-seq-gato-first-attack-vs-cartridge`). Left: one frame of the song's pre-roll, f1018 (436 px, not

@@ -724,3 +724,27 @@ port's --boot reaches the loader's park 53 frames after the title's Start, the v
 valve's two real-time frames had been covering a port-side +2 on the reboot -> loc 1B1 -> loc 0 leg (the port ramps
 loc 1B1 1..5 with no gap where the cartridge ramps 01, gap, 02..04; which of the port's reboot / load / ramp frames
 make the +2 is not measured here) -- left open, not changed here.
+
+## The Epoch's portrait (2026-11-13)
+
+The portrait frame of the naming screen is filled by C2/EC38 from the name id `$0D46`:
+
+    C2/EC3B  LDX $0D46 / LDA $FFCE70,X / STA $00        the base tile
+    C2/EC44  LDY #06 ... six rows of six tile words counting up from it, at [$61] + row * $40
+    C2/EC6F  LDA $0D46 ... the 16 colours through the pointer $FFCE78 + id * 2
+
+Ids 0-6 are the party: FF:CE70 = 01 25 49 6D 91 B5 D9, 36 tiles each in the set the screen loads from FF:0000. Id 7 is
+the Epoch -- the same table's eighth entry, base tile 01 again, palette pointer FF:CE50 -- and its tiles are sent over
+the first portrait's when the screen is built for it:
+
+    C2/E448  LDA $71 / STA $0D46
+    C2/E44D  CMP #07 / BCC C2/E457
+    C2/E451  LDX #FC68 / JSR C2/8385                    queue the transfer record C2:FC68
+
+C2:FC68 = `10 20 | 88 EB FF | 80 04 | 00`: $0480 bytes (36 tiles) from FF:EB88 to VRAM word $2010 = tile 01 of the set
+at $2000.
+
+Measured: playthrough leg 108, the Epoch's naming (the screen up from the cartridge's f35404). The port packed and drew
+seven portraits (ids 0-6) and the Epoch's frame stood empty: 2295 px of f35700. `assets/extract_assets.py`
+pack_portraits now packs the eighth from the record and the eighth pointer; field.c (nsPortrait[8]) loads and draws
+it. Check `field-picture-naming-portrait-of-the-epoch-vs-cartridge` (0 px).

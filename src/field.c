@@ -3708,7 +3708,7 @@ static char ctToAscii(uint8_t c) {
 // The name-entry screen, built from components as the ROM assembles it: two windows (the dialogue box's background),
 // the keyboard and the entered name in the 8x8 menu font (with its drop shadow), the portrait, the name-cursor
 // triangles and the grid's hand pointer. Geometry is 256-space, measured from the oracle's tilemap/OAM layout.
-static const uint8_t* nsPortrait[7] = {0};       // CT_ASSET_PORTRAIT per char-id 0-6 ([w][h]+RGB)
+static const uint8_t* nsPortrait[8] = {0};       // CT_ASSET_PORTRAIT per naming id 0-7 ([w][h]+RGB): the party, the Epoch
 static const uint8_t* nsHand = NULL;             // grid hand-pointer sprite (16x16 RGBA)
 // The menu's party-panel standing sprites, one per charId ([w u8][h u8] + RGBA): the menu draws the character's own
 // field sprite. Built once from CT_ASSET_SPRITE[charId] composed at the standing frame CT_ASSET_SPRITEANIM[charId]
@@ -3976,7 +3976,11 @@ static void drawNameScreen(uint8_t* fb, const uint8_t* font, int charId, const c
   }
   for (int r = 0; r < 8; r++) for (int c = 0; c < 10; c++)   // the keyboard, in the menu font
     drawMenuGlyph(fb, NAME_GRID[r * 10 + c], NS_GX + c * NS_PITCH, NS_GY + r * NS_PITCH);
-  if (charId >= 0 && charId < 7 && nsPortrait[charId]) {  // the character portrait
+  // The portrait, C2/EC38 on the id `$0D46`: the seven party members' and, for id 7, the Epoch's -- its own 36 tiles
+  // sent over the first portrait's (C2/E44D `CMP #07 / BCC` / `LDX #FC68 / JSR C2/8385`: $0480 bytes from $FF:EB88) and
+  // its palette $FF:CE50. Measured on the rule's cartridge, playthrough leg 108 f35700: the Epoch's naming shows it,
+  // where the port's window was empty (2295 px).
+  if (charId >= 0 && charId < 8 && nsPortrait[charId]) {
     const uint8_t* p = nsPortrait[charId]; int pw = p[0], ph = p[1]; const uint8_t* pb = p + 2;
     for (int j = 0; j < ph; j++) for (int i = 0; i < pw; i++) {
       int dx = NS_PX + i, dy = NS_PY + j;
@@ -8186,6 +8190,20 @@ static struct { int id; int nbytes; uint8_t px[0x4000]; } ctEnemyShCache[8];   /
 // combatant's tile buffer. Type 0 = `.. 08 02` (two rows of 8), type 1 = `.. 10 02` (two rows of 16); a cell c covers
 // tiles (2c, 2c+1) on both rows, words {2c, 2c+1, W+2c, W+2c+1} with W = words/row. The cells come from
 // CtBattleEnemyCells, the ROM's own gather / upload / OAM-template law, which also draws types 2 and 3.
+// The tile `src` of the enemy in `slot`: through the combatant's own sheet pointer when it names the ROM (battle.c
+// CtBattleCmbRawSheetTile), else from the id's decompressed sheet. NULL: blank, or past the sheet.
+static const uint8_t* g_bEnemyMem;                               // the page the enemies are being drawn from
+static const uint8_t* battleEnemySheetTile(int slot, int id, int src) {
+  if (src <= 0) return NULL;
+  if (CtBattleCmbSheetRaw(g_bEnemyMem, 3 + slot)) return CtBattleCmbRawSheetTile(g_bEnemyMem, 3 + slot, src);
+  if (ctEnemyShCache[slot].id != id || ctEnemyShCache[slot].nbytes <= 0) {   // (re)decompress once per id
+    ctEnemyShCache[slot].id = id;
+    ctEnemyShCache[slot].nbytes = CtBattleDecompressEnemySheet(id, ctEnemyShCache[slot].px,
+                                                              (int)sizeof ctEnemyShCache[slot].px);
+  }
+  if (src >= ctEnemyShCache[slot].nbytes / 32) return NULL;
+  return ctEnemyShCache[slot].px + src * 32;
+}
 static int battleEnemyPoseBlitT(uint8_t* fb, int slot, int id, int poseIdx, int type,
                                 int footX, int footY, const uint16_t* palw) {
   CtEnemyCell cells[24];
@@ -8204,21 +8222,18 @@ static int battleEnemyPoseBlitT(uint8_t* fb, int slot, int id, int poseIdx, int 
       fprintf(stderr, "enemycells slot%d %s\n", slot, cur);
     }
   }
-  if (ctEnemyShCache[slot].id != id || ctEnemyShCache[slot].nbytes <= 0) {   // (re)decompress once per id
-    ctEnemyShCache[slot].id = id;
-    ctEnemyShCache[slot].nbytes = CtBattleDecompressEnemySheet(id, ctEnemyShCache[slot].px,
-                                                              (int)sizeof ctEnemyShCache[slot].px);
+  if (!CtBattleCmbSheetRaw(g_bEnemyMem, 3 + slot)) {
+    battleEnemySheetTile(slot, id, 1);                           // (the id's sheet: decompressed once)
+    if (ctEnemyShCache[slot].nbytes <= 0) return 0;
   }
-  if (ctEnemyShCache[slot].nbytes <= 0) return 0;
-  int ntiles = ctEnemyShCache[slot].nbytes / 32;
   for (int c = ncell - 1; c >= 0; c--) {                         // high cell first (SNES low oidx on top)
     static uint8_t cellw[0x22][32];
     static const int vtb[4] = { 0x00, 0x01, 0x10, 0x11 };        // TL TR / BL BR
     memset(cellw, 0, sizeof cellw);
     for (int i = 0; i < 4; i++) {
       uint16_t w = cells[c].w[i]; int src = w & 0x07FF;
-      if (src == 0 || src >= ntiles) continue;                   // word 0 = blank
-      const uint8_t* t = ctEnemyShCache[slot].px + src * 32;
+      const uint8_t* t = battleEnemySheetTile(slot, id, src);   // word 0 = blank
+      if (!t) continue;
       if (w & 0x4000) for (int k = 0; k < 32; k++) cellw[vtb[i]][k] = ctAnimengRev8(t[k]);   // H-flip (C0/FD00)
       else            memcpy(cellw[vtb[i]], t, 32);
     }
@@ -8228,6 +8243,7 @@ static int battleEnemyPoseBlitT(uint8_t* fb, int slot, int id, int poseIdx, int 
 }
 static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
   if (!fb || !mem || !h) return;
+  g_bEnemyMem = mem;
   for (int slot = 0; slot < 8; slot++) {
     if (BATTLE_ZSKIP(3 + slot)) continue;                        // Z-sorted walk (slot -> cmb 3+slot)
     const uint8_t* rec = mem + 0x29BF + slot * 12;
@@ -8367,13 +8383,11 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
       CtEnemyCell ec[24];
       int ncell = CtBattleEnemyCells(3 + slot, id, pose, etype, ec, 24);
       if (ncell <= 0) continue;
-      if (ctEnemyShCache[slot].id != id || ctEnemyShCache[slot].nbytes <= 0) {
-        ctEnemyShCache[slot].id = id;
-        ctEnemyShCache[slot].nbytes = CtBattleDecompressEnemySheet(id, ctEnemyShCache[slot].px,
-                                                                  (int)sizeof ctEnemyShCache[slot].px);
+      g_bEnemyMem = mem;
+      if (!CtBattleCmbSheetRaw(mem, 3 + slot)) {
+        battleEnemySheetTile(slot, id, 1);                           // (the id's sheet: decompressed once)
+        if (ctEnemyShCache[slot].nbytes <= 0) continue;
       }
-      if (ctEnemyShCache[slot].nbytes <= 0) continue;
-      int ntiles = ctEnemyShCache[slot].nbytes / 32;
       // scratch sheet in the T,T+1,T+0x10,T+0x11 raster the compositor expects: cell c at base (c%8)*2 + 0x20*(c/8)
       static uint8_t scratch[0x60][32];
       memset(scratch, 0, sizeof scratch);
@@ -8387,8 +8401,8 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
         int base = (c % 8) * 2 + 0x20 * (c / 8);
         for (int i = 0; i < 4; i++) {
           uint16_t w = ec[c].w[i]; int src = w & 0x07FF;
-          if (src == 0 || src >= ntiles) continue;                 // word 0 = blank
-          const uint8_t* t = ctEnemyShCache[slot].px + src * 32;
+          const uint8_t* t = battleEnemySheetTile(slot, id, src); // word 0 = blank
+          if (!t) continue;
           if (w & 0x4000) for (int k = 0; k < 32; k++) scratch[base + vtb[i]][k] = ctAnimengRev8(t[k]);   // H-flip
           else            memcpy(scratch[base + vtb[i]], t, 32);
         }
@@ -10381,7 +10395,7 @@ int main(int argc, char** argv) {
   g_font = font;                                     // for the headless battle-shot compose (see g_font)
   { uint32_t wl = 0; const uint8_t* wb = CtAssetGet(&assets, CT_ASSET_WINDOW, 0, &wl);
     if (wb && wl >= 1 + (uint32_t)wb[0] * 256 * 3) { tbWinH = wb[0]; tbWinPx = wb + 1; } }
-  for (int c = 0; c < 7; c++) {                                                            // char portraits
+  for (int c = 0; c < 8; c++) {                                                            // the naming's portraits
     uint32_t pl = 0; const uint8_t* pb = CtAssetGet(&assets, CT_ASSET_PORTRAIT, c, &pl);
     if (pb && pl >= 2 + (uint32_t)pb[0] * pb[1] * 3) nsPortrait[c] = pb;
   }

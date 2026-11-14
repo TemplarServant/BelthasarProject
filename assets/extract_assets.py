@@ -47,7 +47,7 @@ T_WORLD = 17    # per world: overworld grids/defs/pal/char/props/triggers/entry 
 T_WORLDSPR = 18 # the overworld player sprite atlas (captured live via ct.exe --owsprite)
 T_WINDOW = 19   # the dialogue window bitmap lifted from the live oracle fb ([h u8] + 256*h*3 RGB)
 T_MOVER = 20    # field mover tables: C0/F300 atan 32x32 (0x400) + C0/F700 facing (0x100) + C0/F800 sine (0x140)
-T_PORTRAIT = 22    # per-char (0-6) 48x48 name-screen portrait: ROM gfx $FF:0000 + per-char palette
+T_PORTRAIT = 22    # per name id (0-7: the party, the Epoch) 48x48 name-screen portrait: ROM gfx + per-id palette
 T_NAMESPRITES = 23 # name-screen cursor sprites: the grid hand + the name-cursor triangle (16x16 RGBA)
 T_MENUFONT = 24    # the 8x8 menu font (keyboard + names): raw 2bpp, tile=char-code, ROM $FF:8C60
 T_NAMEWIN = 25     # name-screen window background (BG2 isolated): [w u16][h u16] + w*h*3 RGB (256x224)
@@ -268,10 +268,13 @@ def pack_dialogue(rom, T):
         yield (T_DIALOGUE, addr, _strlist(strs))
 
 def pack_portraits(rom, T):
-    """The 7 PC name-entry-screen portraits (48x48), straight from the ROM. The naming routine
-    (C0/EC38) reads, per char-id: the base tile from $FF:CE70+id, and the 16-colour palette via
-    the pointer at $FF:CE78+id*2. The portrait is 6x6 tiles laid row-major from the base tile;
-    the 4bpp tile graphics live uncompressed at $FF:0000 (tile N, 1-based, at (N-1)*32)."""
+    """The 8 name-entry-screen portraits (48x48), straight from the ROM: the seven party members and the Epoch.
+    The naming's portrait routine (C2/EC38) reads, per id `$0D46`: the base tile from $FF:CE70+id, and the
+    16-colour palette via the pointer at $FF:CE78+id*2. The portrait is 6x6 tiles laid row-major from the base
+    tile; the party's 4bpp tile graphics live uncompressed at $FF:0000 (tile N, 1-based, at (N-1)*32).
+    The Epoch (id 7) has base tile 01 too -- its own 36 tiles are sent over the first portrait's: C2/E44D
+    `CMP #07 / BCC` / `LDX #FC68 / JSR C2/8385` queues the transfer record C2:FC68 = `10 20 | 88 EB FF | 80 04 | 00`,
+    $0480 bytes from $FF:EB88 to VRAM word $2010 (tile 01 of the set at $2000); its palette pointer is $FF:CE50."""
     B = 0x3F0000                    # bank $FF -> file 0x3F0000 (HiROM)
     def bgr(w):
         e = lambda v: (v << 3) | (v >> 2)   # full-range 5-bit->8-bit (SNES), max 255 not 248
@@ -279,17 +282,20 @@ def pack_portraits(rom, T):
     def palof(c):
         p = rom[B + 0xCE78 + c * 2] | (rom[B + 0xCE78 + c * 2 + 1] << 8)
         return [bgr(rom[B + p + i * 2] | (rom[B + p + i * 2 + 1] << 8)) for i in range(16)]
-    def tilepix(t, x, y):
-        o = B + (t - 1) * 32; bit = 7 - x
+    xrec = rom[0x02FC68:0x02FC70]                                   # the Epoch's transfer record (C2:FC68)
+    xsrc = ((xrec[4] - 0xC0) << 16) | xrec[2] | (xrec[3] << 8)        # $FF:EB88
+    xtile = ((xrec[0] | (xrec[1] << 8)) - 0x2000) // 16               # VRAM word $2010 -> tile 01
+    def tilepix(t, x, y, own=None):
+        o = (own + (t - xtile) * 32) if own is not None else B + (t - 1) * 32; bit = 7 - x
         return ((rom[o + y * 2] >> bit) & 1) | (((rom[o + y * 2 + 1] >> bit) & 1) << 1) \
              | (((rom[o + 16 + y * 2] >> bit) & 1) << 2) | (((rom[o + 16 + y * 2 + 1] >> bit) & 1) << 3)
-    for c in range(7):
+    for c in range(8):
         pal = palof(c); bt = rom[B + 0xCE70 + c]
         blob = bytearray([48, 48])
         for j in range(48):
             for i in range(48):
                 t = bt + (j // 8) * 6 + (i // 8)
-                blob += bytes(pal[tilepix(t, i % 8, j % 8)])
+                blob += bytes(pal[tilepix(t, i % 8, j % 8, xsrc if c >= 7 else None)])
         yield (T_PORTRAIT, c, bytes(blob))
 
 def pack_menufont(rom, T):

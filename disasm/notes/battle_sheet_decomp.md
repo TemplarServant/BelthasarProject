@@ -127,3 +127,24 @@ Notes:
   idle-pose sheet dependency WITHOUT a user capture. His E3 idle-pose SCRIPT (the E4 pose-window / assembly
   indices for the idle) still needs its own derivation/anchor — sheet-only is the win here; do not invent the
   pose script.
+
+## 6. 2026-11-13: an enemy with a RAW sheet (Magus)
+
+Section 3's sweep called the 29 ids that do not resolve to a CT-LZ sheet "unused slots". Eight of them are not
+compressed at all: their E4:F600 record's byte +0 is a PC's sheet index --
+
+    F8: 3     F9, FA, FB: 6 (Magus)     FC, FD, FE, FF: 0
+
+-- and E4:2000[0..6] are the raw 4bpp sheets the party members are drawn from (D2:72C0, D4:0000, D3:6B40, D4:7C40,
+D3:0000, D5:0000, D2:0000). Nothing decompresses them. The battle's staging gives an enemy the sheet pointer its field
+object carried (CC/EAC4-EACF: `$1C60,Y` = `$29C8,X` (16-bit), `$1C62,Y` = `$29CA,X`, Y = 3 * slot), and the tile builder
+C1/1C4A reads the cells' tiles through `$1C57 + 3 * cmb` wherever it points: a decompressed sheet in bank $7F, or the
+ROM itself.
+
+Measured on the rule's cartridge, playthrough leg 95 (Magus's fight, called on f9962), f10800: enemy block 0 id F9,
+`$990A` EB, `$967C` 00, the alive list F9, the foot (78,6F), and `$1C60..$1C62` = 00 00 D2. The port's WRAM had the same
+bytes; its renderer LZ-decompressed the id's E4:2000 source instead of following the pointer, and drew nothing --
+Magus was not on the screen in his own fight (544-594 px a picture). battle.c CtBattleCmbSheetRaw /
+CtBattleCmbRawSheetTile read the tile through the pointer when its bank is a ROM bank; check
+`field-picture-magus-is-drawn-from-his-raw-sheet-vs-cartridge`. (The container's table D2:0000-D5:FFFF covers these
+sheets, so the ROM-free runtime reads them too.)
