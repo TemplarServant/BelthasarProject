@@ -139,6 +139,25 @@ PICTURES = {
     # uploaded -- here 970 frames later, on the exit (f10139). The port drew the published pose at once: the record 00
     # where the cartridge still shows the 5C, his cape spread (301 px of this frame, at every lag).
     'ladders-last-pass-is-not-uploaded': dict(leg='137_lavos_spawns_summit', at=0, frames=9300, own=True),
+    # The Tyrano Lair's hall, loc 12A (playthrough leg 102 from its start), f8400: a fight whose arena shakes -- the
+    # scroll records CD/06B4 fills, `$BC89..` (BG1) and `$BD09..` (BG2), are (00B0, 0040 + n), n a new amount 0-7
+    # every two to four frames (rows f8309-f8401; 7 on row f8399). The PPU scrolls a layer whole, so the skull door at the
+    # top of the hall -- priority tiles -- moves with the floor. The port drew the map through the records' rows and
+    # re-drew the priority tiles over the sprites from the unshaken place: the door stood still, 624 px of this frame
+    # (132-624 on every picture of f8340-f8400 with an amount in its records).
+    'priority-tiles-shake-with-the-arena': dict(leg='102_nizbel', at=0, frames=8400, own=True),
+    # Heckran's cave (playthrough leg 59 from its start), f6000: the Tech list is open under an enemy's action and the
+    # hand has just moved (row f5994: `$9EE3` 01). An action's loops call C1/10FA after their wait -- the menu pass,
+    # THEN `JSL CD0009`, whose end is the typewriter step CD/04DF -- so the description the pass posts gets its first
+    # character on that frame (row f5982: `$CD06` 02 and `$CCED` 01 together); the port made the step before the pass
+    # on every frame and typed a character behind: `Spi` where the cartridge shows `Spin` (43 px of this frame,
+    # 27-50 px on each picture of f5985-f6010 but two).
+    'description-typed-on-the-pass-frame': dict(leg='59_heckran', at=0, frames=6000, own=True),
+    # The Blackbird's elevator fights (playthrough leg 119 from its start), f6600: Crono and Lucca carry a status
+    # icon, the blue ring over the head -- ONE large OAM entry each (the cartridge's OAM 21 and 12: name 1A8, 16x16).
+    # The port drew it with four calls of a blitter that draws a 16x16 block a call, and the second put the name
+    # n+16 again 16 px to the right: 19 px of the ring's lower left beside each ringed PC (38 px of this frame).
+    'status-icon-is-one-entry': dict(leg='119_elevator', at=0, frames=6600, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

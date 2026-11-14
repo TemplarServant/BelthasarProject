@@ -7334,13 +7334,15 @@ static void battleStatusIconRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   if (mem[0xA013] || mem[0xA0FE]) return;           // CF/EDC0's gate: suppressed while an action runs
   int dx = 0, dy = 0, tile = 0, pal = 0;
   if (!CtBattleStatusIconLive(mem, cmb, &dx, &dy, &tile, &pal)) return;
-  const uint8_t* t0 = CtBattleStatusIconTile(tile);          // 16x16 = 4 tiles: n, n+1, n+16, n+17
-  if (!t0) return;
-  static uint8_t cell[4][32];
+  // ONE 16x16 OAM entry (CF/EE2C): the names n, n+1, n+16, n+17, at the blitter's 0, 1, 0x10, 0x11. (It was four
+  // calls of the blitter, which draws a 16x16 block a call: the second one put the name n+16 again 16 px to the right
+  // of the icon -- 19 px of the ring's lower left beside every ringed PC. MEASURED on the rule's cartridge, playthrough
+  // leg 119, f6600: OAM 12 and 21 are the two icons, one large entry each, name 1A8, and nothing is beside them.)
+  static uint8_t cell[0x12][32];
   for (int q = 0; q < 4; q++) {
     const uint8_t* src = CtBattleStatusIconTile(tile + (q & 1) + (q >> 1) * 16);
     if (!src) return;
-    memcpy(cell[q], src, 32);
+    memcpy(cell[(q & 1) + (q >> 1) * 0x10], src, 32);
   }
   // The colours are the record's OBJ palette row of the CGRAM the battle's NMI uploaded (CF/E3C0; h->fxCgram), as
   // the bracket and the seats read theirs -- not GATO's captured ctBattleAnimPal. A seed render (no live host) reads
@@ -7349,8 +7351,7 @@ static void battleStatusIconRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   { const uint8_t* src = h ? h->fxCgram + (128 + (pal & 7) * 16) * 2 : mem + 0x2300 + (pal & 7) * 32;
     for (int k = 0; k < 16; k++) palw[k] = (uint16_t)(src[k * 2] | (src[k * 2 + 1] << 8)); }
   int keepPal = g_bObjPalCur; g_bObjPalCur = pal & 7;        // the record's own palette (the sprites' colour math)
-  for (int q = 0; q < 4; q++)                                // the 16x16 quad, top-left origin
-    battleBlitCell(fb, cell, 4, q, footX + dx + (q & 1) * 8, footY + dy + (q >> 1) * 8, palw, 0, 0);
+  battleBlitCell(fb, cell, 0x12, 0, footX + dx, footY + dy, palw, 0, 0);   // the 16x16 entry, top-left origin
   g_bObjPalCur = keepPal;
 }
 
@@ -19270,11 +19271,16 @@ int main(int argc, char** argv) {
       fprintf(stderr, "[iris f%d] window rows %d..%d widest %d..%d $0139=%02X $013C=%02X occl cut=%d win=%d drawn=%d\n",
               frameNo, t, b, wl, wr, CtSceneMem7E(f.vm)[0x0139], CtSceneMem7E(f.vm)[0x013C], occlCut, occlWin, occlDrawn);
     }
+    // (In a fight the pixel under a screen position is the map's at that row's scroll records -- arenaD, the shake: the
+    //  map above is drawn through it, and the priority tiles are the same layers' on the same lines. MEASURED on the
+    //  rule's cartridge, playthrough leg 102 (the Tyrano Lair's hall, loc 12A, a fight whose arena shakes: the records
+    //  `$BC89..` / `$BD09..` are (00B0, 0040 + 0..7), a new amount every two to four frames): the skull door at the top of the
+    //  hall, priority tiles, moves with the floor on every picture; the port's stood still -- 132-624 px a picture.)
     int fgSkipped = 0;
     if (f.prio && !dbg.noFg)
       for (int y = 0; y < ch; y++)
         for (int x = 0; x < cw; x++) {
-          size_t bo = fieldBaseAt(&f, camx + x, camy + y);
+          size_t bo = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]);
           if (!f.prio[bo]) continue;
           if (front[(size_t)y * g_fw + x]) { fgSkipped++; continue; }  // a prio-3 sprite half is in front here
           if (bgWinAt(x, y)) continue;                     // inside the iris -> BG1/BG2 windowed off
@@ -19298,7 +19304,7 @@ int main(int argc, char** argv) {
       if (lc && lw == f.W && lh == f.H && CtFieldSceneObjLevels(f.sd, &ml, &sl))
         for (int y = 0; y < ch; y++)
           for (int x = 0; x < cw; x++) {
-            size_t bo = fieldBaseAt(&f, camx + x, camy + y), i = (size_t)y * g_fw + x;
+            size_t bo = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]), i = (size_t)y * g_fw + x;
             if (ml[bo] != 4) continue;
             if (g_objSubOn && g_objSubDone[i]) continue;
             memcpy(fb + i * 3, f.base + bo * 3, 3);

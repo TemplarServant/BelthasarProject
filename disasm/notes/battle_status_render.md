@@ -759,3 +759,20 @@ both; `battleStatusCloseService` sets `$94` as C1/305F does. With it (and battle
 battle_facing_engine.md's last section) that fight's `$968C`, `$9922`, `$A098`, `$96DB` and `$9907` hold the cartridge's
 values from its first window to its exit. (The port's close service still runs on the frame `$A013` falls, three frames
 after the cartridge's C1/4127: no walk pass can fall between.)
+
+## Addendum 2026-11-14: the icon against the cartridge's picture (one entry)
+
+The first picture of an icon measured against the rule's cartridge: playthrough leg 119 (the Blackbird's elevator
+fights), f6600, Crono and Lucca under a status whose icon is the blue ring (group `$A4D0` = 50).
+
+    the machine   `$A48E` 01 00 01, `$A4D0` 50 00 50, `$A4C5` 0E; `$A4DB` 00 on rows f6574-f6587, 01 on f6588-f6601 --
+                  the same rows on both sides
+    OAM           21: (105, 80) name 1A8 attr 37, large; 12: (121, 129) name 1A8 attr 37, large -- one entry an icon,
+                  and no other entry near either
+
+The port's ring was the cartridge's; beside it stood 19 px that are not: the lower-left name (n+16) once more, 16 px
+to the right. battleStatusIconRender called battleBlitCell four times, a tile each in its mind, but the blitter draws
+a 16x16 block (names t, t+1, t+0x10, t+0x11) a call, and the call for the second tile reached the third. One call
+now; f3900, f6600 and f12900 of the leg are 0 px. Check `field-picture-status-icon-is-one-entry-vs-cartridge`.
+
+(The note above that no pinned fight reaches an icon is superseded for the ring; the sleep icon is still unmeasured.)

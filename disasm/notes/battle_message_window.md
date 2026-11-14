@@ -218,3 +218,41 @@ rows), `$CCEB` reads 9F at f820, and the box's pictures from there are on the ot
 The port: `battleTypewriterHeld` (battle.c) names the five from the state the port already keeps (`$A0FD`'s edge, the
 action's `rel`, `actEndRel` / `actEndHold` / `actSpan`, `victoryHold`, `handoffLeft`), and `battleSysMsgFrame` skips
 CD/04DF's step on them. Legs 50 (27 frames), 70's first fight (2) and 122 (80) count the same on both sides.
+
+## 7. 2026-11-14: the step's place in the frame -- before the menu pass, or after it
+
+CD/04DF comes back from a wait two ways (sec. 6), and the wait's menu pass is on the other side of it in each:
+
+    CD/3E75   JSR CD/3E7D            the NMI; its tail CD/3E89 `JSR CD/04DF`          step
+              JSL C1/0012            = C1/10E3: `LDA $993A / BEQ`, the pass            pass
+    C1/10BD   JSR C1/007E / JSL CD0009   the main loop's frame B: CD/04DB -> CD/04DF  step
+    C1/10C6   LDA $993A / BEQ ..     the pass                                          pass
+    C1/10FA   LDA $993A / BEQ ->11110 / STZ $993A / STZ $E5 / JSR C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD
+                                     the pass                                          pass
+      11110   JSL CD0009 / RTS       CD/04DB -> CD/04DF                                step
+
+C1/10FA is what an action's loops call after their `JSR C1/007E` (C1/485B, 4864, 488D, the eight C1/4943, the script
+loop's C1/40B0, the `$5D9B` wait's C1/40E1). So a box the pass posts -- C1/0E8D `LDA $A0DB / BPL / LDA $9EE3 / JSL
+CD0027`, a tech's description when the hand moves -- gets its first character on the same frame in an action's loops,
+and on the next one in the main loop and under bank CD's waits.
+
+Measured on the rule's cartridge, playthrough leg 59 (Heckran's cave; the Tech list is open under an enemy's action):
+
+    row f5970   `$9EE3` 03 (C1:0DB8), `$CD06` 03 (CD:031E), `$CD05` 01 (CD:033F): the list's first description
+    row f5972   `$CD05` 10, `$CCED` 01 (CD:04FC): its first character -- then one a row to f5980 (`$CCED` 09)
+    f5980       the trace: CD:3E89, CD:04DF, CD:04E4, then C1:10E3 -- a CD/3E75
+    f5981       C1:007E returns into C1:007E: C1/4841's bare wait, no CD:04DF (sec. 6)
+    row f5982   `$9EE3` 02, `$CD06` 02 and `$CCED` 01 together; the trace: C1:10FA, C1:1B67, C1:0C2D, C1:0DB8, C1:0E8D,
+                CD:0027, CD:031B, CD:033F, C1:1153, C1:17DD, CD:0009, CD:04DF, CD:04E4, C1:007E
+    row f5994   the same for the next move (`$9EE3` 01, `$CCED` 01)
+
+The port made the step where the service is, before the pass, on every frame: its row f5982 had the post alone
+(`$CD05` 01, `$CCED` 00) and the first character on f5983, and the description stayed a character behind the
+cartridge's while it was typed -- 27-50 px on each picture of f5985-f6010 but f5989 / f5990 (`Spi` for `Spin` on
+f6000). battle.c: battleSysMsgFrame leaves the step to battleTypeStepAfterPass on an action frame whose wait is one
+of C1/10FA's (battleWaitIsC110FA: from the first of the twelve waits to the first op on; the sheets' packets and the
+effect load before it are CD/3E75's), and battleTickBody makes it after that frame's pass. f5966-f6030 are 0 px, all
+65; check `field-picture-description-typed-on-the-pass-frame-vs-cartridge`.
+
+Not looked at: the open's C1/40A3 (`JSR C1/10FA` after C1/40A0's wait, the frame `$A013` rises on) -- the port's pass
+of that frame is not the freeze's, and no picture of it was measured.

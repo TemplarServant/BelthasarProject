@@ -7130,7 +7130,7 @@
         "saves/battle_re/gato_wait.state"
       ],
       "expect": [
-        "tech char2 #1: cartridge up c694 span 213 | port up p694 span 213 | effect SAME; picture lag +1: 119 differing frame(s), worst 72 px"
+        "tech char2 #1: cartridge up c694 span 213 | port up p694 span 213 | effect SAME; picture lag +1: 0 differing frame(s), worst 0 px"
       ],
       "pin": [
         "^tech char2 #1: "
@@ -7146,7 +7146,7 @@
       "tier": "full",
       "timeout_s": 600,
       "note_pass": "Lucca's Hypno Wave: its BG3 rings widen as the cartridge's -- FD/E39C's mode 3 rotates CGRAM $19-$1B every fourth frame in the fight too",
-      "notes": "The user, 2026-10-12 (translated from Portuguese): 'compare the image of the skill being used in the port and in the oracle and see if it matches'. Hypno Wave (tech 12, group 08 -- every enemy) draws concentric rings on BG3, added to the arena (CGADSUB 04), at the scroll $BD89's records give (FFCA / FFCD on both sides). The rings widen by a colour rotation: the program's op 8E (CD/29E3) arms record 11 `30 19 02 10 .. 04` -- mode 3, CGRAM $19-$1B up one every four frames (FD/E4E8, the stores by FD:E529 from c748) -- with record 10's mode-5 fade on the same colours (FD:E699, c747-777). FD/E39C dispatches the colour modes 1, 2, 3 and 8 with no gate, in the fight as on the field; the port's battle service left them to the field's VM pass (objslot.h colourModes = 0), so the rotation never ran and the rings stood smaller than the cartridge's. MEASURED with tools/battle_ab.py tech 2 1 (gato_wait, Lucca solo, the same WRAM on both sides): BG3's tiles ($A000..) and map ($F800..) byte-identical (CT_BATTLE_FXDUMP against the --peek's .vram), ct --sweepfxcompose 0/147256 px on the cartridge's own data (the compositor exact), and CGRAM 24-27 rotated on the cartridge, still on the port. Before: 184 frames differ, worst 4714 px; now 190 frames, worst 1611 -- the rings equal; what is left is ~80 px a frame through the effect and the top name box closing a frame or two apart (f851-859). The colour modes also keep a location's own animation going through every fight (loc 081's light shafts: battle-obj-priority-3-over-priority-tiles re-pinned). ==== RE-PINNED 2026-10-22 (saves/battle_re/gato_wait.state is the recipe twin now (tools/fixtures/gato.json: fx_a_battle_gato_press_action + the capture's pokes; its SPC is the cartridge's from power-on, where the old capture's still held song 06 with song 42 posted)): worst 1611 -> 1504 px, the same 190 differing frames at lag +1, span 213 and effect SAME on both sides -- the comparison holds on the twin (its WRAM, not its SPC: the capture's APU spliced into the twin gives 1504 too). ==== RE-PINNED 2026-11-13: A FIGHT'S SPRITES, STRIP AND TILES ARE DRAWN AS THE NMI UPLOADED THEM (disasm/notes/battle_picture_lags.md). The cartridge shows what the NMI uploads -- the OAM mirror the frame service's compose built, the strip's image, the line-211 tile DMA -- a frame after what HDMA reads from the frame's own shadows; the port drew both from one instant. Measured on the forest and GATO recipes frame by frame at ONE lag (tools/battle_picture_seq_cmp.py, s19 tallies in the dossier): forest f172-f1140 688 -> 865 of 969 whole frames identical, GATO idle f600-f840 104 -> 241 of 241. This check: fewer differing frames at the same lag (147 before). ==== RE-PINNED 2026-11-13 (128 -> 122 differing frames): AN ACTION'S SCRIPT POSES ARE THE MAIN LOOP'S (disasm/notes/battle_picture_lags.md sec. 3: the pose machine C1/423A publishes after the frame's compose, so a pose is on the picture a frame after a foot of the same row -- the forest's Hetake, `$990A` on row f439, the cell on the cartridge's f442; battle-picture-seq-forest-turn-pose-vs-cartridge). ==== RE-PINNED 2026-11-13 (the worst frame 1504 -> 205 px; 122 differing frames as before, every other field the same): GATO's pose in the tech's frames that overlap his own action's pre-roll -- a scripted action shows the published pose, not the reconstructed ladder (battle-picture-seq-gato-first-attack-vs-cartridge). ==== RE-PINNED 2026-11-13 (122 -> 119 differing frames, the worst 205 -> 72 px; every other field the same): the arena's BG1 / BG2 priority tiles are repainted over the sprites from the arena as composed -- under the rows' colour math -- and a fight's tile DMAs are held a frame as DMAs (battle-picture-seq-gato-song-vs-cartridge: GATO's song 121 -> 307 of 307 whole pictures at one lag; disasm/notes/battle_picture_lags.md sec. 3)."
+      "notes": "The user, 2026-10-12 (translated from Portuguese): 'compare the image of the skill being used in the port and in the oracle and see if it matches'. Hypno Wave (tech 12, group 08 -- every enemy) draws concentric rings on BG3, added to the arena (CGADSUB 04), at the scroll $BD89's records give (FFCA / FFCD on both sides). The rings widen by a colour rotation: the program's op 8E (CD/29E3) arms record 11 `30 19 02 10 .. 04` -- mode 3, CGRAM $19-$1B up one every four frames (FD/E4E8, the stores by FD:E529 from c748) -- with record 10's mode-5 fade on the same colours (FD:E699, c747-777). FD/E39C dispatches the colour modes 1, 2, 3 and 8 with no gate, in the fight as on the field; the port's battle service left them to the field's VM pass (objslot.h colourModes = 0), so the rotation never ran and the rings stood smaller than the cartridge's. MEASURED with tools/battle_ab.py tech 2 1 (gato_wait, Lucca solo, the same WRAM on both sides): BG3's tiles ($A000..) and map ($F800..) byte-identical (CT_BATTLE_FXDUMP against the --peek's .vram), ct --sweepfxcompose 0/147256 px on the cartridge's own data (the compositor exact), and CGRAM 24-27 rotated on the cartridge, still on the port. Before: 184 frames differ, worst 4714 px; now 190 frames, worst 1611 -- the rings equal; what is left is ~80 px a frame through the effect and the top name box closing a frame or two apart (f851-859). The colour modes also keep a location's own animation going through every fight (loc 081's light shafts: battle-obj-priority-3-over-priority-tiles re-pinned). ==== RE-PINNED 2026-10-22 (saves/battle_re/gato_wait.state is the recipe twin now (tools/fixtures/gato.json: fx_a_battle_gato_press_action + the capture's pokes; its SPC is the cartridge's from power-on, where the old capture's still held song 06 with song 42 posted)): worst 1611 -> 1504 px, the same 190 differing frames at lag +1, span 213 and effect SAME on both sides -- the comparison holds on the twin (its WRAM, not its SPC: the capture's APU spliced into the twin gives 1504 too). ==== RE-PINNED 2026-11-13: A FIGHT'S SPRITES, STRIP AND TILES ARE DRAWN AS THE NMI UPLOADED THEM (disasm/notes/battle_picture_lags.md). The cartridge shows what the NMI uploads -- the OAM mirror the frame service's compose built, the strip's image, the line-211 tile DMA -- a frame after what HDMA reads from the frame's own shadows; the port drew both from one instant. Measured on the forest and GATO recipes frame by frame at ONE lag (tools/battle_picture_seq_cmp.py, s19 tallies in the dossier): forest f172-f1140 688 -> 865 of 969 whole frames identical, GATO idle f600-f840 104 -> 241 of 241. This check: fewer differing frames at the same lag (147 before). ==== RE-PINNED 2026-11-13 (128 -> 122 differing frames): AN ACTION'S SCRIPT POSES ARE THE MAIN LOOP'S (disasm/notes/battle_picture_lags.md sec. 3: the pose machine C1/423A publishes after the frame's compose, so a pose is on the picture a frame after a foot of the same row -- the forest's Hetake, `$990A` on row f439, the cell on the cartridge's f442; battle-picture-seq-forest-turn-pose-vs-cartridge). ==== RE-PINNED 2026-11-13 (the worst frame 1504 -> 205 px; 122 differing frames as before, every other field the same): GATO's pose in the tech's frames that overlap his own action's pre-roll -- a scripted action shows the published pose, not the reconstructed ladder (battle-picture-seq-gato-first-attack-vs-cartridge). ==== RE-PINNED 2026-11-13 (122 -> 119 differing frames, the worst 205 -> 72 px; every other field the same): the arena's BG1 / BG2 priority tiles are repainted over the sprites from the arena as composed -- under the rows' colour math -- and a fight's tile DMAs are held a frame as DMAs (battle-picture-seq-gato-song-vs-cartridge: GATO's song 121 -> 307 of 307 whole pictures at one lag; disasm/notes/battle_picture_lags.md sec. 3). RE-PINNED 2026-11-14 (119 differing frames, worst 72 px -> 0 frames): the residual this check carried is gone with that day's four fixes of a fight's picture (disasm/notes/battle_picture_lags.md sec. 7 and 8, battle_message_window.md sec. 7, battle_status_render.md's addendum); which of them it was has not been isolated. The comparison is the cartridge's, so the new line is measured, not assumed."
     },
     {
       "name": "field-organ-door-opens-live",
@@ -27648,14 +27648,14 @@
         "saves/attract_demo_battle_f1850.state"
       ],
       "expect": [
-        "sweepfxcompose: f90..f215 -> 0 frame(s) differ, 0/5483486 non-sprite px differ; the effect itself changed 760558 px"
+        "sweepfxcompose: f90..f215 -> 0 frame(s) differ, 0/5483486 non-sprite px differ; the effect itself changed 764398 px"
       ],
       "pin": [
         "^sweepfxcompose: "
       ],
       "timeout_s": 120,
       "note_pass": "the effect compositor (HDMA per line, windows, BG3, colour math, the white flash) reproduces the cartridge's X-Strike frames pixel for pixel from the cartridge's own RAM",
-      "notes": "USER REQUEST 'keep porting the x-strike's effects'. battle.c CtBattleFxLayerCompose evaluates the eight battle HDMA channels exactly as snes/dma.c does (entry [count, addr], transfer while doTransfer, repCount-- / bit 7, row y takes transfers 0..y) from the tables in WRAM ($C867 BGxSC, $C8EE BG3 scroll, $C91B TM TS TMW TSW, $C948 CGWSEL CGADSUB COLDATA SETINI, $C975 BGMODE, and $C9A2/$C9CF by the NMI's $7C parity), then the pixel rule of ppu_handlePixel: the main layer from the arena composite's coverage (backdrop takes no math and shows BG3 when TM lets it), BG3 through W34SEL/WBGLOG from the VRAM window the effect load wrote, the colour window, add/half/subtract with the sub screen or the fixed colour. Lines whose TM/TS and colour registers do not come from the effect shadow blocks ($BE8D/$BE95 -- the HUD band's lines point at $C02B/$C02F) are the HUD renderer's and are not compared. THE GRADE: for each frame, the oracle renders once with g_ppuFxBase (main screen without OBJ or sub screen, no clip or math, recording each pixel's layer), once with only OBJ (the sprite mask) and once for real; the port's compositor runs on the base with the oracle's WRAM, VRAM $7C00/$5000, window-select registers and CGRAM, and every non-sprite pixel of a modelled line must equal the real frame. f90..f215 covers the dark arena, the slash lines growing, the flash ramp 1F..01, the slash's own fade and the clear. Three mechanisms were found by this grade and are now the port's: the backdrop gets no math (rows 211-223 stayed black on the cartridge), the CGRAM on screen is the page CF/E3C0 uploaded at the NMI (one frame behind FD/E39C's fade), and the HUD band's lines belong to its own blocks.",
+      "notes": "USER REQUEST 'keep porting the x-strike's effects'. battle.c CtBattleFxLayerCompose evaluates the eight battle HDMA channels exactly as snes/dma.c does (entry [count, addr], transfer while doTransfer, repCount-- / bit 7, row y takes transfers 0..y) from the tables in WRAM ($C867 BGxSC, $C8EE BG3 scroll, $C91B TM TS TMW TSW, $C948 CGWSEL CGADSUB COLDATA SETINI, $C975 BGMODE, and $C9A2/$C9CF by the NMI's $7C parity), then the pixel rule of ppu_handlePixel: the main layer from the arena composite's coverage (backdrop takes no math and shows BG3 when TM lets it), BG3 through W34SEL/WBGLOG from the VRAM window the effect load wrote, the colour window, add/half/subtract with the sub screen or the fixed colour. Lines whose TM/TS and colour registers do not come from the effect shadow blocks ($BE8D/$BE95 -- the HUD band's lines point at $C02B/$C02F) are the HUD renderer's and are not compared. THE GRADE: for each frame, the oracle renders once with g_ppuFxBase (main screen without OBJ or sub screen, no clip or math, recording each pixel's layer), once with only OBJ (the sprite mask) and once for real; the port's compositor runs on the base with the oracle's WRAM, VRAM $7C00/$5000, window-select registers and CGRAM, and every non-sprite pixel of a modelled line must equal the real frame. f90..f215 covers the dark arena, the slash lines growing, the flash ramp 1F..01, the slash's own fade and the clear. Three mechanisms were found by this grade and are now the port's: the backdrop gets no math (rows 211-223 stayed black on the cartridge), the CGRAM on screen is the page CF/E3C0 uploaded at the NMI (one frame behind FD/E39C's fade), and the HUD band's lines belong to its own blocks. RE-PINNED 2026-11-14 (the effect itself changed 760558 -> 764398 px, still 0 differing): the compose reaches the last row of each arena band now (battle.c btFxCompose `from[]`: a row's band is the entry of its last transfer; disasm/notes/battle_picture_lags.md sec. 8), so it changes more pixels -- and they are the oracle's.",
       "mutations": [
         {
           "file": "src/battle.c",
@@ -30656,6 +30656,13 @@
         "208",
         "134",
         "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
         "60",
@@ -32208,6 +32215,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -34513,6 +34527,13 @@
         "208",
         "134",
         "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
         "60",
@@ -34619,6 +34640,167 @@
       "notes": "USER REPORT 2026-09-19 'this frog's colours are not perfect' (disasm/notes/battle_boot_turns.md). The frog's body, cartridge f4850 against port f6846: 11304 / 12320 identical (the rest is the enemies' white flash, a known separate cause). Before D1/F83D ran, the band's records at $C02F.. were the field's and their COLDATA ($78: R = G = 24) survived into the frog's lines, which write one channel each: 78% of the frame. RE-PIN 2026-09-23 (11304 -> 11195), the playAnim list arm (disasm/notes/battle_playanim_list.md): tech $28's `06 05` on track 4 now arms every $A018 victim (C1/4D79), so enemies 5/6/7 publish anim 5's poses 03 03 02 as the cartridge does (graded frame by frame against the LOGICAL oracle by attract-07d-playanim-list-vs-logical-oracle: 459/459 frames). All 325 pixels that moved (109 net inside the box) are those three sprites above the frog's top edge, rows 56-74; the frog's own colours -- this check's subject -- did not change. They do not match the real-time cartridge here because on it the tech has MOVED the victims under the frog ($1D0C/$1D23 = (80,127) (159,127) (120,127)) and the port does not move them yet: the OPEN item of battle_tech_damage_type6.md section 5, not a pose error. RE-PIN 2026-09-23 (the placement ops, disasm/notes/field_op8c_place_from_vars.md): the 07D's enemies were placed by op 0x8C as 12.4 words read big-endian -- 8 px left and a tile high -- so the Hench and the Vamps spread out of the wrong point and arrived 5 frames late. With C0/4BC3 ported they walk the logical oracle's paths frame for frame and the battle stages 8 frames earlier in the port's own count, which is 8 frames EARLY against the cartridge: a pre-existing shortfall of the port's op 0xD9 (MOVEPARTY) walk that the wrong spread had been hiding. Every later attract frame moved with it; this check's content is unchanged at the shifted frame. And the count ROSE, 11195 -> 11424: the three victims now stand under the frog where the cartridge stands them, not above its edge (the port f6846 of before is port f6838 now). RE-PIN 2026-09-23 (op 0xD9 ported: disasm/notes/field_d9_party_walk.md) -- the SAME content, port f6838 -> f6850. The party walk before each demo battle now runs the ROM's own walk programs ($7F3720..) and ends when the cartridge's does, the lead heads the scheduler queue (C0/59D9 prepends $1100 == 0) and a battle stages at the start of the frame after C0/1770's align frame; every later attract frame moved with them. | RE-ANCHORED 2026-09-23 (op 0xD4 through C0/394E + the PC loader's $1101/$018D stores): the attract's first hub is 66 frames like the logical oracle's (was 58) and every hub leave ends its visit, so this vehicle's numbering moved +14 here -- measured on the $0100/$0119/$1E00 timeline of the old binary against the new; the content at the new frame is the one pinned before. ==== 2026-09-27 (b), RE-PINNED 11424 -> 12062, better: the candles' BG3 glow is inside this box, and through the tech the cartridge does not add it (CGWSEL 00 from the effect's load, CD:0F3F; back to 02 03 at CD/0CF6). The arena now takes the battle's colour math ($BE95, the NMI's shadow) and $0BDF is staged (C0/A40B), so the port stops adding the glow -- which it drew in the effect's green (the user's item #6). disasm/notes/battle_arena_cgram.md sec. 6. ==== 2026-09-28, RE-ANCHORED +13, not re-graded: op 0xFF < $90 runs its OWN fade before it jumps (C0/3FBB-3FD1 -- `DEC $19` a frame until 0, the jump on the frame after; the first DEC in the op's frame), for the $C3 sequences as for the $FD warp. The port jumped on the frame after the op whatever $0119 held: the hub's `FF 61` before 0A5 met the C0/2848 ramp at 0D (13 frames short), before 0E6 at 0F (15), the race's and its credits' at 05 (5 + 5), the title after the demo at 0F (15). Measured on the $0100/$0119/$1E00 timeline of the old binary against the new in this check's vehicle; the content at the new frame is the one pinned before. ==== 2026-09-28 (the count after a load), RE-ANCHORED -23 AND RE-PINNED 12062 -> 10796: after a location load the scheduler's countdown $1001,X is the fill's 00 (C0/5786), re-armed only by an fn0 `87` (C0/488B), so the first queue build (C0/59F0 `LDA $01,X / BEQ`) visits EVERY object -- measured on the rule oracle at 16E, 0AD, 0E6, 112 and on loc 468's stairs. The port wrote the period there, so a period-4 object's first visit came 3 frames late; every leg with one now ends up to 3 frames earlier. (Same commit: op 0x0A's kill is only $1100 = 80 and a later load op revives the object; the follower PC arms' $0B8A/$0D00/$1700/$1000 stores; C0/286C's C0/6F79.) The new frame was found by comparing every frame within 5 of the $0100/$0119/$1E00 shift of this check's vehicle. The one peak within 16 frames (f6853 5224, f6854 10796, f6855 6255). THE FROG IS IDENTICAL -- none of the 1266 pixels lost is on it: they are the castle wall behind it (the top edge and both sides of the box), the Frog Squash backdrop whose colours alternate in pairs a frame apart and match no cartridge frame within 3 (build/_divergence/audit_2026-09-28.md item 6, open): the old frame had its phase, this one the other. ==== RE-PIN 2026-09-28 (10796 -> 10530), $7C counted from D1/F1B0's install (battle.c battleFightNmiOn, attract-07d-field-anim-under-the-battle-vs-logical-oracle): the port's $7C ran two ahead of the cartridge's for the whole fight, and CD/0B16's shake indexes C0:FE00 with it, so this frame's shake offset moved (old and new port differ by 10566 px here, the whole shaken picture). Neither matches: the port's Frog Squash starts 6 frames early against the rule's cartridge (its first shake at the port's module f311 with $7C = 35, the cartridge's at c6926 with $7C = 3B -- the boot's CPU frames CT_BATTLE_BOOT_CPU, 4 here, and 2 more, OPEN), so the RNG index is 6 short now where it was 3 short; the shake pairs agree 37/60 frames (was 39/60) at the best alignment. Against the real cartridge the index also carries its lag frames. The frog's own colours, the subject, did not change. || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now; tools/rule_flip/attract.json): The reference becomes the rule's cartridge: under the line-64 cut the Frog Squash's per-line wave lands on line 64 on both sides, so against the REAL cartridge no port frame matches any more (best f6814: 10501 / 12320, the valve's pair read 10530). Against the rule's cartridge (CT_ORACLE_LOGICAL/VIRTUAL_BEAM with the switches) the port's Frog Squash is exact: port f6824 vs cartridge f4755 box (48,57)-(208,134) 12320 / 12320, and f6829 vs f4760 too (the neighbours 1313-3492) -- f4755 is the frame the 2026-09-30 two-switch migration found for this moment. ==== RE-ANCHORED 2026-10-03 (the battle exits: the defeat's and the demo's CF/FBE5 + CD/03B4, CD/0415-0438's two waits and SPC poll before C0/1BE6, the demo's pass ending on its drop, the exit's CD/0453 stepped once a frame -- battle_defeat_flow.md): the attract's legs against the rule's cartridge (attract_cena_inicial, $0100 per leg) -- 0AD exact (was 1 short), 087 exact (was 1 short), 07D 1 long (was 1 short: C0/1C89's `70 00` prices 13 NMIs on the port, 12 on the cartridge, OPEN) -- so every port frame after the 0AD's exit moved +1, after the 07D's +3, after the 087's +4. The value at the moved frame is the one pinned before. ==== RE-PINNED 2026-10-03 (battle_defeat_flow.md, the exits): the frames only, the values unchanged -- the moved frame (the attract's legs: +1 after the 0AD's exit, +3 after the 07D's, +4 after the 087's; the headless module: +1, CD/0418's frame). || RE-ANCHORED 2026-10-07 (the CALL's completion spends one dispatch, ct_vm.c step(): disasm/notes/field_quad_window.md sec. 3). The attract's 112 leg is 4 frames longer (417 -> 421, the cartridge's 433: obj0's two `04` waits), so every port frame after it moved -- measured with the previous binary against this one, per vehicle: --selftest +4 after f4348; the lockstep run +4 from 0DB and +5 from the 07D fight's boot (its `70 01` handshake one NMI longer at the new SPC phase: battle-start at battle f17, was f16); the unlocked run (attract_bg_cmp) +4. Only port frames moved; the content is the old binary's (each check passes on the shifted frame and its neighbours do not, where they differ). ==== 2026-10-08, RE-ANCHORED (disasm/notes/field_f8_cursor_play_clock.md): the demo's staging spill (C1/BA33, CPU work) is free under the rule -- the rule's cartridge opens both demo actions 2 frames after the cursor find (0AD trigger + 100, 07D + 99) and the port now does -- so every demo action and all that follows it is a frame earlier: on the lockstep vehicle -1 after the 0AD fight's action, -2 after 07D's, -3 after 087's; module frames after the action -1. The --selftest vehicle (fights synchronous) moved +1 from loc 112 and +2 from ~f6369 instead: C0/91F8's auto-scroll derives its step from the play clock $0400, whose ticks the same change corrected. Measured with the old and the new binary on the $0100/$0119/$1E00/$0384/$A013 timeline of each vehicle; the content at the shifted frame is the one pinned before. | 2026-10-18 RE-PINNED: the port frame(s) +1, the same picture: a location load's last sound commands (its init runner's and obj0's slot 1's: C0/5709, C0/56C8) now reach the SPC in the load's last frame, as the cartridge's (ct_vm.c gLoadPost; they ran at the load's start): the attract's 112 visit is one frame longer, 422 against the cartridge's 433 (was 421; tools/attract_divergence.py, every other visit unchanged). RE-TARGETED 2026-10-22 (disasm/notes/field_load_cost.md sec. 13): the oracle is now the rule's cartridge FROM POWER-ON (`--peek boot`), the vehicle's own history since --scene 433 plays the power-on (docs/TESTING.md, the attract vehicle). attract_cena_inicial.state is another history: its $051D (FD/E022's tile-step count) has the other parity at the 07D load (4A against the power-on's F5), so its candles step on the other frames -- its f4755 against the power-on's f6912 is 12297 / 12320 in this box, the 23 pixels of the left candle flame (x48-55 y64-77) the check lost at ce84bdb..404971a; no port frame can give it the 12320. Against the power-on cartridge HEAD already drew this frame at f6821 (12320 / 12320) -- a frame late on the vehicle's diagonal (picture P = --peek boot P+92): the 07D load took 49 black frames for the cartridge's 48 (the SPC's frame grid +86 APU cycles off at its `10 18`: the JSLs' remainders dropped, src/audio.c ldSpcRan). Now the 07D visit is the cartridge's frame for frame, and port f6820 = --peek boot f6912: 12320 / 12320, the candles included. ==== PIN 2026-10-24: its own rectangle's line (it was ^frame-region-cmp: ), the same line from its own run; the line of this check, not another rectangle's, when several share a port run. ==== SHARES ITS RUN (2026-10-24, tools/regress_share.py): argv and env are the group's (attract-01c-dragon-tank-tail-vs-oracle, attract-0ad-hud-close-no-blink-vs-oracle, attract-112-walk-vs-rule-cartridge, attract-1f7-no-lead-sprite-vs-oracle, attract-1f7-lavos-fragments-vs-oracle, attract-07d-frog-squash-bg3-priority-vs-oracle, attract-07d-hench-keep-the-frog-squash-pose-vs-oracle, attract-07d-field-objects-take-the-battle-pose-vs-oracle, attract-07d-lead-keeps-the-battle-pose-until-the-drain-vs-oracle, attract-0e6-sprite-depth-is-the-rom-draw-list-vs-rule-cartridge, attract-0e6-robots-snap-onto-their-tile-vs-oracle, attract-087-ice-crystal-vs-oracle, attract-1b0-cockpit-pcs-behind-console-vs-oracle, attract-1f0-epoch-departure-vs-oracle, attract-1f0-epoch-return-vs-oracle), proved to grade this check exactly as its own run did (it was: python tools/frame_region_cmp.py boot 6912 6820 48 57 208 134 -- --assets ct_assets.dat --scene 433); tools/regress.py runs the group once, its timeout the members' sum."
     },
     {
+      "name": "attract-07d-effect-reaches-the-row-above-the-hud-vs-rule-cartridge",
+      "tier": "quick",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/attract_cena_inicial_rule.state",
+        "861",
+        "2928",
+        "48",
+        "104",
+        "96",
+        "148",
+        "saves/attract_cena_inicial_rule.state",
+        "2129",
+        "4196",
+        "0",
+        "0",
+        "256",
+        "224",
+        "boot",
+        "4700",
+        "4607",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "2910",
+        "4977",
+        "96",
+        "80",
+        "152",
+        "120",
+        "saves/attract_cena_inicial_rule.state",
+        "3055",
+        "5122",
+        "0",
+        "0",
+        "256",
+        "224",
+        "boot",
+        "6912",
+        "6820",
+        "48",
+        "57",
+        "208",
+        "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "4935",
+        "7002",
+        "60",
+        "138",
+        "190",
+        "169",
+        "saves/attract_cena_inicial_rule.state",
+        "5046",
+        "7113",
+        "0",
+        "100",
+        "256",
+        "200",
+        "saves/attract_cena_inicial_rule.state",
+        "5087",
+        "7154",
+        "0",
+        "140",
+        "64",
+        "196",
+        "saves/attract_cena_inicial_rule.state",
+        "5087",
+        "7154",
+        "104",
+        "120",
+        "152",
+        "168",
+        "boot",
+        "7619",
+        "7526",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "5603",
+        "7669",
+        "0",
+        "32",
+        "240",
+        "192",
+        "saves/attract_cena_inicial_rule.state",
+        "7621",
+        "9688",
+        "88",
+        "8",
+        "168",
+        "136",
+        "saves/attract_cena_inicial_rule.state",
+        "8217",
+        "10283",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "8544",
+        "10611",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "8652",
+        "10719",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "433"
+      ],
+      "env": {
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_ORACLE_LOGICAL": "1",
+        "CT_ORACLE_VIRTUAL_BEAM": "1",
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1"
+      },
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat"
+      ],
+      "expect": [
+        "frame-region-cmp: port f6895 vs oracle f4828 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: port f6895 vs oracle f4828 box \\(0,0\\)-\\(256,224\\) "
+      ],
+      "timeout_s": 6400,
+      "note_pass": "Frog Squash under the top HUD: the effect's layer reaches the last row above the strip, and the room's priority tiles shake with it",
+      "notes": "WHOSE LINE A ROW IS: THE ENTRY ITS LAST TRANSFER CAME FROM (battle.c btFxCompose `from[]`; disasm/notes/battle_picture_lags.md sec. 8). The battle's HDMA tables step to their next entry in the update of an entry's last line (dma_doHdma: `repCount--`, `(repCount & 0x7F) == 0` -> the next entry, its first transfer on the line after), so on the last row of a band the channel's table pointer is already the next band's while the registers are still this band's. The port asked the pointer whose row it was and took the last arena row above the top HUD for the HUD's -- left out of the effect's compose. Measured on the rule's cartridge, the attract's fight in Magus's castle (loc 07D, Frog Squash, the top HUD up; cartridge f4828 = port f6895): channel 4 `$C91B` is `08->BE8D 30->C02B 54->BE8D 48->BE8D`, channel 5 `$C948` `88->BB05 B0->C02F A8->BBE5 E0->BB05 94->BB05`, channels 1 / 2 `88->BC89 30->BE9F ..`; rows 0-7 are the arena's (the transfers of lines 0-7) and row 7 shows the effect's BG3 under the colour ramp like rows 0-6 ((0,14,0) on row 6 and (0,16,0) on row 7 at x 38), where the port showed the room (2,2,2): 134 px of row 7 on this frame, 102-148 px on each of port f6892-f6910 and 10-90 on f6962-f6974 -- all 0 now. The same frame is under a shake (the records' Y FF91 for the words' FF90) and held 612 px more before the room's priority tiles took the records too (check field-picture-priority-tiles-shake-with-the-arena-vs-cartridge). Playthrough leg 59, f5100: 10 px of row 7 -> 0. Whole picture, the fight's pairing. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    gBattleFxRowModelled[line] = from[2] == 0xBE8D && (from[3] == 0xBE95 || (from[3] >= 0xBB05 && from[3] < 0xBB05 + 0x180))\n",
+          "replace": "    gBattleFxRowModelled[line] = ch[2].base == 0xBE8D && (ch[3].base == 0xBE95 || (ch[3].base >= 0xBB05 && ch[3].base < 0xBB05 + 0x180))   /* MUT: the table's pointer, a line early */\n",
+          "why": "the table steps to its next entry on the last line of a band; the row rendered then still has this band's registers (row 7 above the top HUD shows the effect's layer on the cartridge)"
+        }
+      ]
+    },
+    {
       "name": "attract-0ad-hud-close-no-blink-vs-oracle",
       "tier": "quick",
       "argv": [
@@ -34666,6 +34848,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -34833,6 +35022,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -35008,7 +35204,7 @@
         "saves/attract_087_ice_f7700.state"
       ],
       "expect": [
-        "sweepfxcompose: f0..f150 -> 0 frame(s) differ, 0/6281858 non-sprite px differ; the effect itself changed 267124 px"
+        "sweepfxcompose: f0..f150 -> 0 frame(s) differ, 0/6279944 non-sprite px differ; the effect itself changed 267124 px"
       ],
       "pin": [
         "^sweepfxcompose: "
@@ -35035,7 +35231,7 @@
           "why": "the harness's base must be the arena alone: with BG3 in it, the crystal's math-less pixels are read as the arena's and the compositor adds the crystal to itself"
         }
       ],
-      "notes": "USER REPORT 2026-09-19 'in the battle against zombor, the sprite does not appear in the ice skill's animation' (disasm/notes/battle_effect_orbit.md 10). The Ice Sword's crystal is BG3 priority tiles (BGMODE $49) ADDED to a sub screen that is the main screen less BG3 (TM 17, TS 13, CGWSEL 02, CGADSUB 04): the compositor used to refuse every line whose sub screen carries BG1/BG2/OBJ. The compositor graded against the cartridge's own RAM/VRAM/window registers over the crystal's whole life (cartridge f7700-f7850; the state is `PEEK_SAVE=... ct.exe --peek saves/attract_cena_inicial.state .. --frames 7700`). Every non-sprite pixel, 0 differ; before, the lines were unmodelled and the effect's 270567 pixels went ungraded. The harness's fx base now leaves BG3 out, as it was documented to (the crystal was in it). | 2026-10-11 re-pinned on the recipe-made fixture (fxa_attract_cena_inicial + 7535 frames, chosen so the action flag $A013 falls at f174 under the rule, as it does from the capture): still 0 frames and 0 non-sprite px differ between the port's compose and the cartridge's; the totals moved with the state (6281611 -> 6281858 px compared, the effect 270567 -> 267124 px). ==== MUTATION [0] RE-DERIVED 2026-10-24: its find was gone after a refactor; the same break on the code that does it now (Two sites now: btFxRowPixels (line 19940, the pixel path) and btFxCompose (line 20075). The why is about which lines are the compositor's: 20075's subRest feeds gBattleFxRowModelled[line] (line 20083-20084), and a row not modelled is skipped (`continue`, line 20091) -- so the mutation goes there; th)."
+      "notes": "USER REPORT 2026-09-19 'in the battle against zombor, the sprite does not appear in the ice skill's animation' (disasm/notes/battle_effect_orbit.md 10). The Ice Sword's crystal is BG3 priority tiles (BGMODE $49) ADDED to a sub screen that is the main screen less BG3 (TM 17, TS 13, CGWSEL 02, CGADSUB 04): the compositor used to refuse every line whose sub screen carries BG1/BG2/OBJ. The compositor graded against the cartridge's own RAM/VRAM/window registers over the crystal's whole life (cartridge f7700-f7850; the state is `PEEK_SAVE=... ct.exe --peek saves/attract_cena_inicial.state .. --frames 7700`). Every non-sprite pixel, 0 differ; before, the lines were unmodelled and the effect's 270567 pixels went ungraded. The harness's fx base now leaves BG3 out, as it was documented to (the crystal was in it). | 2026-10-11 re-pinned on the recipe-made fixture (fxa_attract_cena_inicial + 7535 frames, chosen so the action flag $A013 falls at f174 under the rule, as it does from the capture): still 0 frames and 0 non-sprite px differ between the port's compose and the cartridge's; the totals moved with the state (6281611 -> 6281858 px compared, the effect 270567 -> 267124 px). ==== MUTATION [0] RE-DERIVED 2026-10-24: its find was gone after a refactor; the same break on the code that does it now (Two sites now: btFxRowPixels (line 19940, the pixel path) and btFxCompose (line 20075). The why is about which lines are the compositor's: 20075's subRest feeds gBattleFxRowModelled[line] (line 20083-20084), and a row not modelled is skipped (`continue`, line 20091) -- so the mutation goes there; th). RE-PINNED 2026-11-14 (non-sprite px compared 6281858 -> 6279944, still 0 differing): the rows the compose owns moved by the band's last row (battle.c btFxCompose `from[]`; disasm/notes/battle_picture_lags.md sec. 8) -- the HUD's own last row is the strip's, no longer the compose's."
     },
     {
       "name": "attract-087-ice-crystal-vs-oracle",
@@ -35085,6 +35281,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -35867,6 +36070,13 @@
         "208",
         "134",
         "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
         "60",
@@ -36021,6 +36231,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -36188,6 +36405,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -40790,6 +41014,13 @@
         "208",
         "134",
         "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
         "60",
@@ -40945,6 +41176,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -41103,6 +41341,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -41273,6 +41518,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -41474,6 +41726,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -41716,6 +41975,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -42235,6 +42501,13 @@
         "57",
         "208",
         "134",
+        "saves/attract_cena_inicial_rule.state",
+        "4828",
+        "6895",
+        "0",
+        "0",
+        "256",
+        "224",
         "saves/attract_cena_inicial_rule.state",
         "4935",
         "7002",
@@ -50620,14 +50893,14 @@
         "tools/rom_free_gate.py"
       ],
       "expect": [
-        "rom-free-gate: f11200 5601 thumbnails and 6029928 output samples identical with no dump; 0 pages of the empty image read (sha1 ee67ea3e5499)"
+        "rom-free-gate: f11200 5601 thumbnails and 6029928 output samples identical with no dump; 0 pages of the empty image read (sha1 f1dd2cd1c1fe)"
       ],
       "pin": [
         "^rom-free-gate: "
       ],
       "timeout_s": 1500,
       "note_pass": "the ROM-free runtime's gate (package H): Belthasar with NO dump (CT_NO_ROM=1: the empty image, CT_ROM_CENSUS-guarded) plays the whole attract exactly as with one, and reads no page of the empty image",
-      "notes": "Package H of the ROM-free runtime (memory rom-free-runtime-goal). The empty image is src/battle.c CtBattleUseEmptyRom, taken at start-up when no dump is found and the container holds the ROM-free tables. A difference or a page read is the runtime's defect: never re-pin it; the sha1 moves only when the attract itself changes. ==== RE-PINNED 2026-10-21 (the location and world loads walked, disasm/notes/field_load_cost.md sections 9-10): the port's black frames are priced from the ROM now -- every attract world load's stall equals the cartridge's (35/37/33/36/41 frames from the commit to the first play-clock tick, the rule's oracle from power-on), the field loads' commit->ramp agree but four +-1s, and tools/attract_divergence.py (ATTRACT_DIV_STATE=boot) gives every visit the cartridge's length to a frame (HEAD: 1F5 267/271, 1F7 389/392, 1B1 602/609 ...). The port's attract therefore runs 91..87 frames ahead of the cartridge throughout (HEAD drifted 86 -> 61); a frame pinned in a later segment moved by that segment's change. Moved by the frames of its segment; the content is the one pinned before. ==== RE-PINNED 2026-10-21 (b) (the load's sound handshakes against the cartridge's SPC, disasm/notes/field_load_cost.md sec. 11: the load's posts before the frame's SPC slice, the world exit's lead, the song loader's head priced instruction by instruction -- C7/09FD + C7/0A12's cull walk among them -- and the world pass's upload on the world's own background): the route's loads now take the cartridge's frames on 44 of 50 (37 before) and the --boot attract's on all but 1201. The --scene 433 vehicle, whose SPC starts cold inside 1B1 rather than with the cartridge's power-on history, moves +1 from the 01C song upload (f2823) and +2 from 7D00 (f6308; --selftest: from f4083), the --boot vehicle +1 from B101 f7268 to 8700 (f9871, HEAD's -1 at 7324 and +1 at 8700 both gone). Sample frames moved by that delta and the pinned values found again byte for byte; counts and digests re-pinned with their invariants unchanged (0 mismatches, identical). ==== RE-PINNED 2026-10-21 (c) (the attract vehicle plays the power-on, docs/TESTING.md \"The attract vehicle\"): a cold `--scene 433` is now the power-on run on a blank cart (the reset's driver upload, scene 0, 1B1's load and its sound posts) numbered from that run's frame 27, so its SPC carries the cartridge's history and every attract load takes the cartridge's frames but 1201's (before: 1C00 and 7D00 +1). Against (b) it moves 0 before f2824, -1 from f2824, -2 from f6310, -1 from f7243, -2 from f9846 (`--selftest`: -1 from f2824, -2 from f4085, -1 from f7594); sample frames moved by that and the pinned values found again. Counters that start at power-on now include the 27 frames before: the play clock $0400 +22 (the rule's cartridge reads 2601 at the 1F5 commit, as the port now does; it read 1001), gVmTick +17, the visits +1, the sample totals +14,418 (27 x 534); invariants unchanged (0 mismatches, identical). | RE-PINNED 2026-10-22 (the power-on, disasm/notes/boot_loader.md sec. 10 and field_load_cost.md sec. 12): --boot and a cold --scene 433 start at the reset now -- the SPC in its boot ROM, C0/0053's driver upload on the loader clock, the cartridge's 33 black frames before loc 0, the title's opening priced (74 frames), the overlay's END in its own frame; --scene 433 numbers the power-on run from frame 91 (ATTRACT_FRAME0). Re-pinned from the run: the totals grew with the power-on's frames before the attract; every comparison still identical / 0 mismatches. RE-PINNED 2026-10-22 (the load fixes after the cloud commits: ops priced without an SPC, the gate warp's exit in its own frame, a walked load's posts leading by the pass, the reboots walked and their posts before the slice, the SPC grid's remainder kept -- disasm/notes/field_load_cost.md secs. 13-14): the attract's sound moved with its posts: with no dump and with one still identical (5601 thumbnails, 6029928 samples, 0 pages read), the sha follows. RE-PINNED 2026-10-22 (the merge with 4bf83e4: its init-script post lead -- C0/9DC3, slot 1, C2/8004 and the pass after the init runner -- in place of this side's pass-only one; the same SPC grid fix found on both sides): the attract's posts moved by their tail's few cycles; the invariants hold (0 mismatches, container = ROM, no dump = with dump, the latency 1.0 frames). | RE-PINNED 2026-10-22 (c) (src/audio.c ldStartRule: a post the NMI's wait leaves at a raster position -- the field's pad latch, line 228; the battle NMI's line-64 cut -- reaches C7 there; the clock walked to it as CPU work and charged the refresh and the HDMA it met: the battle's line-64 posts on line 71, 474 APU cycles after the rule's cartridge's, now within 10; the --boot attract's loads unchanged, every one the cartridge's but 8700): re-pinned from the run, 0 mismatches, every comparison identical. | RE-PINNED 2026-10-22 (c) (disasm/notes/field_load_cost.md sec. 16: a post the NMI's wait leaves at a raster position reaches C7 there; C7's dispatch priced by the command's path; the boot's post on C1/0000's frame; the teardown's load lead; C0/0304's slot-1 run at ack + 2 -- every load of the --boot attract on the cartridge's frames, 8700 included): re-pinned from the run, 0 mismatches, every comparison identical. ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (tools/rom_free_gate.py runs the attract with the dump and with CT_NO_ROM=1 (battle.c CtBattleUseEmptyRom) + CT_ROM_CENSUS, requiring identical output and 0 pages of the empty image read. src/romview.c line 108-112 is the table lookup; with it gone the no-dump run reads zeros for every table (and the). || RE-PINNED 2026-10-24: the attract's audio moved with the stage openings' deferred posts (see snddrv-lockstep-attract); with no dump identical to with one, as before. || RE-PINNED 2026-10-26: the audio from sample 3406072 on moved with 042ca6b (a walked load's init posts priced on the SPC from the NMI-off base plus their own cycles); the 5601 thumbnails are byte for byte the same. tools/sound_post_cmp.py --attract 7000: one command moved, the song's `10 18` at the cartridge's f4219, port f5879 -> f5878 (offset +1660 -> +1659, its neighbours +1660) -- a load-clock frame, the class the user closed on 2026-10-13. With no dump identical to with one, as before. RE-PIN 2026-11-11 (the hash is the attract's own picture): BG3's priority-1 pixels above every sprite moved the bats of the attract's visit to Magus's lair behind the trees -- port f5505-f5710 and nothing else (thumbnails of the two builds compared frame by frame). Verified against the rule's cartridge on whole frames: f5540 = c3473, f5600 = c3534, f5680 = c3614, 57344 / 57344 each (attract-0a5-bats-behind-the-trees-vs-rule-cartridge pins two of them). RE-PIN 2026-11-11 (the map's per-line BG3 table read live, a word a line late; disasm/notes/ow_bg3_animator.md, its last section): the attract's maps change -- its 2300 A.D. visit most. Verified against the cartridge with the attract audit (tools/attract_divergence.py), every frame: that visit (14, loc 1F2) goes from a median 1.5% of the thumbnail apart and 2 render events to 0.0% and none; 25 -> 23 events in all, no new one. ==== RE-PINNED 2026-11-13 (the attract itself changed, 32 frames of 11200 and no sample of the sound): the field's tile animation steps on the cartridge's frames across a fight and a load (disasm/notes/field_bg_anim.md, 'The IRQ across a fight and a load'; checks leg-window-tile-animation-across-a-fight / -across-a-load-vs-cartridge). The frames are port f7153-f7216, two of every four -- the 07D candles from the Frog Squash fight's return to the room's exit, which ran one step off. GRADED on the rule's cartridge on the fights' picture diagonal (port = cartridge + 2066): port f7153-f7161 against c5087-c5095 are 57344 / 57344 px on all nine frames; before, four of the nine were 57228 (116 px, the flames). ==== RE-PINNED 2026-11-13 (sha1 724ca2baa2ee -> 23366770f193): A FIGHT'S PICTURE IS ONE DIAGONAL (disasm/notes/battle_picture_lags.md). The attract's fights draw their sprites, strip and tiles as the NMI uploaded them, a frame after the frame's own HDMA-read registers; every thumbnail of a fight's moving frames changes with it. GRADED on the rule's cartridge on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle: ten whole frames of 0AD / 07D / 087 identical, 07D at port = cartridge + 2067 with the candles' tiles and the strip's HP row on it; attract-087-ice-sword-afterimage-vs-oracle: three whole frames identical where only the dash's box was before) and frame by frame at one lag on the recipes (battle-picture-seq-*: 301 of 301 and 241 of 241 whole frames, 250 and 104 before). ==== RE-PINNED 2026-11-13 (sha1 23366770f193 -> be38c848eb9a): AN ACTION'S SCRIPT POSES ARE THE MAIN LOOP'S (disasm/notes/battle_picture_lags.md sec. 3: the pose machine C1/423A publishes after the frame's compose, so a pose is on the picture a frame after a foot of the same row -- the forest's Hetake, `$990A` on row f439, the cell on the cartridge's f442; battle-picture-seq-forest-turn-pose-vs-cartridge). Every thumbnail of the attract's fights in which a script changes a pose moves a frame. GRADED on the rule's cartridge: the attract's pair checks stay identical on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle, attract-087-ice-sword-afterimage-vs-oracle), the sequences 301 / 301 and 241 / 241, the forest's whole fight 865 -> 879 of 969 whole frames at one lag, Crono's first tech 95 -> 55 differing frames (tools/battle_ab.py). ==== RE-PINNED 2026-11-13 (sha1 be38c848eb9a -> 73909e266f7d): MORE OF THE MAIN LOOP'S STATE A FRAME LATE IN THE MIRROR (disasm/notes/battle_picture_lags.md sec. 3: the ground shadow's flag, the damage numbers, the foot a script's teleport snaps) and the victim's flash ending with its mask. Every thumbnail of the attract's fights with a hop's shadow, a number or a snap moves a frame. GRADED on the rule's cartridge: battle-picture-seq-forest-commands-vs-cartridge 486 -> 541 of 541 whole frames at one lag, the turn's 12 -> 13 of 13, the forest's whole fight 879 -> 938 of 969 (the rest is the boot); the attract's pair checks stay identical on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle, attract-087-ice-sword-afterimage-vs-oracle), the sequences 301 / 301 and 241 / 241. (The naming screen's move to the picture's lines is not in this run: the attract opens no screen $0D.) ==== RE-PINNED 2026-11-13 (sha1 73909e266f7d -> 4e6ea38428b3): the fights' boots on the fight's lag and a scripted action's published pose -- see rom-free-container-equals-rom's note of this date; graded on the rule's cartridge by battle-picture-seq-forest-boot-vs-cartridge (97 -> 127 of 127) and battle-picture-seq-gato-first-attack-vs-cartridge (777 of 777). ==== RE-PINNED 2026-11-13 (sha1 4e6ea38428b3 -> 0677044f5d71): the arena's BG1 / BG2 priority tiles are repainted over the sprites from the arena as composed -- under the rows' colour math -- and a fight's tile DMAs are held a frame as DMAs (battle-picture-seq-gato-song-vs-cartridge: GATO's song 121 -> 307 of 307 whole pictures at one lag; disasm/notes/battle_picture_lags.md sec. 3). The attract's fights under an effect's colour math or with a tile step on a re-baked frame move; its first 4000 frames do not (rom-free-container-equals-rom's hash is unchanged). RE-PINNED 2026-11-13 (sha1 0677044f5d71 -> 91c10f8863fe: a damage number in its combatant's OAM entry, a script's point on an effect object a picture later): against the build before, 6 of the 5601 thumbnails differ -- f4078-f4086, the `271` of Crono's hit in the demo's fight, now behind Crono as on the cartridge (the rule's capture f2012-f2020: only the `2` shows beside him), and f9630 (99 -> 3 thumbnail px against the cartridge's f7567). RE-PINNED again 2026-11-13 (91c10f8863fe -> aa19d67bdf45: the ground shadows in their combatants' entries): against the build before, ONE of the 5601 thumbnails differs, f4074 (the full pictures f4073-f4075, 7-20 px under the demo fight's enemy): the two attackers' shadows -- on the cartridge's OAM (the rule's capture f2006-f2008) the shadow of the one in front is entry 16, ahead of the enemy's cells 26-30 and over them, and the other's is entry 32, behind them; the port had both beneath every combatant. RE-PINNED 2026-11-14 (aa19d67bdf45 -> ee67ea3e5499: a layer that drifts under a fight stands on its scroll records' counter, field-picture-starfield-drifts-with-the-records-vs-cartridge): against the build before, the thumbnails of the demo fight in the 0AD (f3808-f4210 of the attract) differ -- its starfield a step back -- and that fight's pictures are the cartridge's now: port f4072-f4084 and its close f4188-f4198 against the rule's capture at the fight's pairing, 0 px each at full resolution (570-2966 px before), and the whole picture of f4196 in attract-0ad-hud-close-no-blink-vs-oracle.",
+      "notes": "Package H of the ROM-free runtime (memory rom-free-runtime-goal). The empty image is src/battle.c CtBattleUseEmptyRom, taken at start-up when no dump is found and the container holds the ROM-free tables. A difference or a page read is the runtime's defect: never re-pin it; the sha1 moves only when the attract itself changes. ==== RE-PINNED 2026-10-21 (the location and world loads walked, disasm/notes/field_load_cost.md sections 9-10): the port's black frames are priced from the ROM now -- every attract world load's stall equals the cartridge's (35/37/33/36/41 frames from the commit to the first play-clock tick, the rule's oracle from power-on), the field loads' commit->ramp agree but four +-1s, and tools/attract_divergence.py (ATTRACT_DIV_STATE=boot) gives every visit the cartridge's length to a frame (HEAD: 1F5 267/271, 1F7 389/392, 1B1 602/609 ...). The port's attract therefore runs 91..87 frames ahead of the cartridge throughout (HEAD drifted 86 -> 61); a frame pinned in a later segment moved by that segment's change. Moved by the frames of its segment; the content is the one pinned before. ==== RE-PINNED 2026-10-21 (b) (the load's sound handshakes against the cartridge's SPC, disasm/notes/field_load_cost.md sec. 11: the load's posts before the frame's SPC slice, the world exit's lead, the song loader's head priced instruction by instruction -- C7/09FD + C7/0A12's cull walk among them -- and the world pass's upload on the world's own background): the route's loads now take the cartridge's frames on 44 of 50 (37 before) and the --boot attract's on all but 1201. The --scene 433 vehicle, whose SPC starts cold inside 1B1 rather than with the cartridge's power-on history, moves +1 from the 01C song upload (f2823) and +2 from 7D00 (f6308; --selftest: from f4083), the --boot vehicle +1 from B101 f7268 to 8700 (f9871, HEAD's -1 at 7324 and +1 at 8700 both gone). Sample frames moved by that delta and the pinned values found again byte for byte; counts and digests re-pinned with their invariants unchanged (0 mismatches, identical). ==== RE-PINNED 2026-10-21 (c) (the attract vehicle plays the power-on, docs/TESTING.md \"The attract vehicle\"): a cold `--scene 433` is now the power-on run on a blank cart (the reset's driver upload, scene 0, 1B1's load and its sound posts) numbered from that run's frame 27, so its SPC carries the cartridge's history and every attract load takes the cartridge's frames but 1201's (before: 1C00 and 7D00 +1). Against (b) it moves 0 before f2824, -1 from f2824, -2 from f6310, -1 from f7243, -2 from f9846 (`--selftest`: -1 from f2824, -2 from f4085, -1 from f7594); sample frames moved by that and the pinned values found again. Counters that start at power-on now include the 27 frames before: the play clock $0400 +22 (the rule's cartridge reads 2601 at the 1F5 commit, as the port now does; it read 1001), gVmTick +17, the visits +1, the sample totals +14,418 (27 x 534); invariants unchanged (0 mismatches, identical). | RE-PINNED 2026-10-22 (the power-on, disasm/notes/boot_loader.md sec. 10 and field_load_cost.md sec. 12): --boot and a cold --scene 433 start at the reset now -- the SPC in its boot ROM, C0/0053's driver upload on the loader clock, the cartridge's 33 black frames before loc 0, the title's opening priced (74 frames), the overlay's END in its own frame; --scene 433 numbers the power-on run from frame 91 (ATTRACT_FRAME0). Re-pinned from the run: the totals grew with the power-on's frames before the attract; every comparison still identical / 0 mismatches. RE-PINNED 2026-10-22 (the load fixes after the cloud commits: ops priced without an SPC, the gate warp's exit in its own frame, a walked load's posts leading by the pass, the reboots walked and their posts before the slice, the SPC grid's remainder kept -- disasm/notes/field_load_cost.md secs. 13-14): the attract's sound moved with its posts: with no dump and with one still identical (5601 thumbnails, 6029928 samples, 0 pages read), the sha follows. RE-PINNED 2026-10-22 (the merge with 4bf83e4: its init-script post lead -- C0/9DC3, slot 1, C2/8004 and the pass after the init runner -- in place of this side's pass-only one; the same SPC grid fix found on both sides): the attract's posts moved by their tail's few cycles; the invariants hold (0 mismatches, container = ROM, no dump = with dump, the latency 1.0 frames). | RE-PINNED 2026-10-22 (c) (src/audio.c ldStartRule: a post the NMI's wait leaves at a raster position -- the field's pad latch, line 228; the battle NMI's line-64 cut -- reaches C7 there; the clock walked to it as CPU work and charged the refresh and the HDMA it met: the battle's line-64 posts on line 71, 474 APU cycles after the rule's cartridge's, now within 10; the --boot attract's loads unchanged, every one the cartridge's but 8700): re-pinned from the run, 0 mismatches, every comparison identical. | RE-PINNED 2026-10-22 (c) (disasm/notes/field_load_cost.md sec. 16: a post the NMI's wait leaves at a raster position reaches C7 there; C7's dispatch priced by the command's path; the boot's post on C1/0000's frame; the teardown's load lead; C0/0304's slot-1 run at ack + 2 -- every load of the --boot attract on the cartridge's frames, 8700 included): re-pinned from the run, 0 mismatches, every comparison identical. ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (tools/rom_free_gate.py runs the attract with the dump and with CT_NO_ROM=1 (battle.c CtBattleUseEmptyRom) + CT_ROM_CENSUS, requiring identical output and 0 pages of the empty image read. src/romview.c line 108-112 is the table lookup; with it gone the no-dump run reads zeros for every table (and the). || RE-PINNED 2026-10-24: the attract's audio moved with the stage openings' deferred posts (see snddrv-lockstep-attract); with no dump identical to with one, as before. || RE-PINNED 2026-10-26: the audio from sample 3406072 on moved with 042ca6b (a walked load's init posts priced on the SPC from the NMI-off base plus their own cycles); the 5601 thumbnails are byte for byte the same. tools/sound_post_cmp.py --attract 7000: one command moved, the song's `10 18` at the cartridge's f4219, port f5879 -> f5878 (offset +1660 -> +1659, its neighbours +1660) -- a load-clock frame, the class the user closed on 2026-10-13. With no dump identical to with one, as before. RE-PIN 2026-11-11 (the hash is the attract's own picture): BG3's priority-1 pixels above every sprite moved the bats of the attract's visit to Magus's lair behind the trees -- port f5505-f5710 and nothing else (thumbnails of the two builds compared frame by frame). Verified against the rule's cartridge on whole frames: f5540 = c3473, f5600 = c3534, f5680 = c3614, 57344 / 57344 each (attract-0a5-bats-behind-the-trees-vs-rule-cartridge pins two of them). RE-PIN 2026-11-11 (the map's per-line BG3 table read live, a word a line late; disasm/notes/ow_bg3_animator.md, its last section): the attract's maps change -- its 2300 A.D. visit most. Verified against the cartridge with the attract audit (tools/attract_divergence.py), every frame: that visit (14, loc 1F2) goes from a median 1.5% of the thumbnail apart and 2 render events to 0.0% and none; 25 -> 23 events in all, no new one. ==== RE-PINNED 2026-11-13 (the attract itself changed, 32 frames of 11200 and no sample of the sound): the field's tile animation steps on the cartridge's frames across a fight and a load (disasm/notes/field_bg_anim.md, 'The IRQ across a fight and a load'; checks leg-window-tile-animation-across-a-fight / -across-a-load-vs-cartridge). The frames are port f7153-f7216, two of every four -- the 07D candles from the Frog Squash fight's return to the room's exit, which ran one step off. GRADED on the rule's cartridge on the fights' picture diagonal (port = cartridge + 2066): port f7153-f7161 against c5087-c5095 are 57344 / 57344 px on all nine frames; before, four of the nine were 57228 (116 px, the flames). ==== RE-PINNED 2026-11-13 (sha1 724ca2baa2ee -> 23366770f193): A FIGHT'S PICTURE IS ONE DIAGONAL (disasm/notes/battle_picture_lags.md). The attract's fights draw their sprites, strip and tiles as the NMI uploaded them, a frame after the frame's own HDMA-read registers; every thumbnail of a fight's moving frames changes with it. GRADED on the rule's cartridge on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle: ten whole frames of 0AD / 07D / 087 identical, 07D at port = cartridge + 2067 with the candles' tiles and the strip's HP row on it; attract-087-ice-sword-afterimage-vs-oracle: three whole frames identical where only the dash's box was before) and frame by frame at one lag on the recipes (battle-picture-seq-*: 301 of 301 and 241 of 241 whole frames, 250 and 104 before). ==== RE-PINNED 2026-11-13 (sha1 23366770f193 -> be38c848eb9a): AN ACTION'S SCRIPT POSES ARE THE MAIN LOOP'S (disasm/notes/battle_picture_lags.md sec. 3: the pose machine C1/423A publishes after the frame's compose, so a pose is on the picture a frame after a foot of the same row -- the forest's Hetake, `$990A` on row f439, the cell on the cartridge's f442; battle-picture-seq-forest-turn-pose-vs-cartridge). Every thumbnail of the attract's fights in which a script changes a pose moves a frame. GRADED on the rule's cartridge: the attract's pair checks stay identical on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle, attract-087-ice-sword-afterimage-vs-oracle), the sequences 301 / 301 and 241 / 241, the forest's whole fight 865 -> 879 of 969 whole frames at one lag, Crono's first tech 95 -> 55 differing frames (tools/battle_ab.py). ==== RE-PINNED 2026-11-13 (sha1 be38c848eb9a -> 73909e266f7d): MORE OF THE MAIN LOOP'S STATE A FRAME LATE IN THE MIRROR (disasm/notes/battle_picture_lags.md sec. 3: the ground shadow's flag, the damage numbers, the foot a script's teleport snaps) and the victim's flash ending with its mask. Every thumbnail of the attract's fights with a hop's shadow, a number or a snap moves a frame. GRADED on the rule's cartridge: battle-picture-seq-forest-commands-vs-cartridge 486 -> 541 of 541 whole frames at one lag, the turn's 12 -> 13 of 13, the forest's whole fight 879 -> 938 of 969 (the rest is the boot); the attract's pair checks stay identical on each fight's diagonal (attract-battle-colours-entry-and-tech-vs-oracle, attract-087-ice-sword-afterimage-vs-oracle), the sequences 301 / 301 and 241 / 241. (The naming screen's move to the picture's lines is not in this run: the attract opens no screen $0D.) ==== RE-PINNED 2026-11-13 (sha1 73909e266f7d -> 4e6ea38428b3): the fights' boots on the fight's lag and a scripted action's published pose -- see rom-free-container-equals-rom's note of this date; graded on the rule's cartridge by battle-picture-seq-forest-boot-vs-cartridge (97 -> 127 of 127) and battle-picture-seq-gato-first-attack-vs-cartridge (777 of 777). ==== RE-PINNED 2026-11-13 (sha1 4e6ea38428b3 -> 0677044f5d71): the arena's BG1 / BG2 priority tiles are repainted over the sprites from the arena as composed -- under the rows' colour math -- and a fight's tile DMAs are held a frame as DMAs (battle-picture-seq-gato-song-vs-cartridge: GATO's song 121 -> 307 of 307 whole pictures at one lag; disasm/notes/battle_picture_lags.md sec. 3). The attract's fights under an effect's colour math or with a tile step on a re-baked frame move; its first 4000 frames do not (rom-free-container-equals-rom's hash is unchanged). RE-PINNED 2026-11-13 (sha1 0677044f5d71 -> 91c10f8863fe: a damage number in its combatant's OAM entry, a script's point on an effect object a picture later): against the build before, 6 of the 5601 thumbnails differ -- f4078-f4086, the `271` of Crono's hit in the demo's fight, now behind Crono as on the cartridge (the rule's capture f2012-f2020: only the `2` shows beside him), and f9630 (99 -> 3 thumbnail px against the cartridge's f7567). RE-PINNED again 2026-11-13 (91c10f8863fe -> aa19d67bdf45: the ground shadows in their combatants' entries): against the build before, ONE of the 5601 thumbnails differs, f4074 (the full pictures f4073-f4075, 7-20 px under the demo fight's enemy): the two attackers' shadows -- on the cartridge's OAM (the rule's capture f2006-f2008) the shadow of the one in front is entry 16, ahead of the enemy's cells 26-30 and over them, and the other's is entry 32, behind them; the port had both beneath every combatant. RE-PINNED 2026-11-14 (aa19d67bdf45 -> ee67ea3e5499: a layer that drifts under a fight stands on its scroll records' counter, field-picture-starfield-drifts-with-the-records-vs-cartridge): against the build before, the thumbnails of the demo fight in the 0AD (f3808-f4210 of the attract) differ -- its starfield a step back -- and that fight's pictures are the cartridge's now: port f4072-f4084 and its close f4188-f4198 against the rule's capture at the fight's pairing, 0 px each at full resolution (570-2966 px before), and the whole picture of f4196 in attract-0ad-hud-close-no-blink-vs-oracle. RE-PINNED 2026-11-14 (sha1 ee67ea3e5499 -> f1dd2cd1c1fe): the attract's pictures of port f4007-f4021, f6771-f6780, f6787-f6988 and f9630-f9658 changed with the fights' picture fixes of that day (the room's priority tiles under a shake; the last row of an HDMA band). Each changed frame was measured at full size against the rule's cartridge (cartridge = port - 2067): equal to it now or closer than it was, except f6851-f6854 (+2 .. +6 px at a +1 pairing, unchanged at +0, inside a stretch that is 500-1100 px off before and after) and four of the Zombor strobe's odd frames (f9639, f9653, f9655, f9659: +3 / +4 px on frames one colour level off over the whole screen before and after).",
       "mutations": [
         {
           "file": "src/romview.c",
@@ -50862,14 +51135,14 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 645 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 646 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
       ],
       "timeout_s": 60,
       "note_pass": "every state file a check reads comes from a recipe (tools/fixtures/, made from the ROM), a public source (tools/third_party_saves.json, verified by SHA-256) or the shrinking list of the owner's captures still waiting for their recipes (tools/private_captures.json): no check depends on a file that exists on one machine only and is not on that list",
-      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. RE-PINNED 2026-10-22 (the attract family): saves/attract_cena_inicial.state, attract_loc0AD_flea.state, attract_race_handoff_rule_f8247.state and attract_entry3_handoff_rule_f8859.state are off the private list -- their checks read the recipe-made twins of tools/fixtures/attract_rule.json (and attract.json's attract_entry3_handoff_f6750.state) -- so 115 -> 119 recipe files, 113 -> 109 private captures, 324 -> 277 checks still on one (47 checks read no private capture any more; slot1-runner and the HDMA census keep other families' captures). || RE-PINNED 2026-10-22 (recipes-rest): saves/field_re/magus_scene.lakewram and magus_scene_lake.state made by tools/recipes/fxr_magus_scene.json and taken off tools/private_captures.json -- the rest family has no private capture left; on the merged main: 225 made by recipes, 3 private (other families' catedral_party3 and pre_scene_19f) read by 3 checks. RE-PINNED 2026-10-22 (the five recipe families merged with 4bdb397, graded in a clean-room clone -- setup from the ROM, the public saves fetched, every fixture made by its recipe): after all five families: 2 private captures left (pre_scene_19f, read by 2 checks), 226 states made by recipes, 11 public battery saves. ==== 2026-10-23, RE-PINNED DOWN TO ZERO (the late game's last two): saves/field_re/pre_scene_19f.* is made by the recipe lg_ocean_palace_19f (Jackie's ch22 played through the Ocean Palace to the aftermath; ocean-palace-aftermath-chain-vs-oracle and ow-1f5-wave-and-light-vs-oracle pass on it with their pins unchanged). No check reads a private capture any more: tools/private_captures.json is empty, and any new check on a local capture fails here as UNCLASSIFIED. ==== RE-PINNED 2026-10-24 (629 -> 632 checks): the 16 attract frame_region_cmp checks share one port run (tools/regress_share.py), so the three that start the oracle from `boot` carry the group's argv, which names saves/attract_cena_inicial_rule.state for the other rectangles; the same 239 files, 0 unclassified, 0 stale. ==== RE-PINNED 2026-10-24 (632 -> 628 checks): four of the eight checks the owner removed (docs/MUTATION_AUDIT.md) read state files; the same 239 files, 0 unclassified, 0 stale. Re-pinned 628 -> 627 on 2026-10-24: field-battle-cyclone-fx-not-replayed removed (its state file is still read by 13 checks)."
+      "notes": "2026-10-22, the owner: nothing may depend exclusively on one machine. The suite on a fresh clone (the cloud sessions) SKIPs every check whose input is not there -- before this, 336 of 952 checks, and the number grew because nothing stopped a new check pinned on a local capture. This check fails on such a check (UNCLASSIFIED: give it a recipe or a public source) and on a list entry no check reads (STALE). Re-pin only when the private count goes DOWN (a check moved onto a recipe-made twin, docs/ROADMAP.md 1.1) or the recipe / third-party counts change with it. RE-PINNED 2026-10-22 (the attract family): saves/attract_cena_inicial.state, attract_loc0AD_flea.state, attract_race_handoff_rule_f8247.state and attract_entry3_handoff_rule_f8859.state are off the private list -- their checks read the recipe-made twins of tools/fixtures/attract_rule.json (and attract.json's attract_entry3_handoff_f6750.state) -- so 115 -> 119 recipe files, 113 -> 109 private captures, 324 -> 277 checks still on one (47 checks read no private capture any more; slot1-runner and the HDMA census keep other families' captures). || RE-PINNED 2026-10-22 (recipes-rest): saves/field_re/magus_scene.lakewram and magus_scene_lake.state made by tools/recipes/fxr_magus_scene.json and taken off tools/private_captures.json -- the rest family has no private capture left; on the merged main: 225 made by recipes, 3 private (other families' catedral_party3 and pre_scene_19f) read by 3 checks. RE-PINNED 2026-10-22 (the five recipe families merged with 4bdb397, graded in a clean-room clone -- setup from the ROM, the public saves fetched, every fixture made by its recipe): after all five families: 2 private captures left (pre_scene_19f, read by 2 checks), 226 states made by recipes, 11 public battery saves. ==== 2026-10-23, RE-PINNED DOWN TO ZERO (the late game's last two): saves/field_re/pre_scene_19f.* is made by the recipe lg_ocean_palace_19f (Jackie's ch22 played through the Ocean Palace to the aftermath; ocean-palace-aftermath-chain-vs-oracle and ow-1f5-wave-and-light-vs-oracle pass on it with their pins unchanged). No check reads a private capture any more: tools/private_captures.json is empty, and any new check on a local capture fails here as UNCLASSIFIED. ==== RE-PINNED 2026-10-24 (629 -> 632 checks): the 16 attract frame_region_cmp checks share one port run (tools/regress_share.py), so the three that start the oracle from `boot` carry the group's argv, which names saves/attract_cena_inicial_rule.state for the other rectangles; the same 239 files, 0 unclassified, 0 stale. ==== RE-PINNED 2026-10-24 (632 -> 628 checks): four of the eight checks the owner removed (docs/MUTATION_AUDIT.md) read state files; the same 239 files, 0 unclassified, 0 stale. Re-pinned 628 -> 627 on 2026-10-24: field-battle-cyclone-fx-not-replayed removed (its state file is still read by 13 checks). (646 on 2026-11-14: attract-07d-effect-reaches-the-row-above-the-hud-vs-rule-cartridge reads the attract's recipe state.)"
     },
     {
       "name": "no-script-shadows-the-stdlib",
@@ -51994,6 +52267,108 @@
           "find": "      if (was != pv && was != 0xFF) gPcTileHeld[seat] = was;\n",
           "replace": "      (void)was;   /* MUT: the last pass's pose on the screen at once */\n",
           "why": "the ladder's 64th call is a build pass with no `INC $E5` frame after it: CF/E3F8 does not upload the seat's tiles until `$E5` is set again (VRAM $0200-$02FF unchanged f9160 -> f9180; the picture is the pose 5C's to f10139)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-priority-tiles-shake-with-the-arena-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "priority-tiles-shake-with-the-arena"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: priority-tiles-shake-with-the-arena leg 102 +8400 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: priority-tiles-shake-with-the-arena "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Tyrano Lair's skull door shakes with the floor under a fight: priority tiles take the arena's scroll records too",
+      "notes": "A LAYER'S PRIORITY TILES ARE ON THE SAME SCROLL RECORDS AS THE REST OF IT (field.c, the foreground passes; disasm/notes/battle_picture_lags.md sec. 7). In a fight BG1's and BG2's scroll is the battle HDMA's, a record a line (`$BC89..` / `$BD09..`, filled by CD/06B4 from the arena's words and the shake), and the port draws the map through each row's record less the staged scroll (battle.c CtBattleArenaScrollDelta -> field.c arenaD). The pass that re-draws the map's priority-1 pixels over the sprites sampled the canvas at the unshaken place. Measured on the rule's cartridge, playthrough leg 102 (the Tyrano Lair's hall, loc 12A): the records read (00B0, 0040 + n), n a new amount 0-7 every two to four rows of f8309-f8401 (7 on row f8399), the HDMA tables `$C894` / `$C8C1` point every arena band at them (`A0->BC89` x5; under a message box `88->BC89 18->CA06 A0->BC89..`), VRAM is the same on f8342-f8352, and the skull door at the top of the hall moves with the floor on every picture: against the port's still door, 132-624 px on each picture measured of f8340-f8400 (every second one) whose records hold an amount (0 px on f8350, f8352, f8358, f8388, f8398: none). The port's rows of those cells were the cartridge's already. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          size_t bo = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]);\n",
+          "replace": "          size_t bo = fieldBaseAt(&f, camx + x, camy + y);   /* MUT: the priority tiles off the scroll records */\n",
+          "why": "the PPU scrolls a layer whole: BG1's and BG2's priority-1 tiles are on the lines' scroll records like their priority-0 ones (the door moves with the floor on the cartridge's f8400, records Y = 0047)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-description-typed-on-the-pass-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "description-typed-on-the-pass-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: description-typed-on-the-pass-frame leg 59 +6000 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: description-typed-on-the-pass-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a tech's description posted while an action runs is typed from the frame of the post, as C1/10FA orders it",
+      "notes": "THE TYPEWRITER STEP'S PLACE IN THE FRAME (battle.c battleSysMsgFrame / battleWaitIsC110FA / battleTypeStepAfterPass; disasm/notes/battle_message_window.md sec. 7). CD/04DF, one character of a posted box, comes back from a wait two ways, and the wait's menu pass is on the other side of it in each: CD/3E75 is `JSR CD/3E7D` (tail CD/3E89 `JSR CD/04DF`) then `JSL C1/0012` = C1/10E3, and the main loop's frame B is `JSR C1/007E / JSL CD0009` then C1/10C6's pass -- step, pass; but C1/10FA, which an action's loops call after their C1/007E (C1/485B, 4864, 488D, the eight C1/4943, C1/40B0, C1/40E1), is `LDA $993A / BEQ ->11110 / STZ $993A / STZ $E5 / JSR C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD` and then 11110 `JSL CD0009 / RTS` -- pass, step. So a box the pass posts (C1/0E8D `LDA $A0DB / BPL / LDA $9EE3 / JSL CD0027`, a tech's description when the hand moves) has its first character on the same frame in an action's loops. Measured on the rule's cartridge, playthrough leg 59 (Heckran's cave, the Tech list open under an enemy's action): row f5982 has `$9EE3` 02 (C1:0DB8), `$CD06` 02 (CD:031E) and `$CCED` 01 (CD:04FC) together, the frame's trace being C1:10FA, C1:1B67, C1:0C2D, C1:0DB8, C1:0E8D, CD:0027, C1:1153, C1:17DD, CD:0009, CD:04DF, C1:007E; f5981 is C1/4841's bare wait (no CD:04DF) and f5980 a CD/3E75 (CD:3E89, CD:04DF, then C1:10E3). The port made the step first on every frame: its row f5982 had the post alone (`$CD05` 01, `$CCED` 00) and the step on f5983, the description one character behind for as long as it was typed (27-50 px on each picture of f5985-f6010 but f5989 / f5990; all of f5966-f6030 are 0 px now). The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (!held && battleWaitIsC110FA(h)) { gTypeStepDue = 1; return; }   // (after this frame's pass: C1/10FA)\n",
+          "replace": "  /* MUT: the step before the pass on every frame */\n",
+          "why": "C1/10FA is the menu pass and then `JSL CD0009`: the post of row f5982 and its first character (`$CCED` 01, CD:04FC) are on the same frame"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-status-icon-is-one-entry-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "status-icon-is-one-entry"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: status-icon-is-one-entry leg 119 +6600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: status-icon-is-one-entry "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the status ring over a PC's head is one 16x16 sprite, with nothing beside it",
+      "notes": "A STATUS ICON IS ONE 16x16 OAM ENTRY (field.c battleStatusIconRender; disasm/notes/battle_status_render.md, the 2026-11-14 addendum). CF/EE2C builds one large entry a combatant from the group's record (dx, dy, name, attribute). Measured on the rule's cartridge, playthrough leg 119 (the Blackbird's elevator fights), f6600: the icon machine's cells are the same on both sides (`$A48E` 01 00 01, `$A4D0` 50 00 50, `$A4DB` 01 on rows f6588-f6601, `$A4C5` 0E), OAM 21 (105,80) and OAM 12 (121,129) are the two icons -- name 1A8, large -- and no other entry is near them. The port drew the icon with four calls of battleBlitCell, which draws a 16x16 block (names t, t+1, t+0x10, t+0x11) a call: the second call (t = 1, at x + 8) drew the name n+16 again at x + 16 -- the ring's lower left, 19 px, beside each ringed PC (x 124-128 / y 80-86 and x 140-144 / y 129-135 on this frame: 38 px; f3900 of the leg 19 px and f12900 41 px, 0 now). One call now. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    memcpy(cell[(q & 1) + (q >> 1) * 0x10], src, 32);\n",
+          "replace": "    memcpy(cell[q], src, 32);   /* MUT: the icon's lower names not where the blitter reads them */\n",
+          "why": "the entry is 16x16: names n, n+1 over n+16, n+17 (the cartridge's OAM 21 / 12 on f6600 are large entries of name 1A8)"
         }
       ]
     },

@@ -4963,6 +4963,29 @@ static int battleTypewriterHeld(const CtBattleHost* h, int opened) {
   }
   return 0;
 }
+// ---- The step's place in the frame: before the menu pass, or after it ----
+// CD/04DF comes back from a wait two ways (above), and the wait's menu pass is on the other side of it in each:
+//   CD/3E75   `JSR CD/3E7D` (the NMI; its tail CD/3E89 `JSR CD/04DF`), then `JSL C1/0012` = C1/10E3   step, pass
+//   C1/10C0   the main loop's frame B: `JSR C1/007E / JSL CD0009`, then C1/10C6's pass                 step, pass
+//   C1/10FA   an action's loops, after their `JSR C1/007E`: `LDA $993A / BEQ ->11110 / STZ $993A / STZ $E5 / JSR
+//             C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD`, then 11110 `JSL CD0009 / RTS`         pass, step
+// So a box the pass posts (C1/0E8D `LDA $A0DB / BPL / LDA $9EE3 / JSL CD0027`, a tech's description when the hand
+// moves) gets its first character on the SAME frame in an action's loops, and on the next one everywhere else.
+// MEASURED on the rule's cartridge, playthrough leg 59 (Heckran's cave, the Tech list open under an enemy's action):
+// the hand moves and row f5982 has `$9EE3` 02 (C1:0DB8), `$CD06` 02 (CD:031E, the post) and `$CCED` 01 (CD:04FC, the
+// step) together -- the trace of that frame is C1:10FA, C1:1B67, C1:0C2D, C1:0E8D, CD:0027, C1:1153, C1:17DD, CD:0009,
+// CD:04DF, C1:007E -- where the frame before it is C1/4841's bare wait (no step) and f5980 the sheets' last CD/3E75
+// (CD:3E89, CD:04DF, then C1:10E3). The port made the step first on every frame: its row f5982 had the post alone and
+// the description was a character behind the cartridge's for as long as it was typed (27-50 px a picture).
+// gTypeStepDue: this frame's step waits for the action loop's pass (battleTickBody, the `wasFrozen` branch).
+static int gTypeStepDue;
+static int battleWaitIsC110FA(CtBattleHost* h);                  // (below, with the action's frame counts)
+static void battleTypewriterStep(CtBattleHost* h);
+static void battleTypeStepAfterPass(CtBattleHost* h) {          // 11110 `JSL CD0009` -> CD/04DB -> CD/04DF `LDA $CD05 / BEQ`
+  if (!gTypeStepDue) return;
+  gTypeStepDue = 0;
+  if (h->mem[0xCD05]) battleTypewriterStep(h);
+}
 static void battleSysMsgFrame(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int opened = s[0xA0FD] && !h->typeA0fd;                      // C1/4058's INC, since this service last ran
@@ -4975,7 +4998,13 @@ static void battleSysMsgFrame(CtBattleHost* h) {
       if (s[0xCD1D]) s[0xCE17] = 0xFF;                           // D1/E7F6-E7FD: a name box's close forgets its id
       s[0xCD1D] = 0; s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "box-close"); }
   }
-  if (s[0xCD05] && !held) {                                    // CD/04DF-04FC, one typewriter step:
+  gTypeStepDue = 0;
+  if (!held && battleWaitIsC110FA(h)) { gTypeStepDue = 1; return; }   // (after this frame's pass: C1/10FA)
+  if (s[0xCD05] && !held) battleTypewriterStep(h);
+}
+static void battleTypewriterStep(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  {                                                            // CD/04DF-04FC, one typewriter step:
     // `LDA #01 / STA $0213 / JSL C2/0009` types one decoded character; `LDA $0215 / STA $CD05` = 10 while the string
     // goes on, 00 on the call that reads the terminator; then on every step `JSR CD/01A5 / STA $CCEB / INC $CCED` (the
     // dwell reloaded, so it only runs out after the last one). battle_top_message_box.md sec. 4.1/4.5.
@@ -9326,6 +9355,15 @@ static int battleActPreroll(CtBattleHost* h) {
     u += battleActLoadWait(h);                                          // CD/0EFD-0F25: 31, 15 or none
   }
   return 13 + u;
+}
+// An action's frame whose wait is one of the C1/007E's that C1/10FA follows (C1/485B, 4864, 488D, the eight C1/4943,
+// the script loop's C1/40B0 and the `$5D9B` wait's C1/40E1): from the first of the twelve waits to the first op
+// (CT_FX_LOAD_TO_FIRST_OP) on. Before it the frames are CD/3E75's -- the sheets' eight packets and, with one, the
+// effect load's -- and C1/4841's bare wait; the close's (C1/4116 on) are battleTypewriterHeld's. Not while a death
+// routine runs (CD/0043's waits are CD/3E75).
+static int battleWaitIsC110FA(CtBattleHost* h) {
+  if (!h->actActive || !h->mem[0xA013] || h->dissolveRunning >= 0) return 0;
+  return h->frames - h->actStart >= battleActPreroll(h) - CT_FX_LOAD_TO_FIRST_OP + 1;
 }
 static void battleSkeleton(CtBattleHost* h, int rel) {
   h->fxAtkPal = -1; h->fxAtkDX = 0; h->fxAtkDY = 0; h->fxAtkPose = -1; h->critAnim = 0;
@@ -15905,6 +15943,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->ascOwnsFlash = 0;
   for (int k = 0; k < 11; k++) { h->ascHopY[k] = 0; h->ascShadow[k] = 0; }   // $A4AF / $A5D8: nothing hops or casts a shadow at boot
   gPcTileHeld[0] = gPcTileHeld[1] = gPcTileHeld[2] = -1;        // (every seat's tiles are its published pose's)
+  gTypeStepDue = 0;
   // $9888/$993C boot fill (battle_hurt_flash_sync.md sec. 1.1, sec. A4).
   // PCs: CC/E6F8 `LDA #0A / STA $9888 / STA $993C / INC A / INC A / STA $9889 / ... / STA $988A` -- three
   // unrolled stores, seat-indexed and unconditional, so 0x0A/0x0C/0x0E regardless of who occupies the seat.
@@ -18640,6 +18679,14 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     c->doT = 1;
   }
   uint8_t reg[0x40]; memset(reg, 0, sizeof reg);
+  // The entry each channel's registers came from (its base, at the last transfer): the table steps to its NEXT entry in
+  // the update of an entry's last line, a line before that entry's first transfer, so `ch[i].base` on the last row of a
+  // band is already the next band's. MEASURED on the rule's cartridge, the attract's fight in Magus's castle (cartridge
+  // f4828, the top HUD up, an effect's BG3 and a shake): channel 4 is `08->BE8D 30->C02B ..`, channel 5 `88->BB05
+  // B0->C02F ..`; row 7, the last above the HUD, is rendered with the transfers of lines 0-7 -- the arena's TM and the
+  // eighth colour record -- and shows the effect's layer like rows 0-6 (the green of BG3 + the ramp: (0,14,0) on row 6,
+  // (0,16,0) on row 7 at x 38). The port took row 7 for the HUD's and left it out of the compose: 112-134 px of that row.
+  uint16_t from[6]; for (int i = 0; i < 6; i++) from[i] = ch[i].base;
   int hs3 = 0, vs3 = 0, sp = 0, sp2 = 0;
   const uint8_t* ws = h->fxWinSel;                                 // $2123 $2124 $2125 $212A $212B
   int fixR = gBattleFxFixCarry & 0x1F, fixG = (gBattleFxFixCarry >> 5) & 0x1F, fixB = (gBattleFxFixCarry >> 10) & 0x1F;
@@ -18650,6 +18697,7 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     for (int i = 0; i < 6; i++) {                                  // dma_doHdma: transfers
       BtHdmaCh* c = &ch[i];
       if (c->term || !c->doT) continue;
+      from[i] = c->base;
       for (int j = 0; j < c->unit; j++) {
         uint8_t v = rd[c->ind++];
         switch (i) {
@@ -18693,11 +18741,11 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     // for a per-line colour ramp the records a program's `80 00` / `80 10` writes at $BB05..$BC84 (four bytes a line,
     // cleared by CD/0CF7; the 07D Frog Squash tints the frog through them). The HUD band's lines point at its own
     // blocks ($C02B / $C02F) and are drawn by CtBattleHudRender.
-    gBattleFxRowModelled[line] = ch[2].base == 0xBE8D && (ch[3].base == 0xBE95 || (ch[3].base >= 0xBB05 && ch[3].base < 0xBB05 + 0x180))
+    gBattleFxRowModelled[line] = from[2] == 0xBE8D && (from[3] == 0xBE95 || (from[3] >= 0xBB05 && from[3] < 0xBB05 + 0x180))
                                  && !(cgwsel & 0x01) && (!(addSub && (TS & 0x1B)) || subRest);
     if ((wide || arenaRows) && line < 256) {                       // (the widescreen: each arena row's registers, for the
       BtFxRegs* R = &wideRegs[line]; wideOk[line] = gBattleFxRowModelled[line];   //  HUD's band rows below)
-      wideHud[line] = ch[2].base == 0xC02B || ch[2].base == 0xC02F || ch[3].base == 0xC02B || ch[3].base == 0xC02F;
+      wideHud[line] = from[2] == 0xC02B || from[2] == 0xC02F || from[3] == 0xC02B || from[3] == 0xC02F;
       R->TM = TM; R->TS = TS; R->TMW = TMW; R->TSW = TSW; R->cgwsel = cgwsel; R->cgadsub = cgadsub;
       R->fixR = fixR; R->fixG = fixG; R->fixB = fixB; R->hs3 = hs3; R->vs3 = vs3; memcpy(R->reg, reg, sizeof R->reg);
     }
@@ -20996,6 +21044,7 @@ static int battleBootIntro(const CtBattleHost* h);            // (below, with th
 int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
   CtBattlePictureTables(h, 0);                                  // (a compose that did not hand the page back)
   int r = battleTickBody(h, endRequest, input);
+  if (h && h->mem) battleTypeStepAfterPass(h);                 // (a frame that left before its pass: the step all the same)
   battleIrqFrame(h);                                           // D1/FE97, at the bottom of the frame's picture
   // (a frame whose path made no compose of its own -- the boot, a blocked exit, a stalled main thread: the service ran
   //  it all the same, with the state the frame leaves)
@@ -21716,6 +21765,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   //       raised there waits for the idle loop's frame B. A confirm made here is queued; the dispatch runs it after.
   if (wasFrozen) {
     if (!h->menuPassHold && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }   // C1/10FA
+    battleTypeStepAfterPass(h);                                  // 11110 `JSL CD0009`: the step, after the pass
     if (!s[0xA013]) {                                           // C1/41BA STZ $A013 ran this frame: the handler returns,
       h->iterPh = 0; s[0x00E5] = 0;                             //   the next head runs here ($E5 still C1/4062's 0)
       // ...into a status timer's handler, whose dispatch loop (C1/8339 INX) goes on with the next arrays and the ATB's

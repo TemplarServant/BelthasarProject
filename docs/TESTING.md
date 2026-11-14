@@ -3247,6 +3247,29 @@ later, where the port drew it at once (301 px). `0 px differ at port +0`; one mu
 disasm/notes/battle_picture_lags.md sec. 6. (`tools/field_picture_cmp.py`: a leg played from its start, `at=0`, takes
 the playthrough's own keys; it was given the pad's frame -1 as a first key and ran a frame behind.)
 
+`field-picture-priority-tiles-shake-with-the-arena-vs-cartridge`: playthrough leg 102 from its start, f8400 of a
+fight in the Tyrano Lair's hall whose arena shakes (the scroll records' Y is 0040 + 0..7, a new amount every two to
+four frames). The skull door at the top of the hall is priority tiles; the port re-drew those over the sprites from the
+unshaken place, so the door stood still while the floor moved (624 px on this frame). `0 px differ at port -1`; one
+mutation. disasm/notes/battle_picture_lags.md sec. 7.
+
+`field-picture-description-typed-on-the-pass-frame-vs-cartridge`: playthrough leg 59 from its start, f6000: the Tech
+list open under an enemy's action, the hand just moved. An action's loops call C1/10FA -- the menu pass and THEN the
+service whose end types a character -- so a description the pass posts is typed from that frame; the port made the
+step before the pass on every frame and showed a character less (`Spi` for `Spin`, 43 px). `0 px differ at port -1`;
+one mutation. disasm/notes/battle_message_window.md sec. 7.
+
+`field-picture-status-icon-is-one-entry-vs-cartridge`: playthrough leg 119 from its start, f6600: two PCs under a
+status whose icon is the blue ring. The icon is one 16x16 OAM entry; the port drew it with four calls of a blitter
+that draws a 16x16 block a call and left 19 px of the ring's lower left beside each ringed PC (38 px). `0 px differ
+at port -1`; one mutation. disasm/notes/battle_status_render.md, the 2026-11-14 addendum.
+
+`attract-07d-effect-reaches-the-row-above-the-hud-vs-rule-cartridge`: the attract's Frog Squash under the top HUD,
+port f6895 against the cartridge's f4828, the whole picture (a rectangle of the attract checks' shared run). The
+battle's HDMA tables step to the next band on a band's last line, and the port asked the table's pointer whose row
+it was: the last arena row above the HUD was left out of the effect's compose (134 px of row 7). `57344 / 57344
+identical`; one mutation. disasm/notes/battle_picture_lags.md sec. 8.
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

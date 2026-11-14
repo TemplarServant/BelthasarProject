@@ -281,3 +281,62 @@ battle.c gPcTileHeld keeps the pose a seat's tiles still are, from the ladder's 
 
 Not modelled: the enemies' groups (1-3; an enemy's buffer can straddle two groups, cmb 6's $70AD-$73AC is in groups 2,
 1 and 2), and a main-loop publish that misses its group's upload -- no measured picture shows either.
+
+## 7. 2026-11-14: a layer's priority tiles shake with it
+
+In a fight BG1's and BG2's scroll is the battle HDMA's (channels 1 / 2, tables `$C894` / `$C8C1`, indirect, a record a
+line): CD/06B4 fills the records `$BC89..` (BG1) and `$BD09..` (BG2) from the arena's words `$2C70..` and the shake.
+The port draws the map through each row's record less the staged scroll (battle.c CtBattleArenaScrollDelta, field.c
+arenaD). The pass that re-draws the map's priority-1 pixels over the sprites -- and the one for BG3's -- sampled the
+canvas at the unshaken place, so under a shake the priority tiles stood still while the rest of their layer moved.
+
+Measured on the rule's cartridge, playthrough leg 102 (the Tyrano Lair's hall, loc 12A; the arena's words are staged
+on row f6026):
+
+    rows f8309-f8401   `$47` takes a new amount 0-7 every two to four rows (05 on f8309, 04 on f8312, 01 on f8314,
+                       07 on f8318, 06 on f8320, 01 on f8322, 03 on f8324 .. 07 on f8398, 01 on f8400), and the
+                       records `$BC89` / `$BD09` are (00B0, 0040 + amount) from the row after; the port's
+                       records are the same on the same rows
+    tables             `$C894`: A0->BC89 x5, 30->BEA3, 84->BCC9 (f8404); with a message box up, 88->BC89, 18->CA06,
+                       A0->BC89 x4 .. (f8342): lines 0-7 on the records, lines 8-31 on the box's own
+    VRAM               identical on f8342, f8344, f8346, f8350, f8352
+    pictures           the skull door at the top of the hall (x 98-125, y 0-30; BG, no OBJ there) is at a new height
+                       on every picture; against the port's, cartridge(x, y) = port(x, y + 7) on f8400 (amount 7),
+                       + 3 on f8394, + 1 on f8396, + 0 on f8398
+
+The door is the one thing in that view that shows it: the hall's floor and walls are the priority-0 tiles the port
+already moved, and the walls are vertical stripes. 132-624 px a picture on f8340-f8400, every second one measured (0 px
+on the five whose records hold no amount: f8350, f8352, f8358, f8388, f8398) -> 0 px on all 31; f24300 of the same
+leg, another fight, 2201 px -> 0.
+Both passes sample through arenaD now; check `field-picture-priority-tiles-shake-with-the-arena-vs-cartridge`.
+
+(`$47` itself reads 0040 + amount in the port's WRAM where the cartridge keeps the bare amount there and the sum in
+`$4B` / `$4F`. Not looked at.)
+
+## 8. 2026-11-14: the last row of a band is its own band's
+
+The battle's HDMA tables are bands -- an entry a band, `count -> record` (bit 7: a record a line). The core steps a
+channel to its next entry in the update of the entry's last line (snes/dma.c dma_doHdma: `repCount--`, then
+`(repCount & 0x7F) == 0` loads the next entry and sets `doTransfer`), and that entry's first transfer is on the line
+after; a row is rendered with the transfers of lines 0..row (snes.c: the line at h 512, the HDMA at h 1104). So on the
+last row of a band the table pointer is already the next band's and the registers are still this band's.
+
+battle.c btFxCompose asked the pointer (`ch[i].base`) whose row it was: the last arena row above the top HUD read as
+the HUD's and was left out of the effect's compose (and the HUD's own last row read as the arena's, where the strip's
+renderer covers it). It keeps the base of each channel's last transfer now (`from[]`).
+
+Measured on the rule's cartridge, the attract's fight in Magus's castle (loc 07D, Frog Squash; cartridge f4828 = port
+f6895, the fight's pairing):
+
+    channel 1 `$C894`   88->BC89 30->BE9F 88->BCE9 A0->BC89 x4 94->BC89          (BG1's scroll; channel 2 the same on BD09)
+    channel 4 `$C91B`   08->BE8D 30->C02B 54->BE8D 48->BE8D                       (TM TS TMW TSW)
+    channel 5 `$C948`   88->BB05 B0->C02F A8->BBE5 E0->BB05 94->BB05              (CGWSEL CGADSUB COLDATA SETINI)
+    the ramp `$BB05`    .. 82 80 40 42 44 46 48 4A 4C 4E .. (COLDATA, a record a line)
+    rows 6 / 7, x 38    (0,14,0) / (0,16,0): the effect's BG3 pixel under the ramp's green, two more a row
+    the port's row 7    (2,2,2), the room -- 134 px of the row (132 on f4827, 112 on f4829)
+
+Port f6892-f6910 were 102-148 px each and f6962-f6974 10-90 px: 0 now on all but f6889-f6891, where 26 / 68 / 112 px
+are left on rows 0-7 -- the ramp's green one step (2) off on the effect's first three frames (cartridge 26 for the
+port's 28 on f6889). OPEN: not looked at. Playthrough leg 59 f5100 (10 px of row 7, a Fire being aimed): 0 px.
+Check `attract-07d-effect-reaches-the-row-above-the-hud-vs-rule-cartridge` (the whole picture of port f6895, which
+is under a shake too: sec. 7's 612 px).
