@@ -45,5 +45,6 @@ void CtSeqPicRows37A6(uint8_t* w);                                    // $7E:37A
 void CtSeqPicCopy36AA(uint8_t* w, const CtRaceIo* io, unsigned x, unsigned y);   // $7E:36AA
 void CtSeqPicOam0DBC(uint8_t* w, unsigned rec);   // C3/0DBC: one small sprite from the record $7E:rec
 void CtSeqPicOamHigh3870(uint8_t* w);             // $7E:3870: the high table's byte `($13)` shifted to the next sprite (`$11`)
+void CtSeqPicCircle0077(CtSeqStagePic* sp, uint8_t* w, uint8_t mode);   // C3/0077: a circle into a window table (seq_entry6pic.c)
 
 #endif

@@ -5609,7 +5609,16 @@ int CtObjSlotAlloc(uint8_t* r, int idx) {
 // One STA $420B with channel 7 set as above. Mode 1 alternates the two data ports and VMAIN $80 advances the word
 // address after the second of each pair. A DMA size of 0 means 0x10000 bytes.
 static void ctVramDma(const uint8_t* r, uint8_t* vram, int vmaddr, int src, int len) {
-  if (!vram) return;
+  // No image of its own: a host that keeps the field's VRAM (g_ctVramSink, field.c's) takes the upload -- the objects'
+  // frames, which a native stage drawn over the field's VRAM shows (entry 5's party: their tiles at $0080 / $0200 / $0280 /
+  // $1880 are the field's until a record's frame changes).
+  if (!vram) {
+    if (!g_ctVramSink) return;
+    int n = (len == 0) ? 0x10000 : len, a = src & 0xFFFF, first = n < 0x10000 - a ? n : 0x10000 - a;
+    vmVramDma(vmaddr, r + 0x10000 + a, first);                // (the source bank $7F, its 16-bit wrap kept)
+    if (n > first) vmVramDma((vmaddr + first / 2) & 0x7FFF, r + 0x10000, n - first);
+    return;
+  }
   // VMADD is a word address into 32K words; the byte index below masks to 0xFFFF, which folds word $8000 onto $0000
   // as the hardware does.
   int w = vmaddr;

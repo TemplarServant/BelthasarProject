@@ -13,5 +13,7 @@ long CtEntry5StageSetupCycles(void);
 int  CtEntry5StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io);
 int  CtEntry5StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io);
 void CtEntry5StageClose(uint8_t* w, const CtRaceIo* io);
+// A harness's switch (ct.exe --racepiccmp): 1 = the frame does not run the warp's pass (the main loop's $7441); the harness does.
+extern int g_ctEntry5NoRender;
 
 #endif

@@ -2774,5 +2774,69 @@ while equal to `$4D`, then `$4D` = it, `ORA #01`... -- it advances `$0386`, whic
 - Graded (magus-vortex-entry5-stage-logic-vs-oracle): 1158 frames, END on the same frame, the RNG, `$4D`, the records and the
   pages equal; 11 frames differ in `$0388` (page B's song post `$038A = 3A`: 25 frames held on the logical cartridge, 14 on the
   port's SPC -- the main loop's endless renderer never waits, and the logical oracle only releases it by its safety valve).
-- In play: leg 95 SYNC-ONLY (7 warps; the reboot into 10F, then 002 three frames apart). Open: the picture (stage 2), and
-  C0/260E's own work before the jump (C0/75E9, 74D4, 00DE, 024C: the camera's and the HDMA's) beyond `$0146` / `$010F`.
+- In play: leg 95 SYNC-ONLY (7 warps; the reboot into 10F, then 002 three frames apart). (The picture and C0/260E's
+  screen work: below, 2026-11-14.)
+
+**The picture (stage 2), 2026-11-14: src/seq_entry5pic.c.** The stage is entered with A's bit 7, so the common init leaves
+the PPU alone: the room stands, and the setup changes only what the vortex needs.
+
+- **The field's PPU it finds** (field.c `stagePicFieldRegs`): FD/C0D7, the field's own init (BGMODE 09, BG12NBA 11,
+  BG34NBA 05, OBSEL 00, SETINI 00), the map bases channel 0's records leave ($7F:14F0-14F3) and the fixed colour of the
+  field's NMI (C0/EC3D-EC45: COLDATA E0, then `$0121`).
+- **C0/260E's screen work** (ct_vm.c, the `$0139 = 0B` arm): `D = $1D00 / JSR C0/75E9` builds BG1's window at the camera
+  into $7E:C800, C0/74D4 re-origins it and the `$46 = 1` NMI uploads it to `$1D7C` -- op 0xE5's style 1 (C0/17A0). That
+  buffer is the vortex's room: the setup copies it to `$0C00` (the warp's source) and `$1400`, and `$0C00` on to BG2's
+  map `$6800`. The port's `$C800` held another build's scratch (2019 bytes differed on f83979); now 0.
+- **The setup** `$70DD` / `$70EB-7156`: HDMA channels 0-3 from `$7354` (windows 1 / 2 from the circle tables `$F000` /
+  `$F280`, BG3's scroll from the wave `$F500`), the map to `$6800`, BG1SC 60, BG3SC 70, W12SEL 8B, W34SEL 0C, BGMODE 01,
+  TM 16 / TS 01 / TMW 17 / TSW 01, CGWSEL 02 / CGADSUB 42: the room on the main screen, the warp (BG1) half-added from the
+  sub screen inside the windows.
+- **The tasks**: 7325 (a radius that changed redraws its circle by C3/0077), 73C6 (the warp's matrix from page A's
+  r5 / r0 through the multiplier), 73AA (BG3's wave), 72FF (the radii a step towards 80), the records' radius ($7668),
+  orbit ($76D9), tiles ($6E42 into $1C00 when a frame changes) and sprites ($701E), the mosaic's two stores ($737E).
+- **The hooks**: 783C (a finished warp map to VRAM $6000), 7868 (a record's tiles), 78AB (colours $15-$17 every eighth
+  frame, turned), and the common three.
+- **The V-IRQ**: C3:003B's `$4200 = A1` leaves the field's line-211 IRQ armed, and the stage's vector C3/0529 blanks the
+  screen from there (INIDISP 80) until the next NMI: rows 211-223 are black on every frame.
+- **The warp** `$7E:7441`: the main loop `$3023 JSR $7441 / LDA $00 / BEQ` never waits; each pass maps 27 rows of 32 words
+  of `$0C00` through the matrix into `$1400` and ends `INC $3B`. On the cartridge a pass takes about 2.7 frames of CPU (422
+  passes in 1158 frames) -- the oracle runs this stage in real time, its safety valve releasing the main loop that never
+  waits (snes.c lfIfastReal, "the portal after Magus"). The port runs one pass a frame, the main loop's one iteration
+  (the zelda3 model: CLAUDE.md), and none while the NMI is still in the song's upload (C3/08BE JSR C3/09A4 -> JSL
+  C7/0004: the main thread waits for its RTI; the nested NMIs go on with the tasks). How often the picture's warp changes
+  is the CPU's speed, not the game's.
+
+**Graded** (ct.exe --racepiccmp, entry 5 under the rule's oracle, seeded with the cartridge's PPU as its setup begins:
+`RACEPICCMP_SEEDPPU=7E7092`). The cartridge's NMI tasks run on past the vblank in the oracle's real time, so its own
+pictures take the NMI's register writes on the line its CPU reached; the port's are the vblank's, as the rule has them.
+The harness therefore lays each port picture against the cartridge's STATE once its NMI has returned, drawn by the
+compositor as the rule draws it, and grades the warp pass by pass (the port's renderer run on the cartridge's WRAM at
+each pass's `$7441`, the maps compared at its `INC $3B`): 1158 frames to the END, every picture 0 px against the
+cartridge's state, all 422 passes' maps equal. Three of the RNG's 259 calls read an open bus other than `21` at `CMP
+$2137` (f779, f839, f983: an HDMA transfer between the operand's fetch and the read, which only the real-time CPU can
+make happen) -- the harness takes the cartridge's `$0386` / `$4D` after each and says so.
+
+**In play** (field.c, ct_vm.c, move.c; the host's part of it):
+
+- **C0/260E's screen work** before the jump, which the port had left out: BG1's window rebuilt into `$C800` (above).
+- **The opening's frames**: C0/260E's two C0/EC60, C0/2628's `JSR C0/024C` -- C0/0617 finds no enemy (`$019D` = 80), so
+  0253 `LDA $9D / BMI` takes C0/034B (the regroup), whose tail `BRL C0/00EB` waits a frame -- then the setup's and the
+  common init's `$31B0`: five, measured on the rule's cartridge (C0/2628 -> 262B spans a frame, 406878 master cycles;
+  `$46 = 1` on row f83981, the stage's `$08 = 2` on f83987, where the port's was on f83986). The list is evaluated on the
+  field's WRAM before the stage opens (fieldEnemyList0617, the one C0/024C's fight staging uses).
+- **The opening's picture**: the screen stays on through those frames (the field's NMI in C0/260E's waits; C3:003B turns
+  the NMI back on before the decompression) -- the cartridge shows the room on f83984-f83987. The port shows the field's
+  last picture, where it drew black. (What the field's HDMA does with the tables C0/00DE rebuilt is not modelled: those
+  four pictures still differ, ~21000 px.)
+- **The pad latch**: the stage's NMI reads the pad into `$02` alone (C3/0A99); the field's latch C2/84D2 is the field
+  NMI's. The host ran it every frame, a native stage open or not, and zeroed `$00F0-$00FF` -- which the RNG folds in
+  (`$F0` / `$F2` / `$F4`, left by the records' $77E7 and the setup's $5872): every flash of the vortex was another draw.
+  It runs only while no native stage is open; leg 95's `$0386`, `$4C` / `$4D`, `$08` and `$F0-$F5` are the cartridge's
+  through the flashes.
+- **The party's tiles**: C0/B1B2's uploads of the objects' frames reached no VRAM image in the live port; they go to the
+  host's (g_ctVramSink), so the records' slots `$0080` / `$0200` / `$0280` / `$1880` are the cartridge's when the stage
+  opens (Frog and Magus were missing until their frames changed).
+
+Leg 95 against the rule's cartridge (pictures at the field's diagonal, port P = cartridge P + 2): the stage's frames
+where the two warp maps coincide differ by ~430 px -- the room's torch and candle flames, a tile-animation phase the
+field had before the vortex (f83980, at its best lag -3: 678 px at the same place) -- and by 10000-30000 px elsewhere: the warp's pace.

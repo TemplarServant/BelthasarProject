@@ -6,16 +6,18 @@
 // This file is the logic over the WRAM image: the two scripts and their call $7286, the tasks the logic reads ($7193 the
 // spin's counters, $737E the RNG C3/02DD -- what it leaves in `$0386` is the field's afterwards --, the fades, and the party's
 // animation records of $74F5 / $76A5 / $7721 / $77AE, whose scratch the RNG folds in), and the setup's writes those read. The
-// picture (the main loop's renderer $7441, the records' positions, tiles and OAM, the window circle $7325, the wave $73AA,
-// the matrix $73C6, the colours $72FF, the hooks 783C 7868 78AB 388B 380B 3843, the setup's HDMA $36CC, VRAM and PPU) is not
-// ported yet: those parts run as no-ops here, and the host draws black (field.c).
+// picture (the main loop's renderer $7441, the records' positions, tiles and OAM, the window circles $7325, the wave $73AA,
+// the matrix $73C6, the radii $72FF, the hooks 783C 7868 78AB 388B 380B 3843, the setup's HDMA $36CC, VRAM and PPU) is
+// seq_entry5pic.c, called from here wherever the ROM's code has it, when the host gives a picture (`io->pic`).
 #include "seq_entry5.h"
+#include "seq_entry5pic.h"
 #include "seq_entry4.h"   // CtSeqRng02DD8: C3/02DD (seq_stagelib.c)
 #include "romview.h"
 #include <string.h>
 #include "seq_wram.h"   // CT_SEQ_W16 / CT_SEQ_W16_PUT: the WRAM word helpers
 
 static int s_songHold;   // the song post's handshake frames left (page B's `$038A = 3A`: C3/09A4's JSL C7/0004)
+int g_ctEntry5NoRender;  // a harness's switch (ct.exe --racepiccmp): 1 = it runs the warp's passes itself, on the cartridge's
 
 static unsigned rd(const uint8_t* w, unsigned a) { return CT_SEQ_W16(w, a); }
 static void wr(uint8_t* w, unsigned a, unsigned v) { CT_SEQ_W16_PUT(w, a, v); }
@@ -54,8 +56,11 @@ static void entry5Spin(uint8_t* w) {
 // fourth frame (`LDA $08 / AND #03 / BNE`) a new `$4D` from the RNG: `JSR $3443` (C3/02DD), `AND #30 / ADC #20`, drawn
 // again while it equals `$4D`; then the mosaic `$4D | 1`. The carry: `CMP #FF` (equal: set) into the first draw, the
 // `CMP $4D` (equal: set) into each redraw; A into each redraw is the value just compared.
-static void entry5Flash(uint8_t* w, unsigned slot) {
-  if (w[0x004C] != 0xFF) return;                                      // 7380 LDA $4C / CMP #FF / BEQ -> 7391
+static void entry5Flash(uint8_t* w, unsigned slot, const CtRaceIo* io) {
+  if (w[0x004C] != 0xFF) {                                            // 7380 LDA $4C / CMP #FF / BEQ -> 7391
+    if (io && io->pic) CtEntry5PicMosaic(io->pic, (uint8_t)((w[0x004C] << 4) | 0x01));   // 7386 ASL x4 / ORA #01 / STA $2106
+    return;
+  }
   if (w[0x0008] & 0x03) return;                                       // 7391 LDA $08 / AND #03 / BNE -> RTS
   uint8_t a = 0; int c = 1;                                           // (A = $08 & 3 = 0, the carry from CMP #FF)
   for (int guard = 0; guard < 256; guard++) {
@@ -65,7 +70,8 @@ static void entry5Flash(uint8_t* w, unsigned slot) {
     c = a >= w[0x004D];                                               // 739E CMP $4D
     if (a != w[0x004D]) break;                                        //   BEQ -> 7397
   }
-  w[0x004D] = a;                                                      // 73A2 STA $4D (ORA #01 / STA $2106: the picture's)
+  w[0x004D] = a;                                                      // 73A2 STA $4D
+  if (io && io->pic) CtEntry5PicMosaic(io->pic, (uint8_t)(a | 0x01)); // 73A4 ORA #01 / STA $2106
 }
 
 // ---- The party's four sprite records (D = $0000, X = 0 / 16 / 2C / 42): what the RNG's scratch reads ----
@@ -101,7 +107,7 @@ static unsigned entry5Angle(uint8_t* w, unsigned x, unsigned y) {
 // animation set by `$52 & 7` ($762E: `$5E` = $7E:7642[i], `$5F` = it + 1), `$56`, `$60` = 3000, `$58` (the OAM word), the
 // position `$54` / `$55` from the nibbles $29B0.. and $7649's angle `$5B` = $5872($54 - 80, $55 - 70) (`$F4` / `$F6` its
 // operands; its radius `$5D`, $34FB, is the picture's).
-static void entry5Records(uint8_t* w) {
+static void entry5Records(uint8_t* w, const CtRaceIo* io) {
   static const struct { uint16_t frame, chr; uint16_t v56, v58; uint16_t pos; } R[4] = {
     { 0x29B4, 0x2980, 0x0080, 0x3A08, 0x29B0 }, { 0x29B9, 0x2981, 0x0200, 0x3C20, 0x29B5 },
     { 0x29BE, 0x2982, 0x0280, 0x3E28, 0x29BA }, { 0x29C3, 0x0000, 0x1880, 0x3388, 0x29BF } };
@@ -117,16 +123,18 @@ static void entry5Records(uint8_t* w) {
     unsigned f4 = (w[0x55 + x] - 0x70) & 0xFFFF, f6 = (w[0x54 + x] - 0x80) & 0xFFFF;   // $7649: 764A-765F
     wr(w, 0x00F4, f4); wr(w, 0x00F6, f6);
     wr(w, 0x5B + x, entry5Angle(w, f6, f4));                                      // 7662 JSR $5872 / STA $5B,X
+    if (io && io->pic) CtEntry5PicRadius(io->pic, w, x);                          // 7668-76A0: the radius `$5D,X`
   }
 }
 
 // $7E:76A5 -- the facing (for the records 0, 16, 2C): `$A9 += $0B04` (page B's r2), `$65` = $7E:771D[((A9 + $5B) + 80) >> 8
 // & 3] & 3; the position from the sine and the radius (M7A x M7B) is the picture's.
-static void entry5Facing(uint8_t* w) {
+static void entry5Facing(uint8_t* w, const CtRaceIo* io) {
   wr(w, 0x00A9, rd(w, 0x00A9) + rd(w, 0x0B04));                       // 76A5 LDA $A9 / CLC / ADC $0B04 / STA $A9
   for (unsigned x = 0; x <= 0x2C; x += 0x16) {
     unsigned v = (rd(w, 0x00A9) + rd(w, 0x5B + x) + 0x0080) & 0xFFFF; // 76BC-76C4
     w[0x65 + x] = (uint8_t)(w[0x771D + ((v >> 8) & 3)] & 3);          // 76C7-76D5
+    if (io && io->pic) CtEntry5PicOrbit(io->pic, w, x, io);           // 76D9-771A: `$54,X` / `$55,X`
   }
 }
 
@@ -175,7 +183,8 @@ static void entry5Party(uint8_t* w, const CtRaceIo* io) {
   for (;;) {
     unsigned x = rd(w, 0x00AD);                                       // 772B LDX $AD
     int changed = w[0x51 + x] != w[0x5A + x];                         // 772F LDA $51,X / CMP $5A,X
-    if (changed) { w[0x5A + x] = w[0x51 + x]; wr(w, 0x0041, rd(w, 0x56 + x)); }   // 7735 / 773A-773C
+    if (changed) { w[0x5A + x] = w[0x51 + x]; wr(w, 0x0041, rd(w, 0x56 + x));     // 7735 / 773A-773C
+                   if (io && io->pic) CtEntry5PicTiles(w, x, io); }              // 773E-774D: its tiles into $1C00 ($6E42)
     unsigned nx = (x + 0x16) & 0xFFFF; if (nx == 0x58) nx = 0;        // $7774
     wr(w, 0x00AD, nx);
     if (changed) break;                                               // 7754 BRA -> 775F
@@ -183,6 +192,7 @@ static void entry5Party(uint8_t* w, const CtRaceIo* io) {
     if (!rd(w, 0x00AB)) break;                                        //   BNE -> 772D
   }
   for (unsigned x = 0; x != 0x58; x += 0x16) {                        // 775F-7771
+    if (io && io->pic) CtEntry5PicOam(w, x, io);                      // 7762 JSR $7787: its four sprites ($701E)
     wr(w, 0x00F0, rd(w, 0x52 + x) & 0xFF);                            // $7787 -> $74EB: `STA $F0` (16-bit)
     w[0x00F0] = 0;                                                    //   -> $701E: `LDA #04 / STA $F0` .. `DEC $F0` to 0
     entry5Anim(w, x, io);                                             // 7765 JSR $77AE
@@ -191,20 +201,21 @@ static void entry5Party(uint8_t* w, const CtRaceIo* io) {
 
 static unsigned entry5Task(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io) {
   switch (t) {
-    case 0x76A5: entry5Facing(w); return t;
+    case 0x76A5: entry5Facing(w, io); return t;
     case 0x7721: entry5Party(w, io); return t;
     case 0x3749: CtSeqScript(w, 0x0A00, io, entry5Call); return t;
     case 0x3754: CtSeqScript(w, 0x0B00, io, entry5Call); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);
     case 0x7193: entry5Spin(w); return t;
-    case 0x737E: entry5Flash(w, slot); return t;
-    default: return t;                                                // the picture's tasks (see the head of the file)
+    case 0x737E: entry5Flash(w, slot, io); return t;
+    default: if (io && io->pic) CtEntry5PicTask(io->pic, w, t, io);   // the picture's tasks: 7325 73C6 73AA 72FF
+             return t;
   }
 }
 
 static unsigned entry5Hook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) {
-  (void)w; (void)slot; (void)io;
-  return h;                                                           // the picture's hooks
+  (void)slot;
+  return (io && io->pic) ? CtEntry5PicHook(io->pic, w, h) : h;        // the picture's hooks
 }
 
 int CtEntry5StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
@@ -219,10 +230,10 @@ int CtEntry5StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   if (CtSeqScript(w, 0x0A00, io, entry5Call) < 0) return -1;          // 70CE JSR $3749
   if (CtSeqScript(w, 0x0B00, io, entry5Call) < 0) return -1;          // 70D1 JSR $3754
   wr(w, 0x3024, 0x7441);                                              // 70D4 LDA #7441 / STA $3024: the main loop's JSR
-  // 70DD JSR $36CC (Y = 7354: the HDMA channels) -- the picture's
+  if (io && io->pic) CtEntry5PicSetupA(io->pic, w);                   // 70DD JSR $36CC (Y = 7354: the HDMA channels)
   w[0x038D] = 0x0F;                                                   // 70E3 LDA #0F / STA $038D
-  entry5Records(w);                                                   // 70E8 JSR $74F5 (their logic; see entry5Records)
-  // 70EB-7112 the VRAM DMA, 7117-7139 the PPU -- the picture's
+  entry5Records(w, io);                                               // 70E8 JSR $74F5 (their logic; see entry5Records)
+  if (io && io->pic) CtEntry5PicSetupB(io->pic, w);                   // 70EB-7112 the VRAM DMA, 7117-7156 the PPU
   w[0x003D] = 0x01; w[0x003F] = 0x01;                                 // 713D LDA #01 / STA $05 / STA $003D / STA $003F
   w[0x038C] = 0x0F;                                                   // 7147 LDA #0F / STA $038C
   // $7E:300D .. 301E: $388B, $31B0, JSL C3/08D0 (one NMI, run here), NMI on, STZ $00, STZ $0392
@@ -237,6 +248,10 @@ int CtEntry5StageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
 int CtEntry5StageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   int st = CtSeqStageNmiHooks(w, joy, io, entry5Hook, entry5Task);
   if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);    // page B's song change (`$038A = 3A`)
+  // The main loop, `$3023 JSR $7441 / LDA $00 / BEQ`: one pass of the warp a frame (seq_entry5pic.c's head) -- none while the
+  // NMI is still in the song's upload (C3/08BE JSR C3/09A4 -> JSL C7/0004: the main thread waits for its RTI; the nested NMIs
+  // go on running the tasks).
+  if (st == 0 && io && io->pic && !g_ctEntry5NoRender && !s_songHold) CtEntry5PicRender(w);
   return st;
 }
 

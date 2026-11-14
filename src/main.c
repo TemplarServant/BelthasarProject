@@ -6739,15 +6739,44 @@ static int runSeqPicCmp(const char* romPath, const char* statePath, int frames) 
 #include "seq_entry4.h"
 #include "seq_entry7.h"
 #include "seq_entry6.h"
+#include "seq_entry5.h"
+#include "seq_entry5pic.h"
 #include "seq_ending.h"
-// The stage by its operand: entries 3, 4, 7, 6, the ending, or the race (the seq_*.c stages and their *pic.c).
+// Entry 5's warp, pass by pass. Its main loop ($7E:3023 `JSR $7441`) never waits, so the cartridge's passes end where its
+// CPU's speed puts them and the port's one-pass-a-frame is not the cartridge's pace: the maps are compared pass for pass
+// instead. At each pass's first instruction the cartridge's WRAM is copied and the port's renderer run on the copy; at the
+// pass's `INC $3B` (7E:74DA) the two maps $1400-$1ABF are compared.
+static int g_rpc5On, g_rpc5Armed; static long g_rpc5Pass, g_rpc5Bad; static uint8_t g_rpc5W[0x20000];
+// C3/02EB `CMP $2137` reads the open bus, the operand's last byte 21 -- unless an HDMA transfer lands between the operand's
+// fetch and the read, which only the oracle's real-time CPU can make happen here (the stage's main loop never waits, so the
+// oracle runs it unheld). Such a call is counted, and the frame's RNG ($0386, $4D) is the cartridge's on both sides after it.
+static int g_rpc5Bus, g_rpc5BusN; static uint8_t g_rpc5Map[0x800], g_rpc5Cnt[2];
+static void rpc5Op(Snes* s) {
+  if (s->cpu->k == 0xC3 && s->cpu->pc == 0x02EE && (s->cpu->c ? 1 : 0) != ((s->cpu->a & 0xFF) >= 0x21)) { g_rpc5Bus = 1; g_rpc5BusN++; }
+  if (s->cpu->k != 0x7E) return;
+  if (s->cpu->pc == 0x783C) { memcpy(g_rpc5Map, s->ram + 0x1400, 0x800); g_rpc5Cnt[0] = s->ram[0x3B]; g_rpc5Cnt[1] = s->ram[0x3C]; }
+  if (s->cpu->pc == 0x7441) { memcpy(g_rpc5W, s->ram, sizeof g_rpc5W); CtEntry5PicRender(g_rpc5W); g_rpc5Armed = 1; }
+  else if (s->cpu->pc == 0x74DA && g_rpc5Armed) {
+    g_rpc5Armed = 0; g_rpc5Pass++;
+    int bad = 0, first = -1;
+    for (int i = 0x1400; i < 0x1AC0; i++) if (s->ram[i] != g_rpc5W[i]) { bad++; if (first < 0) first = i; }
+    if (bad) { if (++g_rpc5Bad <= 4) printf("racepiccmp: entry 5's warp, pass %ld: %d bytes of the map differ, the first at $%04X (cart %02X port %02X)\n",
+                                            g_rpc5Pass, bad, first, s->ram[first], g_rpc5W[first]); }
+  }
+}
+static int rpc5InMain(const Snes* s) {   // the main loop's own code: the NMI (C3, the tasks) has returned
+  return s->cpu->k == 0x7E && ((s->cpu->pc >= 0x7441 && s->cpu->pc <= 0x74DC) || (s->cpu->pc >= 0x3023 && s->cpu->pc <= 0x302A));
+}
+// The stage by its operand: entries 3, 4, 7, 6, 5, the ending, or the race (the seq_*.c stages and their *pic.c).
 static int rpcOpen(uint8_t* w, uint8_t op, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageOpen(w, op, io) : CtEntry4StageHas(op) ? CtEntry4StageOpen(w, op, io)
        : CtEntry7StageHas(op) ? CtEntry7StageOpen(w, op, io) : CtEntry6StageHas(op) ? CtEntry6StageOpen(w, op, io)
+       : CtEntry5StageHas(op) ? CtEntry5StageOpen(w, op, io)
        : CtEndingStageHas(op) ? CtEndingStageOpen(w, op, io) : CtRaceStageOpen(w, op, io); }
 static int rpcFrame(uint8_t* w, uint8_t op, uint16_t joy, const CtRaceIo* io) {
   return CtEntry3StageHas(op) ? CtEntry3StageFrame(w, joy, io) : CtEntry4StageHas(op) ? CtEntry4StageFrame(w, joy, io)
        : CtEntry7StageHas(op) ? CtEntry7StageFrame(w, joy, io) : CtEntry6StageHas(op) ? CtEntry6StageFrame(w, joy, io)
+       : CtEntry5StageHas(op) ? CtEntry5StageFrame(w, joy, io)
        : CtEndingStageHas(op) ? CtEndingStageFrame(w, joy, io) : CtRaceStageFrame(w, joy, io); }
 static void racepicPost(void* c) { ((uint8_t*)c)[0x1E00] = 0; }
 // A script's `F5` reads the SPC's output ports: here the oracle's own (the cartridge's marker on its frame).
@@ -6761,6 +6790,7 @@ static void rpcOp(Snes* s, int k) {
   static long pc = -2; if (pc == -2) { const char* e = getenv("RACEPICCMP_PCLOG"); pc = e ? strtol(e, NULL, 16) : -1; }
   if (pc >= 0 && (((long)s->cpu->k << 16) | s->cpu->pc) == pc)
     printf("racepiccmp: f%d pc %06lX A %04X X %04X Y %04X c %d D %04X ram51 %02X%02X%02X%02X F0 %02X%02X%02X%02X%c", k, pc, s->cpu->a, s->cpu->x, s->cpu->y, s->cpu->c ? 1 : 0, s->cpu->dp, s->ram[0x51], s->ram[0x52], s->ram[0x53], s->ram[0x54], s->ram[0xF0], s->ram[0xF1], s->ram[0xF2], s->ram[0xF3], 10);
+  if (g_rpc5On) rpc5Op(s);
   cpu_runOpcode(s->cpu);
 }
 static int runRacePicCmp(const char* romPath, const char* statePath, const char* btns, int handoff, int operand, int frames) {
@@ -6799,6 +6829,16 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   // RACEPICCMP_SEEDVRAM=1: the native VRAM starts as the cartridge's at the hand-off (the field's leftovers the race
   // never writes).
   if (getenv("RACEPICCMP_SEEDVRAM")) memcpy(sp.p.vram, s->ppu->vram, sizeof sp.p.vram);
+  // RACEPICCMP_SEEDPPU=<24-bit hex PC | 1>: the whole picture state starts as the cartridge's -- for a stage entered with A's
+  // bit 7 (entry 5: C3:003B skips the PPU reset, the field's picture stands). With a PC, as it stands when the cartridge's
+  // CPU first reaches it after the hand-off (entry 5: 7E7092, its setup -- the field's NMI still sends tiles after the
+  // hand-off frame); with 1, at the hand-off.
+  if (getenv("RACEPICCMP_SEEDPPU")) {
+    long at = strtol(getenv("RACEPICCMP_SEEDPPU"), NULL, 16), n = 0;
+    if (at > 1) { for (; n < 200000000L && ((((long)s->cpu->k << 16) | s->cpu->pc) != at); n++) cpu_runOpcode(s->cpu);
+                  printf("racepiccmp: the picture seeded at %06lX, %ld instruction(s) after the hand-off\n", at, n); }
+    seqPicFromPpu(&sp.p, s->ppu);
+  }
   // RACEPICCMP_SEEDZERO=<lo>-<hi>[,...] (hex words): clear those ranges of the seeded VRAM.
   { const char* z = getenv("RACEPICCMP_SEEDZERO"); while (z && *z) { char* e; long lo = strtol(z, &e, 16), hi = lo;
       if (*e == '-') hi = strtol(e + 1, &e, 16); for (long i = lo; i <= hi && i < 0x8000; i++) sp.p.vram[i] = 0;
@@ -6815,15 +6855,41 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
   printf("racepiccmp: the stage's setup made its NMI %d frame(s) after the hand-off\n", waited);
   CtSeqStagePicFrame(&sp, w, NULL);                                   // (the frame the setup's NMI drew: its HDMA's last writes)
   int firstState = -1, firstPic = -1, firstWram = -1, stateFrames = 0, lastState = -1; long picBad = 0;
+  int firstRulePic = -1, rulePicFrames = 0, e5MemFrames = 0; long rulePicBad = 0; uint8_t q5en = 0; static uint8_t q5w[0x20000];   // (entry 5's)
+  // Entry 5: the port's frame takes the map the cartridge's hook $783C sends -- `$3B` and $1400-$1BFF as they stand when the
+  // vblank begins (the warp's pace is the cartridge's CPU's; rpc5Op grades the passes themselves) -- and the cartridge's NMI
+  // is followed to its end: its tasks run on past the vblank.
+  const int e5 = CtEntry5StageHas((uint8_t)operand);
+  uint8_t* e5Map = g_rpc5Map; uint8_t* e5Cnt = g_rpc5Cnt;   // (rpc5Op: taken as the cartridge's hook $783C begins)
+  if (e5) { g_ctEntry5NoRender = 1; g_rpc5On = 1; memcpy(e5Map, s->ram + 0x1400, 0x800); e5Cnt[0] = s->ram[0x3B]; e5Cnt[1] = s->ram[0x3C]; }
   for (int k = 1; k <= frames; k++) {
     RPC_PAD();
     while (s->inVblank) rpcOp(s, k);                         // the oracle's NMI k and its hooks done
+    // (entry 5: the state once the cartridge's NMI has returned -- its tasks run on past the vblank in the oracle's real time,
+    //  the picture's last register writes with them; under the rule they are the vblank's)
+    if (e5) { for (long g = 0; !rpc5InMain(s) && s->cpu->k != 0xC7 && !s->inVblank && g < 8000000; g++) rpcOp(s, k);   // (C7: back in a song's upload)
+              seqPicFromPpu(&q, s->ppu); q5en = s->ram[0x038C]; memcpy(q5w, s->ram, sizeof q5w);
+              memcpy(w + 0x1400, e5Map, 0x800); w[0x3B] = e5Cnt[0]; w[0x3C] = e5Cnt[1]; }
     uint16_t joy = s->portAutoRead[0];                                  // $4218 / $4219 as the NMI read them (C3/0A99)
     int st = rpcFrame(w, (uint8_t)operand, joy, &io);
+    if (e5 && g_rpc5Bus) {                                    // (rpc5Op: a draw that read another open bus)
+      g_rpc5Bus = 0; w[0x0386] = s->ram[0x0386]; w[0x004D] = s->ram[0x004D];
+      if (w[0x004C] == 0xFF) CtEntry5PicMosaic(&sp, (uint8_t)(w[0x004D] | 0x01));
+      printf("racepiccmp: f%d an RNG call read an open bus other than 21 at C3/02EB: the RNG taken from the cartridge\n", k);
+    }
+    // RACEPICCMP_CELL=<hex addr>:<n>: those WRAM bytes on both sides after the frame, whenever either changes (with the
+    // oracle's own frame count).
+    { static char lastc[64]; const char* ce = getenv("RACEPICCMP_CELL");
+      if (ce) { char* e2; long ca = strtol(ce, &e2, 16), cn = (*e2 == ':') ? strtol(e2 + 1, NULL, 16) : 1; char now[64]; int o = 0;
+        if (cn > 8) cn = 8;
+        for (long i = 0; i < cn; i++) o += sprintf(now + o, "%02X", s->ram[(ca + i) & 0x1FFFF]);
+        o += sprintf(now + o, "/");
+        for (long i = 0; i < cn; i++) o += sprintf(now + o, "%02X", w[(ca + i) & 0x1FFFF]);
+        if (strcmp(now, lastc)) { strcpy(lastc, now); printf("racepiccmp: cell f%d (oracle frame %u) cart/port %s\n", k, s->frames, now); } } }
     if (st) { printf("racepiccmp: native stage ended (%d) at frame %d\n", st, k);
               if (getenv("RACEPICCMP_PEEK")) printf("racepiccmp: f%d the oracle's $0000 = %02X%02X (its NMI %d done)\n", k, s->ram[1], s->ram[0], k);
               break; }
-    seqPicFromPpu(&q, s->ppu);
+    if (!e5) seqPicFromPpu(&q, s->ppu);
     int vb = 0, cb = 0, ob = 0, rb = 0, rl = 0; char regs[256] = "";
     for (int i = 0; i < 0x8000; i++) vb += q.vram[i] != sp.p.vram[i];
     for (int i = 0; i < 256; i++) cb += q.cgram[i] != sp.p.cgram[i];
@@ -6867,17 +6933,25 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     int bad = vb || cb || ob || rb || hb;
     if (bad && firstState < 0) firstState = k;
     if (bad) { stateFrames++; lastState = k; }
-    if (k == firstState && getenv("RACEPICCMP_VRAM")) {
+    if (e5 && (vb || cb || ob)) e5MemFrames++;              // (entry 5: what its NMI sent -- the registers HDMA rewrites aside)
+    if ((k == firstState && getenv("RACEPICCMP_VRAM")) || (getenv("RACEPICCMP_DETAIL") && k == atoi(getenv("RACEPICCMP_DETAIL")))) {   // (DETAIL=<frame>: that frame's)
       int st0 = -1;
       for (int i = 0; i <= 0x8000; i++) { int d = i < 0x8000 && q.vram[i] != sp.p.vram[i];
         if (d && st0 < 0) st0 = i; if (!d && st0 >= 0) { printf("racepiccmp:   VRAM $%04X-$%04X (cart %04X port %04X)\n", st0, i - 1, q.vram[st0], sp.p.vram[st0]); st0 = -1; } }
     }
-    if (k == firstState && getenv("RACEPICCMP_OAM")) {                  // the OAM words that differ (low table), the high table's bytes
+    if ((k == firstState && getenv("RACEPICCMP_OAM")) || (getenv("RACEPICCMP_DETAIL") && k == atoi(getenv("RACEPICCMP_DETAIL")))) {                  // the OAM words that differ (low table), the high table's bytes
       for (int i = 0; i < 256; i++) if (q.oam[i] != sp.p.oam[i]) printf("racepiccmp:   OAM word %3d (sprite %3d) cart %04X port %04X\n", i, i >> 1, q.oam[i], sp.p.oam[i]);
       for (int i = 0; i < 32; i++) if (q.highOam[i] != sp.p.highOam[i]) printf("racepiccmp:   OAM high %2d cart %02X port %02X\n", i, q.highOam[i], sp.p.highOam[i]);
     }
     if (getenv("RACEPICCMP_VERBOSE") || k == firstState)
       printf("racepiccmp: frame %d: VRAM %d CGRAM %d OAM %d words differ; registers %d%s; HDMA %d; WRAM %d bytes\n", k, vb, cb, ob, rb, regs, hb, wb);
+    // RACEPICCMP_REGS=<frame>: the cartridge's display registers on that frame ($2100-$2133 as last written, the fixed colour).
+    if (getenv("RACEPICCMP_REGS") && k == atoi(getenv("RACEPICCMP_REGS"))) {
+      printf("racepiccmp: f%d the cartridge's registers:", k);
+      for (int i = 0; i <= 0x33; i++) printf(" %02X=%02X", i, q.r[i]);
+      printf(" fix=%02X,%02X,%02X hofs=%04X,%04X,%04X,%04X vofs=%04X,%04X,%04X,%04X\n", q.fix[0], q.fix[1], q.fix[2], q.hofs[0], q.hofs[1], q.hofs[2], q.hofs[3],
+             q.vofs[0], q.vofs[1], q.vofs[2], q.vofs[3]);
+    }
     // RACEPICCMP_WIDE=<side>: also draw with that many widescreen columns a side (a mod's picture; RACEPICCMP_ART=1 the
     // scene adjustments' art, RACEPICCMP_STEAM=1 the Steam art from ct_wide.dat, scene_art.h); SHOT writes
     // build/racepic_wide.raw.
@@ -6892,11 +6966,13 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
                                        g_seqPicArt = CtSceneArtEntry3; } }
     { static double benchT; static int benchN; clock_t t0 = clock();   // (RACEPICCMP_BENCH: the compositor's time a frame)
       CtSeqStagePicFrame(&sp, w, rgb);
+      if (e5) CtEntry5PicIrq(&sp, rgb);                              // (its V-IRQ blanks the bottom lines)
       if (getenv("RACEPICCMP_BENCH")) { benchT += (double)(clock() - t0) / CLOCKS_PER_SEC; benchN++;
         if (benchN % 100 == 0) printf("racepiccmp: bench %d frames, %.2f ms a frame\n", benchN, 1000.0 * benchT / benchN); } }
     g_seqPicWideSide = 0; g_seqPicWideOut = NULL; g_seqPicArt = NULL; g_seqPicWideSkip = 0; g_seqPicWideSkipModes = 0; g_seqPicWideSubTexture = 0;
     uint32_t fr = s->frames;
     while (!s->inVblank && fr == s->frames) rpcOp(s, k);
+    // (entry 5: the map the port sends is the one the cartridge's hook sent: rpc5Op copies it at $7E:783C)
     int pb = 0;
     for (int y = 0; y < 224; y++) {
       const uint8_t* b = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
@@ -6906,9 +6982,43 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
       }
     }
     if (pb) { picBad += pb; if (firstPic < 0) { firstPic = k; printf("racepiccmp: frame %d: %d px differ\n", k, pb); } }
+    // Entry 5: the cartridge's state after its NMI, drawn by the compositor as the rule has it (every register write of the
+    // NMI at the vblank), against the port's picture -- what the port must match. The oracle's own picture takes the NMI's
+    // writes on the line its real-time CPU reached (the main loop never waits, so the oracle runs the stage in real time).
+    if (e5) {
+      static CtSeqStagePic rp; static uint8_t rgb2[256 * 224 * 3];
+      memset(&rp, 0, sizeof rp); rp.p = q; rp.p.mosaicStart = sp.p.mosaicStart;
+      for (int i = 0; i < 8; i++) { DmaChannel* c = &s->dma->channel[i];
+        rp.ch[i].dmap = (uint8_t)((c->indirect ? 0x40 : 0) | (c->mode & 7)); rp.ch[i].bAdr = c->bAdr; rp.ch[i].aAdr = c->aAdr;
+        rp.ch[i].aBank = c->aBank; rp.ch[i].indBank = c->indBank; }
+      rp.hdmaen = q5en;
+      CtSeqStagePicFrame(&rp, q5w, rgb2); CtEntry5PicIrq(&rp, rgb2);
+      int rpx = 0; for (int i = 0; i < 256 * 224 * 3; i += 3) rpx += memcmp(rgb + i, rgb2 + i, 3) != 0;
+      if (rpx) { rulePicBad += rpx; rulePicFrames++;
+                 if (firstRulePic < 0) { firstRulePic = k; printf("racepiccmp: frame %d: %d px differ from the cartridge's state drawn by the rule\n", k, rpx); } }
+    }
+    // RACEPICCMP_ROWS=<frame>: that frame's differing pixels row by row (the count, the first and the last column).
+    if (pb && getenv("RACEPICCMP_ROWS") && k == atoi(getenv("RACEPICCMP_ROWS")))
+      for (int y = 0; y < 224; y++) {
+        const uint8_t* rb2 = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048]; int n = 0, x0 = -1, x1 = -1;
+        for (int x = 0; x < 256; x++) {
+          const uint8_t* o = rb2 + x * 8 + 4 + s->ppu->pixelOutputFormat; const uint8_t* m = rgb + (y * 256 + x) * 3;
+          if (o[2] != m[0] || o[1] != m[1] || o[0] != m[2]) { n++; if (x0 < 0) x0 = x; x1 = x; }
+        }
+        if (n) printf("racepiccmp:   f%d row %3d: %3d px, x %d-%d\n", k, y, n, x0, x1);
+      }
     if (getenv("RACEPICCMP_SHOT") && k == atoi(getenv("RACEPICCMP_SHOT"))) {
       FILE* o = fopen("build/racepic_native.raw", "wb");
       if (o) { uint32_t hd[2] = { 256, 224 }; fwrite(hd, 4, 2, o); fwrite(rgb, 1, sizeof rgb, o); fclose(o); }
+      { const char* op = getenv("RACEPICCMP_SHOT_ORACLE");            // (the cartridge's frame beside it, the same format)
+        if (op && (o = fopen(op, "wb")) != NULL) {
+          uint32_t hd[2] = { 256, 224 }; fwrite(hd, 4, 2, o);
+          for (int y = 0; y < 224; y++) {
+            const uint8_t* rb3 = &s->ppu->pixelBuffer[(y + (s->ppu->evenFrame ? 0 : 239)) * 2048];
+            for (int x = 0; x < 256; x++) { const uint8_t* px = rb3 + x * 8 + 4 + s->ppu->pixelOutputFormat; uint8_t t3[3] = { px[2], px[1], px[0] }; fwrite(t3, 1, 3, o); }
+          }
+          fclose(o);
+        } }
       if (wside > 0 && wside <= 256 && (o = fopen("build/racepic_wide.raw", "wb")) != NULL) {
         uint32_t hd[2] = { (uint32_t)(256 + 2 * wside), 224 }; fwrite(hd, 4, 2, o);
         for (int y = 0; y < 224; y++) { memcpy(wide + ((size_t)y * hd[0] + wside) * 3, rgb + (size_t)y * 256 * 3, 256 * 3);
@@ -6932,6 +7042,11 @@ static int runRacePicCmp(const char* romPath, const char* statePath, const char*
     }
   }
   #undef RPC_PAD
+  if (g_rpc5On) printf("racepiccmp: entry 5's warp: %ld passes, %ld with a map that differs; %d RNG call(s) read another open bus\n",
+                       g_rpc5Pass, g_rpc5Bad, g_rpc5BusN);
+  if (g_rpc5On) printf("racepiccmp: entry 5's pictures against the cartridge's state drawn by the rule: %d frame(s) differ (%ld px), the first %d\n",
+                       rulePicFrames, rulePicBad, firstRulePic);
+  if (g_rpc5On) printf("racepiccmp: entry 5's VRAM / CGRAM / OAM differ on %d frame(s)\n", e5MemFrames);
   printf("racepiccmp: %d frames -- first state difference %d, first race-WRAM difference %d, first picture difference %d (%ld px)\n", frames, firstState, firstWram, firstPic, picBad);
   printf("racepiccmp: the state differs on %d frame(s), the last %d\n", stateFrames, lastState);   // (a pin of the first alone hides the rest)
   CtOracleDestroy(s); free(rom);

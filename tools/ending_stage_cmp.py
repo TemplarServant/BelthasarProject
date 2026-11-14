@@ -91,7 +91,7 @@ DRIVES = {
     # counters `$4A` / `$4C` and page B's `$49` / `$4B` are graded with it.
     '85': dict(state=os.path.join(ROOT, 'build', '_stage', 'e5_pre_leg95_f83960.state'), handoff=23,
                hstate=os.path.join(ROOT, 'build', '_stage', 'e5_handoff_leg95_f83983.state'), leg=('95_', 83960),
-               shift=26, hold=4, total=1250, tag='seqstage', press=[(6, 0x100, 2)],
+               shift=26, hold=4, total=1250, tag='seqstage', press=[(6, 0x100, 2)], seedppu='7E7092', picframes=1160,
                extra=[(0x0386, 1), (0x0049, 5), (0x0051, 0x5A), (0x00A9, 2), (0x00F0, 6)], unskip={0x0386},
                # (the records' positions `$54` / `$55` and radius `$5D`, and the OAM cursors -- the picture's)
                skip={0x51 + k * 0x16 + o for k in range(4) for o in (3, 4, 0xC)}),
@@ -145,10 +145,7 @@ def marks(full, shift, d):
     return res
 
 
-def run(op, d, verbose):
-    spec = ','.join('7E%04X:%d' % r for r in REGIONS + d.get('extra', []))
-    skip = (SKIP - d.get('unskip', set())) | d.get('skip', set())
-    env = dict(os.environ, CT_ORACLE_LOGICAL='1')
+def ensure_states(d, env):
     if d.get('leg') and not os.path.exists(d['state']):
         # a playthrough leg's frame (the route's own states and pads, from the ROM: tools/playthrough.py), cached under build/
         sys.path.insert(0, os.path.join(ROOT, 'tools'))
@@ -166,16 +163,45 @@ def run(op, d, verbose):
     if not os.path.exists(d['hstate']):
         subprocess.run([CT, ROM, '--peek', d['state'], os.path.join(ROOT, 'build', '_ending_h.raw'), '--btnscript',
                         '0:%d' % d['handoff']], cwd=ROOT, env=dict(env, PEEK_SAVE=d['hstate']), capture_output=True)
+
+
+def drive_pads(d, off, n):            # the drive's presses (cartridge frames) as a btnscript from frame `off`, `n` frames long
+    parts, f = [], 0
+    for at, m, hold in d.get('press', []):
+        at -= off
+        if at > f: parts.append('0:%d' % (at - f)); f = at
+        parts.append('%x:%d' % (m, hold)); f += hold
+    parts.append('0:%d' % max(1, n - f))
+    return ','.join(parts)
+
+
+def picture(op, d):
+    """--picture: the stage's picture (its *pic.c) against the cartridge under the rule, ct.exe --racepiccmp from the drive's
+    state -- the cartridge's PPU as the stage's setup begins (`seedppu`) for a stage that keeps the field's picture."""
+    env = dict(os.environ, CT_ORACLE_LOGICAL='1')
+    ensure_states(d, env)
+    if d.get('seedppu'):
+        env['RACEPICCMP_SEEDPPU'] = d['seedppu']
+    n = d.get('picframes', d['total'])
+    out = subprocess.run([CT, ROM, '--racepiccmp', d['state'], drive_pads(d, 0, d['handoff'] + n + 100), str(d['handoff']), op, str(n)],
+                         cwd=ROOT, env=env, capture_output=True, text=True, errors='replace').stdout
+    keep = [l for l in out.splitlines() if l.startswith(('racepiccmp: native stage ended', "racepiccmp: entry 5's", 'racepiccmp: f'))
+            and ('open bus' in l or 'ended' in l or "entry 5's" in l)]
+    for l in keep:
+        print('stagepicture: FF %s %s' % (op, l[len('racepiccmp: '):]))
+    if not keep:
+        print('stagepicture: FF %s -- no output (%s)' % (op, ' '.join(out[-200:].split())))
+
+
+def run(op, d, verbose):
+    spec = ','.join('7E%04X:%d' % r for r in REGIONS + d.get('extra', []))
+    skip = (SKIP - d.get('unskip', set())) | d.get('skip', set())
+    env = dict(os.environ, CT_ORACLE_LOGICAL='1')
+    ensure_states(d, env)
     total, shift = d['total'], d['shift']
     def pads(off, n):                 # the drive's presses (cartridge frames) as a btnscript from frame `off`, `n` frames long
         # (the port's: from shift - 1 -- the NMI reads the pad the frame after the cartridge's input frame, C3/0A99's $4218)
-        parts, f = [], 0
-        for at, m, hold in d.get('press', []):
-            at -= off
-            if at > f: parts.append('0:%d' % (at - f)); f = at
-            parts.append('%x:%d' % (m, hold)); f += hold
-        parts.append('0:%d' % max(1, n - f))
-        return ','.join(parts)
+        return drive_pads(d, off, n)
     o = subprocess.run([CT, ROM, '--monitor', spec, '--from', d['state'], '--input', pads(0, total), '--diff'],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace').stdout
     p = subprocess.run([CT, '--seqstage', d['hstate'], op, str(total - shift), pads(shift - 1, total - shift), spec, str(d['hold'])],
@@ -226,7 +252,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('-v', action='store_true')
     ap.add_argument('--drives', default='2B,2E,23,24')
+    ap.add_argument('--picture', help='a drive whose stage picture to grade (racepiccmp): e.g. 85')
     a = ap.parse_args()
+    if a.picture:
+        for op in a.picture.split(','):
+            picture(op, DRIVES[op])
+        return 0
     for op in a.drives.split(','):
         run(op, DRIVES[op], a.v)
     return 0

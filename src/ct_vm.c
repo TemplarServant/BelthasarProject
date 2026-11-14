@@ -5560,6 +5560,14 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->sndFrozenTick && !sc->loadFadeIn && body) {
     int st39 = r8(sc->mem, 0x7E0139);
     if (st39 == 0x0B && !sc->seqHas) {
+      // 260E-2625: BG1's tilemap rebuilt at the camera into $7E:C800 (`D = $1D00 / JSR C0/75E9`), re-origined (C0/74D4) and,
+      // `$46 = 1`, uploaded by the NMI of 2625's wait to BG1's word $1D7C (C0/EADC) -- op 0xE5's style 1 (C0/17A0). The
+      // buffer is what the vortex shows: its setup copies $7E:C800 to $0C00 (the warp's source) and $1400, and $0C00 on to
+      // BG2's map $6800. MEASURED on the rule's cartridge, playthrough leg 95: $7E:C800-$CFFF is BG1's window on f83979,
+      // and the port's held another build's scratch (2019 bytes differ) -- the vortex drew no room.
+      ctXferBuild(sc->mem->s, 0);                                            // 2617 JSR C0/75E9
+      ctXferReorigin(sc, 0);                                                 // 261B JSR C0/74D4
+      ctXferUpload(sc->mem->s, 0x1D7C);                                      // (2625 C0/EC60: the NMI's $46 = 1 arm)
       w8(sc->mem, 0x7E0146, 0x01);                                           // 2621 LDA #01 / STA $46 (D = $0100)
       w8(sc->mem, 0x7E010F, 0x80);                                           // 263D LDA #80 / STA $00010F
       sc->seqReq = 0x85; sc->seqHas = 1;                                     // 2649 LDA #85 / JML C3:0000

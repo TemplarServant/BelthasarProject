@@ -89,6 +89,7 @@
 #include "seq_entry3.h"   // entry 3 (FF 23, after the Blackbird)
 #include "seq_entry4.h"   // entry 4 (FF 24, the Tyranno Lair: Lavos falls)
 #include "debug_sections.h"
+#include "seq_entry5pic.h"
 #include "seq_entry5.h"   // entry 5 (C0/260E's A = 85: the vortex after Magus)
 #include "seq_entry6.h"   // entry 6 (FF 26, the Epoch into Lavos's shell)
 #include "seq_entry7.h"   // entry 7 (FF 07, the Day of Lavos after the lost final battle)
@@ -5467,6 +5468,10 @@ static int seqOpeningHold(long oc, long os) {
 // registers reset, VRAM the field's (g_fieldVram; entry 3 draws with the tiles and maps loc 06B left). Only stages whose
 // picture is ported get it.
 static CtSeqStagePic g_stagePic;
+// Entry 5's opening keeps the screen on (C0/260E's waits run the field's own NMI; C3:003B turns the NMI back on before the
+// overlay's decompression, C3:0548 storing INIDISP 0F): the room as the field left it stays on the screen until the stage's
+// first NMI. MEASURED on the rule's cartridge, playthrough leg 95: f83984-f83987, the room, unchanged.
+static uint8_t g_e5Hold[CAMW * CAMH * 3];
 static uint16_t g_fieldVram[0x8000];
 // The three field tilemaps of that image ($6000-$77FF, 64x32 each) word by word: 1 = the word is one the field's own
 // writers put there and this image saw (the entry's fill, the edge streamer: fieldVramSink) -- the cartridge's VRAM
@@ -5531,6 +5536,17 @@ static void stagePicOpen(void) {
   if (getenv("CT_STAGEPIC_TRACE")) { long n = 0; for (int i = 0; i < 0x8000; i++) n += g_fieldVram[i] != 0;
     { const char* dp = getenv("CT_STAGEPIC_VRAMDUMP"); FILE* df = dp ? fopen(dp, "wb") : NULL; if (df) { fwrite(g_fieldVram, 2, 0x8000, df); fclose(df); } }
     fprintf(stderr, "stagepic: open, the field VRAM has %ld nonzero words (1000: %04X 6140: %04X 6800: %04X)\n", n, g_fieldVram[0x1000], g_fieldVram[0x6140], g_fieldVram[0x6800]); }
+}
+// The field's PPU as a stage entered with A's bit 7 finds it (entry 5, C0/260E's A = 85: C3:003B skips the common init's PPU
+// reset, so the room's picture stands and the stage's setup changes only what it needs): FD/C0D7, the field's own init
+// (`D = $2100`: BGMODE 09, BG12NBA 11, BG34NBA 05, OBSEL 00, SETINI 00), the map bases channel 0's records leave ($7F:14F0-14F3,
+// FD/C129-C151: BG1SC .. BG4SC), and the fixed colour of the field's NMI (C0/EC3D-EC45: COLDATA E0, then $0121).
+static void stagePicFieldRegs(const uint8_t* w) {
+  CtSeqPic* p = &g_stagePic.p;
+  CtSeqPicWrite(p, 0x05, 0x09, 0); CtSeqPicWrite(p, 0x0B, 0x11, 0); CtSeqPicWrite(p, 0x0C, 0x05, 0);   // FD/C0E0-C0EA
+  CtSeqPicWrite(p, 0x01, 0x00, 0); CtSeqPicWrite(p, 0x33, 0x00, 0);                                   // FD/C0F8-C0FC
+  for (int k = 0; k < 4; k++) CtSeqPicWrite(p, (uint8_t)(0x07 + k), w[0x114F0 + k], 0);               // channel 0's records
+  CtSeqPicWrite(p, 0x32, 0xE0, 0); CtSeqPicWrite(p, 0x32, w[0x0121], 0);                            // C0/EC3D-EC45
 }
 // `$213F`'s bit 7, the PPU's field, as a stage's NMI reads it (`LDA $213E` 16-bit, the ending's $9E7B / $9A0C): it flips every
 // frame. Its phase is a cold boot's -- the first frame odd (ppu.c ppu_handleFrameStart), the port's frame f the cartridge's f + 2;
@@ -9337,30 +9353,17 @@ static int battleShotAtCb(void* ctx0) {
 // `interactive` = drive the battle one frame per outer-loop iteration (CtBattleBegin here; the main loop runs
 // CtBattleTick + fieldBattleFinish, field frozen). Headless (0) = the synchronous CtBattleRun + fieldBattleFinish. On
 // interactive entry *entered is set to 1.
-// ============================================================================
-static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
-                                int* battleRan, int* gameOver, int* entered) {
-  if (!vm) return;
+// C0/0617 (C0/024C's first call): the eligible-enemy list at $019D. Returns its length; `list` takes it (12 at most).
+static int fieldEnemyList0617(CtScene* vm, uint8_t list[13]) {
   uint8_t* s = CtSceneMem7E(vm);
-  uint8_t* g = CtSceneMemGlb(vm);
-  // C0/1770-188B's bit-5 half (the align loop, C0/1790's AF4E, the style branch) is the VM's own machine (ct_vm.c, the
-  // $0117 bit-5 service at the top of CtSceneTick), shared with op 0xE5. What is left here is C0/188C: bit 0 is reached
-  // only by a dispatch that finds bit 5 clear, i.e. at the start of a normal frame -- not the frame after op D8 (C0/1770
-  // takes bit 5 first), not the frame the style branch returns into (C0/00A7 on, no C0/0C76), and never behind bit 7 or
-  // bit 6 (0C8F / 0CC7 dispatch first). This consumer runs at the end of a frame, so it asks what the next frame is.
-  if (CtSceneXferFrame(vm) != CT_XF_NORMAL || (s[0x117] & 0xC0)) return;
-  if (!(s[0x117] & 0x01)) return;                    // C0/188C `BIT #01`: no battle pending
-  // ---- C0/024C -> C0/0617: build the eligible-enemy list at $019D ----
   // Arena origin $DB/$DD = $1D0A>>1 / $1D0E>>1 (the camera scroll, in tiles; op 0xE7 settles it,
   // ct_vm.c). Scan X = objCount*2 down to 2 (object 0 is never scanned); eligible =
   // ($0F00,X != 0 [drawn] OR $1A81,X bit7) AND mode $1100,X in {5,6} AND relX 1..14 AND relY 1..13;
   // store objIdx*2 -> $019D,Y, cap 12, terminator 0x80.
   int oTX = ((s[0x1D0A] | (s[0x1D0B] << 8)) >> 1) & 0xFF;
   int oTY = ((s[0x1D0E] | (s[0x1D0F] << 8)) >> 1) & 0xFF;
-  int camPx = (s[0x1D0A] | (s[0x1D0B] << 8)) * 8;    // the same scroll in pixels ($1D0A = 8px units)
-  int camPy = (s[0x1D0E] | (s[0x1D0F] << 8)) * 8;    //   -> the $0A00/$0A80 on-screen fine nibbles
   int nobj = CtSceneActorCount(vm);
-  uint8_t list[13]; int nl = 0;
+  int nl = 0;
   for (int o = nobj - 1; o >= 1; o--) {
     int X = o * 2;
     int pl, sp, ax, ay, fa; CtSceneActor(vm, o, &pl, &sp, &ax, &ay, &fa);
@@ -9380,10 +9383,33 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
       CtSceneActor(vm, o, &pl, &sp, &ax, &ay, &fa);  //   --monitor 7E0D40:4,7E0F40:4,7E1140:4,...)
       if (!pl && !(s[0x1A81 + X] & 0x80) && !s[0x0F00 + X]) continue;
       fprintf(stderr, "[stagelist] obj%d pl=%d 0F00=%02X 1A81=%02X 1100=%02X 0D00=%02X "
-              "tile=(%02X,%02X) rel=(%d,%d)\n", o, pl, s[0x0F00 + X], s[0x1A81 + X],
+              "tile=(%02X,%02X) rel=(%d,%d) mode=%d\n", o, pl, s[0x0F00 + X], s[0x1A81 + X],
               s[0x1100 + X], s[0x0D00 + X], (ax >> 4) & 0xFF, (ay >> 4) & 0xFF,
-              (ax >> 4) - oTX, (ay >> 4) - oTY);
+              (ax >> 4) - oTX, (ay >> 4) - oTY, CtSceneActorMode(vm, o));
     }
+  return nl;
+}
+
+// ============================================================================
+static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
+                                int* battleRan, int* gameOver, int* entered) {
+  if (!vm) return;
+  uint8_t* s = CtSceneMem7E(vm);
+  uint8_t* g = CtSceneMemGlb(vm);
+  // C0/1770-188B's bit-5 half (the align loop, C0/1790's AF4E, the style branch) is the VM's own machine (ct_vm.c, the
+  // $0117 bit-5 service at the top of CtSceneTick), shared with op 0xE5. What is left here is C0/188C: bit 0 is reached
+  // only by a dispatch that finds bit 5 clear, i.e. at the start of a normal frame -- not the frame after op D8 (C0/1770
+  // takes bit 5 first), not the frame the style branch returns into (C0/00A7 on, no C0/0C76), and never behind bit 7 or
+  // bit 6 (0C8F / 0CC7 dispatch first). This consumer runs at the end of a frame, so it asks what the next frame is.
+  if (CtSceneXferFrame(vm) != CT_XF_NORMAL || (s[0x117] & 0xC0)) return;
+  if (!(s[0x117] & 0x01)) return;                    // C0/188C `BIT #01`: no battle pending
+  // ---- C0/024C -> C0/0617: build the eligible-enemy list at $019D ----
+  uint8_t list[13]; int nl = fieldEnemyList0617(vm, list);
+  int oTX = ((s[0x1D0A] | (s[0x1D0B] << 8)) >> 1) & 0xFF;   // (the staging below reads the same origin and scroll)
+  int oTY = ((s[0x1D0E] | (s[0x1D0F] << 8)) >> 1) & 0xFF;
+  int camPx = (s[0x1D0A] | (s[0x1D0B] << 8)) * 8;    // the same scroll in pixels ($1D0A = 8px units)
+  int camPy = (s[0x1D0E] | (s[0x1D0F] << 8)) * 8;    //   -> the $0A00/$0A80 on-screen fine nibbles
+  int nobj = CtSceneActorCount(vm);
   memcpy(s + 0x19D, list, (size_t)nl); s[0x19D + nl] = 0x80;
   if (nl == 0) {
     // Empty list -> carry set at C0/027E -> C0/18CE: TRB $17 bit 0 + TSB $18 bit 0, the battle is skipped and the
@@ -16600,7 +16626,13 @@ int main(int argc, char** argv) {
       CtVmWmaskExclude(0x7E1D0E, 1); CtVmWmaskExclude(0x7E1D10, 1);
       CtVmWmaskFramePreW(fieldWram());                // after every injection
     }
-    fieldPadNmi(padSerial);                           // C0/EC15's pad latch: after the compare, before the field's tick
+    // C0/EC15's pad latch: after the compare, before the field's tick -- the field's NMI. A native $C3 stage has its own
+    // (C3/08D0: the pad into `$02` alone, C3/0A99), so while one is open the field's latch does not run and `$00F0-$00FF`
+    // are the stage's scratch: entry 5's RNG C3/02DD folds `$F0` / `$F2` / `$F4` in, which its records' step $77E7 and its
+    // setup's $5872 leave there. MEASURED on the rule's cartridge, playthrough leg 95: `$F0-$F5` 00 00 F0 00 B0 AF on row
+    // f84226, where the port's latch had zeroed them every frame and the vortex's flashes were other draws.
+    if (!(seqOpen > 0 && (raceOn || endOn)))
+      fieldPadNmi(padSerial);
     // The $0117 bit-5 service (ct_vm.c, CtSceneXferFrame): while C0/1770 holds the main loop -- the frame after an op 0xE5
     // or D8 (ENTER), the align loop (ALIGN), the style branch (STYLE) -- the legs C0/00A7-00B4 do not run: no player
     // controller (881E, and the exits and doors it reaches), no A handler (1AAC), no box machine (1F87, whose state 6 is
@@ -17037,12 +17069,15 @@ int main(int argc, char** argv) {
       }
       // Entry 5 (stage 1: its logic). Not an `FF` op: scene 0AC's `FF 9B` after Magus's fight sets `$0139 = 0B`, C0/21E1's
       // entry 0B (C0/260E, ct_vm.c) requests A = 85 -- the vortex: the two scripts to their END, the teardown's reboot into the
-      // 10F the script's `DD` staged. Its picture is not ported (black). Its opening is NOT the others' NMI-off load: C3:003B
+      // 10F the script's `DD` staged. Its picture is seq_entry5pic.c's. Its opening is NOT the others' NMI-off load: C3:003B
       // `BIT #80` (A = 85) turns the NMI back on before the overlay's C3/0557 (`$4200 = A1`, INIDISP 0F, CLI), so the
       // decompression and the setup cost no frames (CLAUDE.md, NMI-on work); the frames are the waits alone: C0/260E's two
       // C0/EC60 before its JML, the setup's and the common init's `JSR $31B0` (sequence_table.md sec. 17).
       if (seqId != 2 && !seqOpen && CtEntry5StageHas((uint8_t)seqId)) {
         CtRaceIo rio = raceIoFor(w);
+        stagePicOpen(); stagePicFieldRegs(w); rio.pic = &g_stagePic;   // its picture (seq_entry5pic.c): the room's, kept
+        memcpy(g_e5Hold, fb, sizeof g_e5Hold);                     // (the opening's picture: the field's last)
+        uint8_t e5List[13]; const int e5Enemies = fieldEnemyList0617(f.vm, e5List);   // (C0/024C's, on the field's WRAM)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         if (CtEntry5StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 6; endEnded = 0;
@@ -17051,7 +17086,12 @@ int main(int argc, char** argv) {
             uint32_t osrc = 0xC30000u | CtRomByte(orb, orl, 0x3E0003) | ((uint32_t)CtRomByte(orb, orl, 0x3E0004) << 8);
             long oc = ct_lz_rom_cycles(orb, (size_t)orl, ct_lz_hirom_offset(osrc), 0);
             long od = 8L * (0x100 + 0x1500 + 0x200), os = CtEntry5StageSetupCycles();
-            seqHold = 2 + 2;                                         // 260E's two EC60, then 710F and 3010 JSR $31B0
+            // 260E's two EC60, then 710F and 3010 JSR $31B0 -- and between the two EC60, C0/2628 `JSR C0/024C`: C0/0617
+            // finds no enemy (`$019D` = 80), so 0253 `LDA $9D / BMI` takes C0/034B, the regroup, whose tail `BRL C0/00EB`
+            // waits a frame. MEASURED on the rule's cartridge, playthrough leg 95: C0/2628 -> 262B spans a frame (406878
+            // master cycles, 027E -> 0281 404532 of them), `$46 = 1` on row f83981 and the stage's `$08 = 2` on f83987; the
+            // port's was on f83986. (With an enemy the call stages the fight and returns at once: 0257-027D.)
+            seqHold = 2 + (e5Enemies == 0 ? 1 : 0) + 2;
             printf("sequence: entry %d (the vortex after Magus) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -20058,7 +20098,8 @@ int main(int argc, char** argv) {
         //  (mode 7) and the clouds (mode 1) go on.)
         stageWideBegin(endOn == 2 ? 1 : endOn == 4 ? 0x11 : endOn == 1 ? 0x03 : 0, endOn == 1 ? 1 << 4 : 0,
                        endOn == 2 ? CtSceneArtEntry3 : endOn == 5 ? CtSceneArtEntry6 : NULL);
-        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram())); }   // still inside C3:0000's opening: no NMI
+        if (seqHold > 0) { if (--seqHold == 0) raceSndDeferredFlush(CtWramSys(fieldWram()));    // still inside C3:0000's opening: no NMI
+                           if (endOn == 6) memcpy(fb, g_e5Hold, sizeof g_e5Hold); }   // (entry 5's: the room stays on)
         else if (!endEnded) {
           raceSndDeferredFlush(CtWramSys(fieldWram()));   // (an opening with no hold: before the first NMI)
           static const uint16_t map[12] = { 0x8000, 0x4000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0200, 0x0100,
@@ -20066,8 +20107,8 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram()));
-          int stagePic = (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));
-          if (stagePic) rio.pic = &g_stagePic;                      // entries 3, 4, 7, 6 and the ending's 11 / 14 / 15
+          int stagePic = (endOn >= 2 && endOn <= 6) || (endOn == 1 && CtEndingPicHas(CtWramSys(fieldWram())[0x0384]));
+          if (stagePic) rio.pic = &g_stagePic;                      // entries 3, 4, 7, 6, 5 and the ending's 11 / 14 / 15
           int st = endOn == 2 ? CtEntry3StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 3 ? CtEntry4StageFrame(CtWramSys(fieldWram()), joy, &rio)
                  : endOn == 4 ? CtEntry7StageFrame(CtWramSys(fieldWram()), joy, &rio)
@@ -20075,7 +20116,8 @@ int main(int argc, char** argv) {
                  : endOn == 6 ? CtEntry5StageFrame(CtWramSys(fieldWram()), joy, &rio)
                               : CtEndingStageFrame(CtWramSys(fieldWram()), joy, &rio);
           if (st) endEnded = st;
-          else if (stagePic) CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+          else if (stagePic) { CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
+                               if (endOn == 6) CtEntry5PicIrq(&g_stagePic, fb); }   // (entry 5: the field's V-IRQ, line 211)
           else g_seqWideW = 0;                              // (a stage without a picture: no sides)
           if (getenv("CT_STAGEPIC_TRACE")) { long sum = 0; for (int i = 0; i < CAMW * CAMH * 3; i++) sum += fb[i];
             fprintf(stderr, "stagepic: f%d end=%d st=%d INIDISP=%02X TM=%02X hdmaen=%02X sum=%ld cg1=%04X\n", frameNo, endOn, st,
@@ -20222,7 +20264,7 @@ int main(int argc, char** argv) {
       CtSceneSequenceDone(f.vm);
       // One VRAM: what the stage left in the PPU is what the field's next load finds (sequence_table.md 11.11: the credits'
       // text tilemap under 06B's second BG1 half), so a stage that drew takes its image back to the field's.
-      if (raceOn || (endOn >= 2 && endOn <= 5) || (endOn == 1 && CtEndingPicHas(w[0x0384])))
+      if (raceOn || (endOn >= 2 && endOn <= 6) || (endOn == 1 && CtEndingPicHas(w[0x0384])))
         memcpy(g_fieldVram, g_stagePic.p.vram, sizeof g_fieldVram);
       fieldRingForget();                                             // (a stage's VRAM is not the field's tilemaps)
       printf("sequence: entry %d (native) ended after %d frames from C3:0000\n", w[0x0384] & 0x1F, frameNo - seqOpenFrame + 1);

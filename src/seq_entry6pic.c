@@ -456,3 +456,5 @@ int CtEntry6PicTask(CtSeqStagePic* sp, uint8_t* w, unsigned slot, unsigned t, co
     default: return 0;
   }
 }
+// C3/0077 for the other stages (seq_racepic.h): the circle over the request at `$0350-$0358`.
+void CtSeqPicCircle0077(CtSeqStagePic* sp, uint8_t* w, uint8_t mode) { Cpu6 k = { sp, w, 0, 0, 0, 0 }; circle0077(&k, mode); }

@@ -3363,3 +3363,10 @@ fight, played by the port from the cartridge's state in the field before it (f51
 f7364-f7485 and the lit floor's cycle stands still under it; 75 frames after, the picture is the cartridge's (`0 px
 differ at port +0`). With the 1x records alone parked the floor stood 15 frames out of step (the line read `6 px
 differ at port +4`: the lag where the two cycles happen to meet). One mutation.
+
+`seq-entry5-vortex-picture-vs-rule-cartridge`: the vortex after Magus (sequence entry 5), its picture
+(src/seq_entry5pic.c) against the rule's cartridge through `ct.exe --racepiccmp` from the drive's state (leg 95 at
+f83960, made from the route by tools/ending_stage_cmp.py `--picture 85`). The cartridge runs this stage in real time
+(its main loop never waits), so each port picture is graded against the cartridge's state once its NMI has returned,
+drawn the rule's way, and the warp pass by pass (the port's renderer on the cartridge's WRAM at each pass); 1158 frames,
+0 px; 422 passes, 0 maps that differ; 3 RNG calls that read another open bus, named. Two mutations.
