@@ -776,3 +776,30 @@ a 16x16 block (names t, t+1, t+0x10, t+0x11) a call, and the call for the second
 now; f3900, f6600 and f12900 of the leg are 0 px. Check `field-picture-status-icon-is-one-entry-vs-cartridge`.
 
 (The note above that no pinned fight reaches an icon is superseded for the ring; the sleep icon is still unmeasured.)
+
+## The close's loop runs with the wipe, before the victims' walk (2026-11-14)
+
+The parenthesis that ends the 2026-11-11 section ("three frames after the cartridge's C1/4127: no walk pass can fall
+between") was wrong about what it costs. The close is (`python tools/romdis.py 014116 170 1 0`):
+
+```
+4116  JSR C1/007E                       a frame
+4119  JSL CC/F06B                       the wipe
+411D  LDA $99D9 / PHA / STZ $99D9 / STZ $A102
+4127  JSR C1/305C / LDA $A102 / BEQ ->4127       the status loop (every present combatant)
+412F  PLA / STA $99D9 / STZ $A012
+4138  LDA $AC5C,X / BMI ->41BA / BEQ, DEC A / BEQ, DEC A / BEQ ->4148 / INX / BRA ->4138    the victims: a PC?
+4148  JSR C1/41BE / JSR C1/007E         a frame
+414E  $A119 / $A11A / $A11B: the seat's pose (C1/1C4A)
+41AF  LDA #02 / STA $A118 / JSR C1/007E / JSR C1/007E      two frames
+41BA  STZ $A013 / RTS
+```
+
+So the loop runs on the wipe's frame, and with a PC among the victims `$A013` falls three frames later. The port ran
+the loop on the frame `$A013` falls. No walk pass falls between, but a mark the loop starts is a clock: its colour ramp
+(CF/E7D7, `$A49B` += 2 a frame) begins three frames late and stays three steps behind for as long as the status lasts.
+
+Measured on the rule's cartridge, playthrough leg 95 (Magus; a status lands on Marle): her mark `$A46F` is 01 on row
+f69395 with `$A013` still 01, and `$A013` clears on f69398; the port had both on f69398. The audit's samples of the
+fight from there on differ (f69600-f76500, most of them by 142 px). battle.c: `battleStatusCloseService` is called with
+`CtBattlePcLadderWipe`, in both of the close's arms; f69600 and f72300 of the leg are 0 px.

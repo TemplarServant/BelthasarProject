@@ -3302,6 +3302,19 @@ the priority mask is stamped where a pixel is drawn); and after the victory ladd
 tiles at the new record's cell offsets (279 px). `0 px differ` each; a mutation each.
 disasm/notes/battle_picture_lags.md sec. 11 and 12.
 
+`field-picture-close-status-loop-runs-with-the-wipe-vs-cartridge`: playthrough leg 95 (Magus), seeded at f600 and
+played to f69600 -- about ten minutes, the fight cannot be seeded nearer. A status lands on Marle at an action's
+close: the close runs its status loop (C1/411D-4131) on the wipe's frame and only then walks the victims, whose PC
+entries wait three frames more, so her mark is 01 three rows before `$A013` clears. The port ran the loop with the
+`STZ $A013` and the mark's colour ramp stayed three steps behind (142 px a picture). `0 px differ at port -1`; one
+mutation. disasm/notes/battle_status_render.md, the last section.
+
+**The port's first key** (tools/playthrough.py `last_key`, 2026-11-14). The port's keys are the cartridge's + 1, so
+the port's frame 0 takes the pad of the frame BEFORE the cut: the previous leg's last pad at a leg's start (it was
+always an idle token), the leg's own previous frame at a mid-leg seed (field_picture_cmp.py, as before). A leg that
+begins mid-walk goes on walking on the cartridge's frame 0; without the key the port's lead stood one frame and its
+followers trailed apart for the rest of the leg (legs 87, 110 and 115 in the picture audit).
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

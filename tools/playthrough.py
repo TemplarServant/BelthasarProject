@@ -110,9 +110,16 @@ def compact(pad):
     return ','.join(out)
 
 
-def walkscript(pad):
-    # one frame later on the port (its keys are the cartridge's + 1); a pad of 0 is an idle token
-    return ','.join(['.:1'] + ['H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in pad])
+def walkscript(pad, first=0):
+    # one frame later on the port (its keys are the cartridge's + 1), so the port's frame 0 takes the pad of the frame
+    # BEFORE the cut: `first` (last_key: a leg that begins mid-walk goes on walking on the cartridge's frame 0, whose
+    # logic reads the pad the last NMI latched). A pad of 0 is an idle token.
+    return ','.join(['H%X:1' % first if first else '.:1'] + ['H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in pad])
+
+
+def last_key(legs, i):
+    """The pad of the frame before leg i's first: the previous leg's last (0 for the first leg and after an idle end)."""
+    return legs[i - 1]['pad'][-1][0] if i > 0 and legs[i - 1]['pad'] else 0
 
 
 def state_of(name):
@@ -426,8 +433,9 @@ def seed_in_load_fade(start, w):
     return ans
 
 
-def port_timeline(start, pad):
-    """The port's graded bytes on change, and its pictures around the leg's last frame ({offset: rgb bytes})."""
+def port_timeline(start, pad, first=0):
+    """The port's graded bytes on change, and its pictures around the leg's last frame ({offset: rgb bytes}).
+    `first` is the pad of the frame before `pad` begins (walkscript)."""
     w = wram_of(start)
     lw = os.path.join(TMP, 'seed.lakewram')
     open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)
@@ -444,7 +452,8 @@ def port_timeline(start, pad):
     if seed_in_load_fade(start, w):
         env['CT_SEED_LOADFADE'] = '1'                    # (a leg cut inside C0/2848's ramp: the port goes on with it)
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
-                        '--walkscript', walkscript(pad)], cwd=ROOT, env=env, capture_output=True, text=True,
+                        '--walkscript', walkscript(pad, first) if first else walkscript(pad)], cwd=ROOT, env=env,
+                       capture_output=True, text=True,
                        errors='replace')
     global PORT_STDOUT
     PORT_STDOUT = r.stdout or ''
@@ -525,7 +534,7 @@ def cmp_leg(legs, i, verbose):
         return None
     if not os.path.exists(start):
         sys.exit('playthrough: %s has no start state (%s): run `play all` first' % (lg['name'], start))
-    ptl, pics = port_timeline(start, lg['pad'])
+    ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
     o, p = chains(oracle_timeline(start, lg['pad'])), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad']), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0
@@ -616,7 +625,7 @@ def main():
         if i > 0:
             ensure_states(legs, i - 1)
         start = start_of(legs, i)
-        _, pics = port_timeline(start, legs[i]['pad'])
+        _, pics = port_timeline(start, legs[i]['pad'], last_key(legs, i))
         c = oracle_picture(start, legs[i]['pad'])
         k, n = picture_grade(c, pics)
         p = pics[k]

@@ -14696,6 +14696,14 @@ static void battleAdvanceAction(CtBattleHost* h) {
       if (rel == e2 && s[0x5D9B]) { h->actEndHold++; h->actSpan++; }   //   `LDA $5D9B / BNE ->40E1`: one more frame
       else if (rel == e2 + 1) { battleCloseRebase40FB(h);         // C1/40FB-4114, then
                                 CtBattlePcLadderWipe(h);          // C1/4119 JSL CC/F06B: the roles to FF, $5D80.. zeroed
+                                // ...and C1/411D-4131, the status loop, on the same frame -- BEFORE C1/4138's walk of
+                                // the victims, whose PC entries wait three frames more (C1/414B, 41B4, 41B7). MEASURED on
+                                // the rule's cartridge, playthrough leg 95 (Magus; a status lands on Marle): her mark
+                                // `$A46F` is 01 on row f69395 with `$A013` still 01, and `$A013` clears on f69398; the
+                                // port ran the loop with the `STZ $A013`, three rows late, and the mark's colour ramp
+                                // (CF/E7D7, `$A49B` += 2 a frame) stayed three steps behind for the rest of the fight
+                                // (142 px a picture).
+                                battleStatusCloseService(h);
                                 h->actCloseWiped = 1;                //   (once: the act-end below does not repeat it)
                                 h->menuPassHold = 1; } }             //   (C1/4116 on: no C1/10FA menu pass to the close)
   }
@@ -14984,9 +14992,9 @@ static void battleAdvanceAction(CtBattleHost* h) {
     battleTrace(h, "act-end");                                 // span end: HP applies and timers reload here
     // C1/4119 JSL CC/F06B, the close's wipe -- once per action: a script-ended tail ran it at C1/4116 already (above);
     // a second one would restart `$9931` (CC/F0E6) late.
-    if (!h->actCloseWiped) { battleCloseRebase40FB(h); CtBattlePcLadderWipe(h); }   // C1/40FB-4114, C1/4119
+    if (!h->actCloseWiped) { battleCloseRebase40FB(h); CtBattlePcLadderWipe(h);     // C1/40FB-4114, C1/4119
+                             battleStatusCloseService(h); }      // C1/411D-4131: scan all eleven, dispatch after each
     h->actCloseWiped = 0;
-    battleStatusCloseService(h);                               // C1/411D-4131: scan all eleven, dispatch after each
     // The action loop's exit posts #FF, once per action: the frame C1/40CE `LDA $9876 / BEQ loop` falls through,
     // C1/40D3 posts `$1E01 = FF / $1E00 = 18` with no pan write, then tears the action down. (What id $FF means to the
     // sound driver is not derived.)

@@ -199,6 +199,12 @@ PICTURES = {
     # record's cell offsets at once, so the picture is the tiles of 62 at the offsets of 63; the port drew 62 whole
     # (279 px of her, above the tile that hides her feet).
     'held-tiles-stand-on-the-new-cells': dict(leg='43_arris_info_center', at=0, frames=1800, own=True),
+    # Magus (leg 95), f69600: a status has landed on Marle at an action's close. The close runs its status loop
+    # (C1/411D-4131) on the wipe's frame (C1/4119) and only then walks the victims, whose PC entries wait three frames
+    # more (C1/414B, 41B4, 41B7) before `STZ $A013`: her mark `$A46F` is 01 on row f69395 and `$A013` clears on f69398.
+    # The port ran the loop with the STZ, so the mark's colour ramp began three frames late and stayed three steps
+    # behind for the rest of the fight (142 px a picture; disasm/notes/battle_status_render.md, the last section).
+    'close-status-loop-runs-with-the-wipe': dict(leg='95_magus', at=600, frames=69000, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX
@@ -301,11 +307,14 @@ def run(name, want_png):
     own = bool(d.get('own'))
     pad = span(legs[i]['pad'], d['at'], d['frames']) if own else [(0, d['frames'])]
     keys = P.walkscript
+    first = 0
     if own and d.get('at'):                                   # the port's first key: the leg's pad frame before the cut
-        prev = span(legs[i]['pad'], d['at'] - 1, 1)           # (a leg played from its start has none: the playthrough's own keys)
+        prev = span(legs[i]['pad'], d['at'] - 1, 1)
         P.walkscript = lambda p: ','.join('H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in prev + p)
+    elif own:                                                 # ...and from the leg's start, the previous leg's last
+        first = P.last_key(legs, i)
     try:
-        _, pics = P.port_timeline(start, pad)
+        _, pics = P.port_timeline(start, pad, first)
     finally:
         P.walkscript = keys
     c = P.oracle_picture(start, pad)
