@@ -915,6 +915,7 @@ int CtBattleFxProgOpMem(uint8_t* mem, int X, int opAddr);
 // Op 88's sub-op `sub` (D1/FBCE -> D1/FBD2[sub]: FCF4 FC38 FC96 FBDA) on a bare $7E page; -1 past the four. --sweepfxops.
 int CtBattleFxOp88Mem(uint8_t* mem, int sub);
 void CtBattleShakeNmiMem(uint8_t* mem);   // ct --sweepshake: CD/06B4 + CD/0B51 (the scroll records, the screen shake, CD/0C48)
+const uint8_t* CtBattleArenaFillWords(const uint8_t* mem);   // $2C70..$2C7B as the scroll records were last filled from them (NULL: none yet)
 void CtBattleArenaScrollDelta(const uint8_t* mem, int H, int16_t* d, uint8_t* arena);   // per fb row: BG1 dx dy, BG2 dx dy (HDMA ch1/ch2 - staged); arena = which rows read CD/06B4's records
 // Around a fight's compose: the layout tables the picture shows (a side installed this frame is on screen the next).
 void CtBattlePictureTables(CtBattleHost* h, int begin);

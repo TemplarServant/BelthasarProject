@@ -125,6 +125,13 @@ PICTURES = {
     # priority tiles. The port drew the shadows unmarked and its foreground pass painted the floor over this one
     # (42 px on every picture of the fight from f14190 on).
     'shadow-over-the-priority-floor': dict(leg='95_magus', at=600, frames=14400, own=True),
+    # Flea's fight, loc 0AD (playthrough leg 92 from its start; the room is entered on f30824), f37200:
+    # the starfield is BG2 drifting under the fight -- the field's C0/2C41, which the battle's NMI calls AFTER it has
+    # filled the scroll records from the same words (D1/E7E3 after CD/0929), so the records, what the screen shows,
+    # hold the counter of the frame before (`$2C74` 0DE4 / 0DE6 / 0DE8 and `$BD09` 0DE2 / 0DE4 / 0DE6 on rows
+    # f37196-98). The port placed the layer on the live counter: the stars one step (2,1) ahead of the sprites, 4362 px
+    # of this frame at the fight's lag (442 px, Flea alone, a lag further).
+    'starfield-drifts-with-the-records': dict(leg='92_slash', at=0, frames=37200, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

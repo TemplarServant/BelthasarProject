@@ -3234,6 +3234,12 @@ entry of its combatant's entry (CF/E906 -> CF/EA8A) and carries the fight's OBJ 
 unmarked beneath everything and its priority-tile pass painted the floor over Magus's (42 px on every picture from
 f14190 on). `0 px differ at port +0`; one mutation. disasm/notes/battle_picture_lags.md sec. 4.
 
+`field-picture-starfield-drifts-with-the-records-vs-cartridge`: playthrough leg 92 from its start, f37200 of Flea's
+fight. The room's starfield drifts on BG2 under the fight (the field's C0/2C41, called by the battle's NMI after it
+filled the scroll records), so the screen shows the counter of the frame before; the port placed the layer on the
+live counter, a step ahead of the sprites (442 px at the best lag, 4362 at the fight's). `0 px differ at port -2`;
+one mutation.
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

@@ -15630,6 +15630,8 @@ static void battleShadowStage(uint8_t* m) {
 }
 // Boot head: stage the battle data (stageAll), then set up the ATB loop state.
 static void battleOamReset(const CtBattleHost* h);              // (below, with the combatants' OAM mirror)
+static uint8_t gArenaFillWords[12];                                // (battleScrollFill's, below)
+static const uint8_t* gArenaFillMem;
 void CtBattleBegin(CtBattleHost* h) {
   if (!h || !h->mem || !h->glb) return;
   // D1/F210-F29E, the module's HDMA/window init at the field-to-battle transition (60 frames before the wipe): a
@@ -15682,6 +15684,7 @@ void CtBattleBegin(CtBattleHost* h) {
     if (m[0x2A21] & 1) m[0xBC86] &= 0xFE;
     for (int X = 0; X < 0x80; X += 4)
       for (int k = 0; k < 4; k++) { m[0xBC89 + X + k] = m[0x2C70 + k]; m[0xBD09 + X + k] = m[0x2C74 + k]; m[0xBD89 + X + k] = m[0x2C78 + k]; }
+    memcpy(gArenaFillWords, m + 0x2C70, sizeof gArenaFillWords); gArenaFillMem = m;   // (the staging is the records' first fill)
     { int n53 = 0x13, v = 0xFFFC;
       for (int X = 0; X < 0xC0; X += 4) {
         W16(0xBEAB + X, 0); W16(0xBF6B + X, 0); W16(0xBEAD + X, v); W16(0xBF6D + X, (v - 0x98) & 0xFFFF);
@@ -17801,8 +17804,21 @@ static void battleShakeFrame(CtBattleHost* h) {
 // 0's anchor + offset ($CA5A + $CA5E / $CA5C + $CA60) plus the shake; then 32 records per layer ($BC89 BG1, $BD09 BG2,
 // $BD89 BG3). 2: as 1, plus a per-record line wave $0A00,X on the H scroll of each layer whose $CC91/$CC93/$CC95 is set;
 // 3: as 2, then BG3's records 32..63 too. $CA92 is the runner's (CD/161A, 0 or 1) or a program op's (CD/1880, 25BC, 262D).
+// The arena's scroll words as the records were last filled from them. The layers' own drift (the field's C0/2C41, still
+// running under the battle: D1/E7E3 `JSL CD/0C89`) steps `$7F:346B..` and stores them in `$2C74..$2C7A` AFTER this fill
+// in the same NMI, so the records -- what HDMA shows -- hold the counters of the frame before: a drifting layer stands
+// one step behind its live counter. MEASURED on the rule's cartridge, playthrough leg 92 (Flea's fight, loc 0AD's
+// starfield on BG2): `$2C74` 0DE4 / 0DE6 / 0DE8 on rows f37196-98 (C0:2C88) and the record `$BD09` 0DE2 / 0DE4 / 0DE6
+// on the same rows. The port's rows are the same; its picture took the layers' places from the live counters -- the
+// starfield one step (2,1) ahead of the sprites, 4362 px on every picture of that fight at the fight's lag.
+// CtBattleArenaFillWords hands the fill's words to the picture (field.c: the tilemap ring's scroll and the map's
+// offsets) and to CtBattleArenaScrollDelta's base (the step is not a shake).
+static uint8_t gArenaFillWords[12];
+static const uint8_t* gArenaFillMem;
+const uint8_t* CtBattleArenaFillWords(const uint8_t* mem) { return (mem && mem == gArenaFillMem) ? gArenaFillWords : NULL; }
 static void battleScrollFill(CtBattleHost* h) {
   uint8_t* s = h->mem;
+  memcpy(gArenaFillWords, s + 0x2C70, sizeof gArenaFillWords); gArenaFillMem = s;
   #define W(a) ((unsigned)(s[a] | (s[(a) + 1] << 8)))
   int var = s[0xCA92] & 3;
   unsigned v45 = (W(0x2C70) + W(0xCCA4) + W(0xBB01)) & 0xFFFF, v47 = (W(0x2C72) + W(0xCCA6) + W(0xBB03)) & 0xFFFF;
@@ -18842,6 +18858,8 @@ void CtBattleArenaScrollDelta(const uint8_t* mem, int H, int16_t* d, uint8_t* ar
   static const uint16_t tbl[2] = { 0xC894, 0xC8C1 };
   #define W16(a) ((int)(mem[(uint16_t)(a)] | (mem[(uint16_t)((a) + 1)] << 8)))
   int base[4] = { W16(0x2C70) & 0x3FF, W16(0x2C72) & 0x3FF, W16(0x2C74) & 0x3FF, W16(0x2C76) & 0x3FF };
+  { const uint8_t* fw = CtBattleArenaFillWords(mem);                 // (the words the records were filled from: a
+    if (fw) for (int k = 0; k < 4; k++) base[k] = (fw[k * 2] | (fw[k * 2 + 1] << 8)) & 0x3FF; }   //   drifting layer's step is not a shake)
   int cur[4] = { base[0], base[1], base[2], base[3] };
   int from[2] = { -1, -1 };
   static const int lo[2] = { 0xBC89, 0xBD09 };
@@ -20506,6 +20524,9 @@ void CtBattleTailFrame(CtBattleHost* h) {
   // it was), `TRB $53`, FD/C1EE: the field's tables are live again under the tail, and its STA $420C (absolute: the
   // interrupted code's bank) decides whether they run (CtAudioSetRuleHdma, the exit's chain).
   h->mem[0x0153] |= 0x80; CtHdmaTableBuild(h->mem); CtHdmaTableBuild(h->mem); h->mem[0x0153] &= 0x7F;
+  // D1/F4F5-F545: the six scroll registers take `$2C70..$2C7B` themselves -- no records any more -- and the tail's
+  // pictures are on the field's diagonal, where the live counters are the picture's (CtBattleArenaFillWords: none).
+  if (gArenaFillMem == h->mem) gArenaFillMem = NULL;
   battleFieldScrollTick(h->mem);                                   // D1/F549 JSL CD/0C89 -> C0/0002 -> C0/2C41
   battleObjSlotFrame(h);                                           // D1/F54D JSL FD/FFF7 -> FD/E39C
 }

@@ -18387,12 +18387,22 @@ int main(int argc, char** argv) {
     // every frame beside the camera's; a layer that has moved away from BG1 is re-baked sampled at its offset, because
     // the field crops one canvas at the camera (e.g. the Blackbird's parallax clouds, loc 16E; Zeal's starfield, 0AD).
     int layerMoved = 0;
+    static int g_bDriftAdj[4];                       // a fight's drifting layers: the records' counter less the live one
     if (f.sd && f.vm) {
       // Under a battle the field's page is the copy C0/0918 left at $7F:2000, which C0/2C41 drifts every frame (the
       // arena's BG2 is the field's -- 0AD's starfield behind Flea); the live $0920-$1DFF is the battle's own.
       const uint8_t* pg = CtSceneMem7E(f.vm);
       if (battlePhase && g_battleObjSaved) pg = pg + 0x12000 - 0x0920;
       int o2x, o2y, o3x, o3y; CtSceneLayerOffsetsOf(f.vm, pg, &o2x, &o2y, &o3x, &o3y);
+      // ...and the picture's counters are the ones the fight's scroll records were filled from (CD/06B4), a step behind
+      // the live ones: the drift runs after the fill in the same NMI (battle.c CtBattleArenaFillWords).
+      g_bDriftAdj[0] = g_bDriftAdj[1] = g_bDriftAdj[2] = g_bDriftAdj[3] = 0;
+      if (battlePhase && g_battleObjSaved) {
+        const uint8_t* m7 = CtSceneMem7E(f.vm); const uint8_t* fw = CtBattleArenaFillWords(m7);
+        if (fw) for (int k = 0; k < 4; k++)                              // BG2 x, y, BG3 x, y
+          g_bDriftAdj[k] = (int16_t)((fw[4 + k * 2] | (fw[5 + k * 2] << 8)) - (m7[0x2C74 + k * 2] | (m7[0x2C75 + k * 2] << 8)));
+        o2x += g_bDriftAdj[0]; o2y += g_bDriftAdj[1]; o3x += g_bDriftAdj[2]; o3y += g_bDriftAdj[3];
+      }
       if (!battlePhase) o2y += fieldWideBg2Dy();     // (the widescreen's sky offset, a mod: fieldWideBg2Dy)
       // BG3's scroll is HDMA channel 3's, a line at a time (FD/C1EE programs it DMAP 43 on $2111: BG3HOFS twice, BG3VOFS
       // twice, bank $7F, the table $7F:1085 or $7F:133D with $0153 as the other channels; FD/C2C1 builds it). A room
@@ -18611,7 +18621,8 @@ int main(int argc, char** argv) {
           rb[L] = pg[0x1D7C + L * 2] | (pg[0x1D7D + L * 2] << 8);
           rs[L * 2] = (int16_t)(pg[0x1D87 + L * 4] | (pg[0x1D88 + L * 4] << 8)) - sprDX;
           rs[L * 2 + 1] = (int16_t)(pg[0x1D89 + L * 4] | (pg[0x1D8A + L * 4] << 8)) - sprDY + 1 - fillHold;
-        }
+          if (battlePhase && L) { rs[L * 2] += g_bDriftAdj[(L - 1) * 2]; rs[L * 2 + 1] += g_bDriftAdj[(L - 1) * 2 + 1]; }   // (the
+        }                                                                //   records' counters in a fight: above)
       }
       if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn)) {
         bgDirty = 1;

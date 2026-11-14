@@ -165,19 +165,26 @@ frames where the singer's cell led the spotlight.
   cartridge's lines 0-160 of a lit frame are one band (`--hdma` at f1093: TM 13, TS 04, CGADSUB 03, BG3's scroll
   (985,123), no window enabled), so the port's BG3 map lacks cells of the rows those lines show (map rows 15-16, about
   columns 13-18). Not derived: who writes them.
-* The layers' own scroll under a fight -- OPEN, measured 2026-11-14 on playthrough leg 92 (Flea's fight, loc 0AD: the
-  starfield drifts on BG2). The drift is the field's C0/2C41, still running under the battle (D1/E7E3 `JSL CD/0C89`):
-  it steps `$7F:346B / 346D` and stores them in the arena's words `$2C74 / $2C76` (C0:2C88 / C0:2CD6) -- AFTER the
-  same NMI's CD/06B4 filled the scroll records from them, so the record `$BD09` of a row is the counter of the row
-  before (`$2C74` 0DE4 / 0DE6 / 0DE8 and `$BD09` 0DE2 / 0DE4 / 0DE6 on rows f37196-98; the port's rows are the same).
-  (`--hdma` from the cartridge's state of f37196, where `$2C74` is 0DE4: BG2's scroll is 482 on line 0 and 484 from
-  line 1 of the frame it traces.) The starfield of the cartridge's picture f37200 is the port's picture f37198's to
-  the pixel, and the port's f37199 -- the fight's lag -- has it one step (2,1) further on: 4362 px on every picture of
-  that fight, where at -2 only Flea differs (442 px). Which row's record a picture shows is not pinned to the frame
-  here (the trace's frame number against the pictures'). Not fixed: the picture's starfield does not follow the scene's
-  BG2 offset (field.c CtFieldSceneSetLayerOffsets) -- with it taken a step back, or pushed 40 px, only a sparse
-  under-layer of stars moves (283 px) and the visible field stays; where the fight's compose takes that layer's
-  position from is the next thing to find. (Leg 95's mist and the room's palette cycles: not measured this way yet.)
+* (CLOSED 2026-11-14.) The layers' own scroll under a fight, measured on playthrough leg 92 (Flea's fight, loc 0AD:
+  the starfield drifts on BG2, a layer built from the map, `$1D35` 02). The drift is the field's C0/2C41, still running
+  under the battle (D1/E7E3 `JSL CD/0C89`): it steps `$7F:346B / 346D` and stores them in the arena's words `$2C74 /
+  $2C76` (C0:2C88 / C0:2CD6) -- AFTER the same NMI's CD/06B4 filled the scroll records from them, so the record
+  `$BD09` of a row is the counter of the row before (`$2C74` 0DE4 / 0DE6 / 0DE8 and `$BD09` 0DE2 / 0DE4 / 0DE6 on rows
+  f37196-98; the port's rows are the same). (`--hdma` from the cartridge's state of f37196: BG2's scroll is 482 on
+  line 0 and 484 from line 1 of the frame it traces.) The port's picture placed the layer on the live counter: at
+  the fight's lag the starfield was one step (2,1) ahead of the sprites -- 4362 px on every picture of that fight,
+  where a lag further only Flea differed (442 px). The layer is drawn by the TILEMAP RING (scene.c RingOv: its
+  scroll is the counter field.c hands CtFieldSceneSetRing), not by the map's offsets -- moving those alone moves a
+  sparse under-layer of 283 px and nothing else, which cost a wrong turn. Both take the counter the records were
+  filled from now (battle.c CtBattleArenaFillWords, field.c g_bDriftAdj; the same words are
+  CtBattleArenaScrollDelta's base, so a drift's step is not read as a shake): f37200 is 0 px at the fight's lag.
+  The exit's tail is not the fight's diagonal: its NMI D1/F4C0 writes the six scroll registers from the words
+  themselves (D1/F4F5-F545) and then drifts, and its pictures are the field's (CtBattleTailFrame drops the fill's
+  words). The attract's demo fight in the same room shows the switch: port f4188-f4198, the HUD's close, are the
+  cartridge's f2121-f2131 to the pixel, and from f4199 the field's pairing (f2133 on) -- they were up to 1024 px off at their best pairing
+  before, and `attract-0ad-hud-close-no-blink-vs-oracle` grades the whole picture of f4196 now.
+  Check `field-picture-starfield-drifts-with-the-records-vs-cartridge`. (The room's palette cycles under a fight:
+  not measured this way yet.)
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * (The effect objects are measured now: sec. 5.)
 * (CLOSED 2026-11-13.) The ground shadow's place in the OAM. CF/EA8A is the LAST thing of a combatant's entry (CF/E906,
