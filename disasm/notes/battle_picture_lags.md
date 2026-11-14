@@ -165,7 +165,18 @@ frames where the singer's cell led the spotlight.
   cartridge's lines 0-160 of a lit frame are one band (`--hdma` at f1093: TM 13, TS 04, CGADSUB 03, BG3's scroll
   (985,123), no window enabled), so the port's BG3 map lacks cells of the rows those lines show (map rows 15-16, about
   columns 13-18). Not derived: who writes them.
-* The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
+* The layers' own scroll under a fight -- OPEN, measured 2026-11-14 on playthrough leg 92 (Flea's fight, loc 0AD: the
+  starfield drifts on BG2). The drift is the field's C0/2C41, still running under the battle (D1/E7E3 `JSL CD/0C89`):
+  it steps `$7F:346B / 346D` and stores them in the arena's words `$2C74 / $2C76` (C0:2C88 / C0:2CD6) -- AFTER the
+  same NMI's CD/06B4 filled the scroll records from them, so the record `$BD09` of a row is the counter of the row
+  before (`$2C74` 0DE4 / 0DE6 / 0DE8 and `$BD09` 0DE2 / 0DE4 / 0DE6 on rows f37196-98; the port's rows are the same).
+  The stars of the cartridge's picture f37200 stand on 0DE8, the record of row f37199 (`--hdma` from the state of
+  f37196 shows BG2 at 482 on line 0 and 484 from line 1 of the frame after it). The port's picture f37198 has those
+  stars: at the fight's lag (-1) its starfield is one step (2,1) AHEAD of its sprites -- 4362 px on every picture of
+  that fight, and at -2 only Flea differs (442 px). Not fixed: the picture's starfield does not follow the scene's
+  BG2 offset (field.c CtFieldSceneSetLayerOffsets) -- with it taken a step back, or pushed 40 px, only a sparse
+  under-layer of stars moves (283 px) and the visible field stays; where the fight's compose takes that layer's
+  position from is the next thing to find. (Leg 95's mist and the room's palette cycles: not measured this way yet.)
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * (The effect objects are measured now: sec. 5.)
 * (CLOSED 2026-11-13.) The ground shadow's place in the OAM. CF/EA8A is the LAST thing of a combatant's entry (CF/E906,
