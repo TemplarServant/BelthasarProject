@@ -2942,6 +2942,7 @@ static int g_objSubMixed;                        // sprite pixels mixed that way
 // drawSprite does for the field's. MEASURED, the rule's cartridge, Magus's castle loc 1BF (playthrough leg 95: TM 1D, TS 19,
 // half-add of the sub screen): the Vamps and Marle's head are seen THROUGH the mist, BG3's priority tiles.
 static int g_bObjSubPrio = -1;
+static uint8_t* g_bObjPrioMask;                  // (below: the OBJ priority on top, per pixel of a fight's picture)
 static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
   if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3;
     int sub = 0;
@@ -2960,6 +2961,10 @@ static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
       }
     }
     fb[o] = r; fb[o + 1] = g; fb[o + 2] = b;
+    // (the priority of the sprite on top here: every pixel it draws, whatever colour was under it -- a number's white
+    //  over a PC's white is still the number's. Leg 43 f654-f664: six pixels of a rising number over Marle's cells, the
+    //  number OBJ 3 and the cells OBJ 2 under a BG priority tile -- the tile took them back.)
+    if (g_bObjPrioMask && g_bObjSubPrio >= 0 && g_fw == CAMW) g_bObjPrioMask[(size_t)y * CAMW + x] = (uint8_t)g_bObjSubPrio;
     if (g_bObjPalMask) g_bObjPalMask[(size_t)y * g_fw + x] = (uint8_t)((g_bObjPalCur < 0 || sub) ? 0xFF : g_bObjPalCur);   // (a BG pixel is on top of a mixed one)
     if (g_mot) { g_mot->own[(size_t)y * g_fw + x] = (uint8_t)g_motOwn; int n0 = g_mot->nspx; CtMotSpritePixel(g_mot, x, y, r, g, b, g_motOwn);
                  if (g_mot->nspx > n0) g_mot->spx[n0].pal = (uint8_t)(g_bObjPalCur < 0 ? 0xFF : g_bObjPalCur & 7); } }
@@ -7127,7 +7132,7 @@ void CtBattleHudRender(uint8_t* fb, const uint8_t* mem, const uint8_t* vram) {
 static int g_bDrawOnly = -1;      // -1 = draw everyone; else only this combatant (the sorted walk's filter)
 // Per screen pixel of a CAMW x CAMH frame: the OBJ PRIORITY (0-3) of the combatant whose cells won it in
 // battleCombatantsRender, 0xFF where none drew. NULL = not recorded (the headless vehicles). See the battle compose.
-static uint8_t* g_bObjPrioMask = NULL;
+/* g_bObjPrioMask: declared with plot(), which stamps it */
 #define BATTLE_ZSKIP(cmb) (g_bDrawOnly >= 0 && (cmb) != (g_bDrawOnly))
 // The list, front-first (index 0 = lowest OAM index = frontmost): CF/E83F's build and sort.
 static int battleObjOrder(const uint8_t* mem, const CtBattleHost* h, int* out) {
@@ -7317,6 +7322,7 @@ static int battleMarleAtkPose(const uint8_t* mem, const CtBattleHost* h, int* md
 }
 
 static void ctAnimengPcBlit(uint8_t* fb, int charId, int idx, int footX, int footY, const uint16_t* palw);  // sec. B.3 (charId-keyed)
+static void ctAnimengPcBlitOn(uint8_t* fb, int charId, int idx, int lay, int footX, int footY, const uint16_t* palw);   // (...its tiles, another record's offsets)
 
 static void battleBlitCell(uint8_t* fb, const uint8_t (*tiles)[32], int ntile, int tile,
                            int bx, int by, const uint16_t* palw, int hf, int vf);   // fwd (defined below)
@@ -7467,9 +7473,8 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
     // caster and co-actor poses (battleAscSetPos has no PC gate: C1/5135/C1/6299 split on the track only). A PC
     // physical arms no script, so its swing reaches battleAttackRender through cronoAtk above.
     // (a pose the ladder published on its last pass is not in VRAM yet: battle.c CtBattlePcTileHeld)
+    // (...its TILES: the cells stand where the published record puts them, ctAnimengPcBlitOn)
     const int tileHeld = (h && h->mvInited && !(h->ascOn && h->ascPmPose[seat] >= 0) && flinch < 0) ? CtBattlePcTileHeld(seat) : -1;
-    if (tileHeld >= 0) poseIdx = tileHeld;
-    else
     if (ladderPose >= 0) poseIdx = ladderPose;             // the ladder wins: it only publishes while
                                                            //   the seat is celebrating or fallen
     else if (h && h->ascOn && h->ascPmPose[seat] >= 0) poseIdx = h->ascPmPose[seat];
@@ -7483,12 +7488,13 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
                                                       CtBattlePcFacing(mem, h, seat));
     else                  poseIdx = pcStanceIdx(charId, CtBattlePcFacing(mem, h, seat));
     if (poseIdx < 0) continue;                             // un-baked PC (Robo/Ayla/Magus) -> nothing
+    const int gfxPose = tileHeld >= 0 ? tileHeld : poseIdx;   // (the tiles in VRAM; the offsets are poseIdx's)
     // The afterimage (CF/E92C, battle.c battleTrailCompose): on the frames its countdown lands, the compose puts this
     // combatant's current cells down again at its four recorded points (foot x + $A4A4, y + $A4AF as CF/ED18 kept them),
     // in OAM after the body (behind it), newest first; painted back to front, oldest first.
     if (h && seat >= 0 && seat < 3 && h->trailShown[seat])
-      for (int k = 3; k >= 0; k--) ctAnimengPcBlit(fb, charId, poseIdx, h->trailXShown[seat][k], h->trailYShown[seat][k], palw);
-    ctAnimengPcBlit(fb, charId, poseIdx, footX + battleHopX(h, seat), footY + battleHopY(h, seat), palw);   // CF/EAE3 / EAF8
+      for (int k = 3; k >= 0; k--) ctAnimengPcBlitOn(fb, charId, gfxPose, poseIdx, h->trailXShown[seat][k], h->trailYShown[seat][k], palw);
+    ctAnimengPcBlitOn(fb, charId, gfxPose, poseIdx, footX + battleHopX(h, seat), footY + battleHopY(h, seat), palw);   // CF/EAE3 / EAF8
     // CT_BATTLE_PCBLITTRACE: the four OAM cells this seat's pose puts on screen (foot + the E3 record's (dx,dy)),
     // printed when the pose or the foot changes -- comparable cell for cell with an oracle OAM peek.
     { static int pt = -1; if (pt < 0) { const char* t = getenv("CT_BATTLE_PCBLITTRACE"); pt = (t && *t) ? 1 : 0; }
@@ -7823,23 +7829,34 @@ static int ctPcPoseBind(int charId, CtPcPoseBind* b) {
 // assembly index (idle cycle or attack ladder); the 4 cells' top-left tiles are vt0 + {0,2,4,6}. The record and tiles
 // come from the sparse bakes first, then from the ROM (battle_facing_engine.md sec. 3.1: the bakes hold the ROM's
 // bytes; the ROM path serves the per-facing poses the bakes do not hold). Nothing is drawn only if both are absent.
-static void ctAnimengPcBlit(uint8_t* fb, int charId, int idx, int footX, int footY, const uint16_t* palw) {
+// (`lay`: the record whose cell OFFSETS the four entries take, when it is not the tiles' own -- a seat whose VRAM still
+//  holds the pose before: the builder C1/1C4A stores the new record's dx,dy at once (`$9F47..`, what the compose reads
+//  on the next frame) and its tiles only into the seat's buffer, which the NMI's group upload ships later or, after the
+//  ladder's last pass, not at all. MEASURED on the rule's cartridge, playthrough leg 43's victory: Marle's `$9909` is 62
+//  on row f1403 and 63 on f1407, the ladder's last pass; VRAM words $0281-$03FE change between f1404 and f1406 and not
+//  again to f1500; her four OAM entries stand where record 63 puts them, with the tiles of 62.)
+static const CtAnimengPcRec* ctAnimengPcRecOf(const CtPcPoseBind* b, int charId, int idx, CtAnimengPcRec* romRec) {
+  const CtAnimengPcRec* r = ctAnimengPcRec(b->e3, b->e3n, idx);
+  if (r) return r;
+  uint16_t cw[16]; int8_t pos[8];                        // ROM-direct record (E4:2300[cid] + idx*0x28)
+  if (!CtBattlePcE3Rec(charId, idx, cw, pos)) return NULL;
+  romRec->idx = (uint8_t)idx;
+  for (int i = 0; i < 16; i++) romRec->cw[i] = cw[i];
+  for (int c = 0; c < 4; c++) { romRec->pos[c].dx = pos[c * 2]; romRec->pos[c].dy = pos[c * 2 + 1]; }
+  return romRec;
+}
+static void ctAnimengPcBlitOn(uint8_t* fb, int charId, int idx, int lay, int footX, int footY, const uint16_t* palw) {
   static uint8_t win[0x40][32];
   CtPcPoseBind b;
   if (!ctPcPoseBind(charId, &b)) {
     // Robo/Ayla/Magus: no sparse bake -- ROM-only bind (vt0 0x08; self-contained gather buffer)
     b.e3 = NULL; b.e3n = 0; b.sheet = NULL; b.sheetn = 0; b.vt0 = 0x08;
   }
-  const CtAnimengPcRec* r = ctAnimengPcRec(b.e3, b.e3n, idx);
-  CtAnimengPcRec romRec;
-  if (!r) {                                              // ROM-direct record (E4:2300[cid] + idx*0x28)
-    uint16_t cw[16]; int8_t pos[8];
-    if (!CtBattlePcE3Rec(charId, idx, cw, pos)) return;
-    romRec.idx = (uint8_t)idx;
-    for (int i = 0; i < 16; i++) romRec.cw[i] = cw[i];
-    for (int c = 0; c < 4; c++) { romRec.pos[c].dx = pos[c * 2]; romRec.pos[c].dy = pos[c * 2 + 1]; }
-    r = &romRec;
-  }
+  CtAnimengPcRec romRec, layRec;
+  const CtAnimengPcRec* r = ctAnimengPcRecOf(&b, charId, idx, &romRec);
+  if (!r) return;
+  const CtAnimengPcRec* rl = lay == idx ? r : ctAnimengPcRecOf(&b, charId, lay, &layRec);
+  if (!rl) rl = r;
   memset(win, 0, sizeof win);
   for (int i = 0; i < 16; i++) {
     uint16_t w = r->cw[i]; int src = w & 0x07FF, vt = b.vt0 + (i & 7) + 0x10 * (i >> 3);
@@ -7853,7 +7870,10 @@ static void ctAnimengPcBlit(uint8_t* fb, int charId, int idx, int footX, int foo
   const uint16_t order[4] = { (uint16_t)b.vt0, (uint16_t)(b.vt0+2), (uint16_t)(b.vt0+4), (uint16_t)(b.vt0+6) };
   for (int j = 3; j >= 0; j--)                           // high oidx first (SNES low index = on top)
     battleBlitCell(fb, win, 0x40, order[j],
-                   footX + r->pos[j].dx, footY + r->pos[j].dy, palw, 0, 0);
+                   footX + rl->pos[j].dx, footY + rl->pos[j].dy, palw, 0, 0);
+}
+static void ctAnimengPcBlit(uint8_t* fb, int charId, int idx, int footX, int footY, const uint16_t* palw) {
+  ctAnimengPcBlitOn(fb, charId, idx, idx, footX, footY, palw);
 }
 // Debug (CT_ANIMENG_ATKTRACE -> stderr): log the engine's per-frame GATO pose selection during the attack/song
 // branches (which E3 assembly the script and facing select). Inert unless the env is set.
@@ -11807,6 +11827,10 @@ int main(int argc, char** argv) {
       // loader's writes past its own CGRAM DMA reach only that way (C2/2D91's OBJ palette 1 at $0A40).
       for (int c = 0; c < 256; c++) wd.cgw[c] = (uint16_t)(hw[0x0920 + c * 2] | (hw[0x0921 + c * 2] << 8));
       worldPalRefresh(&wd, 0, 256);
+      // (...and the rest of the camera is the capture's as well: BG3's scroll `$24` / `$2A`, the drift's fractions and
+      //  the dust wave's phase, which the placement began afresh -- leg 132, seeded on 2300 A.D.'s world: `$24` F4DC on
+      //  the cartridge's row f0 and FFFC in the port, the dust 3668-4003 px off on every picture)
+      CtWorldCamSeed(&wd.cam, hw);
       wd.mv.posX = wd.mv.probeX = (uint16_t)wpx; wd.mv.posY = wd.mv.probeY = (uint16_t)wpy;   // the exact pixel (the
       wd.cam.bg1h = wd.cam.bg2h = (uint16_t)(hw[0x20] | (hw[0x21] << 8));                  //   entry rounds to the
       wd.cam.bg1v = wd.cam.bg2v = (uint16_t)(hw[0x26] | (hw[0x27] << 8));                  //   8-px cell)
@@ -19706,7 +19730,13 @@ int main(int argc, char** argv) {
             // clear: the canopy covers the fighters), 3 at GATO and in Manoria's cathedral.
             if (objPrio[y * CAMW + x] == 3) continue;
             if (bgWinAt(x, y)) continue;
-            if (g_objSubOn && g_objSubDone[(size_t)y * g_fw + x]) continue;   // the sprite under it is its sub pixel: mixed
+            // (the sprite under it is its sub pixel, mixed -- with OBJ on BOTH screens: the tile is the main screen's and
+            //  the sprite showed through it. With OBJ on the sub screen ALONE the tile is on the sub screen with the
+            //  sprite and beats it there like anywhere: the sub pixel is the tile's. MEASURED on the rule's cartridge,
+            //  playthrough leg 43 (Arris Dome's info centre: TM 04, TS 13, CGWSEL 02, CGADSUB 44, the room seen through
+            //  BG3): Marle fallen, OAM 4-7 at y 159, attribute 2E, over BG1 tiles of priority 1 -- not on the picture,
+            //  where the port showed her whole: 391 px on f600, 231 on f620.)
+            if (g_objSubBoth && g_objSubDone[(size_t)y * g_fw + x]) continue;
             // The tile's pixel is the arena's as composed, not the raw tile: a priority tile is a BG1 / BG2 pixel
             // like any other to the rows' colour math. Measured on the rule's cartridge, GATO's song (gato_wait,
             // f1049-f1230): the beam -- BG3 on the sub screen added to BG1 / BG2, CGADSUB 03 -- tints the tree's

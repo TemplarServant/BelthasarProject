@@ -3283,6 +3283,25 @@ px on f32401) and, once that was right, began the form a picture early (2044 px 
 in the OAM mirror a frame after its row). `0 px differ at port -1` each; a mutation each.
 disasm/notes/battle_picture_lags.md sec. 10.
 
+`field-picture-dust-begins-on-the-loaders-byte-vs-cartridge`: playthrough leg 48 from its start, f6600, on 2300
+A.D.'s map. The dust's wave (C2/7759) reads its phase at $7E:01E2, a word the world never writes first: $01E3 is the
+field's `$E3`, the sheet id the last allocating loader handed C0/5C90. The port's loaders did not store it and its
+dust never met the cartridge's (1351 px). `0 px differ at port -1`; one mutation.
+
+`field-picture-world-capture-seeds-the-dust-vs-cartridge`: playthrough leg 132, which begins on that map, f900. The
+harness's world-capture start seeds the camera's BG3 scroll, drift and wave from the capture, and CtWorldCamSeed
+keeps the 64-word table's top for the world that has one (4003 px, then 1045, then 0). `0 px differ at port -1`; two
+mutations. disasm/notes/ow_bg3_animator.md, the 2026-11-14 section.
+
+`field-picture-sub-screen-priority-tile-covers-the-fallen-vs-cartridge`,
+`field-picture-a-number-over-a-covered-pc-keeps-its-pixels-vs-cartridge` and
+`field-picture-held-tiles-stand-on-the-new-cells-vs-cartridge`: playthrough leg 43 from its start (f600, f660,
+f1800), a fight in a room seen through BG3 (OBJ on the sub screen alone). A BG priority tile on the sub screen
+hides a fallen PC (the port showed her, 391 px); a rising number's pixels over her stay in front of the tile (6 px:
+the priority mask is stamped where a pixel is drawn); and after the victory ladder's last pass a PC is her old
+tiles at the new record's cell offsets (279 px). `0 px differ` each; a mutation each.
+disasm/notes/battle_picture_lags.md sec. 11 and 12.
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

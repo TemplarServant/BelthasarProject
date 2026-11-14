@@ -46301,10 +46301,10 @@
         "saves/field_re/catedral_world.lakewram"
       ],
       "expect": [
-        "owbg3line t16 phase=0011 0002 0008 000E 0014 001A 001F 0024 0029 sum=15CE3400 top=A925",
-        "owbg3line t40 phase=0029 0005 000B 0011 0016 001C 0020 0025 0029 sum=41849D93 top=A925",
-        "owbg3line t64 phase=0041 002E 002F 002F 002F 002E 002D 002B 0028 sum=238A88FF top=A939",
-        "owbg3line t104 phase=0069 FFA6 FFA6 FFA6 FFA6 FFA8 FFA9 FFAC FFAF sum=74B8FC1D top=A975"
+        "owbg3line t16 phase=0093 000C 0010 0013 0016 0018 0019 001A 001A sum=ED5E0E49 top=A925",
+        "owbg3line t40 phase=00AB 000C 000F 0011 0013 0014 0014 0014 0014 sum=505B5A6D top=A925",
+        "owbg3line t64 phase=00C3 0003 FFFF FFFB FFF6 FFF1 FFEC FFE6 FFE0 sum=01465EB0 top=A939",
+        "owbg3line t104 phase=00EB FF92 FF96 FF9A FF9F FFA5 FFAA FFB0 FFB6 sum=C5745198 top=A975"
       ],
       "pin": [
         "^owbg3line t(16|40|64|104) "
@@ -46319,7 +46319,7 @@
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "The user, 2026-10-04: in 600 A.D., walking up or down, the mist over the world map ran sideways. C2/7652's BG3 H wave is indirect HDMA ($4310 = 42) whose four 64-line blocks the NMI points at $7E:A916 (C2/0300-0312); the drift C2/75FD adds twice the camera's vertical step to it (C2/7627-7646, wrapped in [A925, A9A5)), so each band of mist keeps its offset as it scrolls. The port read the table from line 0. MEASURED, the rule's cartridge (saves/field_re/catedral_world.state, Down 40 / Up 40, --writer): $A916 A925 -> A975 down, back up, A92B -> A93B over eight 1-px frames (C2:764A). The port's window (top=, the trace's last field) walks the same: A929 / A959 / A975 / A925. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the world-1 entry is 3 black frames shorter (42 -> 39, CT_LOADCOST), and the tick counts from the world's start while the drive counts from the run's, so the drive moves 3 frames earlier (.:57 -> .:54, --frames 160 -> 157); all 117 owbg3line lines are then identical to before. ==== RE-PINNED 2026-10-27: a --loadwram of a WORLD capture now starts in that world at the capture's own position (field.c, the world-capture start before the frame loop): the port used to run it as a field scene whose positional-exit test met the exit records the field had left in WRAM and re-entered the world at that exit's tile (a fade and a song post later). From the same catedral_world state the cartridge's $A916 steps A927 at f57 ... A975 at f96 and back from f107 under 0:55,20:40,0:10,10:40; the port's top= steps A927 at t55 ... A975 at t94 and back from t105 -- the same walk, a frame early under the drive convention."
+      "notes": "The user, 2026-10-04: in 600 A.D., walking up or down, the mist over the world map ran sideways. C2/7652's BG3 H wave is indirect HDMA ($4310 = 42) whose four 64-line blocks the NMI points at $7E:A916 (C2/0300-0312); the drift C2/75FD adds twice the camera's vertical step to it (C2/7627-7646, wrapped in [A925, A9A5)), so each band of mist keeps its offset as it scrolls. The port read the table from line 0. MEASURED, the rule's cartridge (saves/field_re/catedral_world.state, Down 40 / Up 40, --writer): $A916 A925 -> A975 down, back up, A92B -> A93B over eight 1-px frames (C2:764A). The port's window (top=, the trace's last field) walks the same: A929 / A959 / A975 / A925. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the world-1 entry is 3 black frames shorter (42 -> 39, CT_LOADCOST), and the tick counts from the world's start while the drive counts from the run's, so the drive moves 3 frames earlier (.:57 -> .:54, --frames 160 -> 157); all 117 owbg3line lines are then identical to before. ==== RE-PINNED 2026-10-27: a --loadwram of a WORLD capture now starts in that world at the capture's own position (field.c, the world-capture start before the frame loop): the port used to run it as a field scene whose positional-exit test met the exit records the field had left in WRAM and re-entered the world at that exit's tile (a fade and a song post later). From the same catedral_world state the cartridge's $A916 steps A927 at f57 ... A975 at f96 and back from f107 under 0:55,20:40,0:10,10:40; the port's top= steps A927 at t55 ... A975 at t94 and back from t105 -- the same walk, a frame early under the drive convention. ==== RE-PINNED 2026-11-14: the world-capture start seeds the camera's BG3 state from the capture (field.c: CtWorldCamSeed after the capture's WRAM goes back) -- the capture is the world in progress, and its wave object's phase (block $0D70 +22 = 0082) and `$24` (FFDF) are where the cartridge goes on from. The port used to begin the wave afresh (phase 0011 on its tick 16). The four lines' words were read on the rule's cartridge driven by the capture's own recipe (saves/field_re/catedral_user.state, pad 20:40,0:200, then this check's walk): with the phase word `$0D92` at 0093 the table `$A925..` reads 000C 0010 0013 0016 0018 0019 001A 001A, at 00AB 000C 000F 0011 0013 0014 0014 0014 0014, at 00C3 its words 10.. read 0003 FFFF FFFB FFF6 FFF1 FFEC FFE6 FFE0 and at 00EB its words 40.. FF92 FF96 FF9A FF9F FFA5 FFAA FFB0 FFB6 -- the new lines, word for word. `top=` is unchanged."
     },
     {
       "name": "battle-roly-rider-dissolves-vs-oracle",
@@ -52471,6 +52471,182 @@
           "find": "  if (gOamPrioOwner == h && gOamPrioF == h->frames) memcpy(gOamCmpMem + 0x99B5, gOamPrio, sizeof gOamPrio);\n",
           "replace": "  /* MUT: the mirror takes the cells' priority of this tick */\n",
           "why": "CF/E8AF composes before CD/1609 runs in the same service: `$99BB` 00 on row f32379 is on the cartridge's picture f32382, not f32381"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-dust-begins-on-the-loaders-byte-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "dust-begins-on-the-loaders-byte"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: dust-begins-on-the-loaders-byte leg 48 +6600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: dust-begins-on-the-loaders-byte "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "2300 A.D.'s dust is the cartridge's: its wave begins on the byte the field's last sheet loader left in $01E3",
+      "notes": "THE DUST WAVE'S PHASE IS A BYTE THE FIELD LEFT (ct_vm.c npcLoadMirror / the enemy loader; world.c owBg3WaveTick; disasm/notes/ow_bg3_animator.md, the 2026-11-14 section). The 2300 A.D. map's dust is BG3 under a per-line H scroll: C2/7759 rebuilds the table at $7E:8B56 each frame -- the even words `$24`, word 2k+1 `$24 + S(p + k)` -- with the phase p read at `$0022,X`, X left at $01C0 by the loop: the word at $7E:01E2, which the object then steps by 4. Nothing on the world writes that word first. $01E3 is the field's direct-page $E3 (D = $0100): the sheet id an allocating loader hands the allocator -- C0/4620 `LDA $E4F023,X / STA $E3 / JSR C0/5C90` (the NPC arm) and C0/476F `LDA $E4F600,X / STA $E3` (the enemy arm, before its F8 test); C0/5C90's two callers are those. Measured on the rule's cartridge, playthrough leg 48 (Lab 32's road): `$01E2` reads 03 25 on row f6181 and 03 61 on f6183 (C0:4626), the world is entered on f6444 (`$24` FFFC on both sides) and the word steps 6103, 6107, 610B .. from f6447; `--hdma` of leg 132's f899 fits `$24 + S(p + k)` on every sampled line. The port's loaders did not store the byte: its page kept 8003 from an older scene, its wave began there, and the dust never met the cartridge's -- 1351 px on this frame (f6600) at its best lag. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (mode == 4 && gRomImg && gRomImgLen >= 0x250000) w8(m, 0x7E01E3, CtRomByte(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5));\n",
+          "replace": "  /* MUT: the NPC loader leaves $01E3 alone */\n",
+          "why": "C0/4620 `LDA $E4F023,X / STA $E3` before `JSR C0/5C90`: `$01E3` is 25, then 61 on rows f6181 / f6183, and C2/7759 begins its phase on that word"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-world-capture-seeds-the-dust-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "world-capture-seeds-the-dust"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: world-capture-seeds-the-dust leg 132 +900 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: world-capture-seeds-the-dust "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a leg that begins on 2300 A.D.'s map has the cartridge's dust: the world capture seeds BG3's scroll, drift and wave",
+      "notes": "A WORLD CAPTURE'S START TAKES THE CAMERA'S BG3 STATE FROM THE CAPTURE (field.c, the `--loadwram` world capture -- harness only; world.c CtWorldCamSeed; disasm/notes/ow_bg3_animator.md, the 2026-11-14 section). A leg that begins on a world map loads the world, runs the placement on the capture's position and puts the capture's WRAM back; the camera's BG1 / BG2 scroll came from the capture and BG3's did not -- `$24` began afresh (playthrough leg 132, seeded on 2300 A.D.'s map: F4DC on the cartridge's row f0, FFFC in the port, both stepping by the drift's 3.5 a frame), so the dust was 3668-4003 px off on the audit's nine samples of the leg, each at its best lag. CtWorldCamSeed, which that start calls now, also gave every world `waveTop` = $A925 -- the 64-word table's top, C2/7652's -- and field.c owBg3HLine reads a set `waveTop` as `64 words from the top`: a C2/7759 world (224 words, a word a line) repeated its first 64 lines down the screen (1045 px, rows 65 on). Both: 0 px on f900. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      CtWorldCamSeed(&wd.cam, hw);\n",
+          "replace": "      /* MUT: the capture's BG3 state not seeded */\n",
+          "why": "the capture is the world in progress: `$24` is F4DC on the cartridge's first row, not the placement's fresh 0000"
+        },
+        {
+          "file": "src/world.c",
+          "find": "  c->waveTop = 0;\n",
+          "replace": "  c->waveTop = 0xA925;   /* MUT: every world has the 64-word table's top */\n",
+          "why": "a C2/7759 world's table is 224 words, a word a line (`--hdma`: lines 2k+1 = `$24 + S(p + k)` to k = 111)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-sub-screen-priority-tile-covers-the-fallen-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "sub-screen-priority-tile-covers-the-fallen"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: sub-screen-priority-tile-covers-the-fallen leg 43 +600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: sub-screen-priority-tile-covers-the-fallen "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a PC fallen behind the room's priority tiles is hidden in a room seen through BG3, as on the cartridge",
+      "notes": "WITH OBJ ON THE SUB SCREEN ALONE A BG PRIORITY TILE THERE STILL BEATS A FIGHT'S SPRITE OF PRIORITY 2 OR LESS (field.c, the battle's foreground pass; disasm/notes/battle_picture_lags.md sec. 11). Playthrough leg 43 is a fight in Arris Dome's info centre, a room seen through BG3: on the rule's cartridge the arena's shadow blocks read `$BE8D` 04 13 (TM BG3 alone, TS BG1 BG2 OBJ) and `$BE95` 02 44 (the sub screen added to BG3, halved) -- OBJ on the SUB screen alone. The sub screen is a screen like the main one: BG1.1 / BG2.1 beat OBJ2 there, and the sub pixel is then the tile's, not the sprite's. Measured: on f600 Marle lies fallen -- `$9909` 4E, her four OAM entries (4-7) at y 159, attribute 2E -- over BG1 tilemap words of priority 1 (2D01, 2D10, 2E85 at the screen's (170,166), (150,166), (190,166)); she is not on the cartridge's picture. The port's foreground pass left every sprite pixel that had been mixed as a sub pixel alone -- right with OBJ on BOTH screens, where the tile is the main screen's and the sprite shows through it -- and showed her whole: 391 px on f600, 231-608 px on each picture of f560-f640. Every second picture of f540-f700 is 0 px now. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            if (g_objSubBoth && g_objSubDone[(size_t)y * g_fw + x]) continue;\n",
+          "replace": "            if (g_objSubOn && g_objSubDone[(size_t)y * g_fw + x]) continue;   /* MUT: a mixed sprite pixel is never covered */\n",
+          "why": "TS 13 with TM 04: BG1's priority-1 tiles are on the sub screen with OBJ and beat an OBJ of priority 2 there (Marle's OAM 4-7 are attribute 2E and she is not on the cartridge's f600)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-a-number-over-a-covered-pc-keeps-its-pixels-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "a-number-over-a-covered-pc-keeps-its-pixels"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: a-number-over-a-covered-pc-keeps-its-pixels leg 43 +660 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: a-number-over-a-covered-pc-keeps-its-pixels "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a rising number keeps every pixel in front of the tile that hides the PC under it",
+      "notes": "THE SPRITES' PRIORITY MASK IS STAMPED WHERE A PIXEL IS DRAWN (field.c plot / g_bObjPrioMask; disasm/notes/battle_picture_lags.md sec. 11). The battle's foreground pass asks, per pixel, the OBJ priority of the sprite on top: a priority-3 pixel stays in front of a BG1 / BG2 priority tile, a lower one is covered. The mask was marked after each combatant by comparing the picture before and after -- the pixels it CHANGED -- so a pixel drawn in the colour already there kept the priority of the sprite under it. Playthrough leg 43 is a fight in Arris Dome's info centre, a room seen through BG3: on the rule's cartridge the arena's shadow blocks read `$BE8D` 04 13 (TM BG3 alone, TS BG1 BG2 OBJ) and `$BE95` 02 44 (the sub screen added to BG3, halved) -- OBJ on the SUB screen alone. Measured on f654-f664: a rising number (OBJ priority 3) over Marle's cells (priority 2), both over a BG1 priority tile; six of the number's white pixels (x 169-171, y 164-166) fall on white pixels of her cells, kept her 2 and were taken back by the tile -- 1 to 6 px a picture once the tile covered her at all. plot() stamps the mask now. The frame is f660; the picture is still, so the lags tie. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (g_bObjPrioMask && g_bObjSubPrio >= 0 && g_fw == CAMW) g_bObjPrioMask[(size_t)y * CAMW + x] = (uint8_t)g_bObjSubPrio;\n",
+          "replace": "    /* MUT: the priority mask only where the colour changed */\n",
+          "why": "a sprite's pixel is its own whatever colour was under it: the number's six white pixels over Marle's white are OBJ 3 on the cartridge's f660"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-held-tiles-stand-on-the-new-cells-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "held-tiles-stand-on-the-new-cells"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: held-tiles-stand-on-the-new-cells leg 43 +1800 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: held-tiles-stand-on-the-new-cells "
+      ],
+      "tier": "full",
+      "timeout_s": 600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "after the victory ladder's last pass a PC is its old tiles at the new pose's cell offsets, as on the cartridge",
+      "notes": "A SEAT WHOSE TILES WERE NOT UPLOADED SHOWS THE OLD TILES AT THE NEW RECORD'S CELL OFFSETS (field.c ctAnimengPcBlitOn; battle.c gPcTileHeld; disasm/notes/battle_picture_lags.md sec. 6, the addendum). The builder C1/1C4A stores the new record's dx,dy at once (`$9F47..`, what the compose reads on the next frame) and assembles its tiles into the seat's buffer, which reaches VRAM only when the NMI's group upload ships it -- after the ladder's last pass, not at all (check field-picture-ladders-last-pass-is-not-uploaded-vs-cartridge). Measured on the rule's cartridge, playthrough leg 43's victory: Marle's `$9909` is 62 on row f1403 and 63 on f1407, the ladder's 64th call; `$E5` and `$A4` read 00 from there to the leg's end; VRAM words $0281-$03FE change between f1404 and f1406 and are the same on f1407, f1408, f1410, f1420 and f1500; her four OAM entries on f1800 are (186,136) (170,132) (168,162) (169,148). The port drew the held pose whole, offsets and all: 279 px of her on f1800 (343 with the room's tile not yet hiding her feet; before the hold of 5372dbb the picture had the new tiles on the new cells, a smaller error). The picture is still, so the lags tie. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                   footX + rl->pos[j].dx, footY + rl->pos[j].dy, palw, 0, 0);\n",
+          "replace": "                   footX + r->pos[j].dx, footY + r->pos[j].dy, palw, 0, 0);   /* MUT: the held record's own offsets */\n",
+          "why": "C1/1C4A writes the new record's dx,dy at the build; only the tiles wait for an upload (Marle's entries on f1800 stand where record 63 puts them)"
         }
       ]
     },

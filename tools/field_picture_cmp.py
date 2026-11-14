@@ -173,6 +173,32 @@ PICTURES = {
     # after the row, like a pose (the port switched a picture early: 2044 px).
     'low-priority-sprite-is-the-sub-pixel': dict(leg='67_masa_mune_fight', at=0, frames=32401, own=True),
     'low-priority-reaches-the-mirror-a-frame-later': dict(leg='67_masa_mune_fight', at=0, frames=32381, own=True),
+    # 2300 A.D.'s world map, entered on f6444 of playthrough leg 48. Its dust is BG3 under a per-line H scroll (C2/7759,
+    # HDMA channel 1: the odd lines get `$24 + S(p + k)`), and the wave's phase p is the word at $7E:01E2 -- the object
+    # reads `$0022,X` with X left at $01C0 -- which nothing on the world writes first: it is what the field left there,
+    # and $01E3 is the direct page's $E3, the sheet's id the last allocating loader handed C0/5C90 (C0/4620 `LDA
+    # $E4F023,X / STA $E3`). Rows f6181 / f6183: 03 25, then 03 61 (C0:4626); the wave steps the word by 4 from 6103.
+    # The port's loaders did not store it (its page kept 8003): the dust never met the cartridge's, 1351 px here.
+    'dust-begins-on-the-loaders-byte': dict(leg='48_lab32_road', at=0, frames=6600, own=True),
+    # ...and a leg that BEGINS on that world (leg 132: the harness's world-capture start, field.c). The placement began
+    # the camera's BG3 state afresh -- `$24` FFFC on the port's row f0 for the cartridge's F4DC -- and CtWorldCamSeed
+    # gave every world the 64-word table's top, which a C2/7759 world does not have (its first 64 lines repeated down
+    # the screen): 4003 px, then 1045 from row 65 on, then 0.
+    'world-capture-seeds-the-dust': dict(leg='132_keepers_dome', at=0, frames=900, own=True),
+    # Arris Dome's info centre (playthrough leg 43 from its start), a fight in a room seen through BG3: TM 04, TS 13,
+    # CGWSEL 02, CGADSUB 44 -- BG1, BG2 and OBJ on the SUB screen alone. f600: Marle fallen (OAM 4-7 at y 159,
+    # attribute 2E, OBJ priority 2) lies over BG1 tiles of priority 1, which beat her on the sub screen: she is not
+    # on the cartridge's picture. The port showed her whole (391 px).
+    'sub-screen-priority-tile-covers-the-fallen': dict(leg='43_arris_info_center', at=0, frames=600, own=True),
+    # ...f660: a rising number over her cells -- OBJ priority 3, in front of the tile. Six of its white pixels fall on
+    # white pixels of her cells; the priority mask was marked where a sprite CHANGED the picture, so they kept her 2
+    # and the tile took them (6 px).
+    'a-number-over-a-covered-pc-keeps-its-pixels': dict(leg='43_arris_info_center', at=0, frames=660, own=True),
+    # ...f1800, the victory: Marle's ladder publishes 62 on row f1403 and 63 on f1407, its last pass, which is not
+    # uploaded (VRAM words $0281-$03FE change between f1404 and f1406 and not again). The builder stores the new
+    # record's cell offsets at once, so the picture is the tiles of 62 at the offsets of 63; the port drew 62 whole
+    # (279 px of her, above the tile that hides her feet).
+    'held-tiles-stand-on-the-new-cells': dict(leg='43_arris_info_center', at=0, frames=1800, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

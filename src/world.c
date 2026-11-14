@@ -56,8 +56,10 @@ void CtWorldCamSeed(CtWorldCam* c, const uint8_t* ram) {
   // A world seeded mid-flight carries its drift and wave objects' state in their blocks (+2 visited, +12/+16 the
   // drift's fractions, +22 C2/7652's phase; C2/7759's phase is $7E:01E2).
   c->bg3drInit = 0; c->bg3fx = c->bg3fy = 0; c->waveInit = 0; c->wavePhase = 0; c->bg3hLineOn = 0;
-  c->waveTop = (uint16_t)(ram[0xA916] | (ram[0xA917] << 8));
-  if (c->waveTop < 0xA925 || c->waveTop >= 0xA9A5) c->waveTop = 0xA925;
+  // (The 64-word table's top `$7E:A916` is C2/7652's alone -- field.c owBg3HLine reads a set `waveTop` as "64 words from
+  //  the top"; a C2/7759 world's table is 224 words, a word a line. Set for every world, a 7759 world seeded mid-flight
+  //  repeated its first 64 lines down the screen: the dust of leg 132's rows 65 on.)
+  c->waveTop = 0;
   for (int b = 0x0B30; b < 0x1B30; b += 0x40) {
     uint16_t cls = (uint16_t)(ram[b] | (ram[b + 1] << 8));
     if ((cls == 0x7702 || cls == 0x77F2) && ram[b + 2]) {
@@ -69,6 +71,10 @@ void CtWorldCamSeed(CtWorldCam* c, const uint8_t* ram) {
       c->waveInit = 1;
       c->wavePhase = cls == 0x7759 ? (uint16_t)(ram[0x01E2] | (ram[0x01E3] << 8))
                                    : (uint16_t)(ram[b + 0x22] | (ram[b + 0x23] << 8));
+      if (cls == 0x7652) {
+        c->waveTop = (uint16_t)(ram[0xA916] | (ram[0xA917] << 8));
+        if (c->waveTop < 0xA925 || c->waveTop >= 0xA9A5) c->waveTop = 0xA925;
+      }
     }
   }
 }

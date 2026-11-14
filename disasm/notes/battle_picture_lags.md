@@ -392,3 +392,47 @@ Checks `field-picture-low-priority-sprite-is-the-sub-pixel-vs-cartridge` (f32401
 
 Not looked at: a cell of priority 0 / 1 under a BG pixel that has NO math, or with OBJ off the sub screen -- the
 cartridge hides it; the port still draws it on top. No measured picture has one.
+
+## 11. 2026-11-14: OBJ on the sub screen alone -- the tile still wins; and whose pixel a pixel is
+
+Playthrough leg 43 is a fight in Arris Dome's info centre, a room seen through BG3 (the 2300 A.D. rooms' dust): the
+arena's blocks read `$BE8D` 04 13 and `$BE95` 02 44 -- TM BG3 alone, TS BG1 BG2 OBJ, the sub screen added to BG3 and
+halved. Every sprite is a sub pixel there (field.c g_objSubMask = 4), and the port's foreground pass, which paints a
+BG1 / BG2 priority tile back over a sprite of priority 2 or less, skipped every pixel a sprite had been mixed into.
+That is right with OBJ on BOTH screens (sec. 10: the tile is the main screen's and the sprite shows through it). With
+OBJ on the sub screen ALONE the tile is on the sub screen with the sprite and beats it there as anywhere: the sub pixel
+is the tile's, and the picture is the arena's without the sprite.
+
+Measured on the rule's cartridge:
+
+    f600    Marle fallen: `$9909` 4E, OAM 4-7 at (193,159) (145,159) (177,159) (161,159), attribute 2E (priority 2);
+            BG1's tilemap words at her place read 2D01 / 2D10 / 2E85 (bit 13: priority 1; VRAM at the records'
+            scroll); she is not on the picture
+    f620    `$9909` D9, OAM 4-7 at (179,143) (163,143) (163,175) (163,159); what the port showed and the cartridge
+            does not is all below y 153 (x 163-178, y 153-174)
+    the port  showed her whole: 391 px on f600, 231 on f620, 231-608 px on each picture of f560-f640
+
+The pass asks g_objSubBoth now. f540-f700, every second picture: 0 px.
+
+And six pixels: on f654-f664 a rising number (OBJ priority 3, in front of the tile) crosses her cells. The priority
+mask the pass reads was marked by comparing the picture before and after each combatant -- the pixels it CHANGED --
+so the number's white pixels that fell on white pixels of her cells kept her priority 2 and went under the tile
+(x 169-171, y 164-166). plot() stamps the mask where it draws.
+
+Checks `field-picture-sub-screen-priority-tile-covers-the-fallen-vs-cartridge` (f600) and
+`field-picture-a-number-over-a-covered-pc-keeps-its-pixels-vs-cartridge` (f660).
+
+## 12. 2026-11-14: sec. 6 corrected -- the held seat is the old TILES at the new record's cell offsets
+
+Sec. 6 held the whole pose a seat's tiles still are. The builder C1/1C4A does two things at the build: the record's
+tiles into the seat's buffer (VRAM later, or never) and the record's dx,dy into `$9F47..`, which the compose reads on
+the next frame. So an un-uploaded pose is on the screen as the OLD tiles at the NEW record's offsets. Sec. 6's case
+(Magus, 5C held under 00) drew the same either way; the victory of leg 43 does not:
+
+    Marle's `$9909`    62 on row f1403, 63 on f1407 (the ladder's 64th call); `$E5` / `$A4` 00 to the leg's end
+    VRAM $0281-$03FE   changes between f1404 and f1406; the same on f1407, f1408, f1410, f1420, f1500
+    OAM 4-7 on f1800   (186,136) (170,132) (168,162) (169,148)
+    the port           the 62 whole: 279 px of her (the audit's sample went from 85 px to 343 with 5372dbb)
+
+field.c ctAnimengPcBlitOn takes the tiles' record and the offsets' record apart. Check
+`field-picture-held-tiles-stand-on-the-new-cells-vs-cartridge` (f1800); sec. 6's own check stands.

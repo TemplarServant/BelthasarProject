@@ -842,6 +842,14 @@ static void npcLoadMirror(Mem* m, int obj, int hdrIdx, int mode) {
   // the sheet's bank, which C0/CAD9's tile copy C0/E687 reads. Op 0x81 takes its bank from the record.
   w8(m, X + 0x1101, (uint8_t)(mode == 4 ? hdrIdx - 7 : hdrIdx));
   if (mode == 4) w8(m, X + 0x1200, 0x7F);
+  // ...and the sheet's id the arm hands C0/5C90 in the direct page: C0/4620 `LDA $E4F023,X / STA $E3 / JSR C0/5C90` (op
+  // 0x82's arm; D = $0100, so $7E:01E3). It outlives the load -- and the ROM reads it back: the overworld's dust wave
+  // C2/7759 takes its phase from the word at `$0022,X` with X left at $01C0, i.e. $7E:01E2 (world.c owBg3WaveTick), so
+  // 2300 A.D.'s dust begins where the last sheet loaded on the field left it. MEASURED on the rule's cartridge,
+  // playthrough leg 48: `$01E2` 03 25 on row f6181 and 03 61 on f6183 (C0:4626), the world entered on f6444 and the
+  // wave stepping the word by 4 from 6103; the port's page kept 8003 and its dust never met the cartridge's (1351 px a
+  // picture; leg 132, seeded on the world, the same).
+  if (mode == 4 && gRomImg && gRomImgLen >= 0x250000) w8(m, 0x7E01E3, CtRomByte(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5));
   if (!gRomImg || gRomImgLen < 0x250000) return;       // palette slots assign on first render,
   loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F000 + (long)hdrIdx * 5, 5), mode == 3);   // not at load
 }
@@ -1009,6 +1017,7 @@ static void loadMonMirror(Mem* m, int obj, uint8_t id, uint8_t op2) {
   w8(m, X + 0x1680, 0x00);                            // 4583
   w8(m, X + 0x1681, 0x00);                            // 4588
   w8(m, X + 0x0D00, (uint8_t)(((slot & 0xFE) << 4) | ((slot & 1) << 3)));
+  if (gRomImg && gRomImgLen >= 0x250000) w8(m, 0x7E01E3, CtRomByte(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10));   // C0/476F-4773 `LDA $E4F600,X / STA $E3` (before the F8 test)
   if (gRomImg && gRomImgLen >= 0x250000)
     loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10, 10), id >= 0xF8);   // C0/477A: F8+ ROM-direct
 }

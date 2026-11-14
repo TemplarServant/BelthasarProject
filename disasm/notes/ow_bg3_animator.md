@@ -191,3 +191,33 @@ mutations each (the latched table; the word a line late).
 How it was found: a grid of trial builds over (row word, table lead, V lead) on leg 131's end -- the picture is 0 px
 only with the live table on word y. A seed on the map restarts the port's BG3 from 0, so `tools/field_picture_cmp.py`
 cannot judge the map; the legs' own lines are the picture checks.
+
+## The dust's phase is a byte the field left: `$7E:01E3` (2026-11-14)
+
+C2/7759 (sec. 6) reads its phase at `$0022,X` with X left at $01C0 -- the word at $7E:01E2 -- and steps it by 4 a
+frame. Nothing on the world writes that word before the first read: it is whatever the field's direct page held.
+$01E2 / $01E3 are the field's `$E2` / `$E3` (D = $0100), and `$E3` is the sheet id an allocating loader hands the
+allocator:
+
+    C0/4620   LDA $E4F023,X / STA $E3 / JSR C0/5C90     the NPC arm (op 0x82): the record's byte 0
+    C0/476F   LDA $E4F600,X / STA $E3                    the enemy arm (op 0x83), before its `CMP #F8`
+    C0/5C90   LDA $E3 / CMP $0920,X ..                   the allocator (its only two callers)
+
+So 2300 A.D.'s dust begins where the last sheet loaded on the field left `$E3`. Measured on the rule's cartridge,
+playthrough leg 48 (Lab 32's road, the world entered on f6444):
+
+    `$01E2`   03 80 from f5000; 03 25 on row f6181 and 03 61 on f6183 (C0:4626); 6103 on f6444-f6446, then 6107,
+              610B, 610F .. (+4 a frame)
+    `$24`     FFFC on f6444, FFF9, FFF5, FFF2 .. on both sides (the drift, sec. 6)
+    the port  `$01E2` 03 80 all along: its loaders did not store `$E3`, and its wave began on 8003
+
+and `ct.exe --hdma` from leg 132's state of f899 fits `$24 + S(p + k)` on every line sampled (lines 2-12, 56-76,
+108-120: base 22, p = 5B93). The dust of leg 48's f6600 was 1351 px from the cartridge's at its best lag; with the two
+stores (ct_vm.c) it is 0. Check `field-picture-dust-begins-on-the-loaders-byte-vs-cartridge`.
+
+A leg that BEGINS on the world (the harness's world-capture start, field.c) had two more things of its own: the
+placement began BG3's state afresh where BG1's and BG2's scroll came from the capture (`$24` FFFC for F4DC on leg
+132's row f0), and CtWorldCamSeed gave every world the 64-word table's top `waveTop`, which owBg3HLine reads as "64
+words from the top" -- C2/7652's table; a C2/7759 world's is 224 words -- so the seeded dust repeated its first 64
+lines. Leg 132 f900: 4003 px, 1045 with the first fixed (rows 65 on), 0 with both. Check
+`field-picture-world-capture-seeds-the-dust-vs-cartridge`.
