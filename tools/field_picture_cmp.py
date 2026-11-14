@@ -132,6 +132,13 @@ PICTURES = {
     # f37196-98). The port placed the layer on the live counter: the stars one step (2,1) ahead of the sprites, 4362 px
     # of this frame at the fight's lag (442 px, Flea alone, a lag further).
     'starfield-drifts-with-the-records': dict(leg='92_slash', at=0, frames=37200, own=True),
+    # Death Peak's summit, playthrough leg 137 from its start, f9300: Magus on seat 1, 133 frames after the entrance
+    # ladder. A PC's cells are the tiles its seat has in VRAM, which the NMI's group upload CF/E3F8 sends (`$E5` set, no
+    # action; group 0 = the seats), not the builder C1/1C4A; the ladder's 64th and last call is a build pass with no
+    # upload after it, so the pose it publishes (his 00, on row f9167) is not on the screen until group 0 is next
+    # uploaded -- here 970 frames later, on the exit (f10139). The port drew the published pose at once: the record 00
+    # where the cartridge still shows the 5C, his cape spread (301 px of this frame, at every lag).
+    'ladders-last-pass-is-not-uploaded': dict(leg='137_lavos_spawns_summit', at=0, frames=9300, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX
@@ -234,8 +241,8 @@ def run(name, want_png):
     own = bool(d.get('own'))
     pad = span(legs[i]['pad'], d['at'], d['frames']) if own else [(0, d['frames'])]
     keys = P.walkscript
-    if own:                                                   # the port's first key: the leg's pad frame before the cut
-        prev = span(legs[i]['pad'], d['at'] - 1, 1)
+    if own and d.get('at'):                                   # the port's first key: the leg's pad frame before the cut
+        prev = span(legs[i]['pad'], d['at'] - 1, 1)           # (a leg played from its start has none: the playthrough's own keys)
         P.walkscript = lambda p: ','.join('H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in prev + p)
     try:
         _, pics = P.port_timeline(start, pad)

@@ -7465,6 +7465,10 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
     // bounds it to the action window, so the publish, when present, owns the seat. The same publish carries a PC tech's
     // caster and co-actor poses (battleAscSetPos has no PC gate: C1/5135/C1/6299 split on the track only). A PC
     // physical arms no script, so its swing reaches battleAttackRender through cronoAtk above.
+    // (a pose the ladder published on its last pass is not in VRAM yet: battle.c CtBattlePcTileHeld)
+    const int tileHeld = (h && h->mvInited && !(h->ascOn && h->ascPmPose[seat] >= 0) && flinch < 0) ? CtBattlePcTileHeld(seat) : -1;
+    if (tileHeld >= 0) poseIdx = tileHeld;
+    else
     if (ladderPose >= 0) poseIdx = ladderPose;             // the ladder wins: it only publishes while
                                                            //   the seat is celebrating or fallen
     else if (h && h->ascOn && h->ascPmPose[seat] >= 0) poseIdx = h->ascPmPose[seat];

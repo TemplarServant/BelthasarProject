@@ -249,3 +249,35 @@ cartridge's at the fight's lag. What the other 52 were:
 
 With them the fight is 1975 of 1975. Checks `battle-picture-seq-gato-won-vs-cartridge` and
 `battle-rows-gato-won-exit-vs-cartridge`.
+
+## 6. 2026-11-14: a seat shows the tiles it has in VRAM (the ladder's last pass)
+
+The picture of a PC is not its published pose `$9907,X`: it is the tiles the seat has in VRAM. Two routines:
+
+    C1/1C4A   the builder: LDA $967B / CMP $9907,X / BEQ RTS / STA $9907,X, the record's address
+              ($1C78,X + pose * stride), its tiles from the sheet [$1C57,X] into the seat's buffer (CC:F941: $7E:64AD,
+              $67AD, $68AD for the seats, $6BAD.. for the enemies)
+    CF/E3F8   the NMI's upload: LDA $A013 / BNE skip / LDA $E5 / BNE upload -- ONE group a call, by $A4, then
+              INC $A4 (mod 4):   group 0  $7E:64AD x $100 -> VRAM word $0080, $7E:66AD x $500 -> $0180   (the seats)
+                                 group 1  $7E:6BAD x $500 -> $0400, $7E:71AD x $100 -> $0700
+                                 group 2  $7E:70AD x $100 -> $0680, $7E:72AD x $500 -> $0780
+                                 group 3  $7E:77AD x $400 -> $0A00
+    CF/E481   ...and after it, on `$A012` = 1, the one combatant `$9679` (a script's publish: $A654 / $A6AC / $A680,X)
+
+In the main loop a group's poses are built in the iteration whose NMI uploads that group (the `$A4` scheduler), so a
+published pose and its tiles go together and the port draws the published pose. The entrance ladder is the exception:
+C1/3686 calls its stepper C1/369A 64 times (`LDA #40 / STA $5DC9`), alternately `INC $E5 / RTS` -- that frame's NMI
+uploads group 0, `$A4` being 0 -- and a build pass that ends `STZ $A4 / STZ $E5`. The 64th call is a build pass, and
+the loop leaves through C1/3695 `STZ $E5 / STZ $A4 / RTS`: what it published is in `$9907,X` and in the buffer, and
+on the screen only when group 0 is next uploaded.
+
+Measured on the rule's cartridge, playthrough leg 137 (the fight on Death Peak's summit, Magus on seat 1): his ready
+window publishes 5B on row f9133, 5C on f9153 and 00 on f9167 (C1:1C69) -- the last pass. `$E5` reads 0 from there to
+row f10138 (CF:FCBC, the exit's CF/FBE5) and `$A4` steps on f10139 (CF:E479). VRAM words $0200-$02FF (his tiles
+020-02F) are the same at f9160 and f9180; the pictures f9168 .. f10139 show the 5C -- his cape spread -- and f10140 the
+record 00. The port drew the 00 at once: 301 px a picture for 970 frames (the audit's legs 135 and 136 the same).
+battle.c gPcTileHeld keeps the pose a seat's tiles still are, from the ladder's last call to the next group-0 upload
+(or a script's publish for the seat); check `field-picture-ladders-last-pass-is-not-uploaded-vs-cartridge`.
+
+Not modelled: the enemies' groups (1-3; an enemy's buffer can straddle two groups, cmb 6's $70AD-$73AC is in groups 2,
+1 and 2), and a main-loop publish that misses its group's upload -- no measured picture shows either.

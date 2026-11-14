@@ -3237,8 +3237,15 @@ f14190 on). `0 px differ at port +0`; one mutation. disasm/notes/battle_picture_
 `field-picture-starfield-drifts-with-the-records-vs-cartridge`: playthrough leg 92 from its start, f37200 of Flea's
 fight. The room's starfield drifts on BG2 under the fight (the field's C0/2C41, called by the battle's NMI after it
 filled the scroll records), so the screen shows the counter of the frame before; the port placed the layer on the
-live counter, a step ahead of the sprites (442 px at the best lag, 4362 at the fight's). `0 px differ at port -2`;
+live counter, a step ahead of the sprites (442 px at the best lag, 4362 at the fight's). `0 px differ at port -1`;
 one mutation.
+
+`field-picture-ladders-last-pass-is-not-uploaded-vs-cartridge`: playthrough leg 137 from its start, f9300. A seat
+shows the tiles it has in VRAM, which the NMI's group upload CF/E3F8 sends, and the entrance ladder's 64th call is a
+build pass with no upload after it: Magus's last ready pose (00) is not on the screen until the exit, 970 frames
+later, where the port drew it at once (301 px). `0 px differ at port +0`; one mutation.
+disasm/notes/battle_picture_lags.md sec. 6. (`tools/field_picture_cmp.py`: a leg played from its start, `at=0`, takes
+the playthrough's own keys; it was given the pad's frame -1 as a first key and ran a frame behind.)
 
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the

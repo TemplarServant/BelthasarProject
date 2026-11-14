@@ -1072,6 +1072,7 @@ int CtBattlePcIdleWin(int charId, int facing, uint8_t poses[4], uint8_t dwells[4
 int CtBattlePcE3Rec(int charId, int idx, uint16_t cw[16], int8_t pos[8]);
 // Pointer into the ROM's raw PC sheet for 8x8 tile `src` (32 bytes), or NULL.
 const uint8_t* CtBattlePcSheetTile(int charId, int src);
+int CtBattlePcTileHeld(int seat);   // the pose a seat's tiles in VRAM still are (the ladder's last pass is not uploaded), or -1
 // A combatant whose sheet pointer `$1C57 + 3 * cmb` names the ROM (a raw 4bpp sheet), and its tile `src`.
 int CtBattleCmbSheetRaw(const uint8_t* mem, int cmb);
 const uint8_t* CtBattleCmbRawSheetTile(const uint8_t* mem, int cmb, int src);

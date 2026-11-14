@@ -11017,6 +11017,25 @@ void CtBattlePcLadderFallen(CtBattleHost* h, int seat) {
 //   136CC INC $5DC1,X / CMP #08 / BEQ      ; the cursor caps at 8
 //   136E7 LDA $922D,Y / STA $5DBD,X        ; reload; 0 = terminator -> publish nothing, the pose holds
 //   136F6 $967B = $9245,Y / JSR C1/1C4A    ; publish
+// ---- A PC's cells are the tiles its seat has in VRAM, and the ladder's last pass is never uploaded ----
+// C1/1C4A (the builder: `STA $9907,X`, the record's tiles into the seat's buffer at $7E:64AD..) does not reach VRAM:
+// the NMI's CF/E3F8 does, `LDA $A013 / BNE skip / LDA $E5 / BNE upload` -- ONE group a call, by `$A4` (CC:F957 sources,
+// CC:F967 VRAM words, CC:F977 sizes): group 0 is the three seats' tiles ($7E:64AD x $100 -> word $0080, $7E:66AD x $500
+// -> word $0180). The ladder C1/3686 calls its stepper C1/369A 64 times (`LDA #40 / STA $5DC9`), alternately `INC $E5 /
+// RTS` -- that frame's NMI uploads group 0 -- and the build pass, which ends `STZ $A4 / STZ $E5`; the 64th call is a
+// build pass and the loop falls into C1/3695 `STZ $E5 / STZ $A4 / RTS`. A pose published on that last pass is in
+// `$9907,X` and in the buffer, and on the screen only when group 0 is next uploaded. MEASURED on the rule's cartridge,
+// playthrough leg 137 (the fight entered on Death Peak's summit, Magus on seat 1): his ready window publishes 5B on row
+// f9133, 5C on f9153 and 00 on f9167 (C1:1C69), the ladder's last pass; `$E5` then reads 0 until row f10138 (CF:FCBC,
+// the exit's CF/FBE5) and `$A4` steps on f10139 (CF:E479). VRAM words $0200-$02FF (his tiles 020-02F) are the same at
+// f9160 and f9180, and his picture is the pose 5C's -- the cape spread -- for those 970 frames, where the port drew
+// the record 00 at once (301 px a picture; legs 135 and 136 the same).
+// gPcTileHeld[seat] is the pose the seat's tiles still are (-1: the published one), dropped by the next group-0 upload
+// (the cartridge's picture f10140 is the first with the record 00, the upload on row f10139: the port's picture of that
+// tick) or when a script publishes for the seat (its own upload, CF/E481 on `$A012`).
+static int gPcTileHeld[3] = { -1, -1, -1 };
+int CtBattlePcTileHeld(int seat) { return (seat >= 0 && seat < 3) ? gPcTileHeld[seat] : -1; }
+static void battlePcTileUploaded(void) { gPcTileHeld[0] = gPcTileHeld[1] = gPcTileHeld[2] = -1; }   // group 0 goes to VRAM
 void CtBattlePcLadderTick(CtBattleHost* h) {
   if (!h) return;
   if (h->pcLadderLoop <= 0) return;                             // C1/368D is the stepper's only caller: 64 frames per arm
@@ -11025,6 +11044,7 @@ void CtBattlePcLadderTick(CtBattleHost* h) {
   // C1/3693 BNE / C1/3695-3697 `STZ $E5 / STZ $A4` once $5DC9 reaches 0 -- after this frame's C1/369A.
   if (h->pcLadderTick == 0) {                                   // 1369A `LDA $E5 / BNE`: INC $E5 and nothing else
     h->pcLadderTick = 1; s[0x00E5]++;
+    if (!s[0x00A4] && !s[0xA013]) battlePcTileUploaded();       // (this frame's NMI: CF/E3F8 on group `$A4` = 0)
     if (h->pcLadderLoop == 0) { s[0x00E5] = 0; s[0x00A4] = 0; BT_SCHEDA4(h) = 0; }
     return;
   }
@@ -11043,6 +11063,10 @@ void CtBattlePcLadderTick(CtBattleHost* h) {
     if (dw <= 0) { h->pcLadderDwell[seat] = 0x100; continue; }   // 136E7: the terminator -> hold
     h->pcLadderDwell[seat] = dw >> 1;                            // 13639 LSR (the copier's own shift)
     int pv = CtBattlePcWinPose(cid, h->pcLadderWin[seat], cur, h->pcLadderFacing[seat]);
+    if (pv >= 0 && h->pcLadderLoop == 0 && gPcTileHeld[seat] < 0) {   // the loop's last call: built, not uploaded
+      int was = h->pcLadderPose[seat] >= 0 ? h->pcLadderPose[seat] : BT_PCPUB(h, seat);
+      if (was != pv && was != 0xFF) gPcTileHeld[seat] = was;
+    }
     if (pv >= 0) { h->pcLadderPose[seat] = pv; BT_PCPUB(h, seat) = pv; }   // 136F6 publish -> $9907,X (C1/1C66)
     { static int wt = -1; if (wt < 0) { const char* t = getenv("CT_BATTLE_WALKTRACE"); wt = (t && *t) ? 1 : 0; }
       if (wt && pv >= 0) fprintf(stderr, "pcladderpub f%d seat=%d win=%02X cur=%d pose=%02X" CT_BATTLE_NL, h->frames, seat, h->pcLadderWin[seat], cur, pv); }
@@ -12422,6 +12446,7 @@ static void battleAscPoseTick(CtBattleHost* h) {
     }
     h->ascPmDwell[cmb] = dwell;                                                 // C1/42EE
     h->ascPmPose[cmb] = pose;                                                   // C1/4304 -> $967B
+    if (cmb >= 0 && cmb < 3) gPcTileHeld[cmb] = -1;                             // (its own upload: CF/E481 on `$A012`)
     // C1/4307 JSR C1/1C4A with $9679 = cmb (C1/42A8): unless the published type $967C,X is 3, C1/1C5A STZ $9922,X and
     // C1/1C66 STA $9907,X -- the one displayed byte the idle walks publish into too, for an enemy as for a PC. So the
     // last pose an action published stays on screen after its script ends, until an idle walk replaces it.
@@ -15632,6 +15657,7 @@ static void battleShadowStage(uint8_t* m) {
 static void battleOamReset(const CtBattleHost* h);              // (below, with the combatants' OAM mirror)
 static uint8_t gArenaFillWords[12];                                // (battleScrollFill's, below)
 static const uint8_t* gArenaFillMem;
+static int gPcTileHeld[3];                                         // (the ladder's, below)
 void CtBattleBegin(CtBattleHost* h) {
   if (!h || !h->mem || !h->glb) return;
   // D1/F210-F29E, the module's HDMA/window init at the field-to-battle transition (60 frames before the wipe): a
@@ -15878,6 +15904,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->flashTarget = -1; h->fxFlashPal = -1; h->flashLeft = 0;
   h->ascOwnsFlash = 0;
   for (int k = 0; k < 11; k++) { h->ascHopY[k] = 0; h->ascShadow[k] = 0; }   // $A4AF / $A5D8: nothing hops or casts a shadow at boot
+  gPcTileHeld[0] = gPcTileHeld[1] = gPcTileHeld[2] = -1;        // (every seat's tiles are its published pose's)
   // $9888/$993C boot fill (battle_hurt_flash_sync.md sec. 1.1, sec. A4).
   // PCs: CC/E6F8 `LDA #0A / STA $9888 / STA $993C / INC A / INC A / STA $9889 / ... / STA $988A` -- three
   // unrolled stores, seat-indexed and unconditional, so 0x0A/0x0C/0x0E regardless of who occupies the seat.
@@ -16079,6 +16106,7 @@ void CtBattleBegin(CtBattleHost* h) {
 static void battleUploadService(CtBattleHost* h) {
   const uint8_t* s = h->mem;
   if (s[0xA013] || !s[0x00E5]) return;                             // CF/E3F8-E3FF
+  if (BT_SCHEDA4(h) == 0) battlePcTileUploaded();                  // CF/E404-E473: group 0, the seats' tiles
   BT_SCHEDA4(h) = (BT_SCHEDA4(h) + 1) & 3;                               // CF/E477-E47F
   h->mem[0x00A4] = (uint8_t)BT_SCHEDA4(h);                            //   (the byte; C1/10A4-10B3 borrow and restore it)
   { static int st = -1; if (st < 0) { const char* t = getenv("CT_BATTLE_SCHEDTRACE"); st = (t && *t) ? 1 : 0; }

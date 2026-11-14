@@ -51938,7 +51938,7 @@
       ],
       "env": {},
       "expect": [
-        "fieldpicture: starfield-drifts-with-the-records leg 92 +37200 frames of the leg's pad: 0 px differ at port -2"
+        "fieldpicture: starfield-drifts-with-the-records leg 92 +37200 frames of the leg's pad: 0 px differ at port -1"
       ],
       "pin": [
         "^fieldpicture: starfield-drifts-with-the-records "
@@ -51953,13 +51953,47 @@
         "tools/playthrough/route.txt"
       ],
       "note_pass": "Flea's fight: the starfield drifting behind it stands where the cartridge's does, with the sprites",
-      "notes": "A LAYER THAT DRIFTS UNDER A FIGHT STANDS ON ITS SCROLL RECORDS' COUNTER (battle.c CtBattleArenaFillWords; field.c g_bDriftAdj; disasm/notes/battle_picture_lags.md sec. 4). The field's layer drift C0/2C41 goes on under the battle -- D1/E7E3 `JSL CD/0C89` -> `BRL C0/2C41`, on the copy of the field's page at $7F:2000 -- stepping `$7F:346B / 346D` (BG2) and `$7F:346F / 3471` (BG3) and storing them in the arena's scroll words `$2C74..$2C7A` (C0:2C88, C0:2CD6). It runs AFTER the same NMI's CD/06B4 (CD/0929) filled the per-line scroll records from those words, so the records -- what HDMA shows -- hold the counter of the frame before. Measured on the rule's cartridge, playthrough leg 92 (Flea's fight, loc 0AD, whose starfield is BG2 built from the map, `$1D35` 02): `$2C74` 0DE4 / 0DE6 / 0DE8 on rows f37196-98 and the record `$BD09` 0DE2 / 0DE4 / 0DE6 on the same rows; the port's rows are the same. The port's picture placed the layer on the LIVE counter (the tilemap ring's scroll and the map's offsets read `$7F:346B..`): the starfield one step (2,1) ahead of the sprites -- at the fight's lag 4362 px of this frame (f37200), and a lag further only Flea differing (442 px). Both now take the counter the records were filled from. The leg is played from its start (the room is entered on f30824). Re-pin only against the cartridge.",
+      "notes": "A LAYER THAT DRIFTS UNDER A FIGHT STANDS ON ITS SCROLL RECORDS' COUNTER (battle.c CtBattleArenaFillWords; field.c g_bDriftAdj; disasm/notes/battle_picture_lags.md sec. 4). The field's layer drift C0/2C41 goes on under the battle -- D1/E7E3 `JSL CD/0C89` -> `BRL C0/2C41`, on the copy of the field's page at $7F:2000 -- stepping `$7F:346B / 346D` (BG2) and `$7F:346F / 3471` (BG3) and storing them in the arena's scroll words `$2C74..$2C7A` (C0:2C88, C0:2CD6). It runs AFTER the same NMI's CD/06B4 (CD/0929) filled the per-line scroll records from those words, so the records -- what HDMA shows -- hold the counter of the frame before. Measured on the rule's cartridge, playthrough leg 92 (Flea's fight, loc 0AD, whose starfield is BG2 built from the map, `$1D35` 02): `$2C74` 0DE4 / 0DE6 / 0DE8 on rows f37196-98 and the record `$BD09` 0DE2 / 0DE4 / 0DE6 on the same rows; the port's rows are the same. The port's picture placed the layer on the LIVE counter (the tilemap ring's scroll and the map's offsets read `$7F:346B..`): the starfield one step (2,1) ahead of the sprites -- at the fight's lag 4362 px of this frame (f37200), and a lag further only Flea differing (442 px). Both now take the counter the records were filled from. The leg is played from its start (the room is entered on f30824). Re-pin only against the cartridge. RE-PINNED the same day (0 px at port -2 -> -1): tools/field_picture_cmp.py gave a leg played from its start (`at=0`) the pad's frame -1 as a first key, a frame the leg does not have -- the port ran one frame behind the playthrough's own keys. It takes the playthrough's keys now and the picture is on the fight's lag.",
       "mutations": [
         {
           "file": "src/field.c",
           "find": "          if (battlePhase && L) { rs[L * 2] += g_bDriftAdj[(L - 1) * 2]; rs[L * 2 + 1] += g_bDriftAdj[(L - 1) * 2 + 1]; }   // (the\n",
           "replace": "          (void)g_bDriftAdj;   /* MUT: the ring's layers on the live counters */   // (the\n",
           "why": "C0/2C41 steps the counters after CD/06B4 filled the scroll records in the same NMI: the screen shows the counter of the frame before (`$BD09` = the `$2C74` of the row before)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-ladders-last-pass-is-not-uploaded-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "ladders-last-pass-is-not-uploaded"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: ladders-last-pass-is-not-uploaded leg 137 +9300 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: ladders-last-pass-is-not-uploaded "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Magus after the entrance ladder: a seat shows the tiles it has in VRAM, and the ladder's last pass is not uploaded",
+      "notes": "A PC'S CELLS ARE THE TILES ITS SEAT HAS IN VRAM (battle.c gPcTileHeld, with CtBattlePcLadderTick; disasm/notes/battle_picture_lags.md sec. 6). The builder C1/1C4A stores the pose in `$9907,X` and assembles the record's tiles into the seat's buffer ($7E:64AD..); VRAM gets them from the NMI's CF/E3F8 -- `LDA $A013 / BNE skip / LDA $E5 / BNE upload`, ONE group a call by `$A4` (group 0: $7E:64AD x $100 -> word $0080 and $7E:66AD x $500 -> word $0180, the three seats). The entrance ladder C1/3686 calls its stepper C1/369A 64 times, alternately `INC $E5 / RTS` (that frame's NMI uploads group 0) and a build pass ending `STZ $A4 / STZ $E5`; the 64th call is a build pass and the loop leaves through `STZ $E5 / STZ $A4 / RTS`. So a pose published on the last pass is not on the screen until group 0 is next uploaded. Measured on the rule's cartridge, playthrough leg 137 (Death Peak's summit, Magus on seat 1): `$9908` 5B on row f9133, 5C on f9153, 00 on f9167 (C1:1C69, the last pass); `$E5` reads 0 from there to row f10138 (CF:FCBC, the exit) and `$A4` steps on f10139 (CF:E479); VRAM words $0200-$02FF are the same at f9160 and f9180, and the pictures f9168 .. f10139 show the 5C -- his cape spread -- the record 00 from f10140. The port drew the published pose at once (301 px a picture for those 970 frames; the audit's legs 135 and 136 the same). The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      if (was != pv && was != 0xFF) gPcTileHeld[seat] = was;\n",
+          "replace": "      (void)was;   /* MUT: the last pass's pose on the screen at once */\n",
+          "why": "the ladder's 64th call is a build pass with no `INC $E5` frame after it: CF/E3F8 does not upload the seat's tiles until `$E5` is set again (VRAM $0200-$02FF unchanged f9160 -> f9180; the picture is the pose 5C's to f10139)"
         }
       ]
     },
