@@ -136,17 +136,26 @@ frames where the singer's cell led the spotlight.
   -> 1368 of 1369 (f232-f1600): the song's 443 px were the arena's PRIORITY TILES, repainted over the sprites from the
   raw tile and not from the arena as composed (the beam's math on the canopy and the tent's edge), and the single
   frames were the pennants' tile steps drawn at once on a frame that re-bakes the arena (a fight's tile DMAs are
-  held a frame as DMAs now) -- check `battle-picture-seq-gato-song-vs-cartridge`. Left, and OPEN: f1316 (33 px on the
-  strip's lines 183-190), a gauge's repaint a frame late. It is the effect teardown's menu pass: every CD/0453 frame
-  after its first ends in CD/3E75 = `JSR CD/3E7D` (the NMI) and THEN `JSL C1/0012` (C1/10E3), so the request the
-  service raises is consumed in its own frame -- `$993A` 01 on row f1306 (CF:E748; the entry's frame has no pass), 00
-  on f1307 (C1:10EB), and rows f1310 / f1314 / f1318 / f1322 / f1326 all read 00, the main loop's next head on f1328.
-  The port makes the pass ahead of its tick's NMI section: 01 on those rows, consumed a row later. TRIED 2026-11-13:
-  the pass moved past the NMI section closes it (GATO f232-f1900: 1669 of 1669) but moves playthrough leg 65's fight
-  exits off the cartridge's frames, which were exact (control back f68297 / f69712 / f80719 / f80873 / f80968 for the
-  cartridge's f68301 / f69711 / f80718 / f80872 / f80966; before: f68299 / f69711 / f80718 / f80872 / f80966) and adds
-  a control blip at the leg's end -- the pass also clears `$E5`, which gates the NMI's `$A4` step, so its place in the
-  frame moves the scheduler's phase. Not landed: the pass and the `$A4` step have to be derived together. (Tried again the same day on top of the exit's passes of sec. 5, the pass in the tick's `fxTd` branch where the action freeze makes its own: GATO left alone 1669 of 1669, GATO won 1975 of 1975, the exit's rows 201 of 201 -- and leg 65 the same f68297 / f69712 / f80719 / f80873 / f80968. The in-fight rows of the fight that ends at f68160 are the same with and without it; what moves is the exit's release.) The entry before these fixes:
+  held a frame as DMAs now) -- check `battle-picture-seq-gato-song-vs-cartridge`. Left then: f1316 (33 px on the
+  strip's lines 183-190), a gauge's repaint a frame late -- CLOSED the same day, the effect teardown's menu pass.
+  Every CD/0453 frame after its first ends in CD/3E75 = `JSR CD/3E7D` (the NMI) and THEN `JSL C1/0012` (C1/10E3), so
+  the request the service raises is consumed in its own frame: `$993A` 01 on row f1306 (CF:E748; the entry's frame
+  has no pass), 00 on f1307 (C1:10EB), and rows f1310 / f1314 / f1318 / f1322 / f1326 read 00 with the pass's post
+  flags up (`$A0` 80, `$99E2` 01); the gauge tile `$0DAA` goes 78 -> 77 on row f1314. The port stepped the main
+  loop's CD/0009 at the head of its tick and made the pass there, ahead of the frame service: a row late (the tile on
+  f1315). A first try moved the pass and turned playthrough leg 65 DIFFERENT, which looked like a regression and was
+  taken out; the leg's sound said otherwise. The cartridge's cursor blips `19 00` reach the APU the frame after the
+  row their request is raised on (f33322 / f33334 for `$9931` 04 / 10 on rows f33321 / f33333, inside the teardown
+  of rows f33318-f33338), and the port's trace has every blip of the leg one frame number ahead of the cartridge's
+  EXCEPT the six a teardown's pass made (f33322 / f33334, f37959 / f37971, f43178 / f43190), which sat on the
+  cartridge's own number: a frame late. With the pass past the service (battle.c g_fxTdPassDue, the tick's `fxTd`
+  branch, where the action freeze makes its own) the rows, the picture and the six blips are the cartridge's: GATO
+  left alone 1669 of 1669 (f232-f1900), check `battle-picture-seq-gato-song-end-vs-cartridge`. Leg 65's fights then
+  release their exits on another step of the SPC's fade -- the in-fight rows and every trace line are the same to the
+  module's exit, and the exit's poll reads `$2141` 01 01 00 where it read 02 02 01 01 00 (control back f68297 /
+  f69712 / f80719 / f80873 / f80968 for the cartridge's f68301 / f69711 / f80718 / f80872 / f80966; before: f68299 /
+  f69711 / f80718 / f80872 / f80966): the fade lattice of battle_exit_fade_poll.md, the class closed as timing on
+  2026-11-07 (playthrough_leg_ledger.md, leg 65). The entry before these fixes:
   GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
   the ladders' gate, field.c battleGatoRender: a scripted action shows the published pose only -- check
   `battle-picture-seq-gato-first-attack-vs-cartridge`). Left: one frame of the song's pre-roll, f1018 (436 px, not
@@ -159,11 +168,17 @@ frames where the singer's cell led the spotlight.
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
 * (The effect objects are measured now: sec. 5.)
-* The ground shadow's place in the OAM. CF/EA8A is the LAST thing of a combatant's entry (CF/E906, after its cells),
-  so a shadow is behind its own combatant and in front of every entry after it: the OAM at f458 of GATO's won fight
-  is Crono's cells 4-7, his shadow 8 (tile 002 at (126,136)), Marle's cells 12-15, a number's row 16-19, GATO's
-  20-31. The port lays every shadow beneath every combatant's cells (field.c battleCombatantsRender's first loop).
-  No measured picture has a shadow over a combatant behind it, so it is not changed.
+* (CLOSED 2026-11-13.) The ground shadow's place in the OAM. CF/EA8A is the LAST thing of a combatant's entry (CF/E906,
+  after its cells): behind its own combatant, in front of every entry after it, and an OBJ of the fight's priority
+  (`$A5E3 | $9F46`) against the BG layers. The OAM at f458 of GATO's won fight is Crono's cells 4-7, his shadow 8
+  (tile 002 at (126,136)), Marle's cells 12-15, a number's row 16-19, GATO's 20-31; at f15000 of playthrough leg 95
+  Magus's cells 16-19 and his shadow 20 (tile 002 at (112,107), attribute 32; his script's D0 sets `$A5DB` on row
+  f14190 and nothing clears it), on the floor's BG priority tiles. The port laid every shadow beneath every combatant
+  and recorded no OBJ priority for its pixels, so the pass that repaints the arena's priority tiles over the lower
+  sprites painted the floor over Magus's shadow: 42 px on every picture of his fight from there (the audit's 235
+  differing samples of that leg). field.c battleShadowEntry lays each shadow in its entry of the walk with the
+  attribute's priority; check `field-picture-shadow-over-the-priority-floor-vs-cartridge`. No measured picture has
+  a shadow over a combatant behind it (the order's other consequence).
 * CD/088D's gates on the OAM upload (`$CE0F`, `$CD02`) are the strip upload's own; no measured frame has them set
   while a sprite moves.
 

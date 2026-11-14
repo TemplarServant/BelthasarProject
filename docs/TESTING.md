@@ -3208,6 +3208,10 @@ pre-roll, where the port's reconstructed rear-up ladder stood 23 pictures early 
 `battle-picture-seq-gato-song-vs-cartridge` is his song, f1009-f1315 (`307 of 307`, 121 before): the arena's priority
 tiles are under the beam's colour math like every other BG pixel, and a fight's tile DMAs are held a frame as DMAs
 (the pennants' steps on the frames the song fades the page) -- three mutations.
+`battle-picture-seq-gato-song-end-vs-cartridge` is the song's teardown and the turns after it, f1300-f1420 (`121 of 121`):
+a teardown frame's menu pass comes after its NMI (CD/3E75), so a rebuild request is consumed in the frame that raises
+it and a gauge's repaint is on the next picture (one mutation). With it GATO's fight left alone is whole from its boot
+on: f232-f1900, 1669 of 1669.
 `battle-picture-seq-gato-won-vs-cartridge` is the same fight WON, A mashed (`1975 of 1975`, f232-f2206: the party's
 attacks, the victory, the results, the exit): a damage number is laid at the head of its own combatant's entry
 (CF/EE9F), behind the combatants in front of it; a script's point on an effect object (Marle's bolt taken back to
@@ -3224,6 +3228,11 @@ mutation.
 f10500 of Magus's fight. His sheet pointer `$1C60` names the ROM (D2:0000, the raw sheet he has as a party member),
 and the port, decompressing every enemy's sheet by its id, drew nobody (544 px). `0 px differ at port -1`; one
 mutation. disasm/notes/battle_sheet_decomp.md sec. 6.
+
+`field-picture-shadow-over-the-priority-floor-vs-cartridge`: the same fight at f15000. A ground shadow is the last OAM
+entry of its combatant's entry (CF/E906 -> CF/EA8A) and carries the fight's OBJ priority; the port drew the shadows
+unmarked beneath everything and its priority-tile pass painted the floor over Magus's (42 px on every picture from
+f14190 on). `0 px differ at port +0`; one mutation. disasm/notes/battle_picture_lags.md sec. 4.
 
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the

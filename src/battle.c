@@ -20651,17 +20651,30 @@ static int battleFxTeardown(CtBattleHost* h) {
 // CD/0009 (battleFxTeardown) and the end path's CD/03C6 (battleFleeFrame's exit). Returns 1 while it runs, 0 on the
 // frame its RTS is reached (t 20 on the long arm, t 4 on the short one).
 static void battleMenuPass(CtBattleHost* h, int masha, const char* pass);
+static int g_fxTdPassDue;                                          // the main loop's CD/0453 frame owes its CD/3E75 pass
 static int battleFxTeardownStep(CtBattleHost* h) {
   uint8_t* s = h->mem;
   int t = h->fxTeardownT++ - 1;
   // Every frame of CD/0453 after its first ends in CD/3E75: `JSR CD/3E7D` (the NMI) then `JSL C1/0012` = C1/10E3, the
-  // menu pass when the frame service raised `$993A`, so the strip's seat refresh and posts go on through it.
-  // OPEN (disasm/notes/battle_picture_lags.md sec. 4): on the cartridge the pass comes after that frame's NMI, so a
-  // request is consumed in the frame that raises it (GATO's song: rows f1310 / f1314 / f1318 read 00); here it runs
-  // ahead of the tick's NMI section and consumes it a row later (a gauge's repaint a picture late, f1316). Moving the
-  // pass past the NMI section closes that frame and moves playthrough leg 65's fight exits a frame or two off the
-  // cartridge's (control back on f80968 for f80966, exact before): not understood, not changed.
-  if (t >= 1 && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
+  // menu pass when the frame service raised `$993A`, so the strip's seat refresh and posts go on through it. The pass
+  // comes AFTER that frame's NMI: a request the service raises is consumed in the frame that raises it, as in every
+  // other blocking chain (the action's C1/10FA, the exit's waits, the death routine's). The main loop's CD/0009 is
+  // stepped at the head of the tick, ahead of its frame service (g_fxTeardownPreNmi), so its pass is owed
+  // (g_fxTdPassDue) and made where the action freeze makes its own (battleTickBody's `fxTd` branch); the exit's own
+  // CD/0453 is stepped past the service already. MEASURED on the rule's cartridge:
+  //  - the teardown after GATO's song (gato_wait): `$993A` 01 on row f1306 (CF:E748, the entry's frame: no pass), 00 on
+  //    f1307 (C1:10EB); the next requests, rows f1310 / f1314 / f1318 / f1322 / f1326, read 00 with the pass's post
+  //    flags up (`$A0` 80, `$99E2` 01), and the gauge tile `$0DAA` 78 -> 77 on row f1314 -- the port's on f1315, the
+  //    repaint a picture late (f1316: 33 px on the strip);
+  //  - playthrough leg 65, the teardown of rows f33318-f33338 with the cursor's key held: the blips `19 00` reach the
+  //    APU on f33322 and f33334, the frame after the rows their requests are raised on (`$9931` 04 / 10: f33321,
+  //    f33333). Every other blip of the leg (an action's passes: f33285, f33297, f33309 ..) is one frame number
+  //    ahead of the cartridge's in the port's trace (CT_SNDPOSTS); these six alone were on the cartridge's number --
+  //    a frame late (also f37959 / f37971, f43178 / f43190).
+  if (t >= 1) {
+    if (g_fxTeardownPreNmi) g_fxTdPassDue = 1;
+    else if (s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
+  }
   if (t == 4) {
     s[0xCD0C] = 0; s[0xCA92] = 0;                                   // CD/0463-0466
     if ((s[0x99D2] & 0x80) || s[0xCD07]) h->fxTeardownLong = 0;    // CD/0469-0471 -> CD/0497
@@ -21381,7 +21394,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   h->schedWalk = 0;
   // ...and it does not run before the main loop: the entrance loop's tail C1/3711 is `STZ $E5 / STZ $A4`
   // (battleCombatStart) and nothing sets $E5 again before the first iteration's C1/10C4.
-  g_fxTeardownPreNmi = 1;                                      // (battleFxPalCommit: its t 4 record waits a frame)
+  g_fxTeardownPreNmi = 1; g_fxTdPassDue = 0;                   // (battleFxPalCommit: its t 4 record waits a frame)
   int fxTd = (h->mvInited && h->frames > battleBootIntro(h) && !sndStalled) ? battleFxTeardown(h) : 0;
   g_fxTeardownPreNmi = 0;
   if (h->mvInited && h->frames > battleBootIntro(h)) {
@@ -21682,7 +21695,11 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // would run the next pass is the caller of that call. The logic-tick accumulator holds, as in the freeze above.
   if (h->demoDispatchAt >= 0) { BT_MV_FLUSH(); return 0; }
   // ...and while the main loop's CD/0009 is inside the effect teardown CD/0453 (battleFxTeardown): no iteration at all.
-  if (fxTd) { BT_MV_FLUSH(); return 0; }
+  if (fxTd) {
+    if (g_fxTdPassDue && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }   // CD/3E78 -> C1/10E3
+    g_fxTdPassDue = 0;
+    BT_MV_FLUSH(); return 0;
+  }
 
   // ===== The iteration gate. On a frame with no iteration the post-intro scheduler is frozen (the ROM's `LDA $993A /
   //       BEQ` skip) and the HUD holds the previous state; h->frames still advances, so the render-frame clocks go on.

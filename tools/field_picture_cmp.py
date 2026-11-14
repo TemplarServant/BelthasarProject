@@ -119,6 +119,12 @@ PICTURES = {
     # LZ-decompressed the address by the enemy's id and drew nothing: no Magus on the screen for the whole fight (544 px
     # of this frame, at every lag).
     'magus-is-drawn-from-his-raw-sheet': dict(leg='95_magus', at=600, frames=9900, own=True),
+    # The same fight at f15000: Magus's ground shadow. His script's D0 sets the flag `$A5DB` on row f14190 and nothing
+    # clears it; CF/EA8A lays the shadow as the last OAM entry of his own entry (cells 16-19, the shadow 20: tile 002
+    # at (112,107), attribute 32) -- an OBJ of the fight's priority (`$A5E3` 30: 3), in front of the floor's BG
+    # priority tiles. The port drew the shadows unmarked and its foreground pass painted the floor over this one
+    # (42 px on every picture of the fight from f14190 on).
+    'shadow-over-the-priority-floor': dict(leg='95_magus', at=600, frames=14400, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

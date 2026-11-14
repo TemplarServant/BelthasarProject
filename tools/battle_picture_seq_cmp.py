@@ -72,6 +72,10 @@ SEQUENCES = {
     # (the tree's canopy and the tent's edge at the cone's top: 443 px a picture from the raw tiles), and the fair's
     # pennants step on frames the song's records fade the page: a fight's tile DMAs are held a frame as DMAs.
     'gato-song': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=1009, b=1315, lag=-1),
+    # The song's teardown (CD/0453, rows f1306-f1327) and the turns after it: each teardown frame ends in CD/3E75 --
+    # the NMI, THEN the menu pass C1/10E3 -- so a rebuild request the service raises is consumed in its own frame and
+    # a gauge's repaint is on the next picture (f1316: the tile `$0DAA` 78 -> 77 on row f1314).
+    'gato-song-end': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=1300, b=1420, lag=-1),
     # GATO's fight WON (A mashed, four frames on and four off): Crono's and Marle's attacks, the victory, the results
     # and the exit, to the fight's last picture. A damage number is its combatant's -- the compose lays its row at
     # the head of that combatant's entry (CF/EDB8 -> CF/EE9F), so Crono, standing in front of GATO, covers the `17`

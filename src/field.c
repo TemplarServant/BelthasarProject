@@ -8832,12 +8832,32 @@ static void battleFxPopupEntry(uint8_t* fb, const CtBattleHost* h, int cmb, uint
     for (int p = 0; p < CAMW * CAMH; p++)
       if (memcmp(prevFb + p * 3, fb + p * 3, 3)) g_bObjPrioMask[p] = 3;
 }
+// A combatant's ground shadow inside the walk. CF/EA8A is the LAST thing of a combatant's entry (CF/E906, after its
+// cells): one OAM entry behind its own combatant and in front of every entry after it -- and an OBJ like any other to
+// the screens: its attribute `$A5E3 | $9F46` carries the fight's OBJ priority, so with priority 3 it is in front of the
+// arena's BG1 / BG2 priority tiles (the foreground pass below reads g_bObjPrioMask). MEASURED on the rule's cartridge:
+// GATO's won fight f458, the OAM is Crono's cells 4-7, his shadow 8 (tile 002 at (126,136)), Marle's cells 12-15, a
+// number's row 16-19, GATO's 20-31; playthrough leg 95 f15000 (Magus's fight, `$A5E3` 30; his script's D0 sets `$A5DB`
+// on row f14190 and nothing clears it), Magus's cells 16-19 and his shadow 20, tile 002 at (112,107) attribute 32 -- on
+// the floor's priority tiles. The port laid every shadow beneath every combatant and left its pixels unmarked: the
+// foreground pass painted the floor over Magus's (42 px on every picture of the fight from there).
+static void battleShadowEntry(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h, int cmb, uint8_t* prevFb) {
+  if (!mem || !h || cmb < 0 || cmb >= 11 || !h->ascShadow[cmb]) return;
+  if (g_bObjPrioMask) memcpy(prevFb, fb, (size_t)CAMW * CAMH * 3);
+  const int keepOwn = g_motOwn;
+  g_motOwn = battleMotOwn(h, cmb);
+  battleShadowRender(fb, mem, h, cmb);
+  g_motOwn = keepOwn;
+  if (g_bObjPrioMask) {
+    const uint8_t pr = (uint8_t)(((mem[0xA5E3] | mem[0x9F46]) >> 4) & 3);
+    for (int p = 0; p < CAMW * CAMH; p++)
+      if (memcmp(prevFb + p * 3, fb + p * 3, 3)) g_bObjPrioMask[p] = pr;
+  }
+}
 static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
   int ord[22], n = battleObjOrder(mem, h, ord);
   int front = 0;                                        // combatants whose cells the FE entry draws
   for (int i = 0; i < n; i++) if (!(ord[i] & 0x40)) front |= 1 << ord[i];
-  for (int i = 0; i < n; i++)                           // beneath every combatant's cells; the FE entry
-    if (ord[i] & 0x40) { g_motOwn = battleMotOwn(h, ord[i] & 0x1F); battleShadowRender(fb, mem, h, ord[i] & 0x1F); }   //   skips it (FE904 BRA)
   // CT_BATTLE_ZTRACE: the sorted list, printed whenever it changes -- `cmb(Y)` front-first, i.e. the
   // oracle's OAM block order read off its 4-sprite blocks (idx 4-7, 8-11, ... = list[0], [1]...).
   if (getenv("CT_BATTLE_ZTRACE")) {
@@ -8854,8 +8874,10 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   static uint8_t prevFb[CAMW * CAMH * 3];
   for (int i = n - 1; i >= 0; i--) {                  // back-to-front
     g_bDrawOnly = ord[i] & 0x1F;
+    if (ord[i] & 0x40) battleShadowEntry(fb, mem, h, g_bDrawOnly, prevFb);   // CF/E906 JSR CF/EA8A: the entry's last OAM
+                                                                             //   (the FE entry has none: FE904 BRA)
     if ((ord[i] & 0x40) && (front & (1 << g_bDrawOnly))) continue;   // FE8C2 BMI: its cells are the FE entry's
-    const int pop = h && g_bDrawOnly < CT_BATTLE_FX_POOL && h->popups[g_bDrawOnly].active && !g_bNoPopups;
+    const int pop =h && g_bDrawOnly < CT_BATTLE_FX_POOL && h->popups[g_bDrawOnly].active && !g_bNoPopups;
     if (battleHiddenObj(mem, h, g_bDrawOnly)) {           // CF/FE28 `LDA $9FF7,X / BNE skip`: no OAM for a hidden object
       if (pop) battleFxPopupEntry(fb, h, g_bDrawOnly, prevFb);   //   (its number as before: not derived for a hidden one)
       continue;
