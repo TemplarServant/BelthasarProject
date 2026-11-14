@@ -52373,6 +52373,40 @@
       ]
     },
     {
+      "name": "field-picture-an-item-is-not-the-swing-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "an-item-is-not-the-swing"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: an-item-is-not-the-swing leg 82 +23100 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: an-item-is-not-the-swing "
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "seat 0 using an item holds the item's poses (the arm raised), not the swing's run-up",
+      "notes": "AN ITEM'S USER IS DRAWN FROM THE POSES ITS SCRIPT PUBLISHES (battle.c battleSkeleton; disasm/notes/battle_picture_lags.md sec. 9). The port keeps a baked ladder for seat 0's physical swing (battleSkeleton -> fxAtkPose -> field.c battleAttackRender) and left it only for a tech or a scripted physical: an item used by seat 0 was drawn with the swing's run-up. Measured on the rule's cartridge, playthrough leg 92 (Flea's fight; seat 0 uses item BE, `$A013` 01 from row f42523): `$9907` (seat 0's published pose) is 2C on row f42546 and 6C on f42561, the same rows in the port's WRAM, and the cartridge's picture f42600 is that pose -- the arm raised, facing the screen -- where the port showed his back: 398 px (a 16x34 column). This check's frame is leg 82's f23100, the same thing in Nizbel's fight: 406 px -> 0 (leg 67's f18900 too, 398 -> 0). The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->actItemId > 0) return;\n",
+          "replace": "  /* MUT: an item is drawn as the baked swing */\n",
+          "why": "an item's script publishes its user's poses (`$9907` 2C then 6C on leg 92's rows f42546 / f42561) and the cartridge's picture shows them"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

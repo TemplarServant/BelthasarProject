@@ -340,3 +340,22 @@ are left on rows 0-7 -- the ramp's green one step (2) off on the effect's first 
 port's 28 on f6889). OPEN: not looked at. Playthrough leg 59 f5100 (10 px of row 7, a Fire being aimed): 0 px.
 Check `attract-07d-effect-reaches-the-row-above-the-hud-vs-rule-cartridge` (the whole picture of port f6895, which
 is under a shake too: sec. 7's 612 px).
+
+## 9. 2026-11-14: an item's user is drawn from its script's poses
+
+The port keeps a baked ladder for seat 0's physical swing (battle.c battleSkeleton -> `fxAtkPose`; field.c
+battleAttackRender draws it and the stance pass steps aside), and battleSkeleton left it only for a tech
+(`actTechId`) or a scripted physical (`actPhysScript`): an ITEM used by seat 0 was drawn with the swing's run-up.
+
+Measured on the rule's cartridge, playthrough leg 92 (Flea's fight; seat 0 uses item BE -- the port's trace
+`pc-act-item .. itemId=190` on its tick 6983 -- and `$A013` is 01 from row f42523):
+
+    `$9907` (seat 0)   C6 on row f42510, 2C on f42546, 6C on f42561 -- the same rows in the port's WRAM
+    picture f42600     the cartridge: the pose of 6C, the arm raised, facing the screen; the port: his back, the
+                       run-up -- 398 px, x 112-127 / y 126-159
+
+With `actItemId` in the same test the stance pass draws the published pose: leg 92 f42600, leg 82 f23100 (406 px)
+and leg 67 f18900 (398 px) are 0 px. Check `field-picture-an-item-is-not-the-swing-vs-cartridge` (leg 82).
+
+(The baked ladder itself -- seat 0 only, whoever sits there -- is the port's own shortcut for the unscripted
+physical; not looked at here.)

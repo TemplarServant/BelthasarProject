@@ -9371,6 +9371,11 @@ static void battleSkeleton(CtBattleHost* h, int rel) {
   if (h->actAttacker != 0) return;                              // idx0 = Crono (PC seat0, pal5); only Crono is baked
   if (h->actTechId > 0) return;                                 // a PC tech: the interpreter publishes its poses
   if (h->actPhysScript) return;                                 // ...and a physical running its own script
+  // ...and an item: its script publishes the user's poses like any other (C1/1C66 -> `$9907,X`). MEASURED on the
+  // rule's cartridge, playthrough leg 92 (Flea's fight, seat 0 uses item BE: `$A013` 01 from row f42523): `$9907` 2C on row f42546
+  // and 6C on f42561 -- the port's rows the same -- and the pictures show those poses, the arm raised facing the
+  // screen, where the port drew the swing's run-up instead (398 px on f42600).
+  if (h->actItemId > 0) return;
   // The arrival-anchored ladder (battle_pc_attack_sequencing.md sec. 6.4): op 18 parks the script for the whole walk,
   // so the run window loops until the stop probe fires and only then does the swing start. The fixed
   // `idx = rel + CT_CRONO_ATK_IDX0` table below serves only when no route was armed (pre-init host / Marle / crit).

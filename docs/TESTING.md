@@ -3270,6 +3270,11 @@ battle's HDMA tables step to the next band on a band's last line, and the port a
 it was: the last arena row above the HUD was left out of the effect's compose (134 px of row 7). `57344 / 57344
 identical`; one mutation. disasm/notes/battle_picture_lags.md sec. 8.
 
+`field-picture-an-item-is-not-the-swing-vs-cartridge`: playthrough leg 82 from its start, f23100: seat 0 uses an
+item. Its script publishes the user's poses and the cartridge shows them (the arm raised, facing the screen); the
+port drew seat 0's baked swing for every action of his that was not a tech (406 px). `0 px differ at port -1`; one
+mutation. disasm/notes/battle_picture_lags.md sec. 9.
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

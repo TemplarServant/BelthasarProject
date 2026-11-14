@@ -158,6 +158,12 @@ PICTURES = {
     # The port drew it with four calls of a blitter that draws a 16x16 block a call, and the second put the name
     # n+16 again 16 px to the right: 19 px of the ring's lower left beside each ringed PC (38 px of this frame).
     'status-icon-is-one-entry': dict(leg='119_elevator', at=0, frames=6600, own=True),
+    # Nizbel's fight (playthrough leg 82 from its start), f23100: the PC of seat 0 uses an item. An item's script
+    # publishes its user's poses like any other (C1/1C66 -> `$9907,X`: on leg 92, `$9907` 2C on row f42546 and 6C
+    # on f42561, the port's rows the same) and the picture shows them -- the arm raised, facing the screen. The port
+    # drew seat 0 with the baked swing's run-up for every action of his that was not a tech: 406 px of this frame
+    # (398 on leg 92's f42600).
+    'an-item-is-not-the-swing': dict(leg='82_nizbel', at=0, frames=23100, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX
