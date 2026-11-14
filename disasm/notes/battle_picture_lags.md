@@ -170,10 +170,11 @@ frames where the singer's cell led the spotlight.
   it steps `$7F:346B / 346D` and stores them in the arena's words `$2C74 / $2C76` (C0:2C88 / C0:2CD6) -- AFTER the
   same NMI's CD/06B4 filled the scroll records from them, so the record `$BD09` of a row is the counter of the row
   before (`$2C74` 0DE4 / 0DE6 / 0DE8 and `$BD09` 0DE2 / 0DE4 / 0DE6 on rows f37196-98; the port's rows are the same).
-  The stars of the cartridge's picture f37200 stand on 0DE8, the record of row f37199 (`--hdma` from the state of
-  f37196 shows BG2 at 482 on line 0 and 484 from line 1 of the frame after it). The port's picture f37198 has those
-  stars: at the fight's lag (-1) its starfield is one step (2,1) AHEAD of its sprites -- 4362 px on every picture of
-  that fight, and at -2 only Flea differs (442 px). Not fixed: the picture's starfield does not follow the scene's
+  (`--hdma` from the cartridge's state of f37196, where `$2C74` is 0DE4: BG2's scroll is 482 on line 0 and 484 from
+  line 1 of the frame it traces.) The starfield of the cartridge's picture f37200 is the port's picture f37198's to
+  the pixel, and the port's f37199 -- the fight's lag -- has it one step (2,1) further on: 4362 px on every picture of
+  that fight, where at -2 only Flea differs (442 px). Which row's record a picture shows is not pinned to the frame
+  here (the trace's frame number against the pictures'). Not fixed: the picture's starfield does not follow the scene's
   BG2 offset (field.c CtFieldSceneSetLayerOffsets) -- with it taken a step back, or pushed 40 px, only a sparse
   under-layer of stars moves (283 px) and the visible field stays; where the fight's compose takes that layer's
   position from is the next thing to find. (Leg 95's mist and the room's palette cycles: not measured this way yet.)
