@@ -11937,6 +11937,24 @@ static void battleAscGetPos(const CtBattleHost* h, int t, int* x, int* y) {
 // $A014,X / TAX` then `$A35D,X := $1D0C,X ... CF/F113 writes $1D0C,X/$1D23,X` -- with no test of who the
 // combatant is. So a co-actor's track moves the co-actor and a PC caster's track moves the PC.
 static uint16_t gOamPosScript;   // bit c: a script's teleport (ops 19 / 1A / 1B, C1/561F) wrote combatant c's foot this frame
+// ...and an EFFECT OBJECT's point (C1/561F's other branch, a track >= 8: C1/5652 `LDA $A2B6 / ASL / TAX / LDA $80 / STA
+// $A240,X / STZ $A241,X / LDA $81 / STA $A250,X / STZ $A251,X`). The teleport is the main loop's; the frame's compose
+// ran before it, in the IRQ chain, right after the movers (CF/E750 .. CF/E8AF). So an object a script places is on the screen a picture after one its mover stepped. MEASURED on the
+// rule's cartridge, the fair's recipe with A mashed, Marle's bolt (object 0): `$A240` A0 / 90 / 80 on rows f1906-08
+// (CF:F4EA, the mover), B0 on f1909 (C1:565F, the script taking it back to the bow), A0 on f1911; the OAM's entry is at
+// x 136 on picture f1909 (90: the row two before), 120 on f1910 AND f1911 (80), 168 on f1912 (B0: the row three
+// before), 152 on f1913 (A0). The port showed the script's point with the mover's latency: B0 on f1911, the bolt at the
+// bow a picture early (30 px; f830 the same in her first shot). battleFxPosScriptMark keeps the point of before the
+// write for this frame's compose (the capture at the interpreter's end).
+static uint8_t gFxPosScript;     // bit o: a script's teleport wrote effect object o's point this frame
+static int gFxPreX[8], gFxPreY[8];                                // its point before the write
+static void battleFxPosScriptMark(const CtBattleHost* h, int t) {
+  if (t < 8 || t >= 16 || (gFxPosScript & (1 << (t - 8)))) return;
+  const uint8_t* m = h->mem; const int o = t - 8;
+  gFxPreX[o] = m[0xA240 + 2 * o] | (m[0xA241 + 2 * o] << 8);
+  gFxPreY[o] = m[0xA250 + 2 * o] | (m[0xA251 + 2 * o] << 8);
+  gFxPosScript |= (uint8_t)(1 << o);
+}
 static void battleAscSetPos(CtBattleHost* h, int t, int x, int y) {
   int c = (t >= 0 && t < 16) ? h->ascRole[t] : -1;
   if (c >= 0 && c < 11) { BT_LIVEX(h, c) = x & 0xFF; BT_LIVEY(h, c) = y & 0xFF; }
@@ -13657,7 +13675,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           if (t == 4) { int cs[11], nc = battleAscCmbs(h, t, cs);
             for (int i = 0; i < nc; i++) { BT_LIVEX(h, cs[i]) = a1; BT_LIVEY(h, cs[i]) = a2; gOamPosScript |= (uint16_t)(1 << cs[i]);
                                            h->mem[0x1D0C + cs[i]] = (uint8_t)a1; h->mem[0x1D23 + cs[i]] = (uint8_t)a2; } }
-          else { battleAscSetPos(h, t, a1, a2);
+          else { battleFxPosScriptMark(h, t); battleAscSetPos(h, t, a1, a2);
             if (t >= 8) { h->mem[0xA241 + 2 * (t - 8)] = 0; h->mem[0xA251 + 2 * (t - 8)] = 0; }
             else { int c = h->ascRole[t]; if (c >= 0 && c < 11) { h->mem[0x1D0C + c] = (uint8_t)a1; h->mem[0x1D23 + c] = (uint8_t)a2; gOamPosScript |= (uint16_t)(1 << c); } } }
           isFree = 0;
@@ -13695,7 +13713,8 @@ static void battleAscTick(CtBattleHost* h, int rel) {
                            h->mem[0x5D80 + a1] = (v < 0) ? 0 : (v > 255) ? 255 : v; }
           break;
         case 0x1B:                                                   // teleport to resolve(a1) (C1/567D)
-          if (battleAscResolve(h, t, a1, &gx, &gy)) { battleAscSetPos(h, t, gx, gy);
+          if (battleAscResolve(h, t, a1, &gx, &gy)) { battleFxPosScriptMark(h, t); battleAscSetPos(h, t, gx, gy);
+            if (t >= 8) { h->mem[0xA241 + 2 * (t - 8)] = 0; h->mem[0xA251 + 2 * (t - 8)] = 0; }   // C1/565C, C1/5664
             if (t < 8 && h->ascRole[t] >= 0 && h->ascRole[t] < 11) gOamPosScript |= (uint16_t)(1 << h->ascRole[t]); }
           break;
         // ---- The links. 1C rr (C1/5694, an effect track only): $A437[$A2B6] = $A014[rr] for rr < 9, else (rr - 9) | 40 --
@@ -13719,7 +13738,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // `LDA $5D9E / STA $80 / LDA $5D9F / STA $81 / JMP C1/561F` -- the same place body ops 19 and 1B
           // end in, with the point taken from the store ($5D9E/$5D9F = $5D80[0x1E]/[0x1F]). C1/561F splits on the track
           // index -- < 8 writes the combatant's $1D0C/$1D23, >= 8 the effect object's $A240/$A250 -- as battleAscSetPos does.
+          battleFxPosScriptMark(h, t);
           battleAscSetPos(h, t, h->mem[0x5D80 + 0x1E], h->mem[0x5D80 + 0x1F]);
+          if (t >= 8) { h->mem[0xA241 + 2 * (t - 8)] = 0; h->mem[0xA251 + 2 * (t - 8)] = 0; }     // C1/565C, C1/5664
           if (t < 8 && h->ascRole[t] >= 0 && h->ascRole[t] < 11) gOamPosScript |= (uint16_t)(1 << h->ascRole[t]);
           break;
         case 0x44: {                                                 // 44: store the track's own position (C1/5A3E)
@@ -14263,9 +14284,12 @@ static void battleAscTick(CtBattleHost* h, int rel) {
   if (!h->composeHeld) battleTrailCompose(h);                      // the compose's CF/E909-E91E -> CF/E92C (CF/E764's gate)
   if (!h->composeHeld) for (int o = 0; o < 8; o++) {
     const uint8_t* m = h->mem;
-    h->fxObjCmp[o].x = (int16_t)(((m[0xA240 + 2 * o] | (m[0xA241 + 2 * o] << 8)) + h->fxObjCmp[o].ox) & 0xFFFF);
-    h->fxObjCmp[o].y = (int16_t)(((m[0xA250 + 2 * o] | (m[0xA251 + 2 * o] << 8)) + h->fxObjCmp[o].oy) & 0xFFFF);
+    int px = m[0xA240 + 2 * o] | (m[0xA241 + 2 * o] << 8), py = m[0xA250 + 2 * o] | (m[0xA251 + 2 * o] << 8);
+    if (gFxPosScript & (1 << o)) { px = gFxPreX[o]; py = gFxPreY[o]; }   // (a script's teleport: the next frame's)
+    h->fxObjCmp[o].x = (int16_t)((px + h->fxObjCmp[o].ox) & 0xFFFF);
+    h->fxObjCmp[o].y = (int16_t)((py + h->fxObjCmp[o].oy) & 0xFFFF);
   }
+  gFxPosScript = 0;
   if (ipTr) for (int t = 0; t < 16; t++)
     if (h->ascIp[t] != ipWas[t]) fprintf(stderr, "ascip f%d rel=%d t%d %04X\n", h->frames, rel, t, h->ascIp[t] & 0xFFFF);
   if (ipTr) for (int t = 0; t < 4; t++) {                           // ...and the live foot of each role's combatant
@@ -20856,6 +20880,15 @@ static int battleFleeStageTick(CtBattleHost* h) {
       battleFleeTrace(h, "exit-sound");
     }
     int b = 5 + h->exitCd0c + ((s[0x2A1F] & 0x40) ? 0 : 15);       // CD/0516's frame
+    // CD/039E is the post and `LDA #0F / JMP CD/3E3B`: its fifteen waits are CD/3E75's, each the NMI and then `JSL
+    // C1/0012` = C1/10E3 -- the menu pass on the request the frame service goes on raising every fourth frame. CF/FBE5's
+    // waits before it (CF/FCFB) and CD/0516's after it (CD/3E7D) have none. MEASURED on the rule's cartridge, playthrough
+    // leg 65's fight ending at f68168 (CF/FCE9 `JSL CD/0006` on that frame, `--cputrace`): `$993A` 01 on row f68163 and
+    // 02 on f68167 (CF:E748, under CF/FBE5's waits), 00 on f68169 (C1:10EB, the first of the fifteen: a whole pass) and
+    // on every row to f68186 -- the requests of f68171 / 75 / 79 / 83 consumed on their own frames -- then 01 on f68187,
+    // 02, 03, 04 on f68199 (CD/0516's waits and the close). The port made no pass in the exit: 01 .. 0A, one every
+    // fourth frame.
+    if (e > b - 15 && e <= b && !(s[0x2A1F] & 0x40) && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
     if (e == b) s[0xCE16] = 1;                                     // CD/0516-0518 (then CD/3E7D)
     if (e == b + 1) { s[0xCA25] = 0x0C; s[0xCA24]++; }             // CD/051E-0523 (then CD/3E7D)
     if (e == b + 2) { s[0xCA1F] = 0x17; s[0xCA1E] = 0x80; h->hudClosePosted = 1; battleFleeTrace(h, "hud-close-arm"); }   // CD/0529-0530

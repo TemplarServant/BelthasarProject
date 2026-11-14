@@ -3208,6 +3208,17 @@ pre-roll, where the port's reconstructed rear-up ladder stood 23 pictures early 
 `battle-picture-seq-gato-song-vs-cartridge` is his song, f1009-f1315 (`307 of 307`, 121 before): the arena's priority
 tiles are under the beam's colour math like every other BG pixel, and a fight's tile DMAs are held a frame as DMAs
 (the pennants' steps on the frames the song fades the page) -- three mutations.
+`battle-picture-seq-gato-won-vs-cartridge` is the same fight WON, A mashed (`1975 of 1975`, f232-f2206: the party's
+attacks, the victory, the results, the exit): a damage number is laid at the head of its own combatant's entry
+(CF/EE9F), behind the combatants in front of it; a script's point on an effect object (Marle's bolt taken back to
+the bow) is a picture after a mover's; and the shot's spark is the script's effect objects, not a baked copy --
+two mutations. disasm/notes/battle_picture_lags.md sec. 5.
+
+`battle-rows-gato-won-exit-vs-cartridge` (`tools/battle_rows_cmp.py`: a recipe's state under its pad, the named
+cells of EVERY row of a span against the cartridge's `--monitor`) is that fight's exit, rows f2100-f2300 of
+`$993A`, `$E5`, `$A4` and `$45` (`201 of 201`): CD/039E's fifteen waits are CD/3E75's, each ending in the menu
+pass C1/10E3, so the rebuild request reads 00 through them where the port's counted up (56 of 201) -- one
+mutation.
 
 `field-picture-magus-is-drawn-from-his-raw-sheet-vs-cartridge` (`tools/field_picture_cmp.py`): playthrough leg 95,
 f10500 of Magus's fight. His sheet pointer `$1C60` names the ROM (D2:0000, the raw sheet he has as a party member),

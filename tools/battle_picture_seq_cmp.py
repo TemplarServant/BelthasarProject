@@ -72,6 +72,13 @@ SEQUENCES = {
     # (the tree's canopy and the tent's edge at the cone's top: 443 px a picture from the raw tiles), and the fair's
     # pennants step on frames the song's records fade the page: a fight's tile DMAs are held a frame as DMAs.
     'gato-song': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 8)], a=1009, b=1315, lag=-1),
+    # GATO's fight WON (A mashed, four frames on and four off): Crono's and Marle's attacks, the victory, the results
+    # and the exit, to the fight's last picture. A damage number is its combatant's -- the compose lays its row at
+    # the head of that combatant's entry (CF/EDB8 -> CF/EE9F), so Crono, standing in front of GATO, covers the `17`
+    # of his own hit (f448-f456, f1468-f1478). Marle's bolt is an effect object a mover flies and the script takes
+    # back to the bow: the script's point is on the screen a picture after a mover's (f830, f1911). And the shot's
+    # spark and rings are those objects and nothing else (a baked copy beside them: f1917-f1931).
+    'gato-won': dict(state='saves/battle_re/gato_wait.state', pad=[(0x100, 4), (0, 4)] * 300, a=232, b=2206, lag=-1),
 }
 
 

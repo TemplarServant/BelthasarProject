@@ -146,7 +146,7 @@ frames where the singer's cell led the spotlight.
   exits off the cartridge's frames, which were exact (control back f68297 / f69712 / f80719 / f80873 / f80968 for the
   cartridge's f68301 / f69711 / f80718 / f80872 / f80966; before: f68299 / f69711 / f80718 / f80872 / f80966) and adds
   a control blip at the leg's end -- the pass also clears `$E5`, which gates the NMI's `$A4` step, so its place in the
-  frame moves the scheduler's phase. Not landed: the pass and the `$A4` step have to be derived together. The entry before these fixes:
+  frame moves the scheduler's phase. Not landed: the pass and the `$A4` step have to be derived together. (Tried again the same day on top of the exit's passes of sec. 5, the pass in the tick's `fxTd` branch where the action freeze makes its own: GATO left alone 1669 of 1669, GATO won 1975 of 1975, the exit's rows 201 of 201 -- and leg 65 the same f68297 / f69712 / f80719 / f80873 / f80968. The in-fight rows of the fight that ends at f68160 are the same with and without it; what moves is the exit's release.) The entry before these fixes:
   GATO's fight left alone, f230-f1600 at one lag: 1184 of 1371 (918 of the 1171 to f1400 before the boot's fixes and
   the ladders' gate, field.c battleGatoRender: a scripted action shows the published pose only -- check
   `battle-picture-seq-gato-first-attack-vs-cartridge`). Left: one frame of the song's pre-roll, f1018 (436 px, not
@@ -158,6 +158,60 @@ frames where the singer's cell led the spotlight.
   columns 13-18). Not derived: who writes them.
 * The layers' own scroll under a fight (leg 95's mist) and the room's palette cycles are still the frame's own state.
 * The frame after a side's install shows ~80 px on the lines above a top strip (GATO, f706).
-* The effect sprites have not been measured against either class with a frame-by-frame tool.
+* (The effect objects are measured now: sec. 5.)
+* The ground shadow's place in the OAM. CF/EA8A is the LAST thing of a combatant's entry (CF/E906, after its cells),
+  so a shadow is behind its own combatant and in front of every entry after it: the OAM at f458 of GATO's won fight
+  is Crono's cells 4-7, his shadow 8 (tile 002 at (126,136)), Marle's cells 12-15, a number's row 16-19, GATO's
+  20-31. The port lays every shadow beneath every combatant's cells (field.c battleCombatantsRender's first loop).
+  No measured picture has a shadow over a combatant behind it, so it is not changed.
 * CD/088D's gates on the OAM upload (`$CE0F`, `$CD02`) are the strip upload's own; no measured frame has them set
   while a sprite moves.
+
+## 5. 2026-11-13: a fight with the party attacking (GATO's, won)
+
+The sequences of sec. 3 are fights left alone or run away from. GATO's fight with A mashed (four frames on, four off:
+Crono's and Marle's attacks until he falls, the results, the exit) is 1975 pictures, f232-f2206; 1923 of them were the
+cartridge's at the fight's lag. What the other 52 were:
+
+* **A damage number is its combatant's.** The compose walks the sorted list front to back; a combatant's entry is
+
+      CF/E8D4  JSR CF/EDB8      with $A3D1 set (ShowDamage): JMP CF/EE9F -- LDA $A3D4,X / BEQ none, the size bits
+                                $92DD,X, the four OAM entries of $922D + 16 * cmb
+               ...              (else: the effect objects marked 80, or the status icon CF/EE2C)
+      CF/E8F1  JSR CF/EB94 / CF/E8F4 JSR CF/EAC5     its cells
+      CF/E8F7  JSR CF/EDF7      the effect objects marked 40
+      CF/E906  JSR CF/EA8A      its ground shadow
+
+  so the number's row is the entry's FIRST OAM: in front of its own combatant, behind every combatant the list has
+  before it. OAM at f448 (Crono's first hit): Crono's cells 4-7, Marle's 8-11, the row 12-15 (`1` `7`: tiles 191 /
+  197, attribute 31), GATO's 16-27 -- Crono stands in front of GATO for the swing and covers the number. The port
+  drew every number over every combatant (f448-f456, f1468-f1478, f1947). field.c battleFxPopupRender, called from
+  battleCombatantsRender's walk (battleFxPopupEntry).
+
+* **A script's point on an effect object is a picture after a mover's.** Marle's bolt is effect object 0. Its point
+  `$A240`, row by row, with the writer:
+
+      f1906 A0  CF:F4EA   f1907 90  CF:F4EA   f1908 80  CF:F4EA      the mover, in the IRQ chain ahead of the compose
+      f1909 B0  C1:565F                                               the script: C1/561F's object branch (C1/5652)
+      f1911 A0  CF:F4EA   f1912 90   f1913 80
+
+  and its OAM entry (x = point - 8): 136 on picture f1909, 120 on f1910 AND f1911, 168 on f1912, 152 on f1913, 136 on
+  f1914. A mover's row r is on picture r + 2; the script's is on r + 3 -- the main loop runs after the frame's
+  compose, as with a combatant's foot (sec. 3). The port showed both at r + 2: the bolt back at the bow a picture
+  early (f830, f1911). battle.c battleFxPosScriptMark keeps the point of before a teleport (ops 19 / 1A / 1B on a track
+  >= 8) for that frame's capture. (C1/5652 also zeroes the points' high bytes: ops 1A and 1B do it now, as 19 did.)
+
+* **The shot's spark and rings are those objects.** field.c drew a baked copy beside them -- one capture's tiles 12E /
+  108 / 10C / 10E on a schedule of the action's frames, at GATO's anchor + (38,-8): a streak and then a ball at
+  (150,62) the cartridge does not have (its OAM at f1920 holds ONE effect sprite, tile 108 at (120,68), and none at
+  f1926; `$A1B0 / $A1D8` equal on both sides on every row). f1917-f1931. Removed.
+
+* **The exit's fifteen waits make the menu pass** (no picture of this fight shows it; the rows do). CD/039E is the fade's
+  post and `LDA #0F / JMP CD/3E3B`: fifteen CD/3E75, each the NMI and then `JSL C1/0012` = C1/10E3. `$993A` reads 01 on
+  row f2149 and 02 on f2153 (CF/FBE5's waits make no pass), 00 on f2156-f2172, then 01 .. 04 on f2173-f2185 (CD/0516's
+  waits are CD/3E7D's). The port made none: 01 .. 0A. Found on playthrough leg 65's fight ending at f68168 (the
+  `--cputrace` of that frame: CF/FCE9 `JSL CD/0006` -> CD/03D3 -> CD/03AB `JSL C7/0004` -> CD/03B1 `JMP CD/3E3B`).
+  battle.c battleFleeStageTick, stage 2; `tools/battle_rows_cmp.py` compares rows.
+
+With them the fight is 1975 of 1975. Checks `battle-picture-seq-gato-won-vs-cartridge` and
+`battle-rows-gato-won-exit-vs-cartridge`.

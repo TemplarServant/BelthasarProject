@@ -8536,30 +8536,16 @@ static void battleAttackRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   ctAnimengPcBlit(fb, 0, e3, footX, footY, ctBattleAnimPal[5]);
 }
 
-// One 16x16 pal0 spark cell (4 sub-tiles T,T+1,T+0x10,T+0x11 stored flat) -- Marle's muzzle/impact effect
-// (battle_actionfx.md ADD-MA.3; the effect OBJ is pal0, tiles 0x100-0x12F). fb row = OAM y + 8 (buffer overscan).
-static void battleSparkBlit(uint8_t* fb, const uint8_t (*sub)[32], int bx, int by, const uint16_t* palw) {
-  for (int q = 0; q < 4; q++) {                              // q0=TL q1=TR q2=BL q3=BR
-    int cx = q & 1, cy = (q >> 1) & 1;
-    const uint8_t* t = sub[q];
-    for (int yy = 0; yy < 8; yy++) {
-      int p0 = t[yy*2], p1 = t[yy*2+1], p2 = t[16+yy*2], p3 = t[16+yy*2+1];
-      for (int xx = 0; xx < 8; xx++) {
-        int b = 7 - xx;
-        int v = ((p0>>b)&1) | (((p1>>b)&1)<<1) | (((p2>>b)&1)<<2) | (((p3>>b)&1)<<3);
-        if (v == 0) continue;
-        uint16_t w = palw[v];
-        plot(fb, bx + cx*8 + xx, by + cy*8 + yy,
-             ((w&31)<<3)|((w&31)>>2), (((w>>5)&31)<<3)|(((w>>5)&31)>>2), (((w>>10)&31)<<3)|(((w>>10)&31)>>2));
-      }
-    }
-  }
-}
-
 // Marle's crossbow attack render (battle_actionfx.md ADDENDUM MA, src/battle_marleatk.h), mirroring battleAttackRender:
-// while her attack owns her (battleMarleAtkPose >= 0) she is drawn in her pal6 pose, planted (MA.2). Then the pal0
-// effect OBJ per its two-role schedule (MA.3): the muzzle spark (0x12E) at her bow line, then the impact ring
-// (0x108 -> 0x10C -> 0x10E) on the target's computed anchor. The stance layer skips her while this owns her.
+// while her attack owns her (battleMarleAtkPose >= 0: no script is posing her) she is drawn in her pal6 pose, planted
+// (MA.2). The stance layer skips her while this owns her.
+// The shot's spark and its impact rings are NOT drawn here: they are the action script's effect objects (the records
+// `$A1B0 / $A1D8 / $A240..`, battleFxObjRender), like any other action's. A baked copy used to be drawn beside them --
+// the tiles 12E / 108 / 10C / 10E of one capture on a schedule of the action's frames (rel 50-66), at GATO's anchor +
+// (38,-8) -- so every shot showed a second spark and ring the cartridge does not have. MEASURED, the fair's recipe with
+// A mashed (GATO's fight won; her last shot from row f1904): the cartridge's OAM at f1920 holds ONE effect sprite, tile
+// 108 at (120,68), and none at f1926; the port's records equal the cartridge's on every row (`$A1B0` 05 04 03 02 01 ..
+// to 00 on f1922) and its picture had a streak and then a ball at (150,62), f1917-f1931 (15-148 px a picture).
 static void battleMarleAttackRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
   if (!fb || !mem || !h) return;
   if (BATTLE_ZSKIP(1)) return;                               // Z-sorted walk: Marle = combatant 1
@@ -8608,22 +8594,6 @@ static void battleMarleAttackRender(uint8_t* fb, const uint8_t* mem, const CtBat
                       mfootX, mfootY, ctBattleAnimPal[6]);
     }
   }
-  // The pal0 spark: active while Marle's attack is live (spans f922-935 = rel 50-66), regardless of her pose.
-  int atk = h->actAttacker;
-  if (!h->actActive || atk < 0 || atk >= 3 || mem[0x2980 + atk] != 1) return;
-  int rel = h->frames - h->actStart, sk = -1;               // pinned schedule (MA.3; rep frames 924/932/934/936):
-  if      (rel >= 50 && rel < 58) sk = 0;                   //   E0 muzzle 0x12E  (~f922-929, at the bow/impact line)
-  else if (rel >= 58 && rel < 61) sk = 1;                   //   E1 ring0  0x108  (f930-932)   the expanding impact
-  else if (rel >= 61 && rel < 63) sk = 2;                   //   E2 ring1  0x10C  (f933-934)   ring ON the target
-  else if (rel >= 63 && rel < 67) sk = 3;                   //   E3 ring2  0x10E  (f935-938)
-  if (sk < 0) return;
-  int tax, tay;                                             // impact lands on the target's live computed anchor:
-  if (!battleEnemyComputedAnchor(mem, h->actTarget - 3, &tax, &tay)) return;   // PC/invalid target -> no spark
-  int sox = ctMarleSparkKf[sk].x - ctBattleStanceActor[2].anchorX;  // baked (142,55) = GATO anchor(104,63) + the
-  int soy = ctMarleSparkKf[sk].y - ctBattleStanceActor[2].anchorY;  //   measured impact offset (+38,-8) (MA.3)
-  { int keepPal = g_bObjPalCur; g_bObjPalCur = 0;           // OBJ palette 0 (the sprites' colour math)
-    battleSparkBlit(fb, ctMarleSparkTiles[sk], tax + sox, tay + soy, ctBattleFxDigitPal);   // pal0 (P1.1)
-    g_bObjPalCur = keepPal; }
 }
 
 // Action feedback: the rising damage-number popup (battle_actionfx.md item 2 + part 2). One 8x8 OBJ per digit (baked
@@ -8649,12 +8619,21 @@ static void battleFxBlitTile(uint8_t* fb, const uint8_t* t, int x, int y, const 
     }
   }
 }
-static void battleFxPopupsRender(uint8_t* fb, const CtBattleHost* h) {
-  if (!h) return;
-  for (int i = 0; i < CT_BATTLE_FX_POOL; i++) {
+// One number is one combatant's (the pool's slot is the combatant, battle.h): the compose lays its row at the head of
+// that combatant's entry -- CF/E8D4 `JSR CF/EDB8`, which with `$A3D1` set is `JMP CF/EE9F`: `LDA $A3D4,X / BEQ none`,
+// the size bits `$92DD,X` and the four OAM entries of `$922D + 16 * cmb`, ahead of the entry's cells (CF/E8F1). So a
+// number is in front of its own combatant and BEHIND every combatant the sorted list has before it (the ones nearer
+// the screen). MEASURED on the rule's cartridge, the fair's recipe, Crono's first hit on GATO (A mashed): the OAM at
+// f448 is Crono's cells 4-7, Marle's 8-11, the number's row 12-15 (`1` `7`: tiles 191 / 197, attribute 31), GATO's
+// 16-27 -- Crono, standing in front of GATO, covers the number (pictures f448-f456). The port drew every number over
+// every combatant. battleCombatantsRender calls this from its walk, one slot at a time.
+static int g_bNoPopups;                                  // (the defeat's hold draws none)
+static void battleFxPopupRender(uint8_t* fb, const CtBattleHost* h, int i) {
+  if (!h || i < 0 || i >= CT_BATTLE_FX_POOL || g_bNoPopups) return;
+  {
     const CtFxPopup* p = &h->popups[i];
-    if (!p->active) continue;
-    int dy = p->rise;                                 // CF/E781's steps so far (battle.c battlePopupRise: D1/5E10, or
+    if (!p->active) return;
+    int dy = p->rise;                                // CF/E781's steps so far (battle.c battlePopupRise: D1/5E10, or
     int y = p->restY + dy;                            //   D1/5E49 on a row whose $A0DC is set -- the MP restore's)
     g_motOwn = g_mot ? CtMotSprite(g_mot, 0x31000 + i, p->centerX, y) : CT_MOT_FIXED;   // (the frames between: it rises)
     // battle_miss_evade.md sec. 2: a miss popup (kind 1) draws the 2-tile "MISS" glyph (OBJ tiles 0x19A/0x19B,
@@ -8667,7 +8646,8 @@ static void battleFxPopupsRender(uint8_t* fb, const CtBattleHost* h) {
       for (int k = 0; k < CT_FX_MISS_NTILE; k++)
         battleFxBlitTile(fb, ctBattleFxMissTile[k], leftX + k * CT_FX_DIGIT_W, y, ctBattleFxDigitPal);
       g_bObjPalCur = -1;
-      continue;
+      g_motOwn = CT_MOT_FIXED;
+      return;
     }
     char digits[6]; int nd = 0;                       // decimal(value), no leading zeros (P1.2)
     // battle_item_slice.md sec. 5: a heal popup carries a negative value (battleApplyDamage applies curHP -= delta); the
@@ -8840,6 +8820,18 @@ static int battleMotOwn(const CtBattleHost* h, int c) {
   int x = (h && h->mvInited && c >= 0 && c < 11) ? BT_LIVEX(h, c) : 0, y = (h && h->mvInited && c >= 0 && c < 11) ? BT_LIVEY(h, c) : 0;
   return CtMotSprite(g_mot, 0x30000 + c, x, y);
 }
+// A combatant's number inside the walk: its pixels carry its own attribute's priority (31 / 39: OBJ priority 3), not its
+// combatant's cells'.
+static void battleFxPopupEntry(uint8_t* fb, const CtBattleHost* h, int cmb, uint8_t* prevFb) {
+  if (g_bObjPrioMask) memcpy(prevFb, fb, (size_t)CAMW * CAMH * 3);
+  const int keepPr = g_bObjSubPrio, keepPal = g_bObjPalCur, keepOwn = g_motOwn;
+  if (g_bObjPrioMask) g_bObjSubPrio = 3;
+  battleFxPopupRender(fb, h, cmb);
+  g_bObjSubPrio = keepPr; g_bObjPalCur = keepPal; g_motOwn = keepOwn;
+  if (g_bObjPrioMask)
+    for (int p = 0; p < CAMW * CAMH; p++)
+      if (memcmp(prevFb + p * 3, fb + p * 3, 3)) g_bObjPrioMask[p] = 3;
+}
 static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
   int ord[22], n = battleObjOrder(mem, h, ord);
   int front = 0;                                        // combatants whose cells the FE entry draws
@@ -8863,7 +8855,11 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
   for (int i = n - 1; i >= 0; i--) {                  // back-to-front
     g_bDrawOnly = ord[i] & 0x1F;
     if ((ord[i] & 0x40) && (front & (1 << g_bDrawOnly))) continue;   // FE8C2 BMI: its cells are the FE entry's
-    if (battleHiddenObj(mem, h, g_bDrawOnly)) continue;   // CF/FE28 `LDA $9FF7,X / BNE skip`: no OAM for a hidden object
+    const int pop = h && g_bDrawOnly < CT_BATTLE_FX_POOL && h->popups[g_bDrawOnly].active && !g_bNoPopups;
+    if (battleHiddenObj(mem, h, g_bDrawOnly)) {           // CF/FE28 `LDA $9FF7,X / BNE skip`: no OAM for a hidden object
+      if (pop) battleFxPopupEntry(fb, h, g_bDrawOnly, prevFb);   //   (its number as before: not derived for a hidden one)
+      continue;
+    }
     if (g_bObjPrioMask) memcpy(prevFb, fb, sizeof prevFb);
     g_motOwn = battleMotOwn(h, g_bDrawOnly);
     g_bObjSubPrio = (g_bObjPrioMask && mem)                // its cells' OBJ priority (below), for the screens' math
@@ -8878,7 +8874,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     if (g_bDrawOnly >= 3 && g_bDrawOnly <= 10 && h && h->mvInited)
       battleStatusIconRender(fb, mem, h, g_bDrawOnly, BT_LIVEX(h, g_bDrawOnly), BT_LIVEY(h, g_bDrawOnly));
     battleAttackRender(fb, mem, h);                   // Crono swing pose
-    battleMarleAttackRender(fb, mem, h);              // Marle crossbow pose + pal0 spark
+    battleMarleAttackRender(fb, mem, h);              // Marle crossbow pose (her shot's sparks: the effect objects)
     battleFxObjRender(fb, h, g_bDrawOnly, 0x80);     // CF/EDB8: the effect objects drawn before it (in front)
     // The cells' OBJ priority: CF/EB1E `$37 = $9930,X | $99A9,X` with X = cmb + $0C, i.e. $99B5 + cmb -- CC/E3F9's
     // default ($A5E3 for all eleven) or what the anim-script ops C1/7555 / C1/7595 set for the role. Painted back to
@@ -8888,6 +8884,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
       for (int p = 0; p < CAMW * CAMH; p++)
         if (memcmp(prevFb + p * 3, fb + p * 3, 3)) g_bObjPrioMask[p] = pr;
     }
+    if (pop) battleFxPopupEntry(fb, h, g_bDrawOnly, prevFb);   // CF/EE9F: its number, the entry's first OAM (in front of its cells)
   }
   g_bDrawOnly = -1;
   g_bObjPalCur = -1;
@@ -9255,7 +9252,6 @@ static int battleShotAtCb(void* ctx0) {
       battleFxCloudRender(buf, c->h);                                 // a program's sprite cloud (CD/2BFC), OAM 4-19
       battleBracketRender(buf, smem, c->h);                           // active-PC selection bracket ($9609==0; ADD6)
       battleTargetCursorRender(buf, smem, c->h);                      // target hand if $9609==1 (replaces bracket, P5/A6.4)
-      battleFxPopupsRender(buf, c->h);
       // CT_BATTLESHOT_HUD: also composite the HUD strip (as the main compose), for the per-PC command-box queue gating
       // (ADDENDUM 3 sec. C) and the target-select layout. Opt-in, so the combatant-only shots stay HUD-free.
       if (getenv("CT_BATTLESHOT_HUD")) CtBattleHudRender(buf, smem, CtBattleStripVram(c->h));
@@ -19634,9 +19630,12 @@ int main(int argc, char** argv) {
       //  BG1 / BG2 priority tile shows where it covers a sprite, below)
       static uint8_t bArenaFb[CAMW * CAMH * 3];
       memcpy(bArenaFb, fb, sizeof bArenaFb);
+      // (the rising numbers are OAM too, each in its combatant's entry: CF/E781 animates them in the frame service,
+      //  ahead of the compose -- the mirror's)
+      g_bNoPopups = defeatHold;
       battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
+      g_bNoPopups = 0;
       if (bMot) { g_mot = NULL; g_motOwn = CT_MOT_FIXED; memcpy(g_motPic, fb, (size_t)CAMW * CAMH * 3); mot->valid = 1; }
-      const int bPop0 = bMot ? mot->nspr : 0;         // (the popups' objects follow the combatants')
       g_bObjPrioMask = NULL;
       // Foliage occlusion (battle_scenario2.md T1): the field foreground (prio-2/foot-tile) tiles draw over the
       // combatant OBJs, over the whole combatant pass: PC and enemy cells carry the same OBJ priority (the fight's
@@ -19674,15 +19673,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleFxCloudRender(fb, &liveHost);            // a program's sprite cloud (CD/2BFC), OAM 4-19
       if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
-      if (bMot) g_mot = mot;
-      // (the numbers are OAM too: CF/E781 animates them in the frame service, ahead of the compose -- the mirror's)
-      if (!defeatHold) battleFxPopupsRender(fb, bOam ? &g_bOamHost : &liveHost);   // rising damage numbers (top)
-      if (bMot) {                                      // ...their pixels are theirs in the owners' picture, not fixed
-        g_mot = NULL;
-        for (int i = 0; i < CAMW * CAMH; i++) { int o = mot->own[i] & 0x7F;
-          if (o >= CT_MOT_SPR + bPop0 && o < CT_MOT_SPR + mot->nspr) memcpy(g_motPic + (size_t)i * 3, fb + (size_t)i * 3, 3); }
-      }
-      if (fxFrontOn)                                   // mode 1 + $2105 bit 3 (ppu.c actMode 8): BG3's priority tiles are
+      if (fxFrontOn)                                  // mode 1 + $2105 bit 3 (ppu.c actMode 8): BG3's priority tiles are
         CtBattleFxFrontApply(fb, CAMW, CAMH, fxFrontFb, cvwin);   // in front of every OBJ and BG1/BG2 priority tile --
                                                        // and the Ice crystal's are added to what is under them
       if (fxFrontOn) {                                 // ...and the sprites' own share of the rows' colour math: the clip,
