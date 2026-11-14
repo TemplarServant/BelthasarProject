@@ -164,6 +164,15 @@ PICTURES = {
     # drew seat 0 with the baked swing's run-up for every action of his that was not a tech: 406 px of this frame
     # (398 on leg 92's f42600).
     'an-item-is-not-the-swing': dict(leg='82_nizbel', at=0, frames=23100, own=True),
+    # Masa & Mune's tornado (playthrough leg 67 from its start). The arena's lines are TM 13, TS 10, CGWSEL 02,
+    # CGADSUB 07 -- OBJ on both screens, the sub screen added to BG1 / BG2 -- and a background program's op 0F
+    # (CD/2B5C `LDX $CD00 / STZ $99B5,X`) puts the enemy's cells at OBJ priority 0 on row f32379 (`$99BB` 00,
+    # CD:2B63): its twelve OAM entries go from attribute 38 to 08, under BG1 and BG2 at either priority, and it shows
+    # as the sub pixel added to the cave's. The port drew it opaque on top: 1474-2066 px on every picture from f32382.
+    # f32401 is inside the form (an odd frame: the form steps every second one, so only one lag fits); f32381 is the last picture before it -- the priority reaches the mirror a frame
+    # after the row, like a pose (the port switched a picture early: 2044 px).
+    'low-priority-sprite-is-the-sub-pixel': dict(leg='67_masa_mune_fight', at=0, frames=32401, own=True),
+    'low-priority-reaches-the-mirror-a-frame-later': dict(leg='67_masa_mune_fight', at=0, frames=32381, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

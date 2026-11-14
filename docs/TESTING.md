@@ -3275,6 +3275,14 @@ item. Its script publishes the user's poses and the cartridge shows them (the ar
 port drew seat 0's baked swing for every action of his that was not a tech (406 px). `0 px differ at port -1`; one
 mutation. disasm/notes/battle_picture_lags.md sec. 9.
 
+`field-picture-low-priority-sprite-is-the-sub-pixel-vs-cartridge` and
+`field-picture-low-priority-reaches-the-mirror-a-frame-later-vs-cartridge`: playthrough leg 67 from its start, Masa &
+Mune's tornado. A background program puts the enemy's cells at OBJ priority 0 (under BG1 / BG2) while the arena adds
+the sub screen, OBJ included, to the BGs: the enemy is seen through the cave, added. The port drew it opaque (1948
+px on f32401) and, once that was right, began the form a picture early (2044 px on f32381: the cells' priority is
+in the OAM mirror a frame after its row). `0 px differ at port -1` each; a mutation each.
+disasm/notes/battle_picture_lags.md sec. 10.
+
 `field-picture-naming-portrait-of-the-epoch-vs-cartridge`: playthrough leg 108, f35700 of the Epoch's naming. The
 portrait is read by the name id (C2/EC38: `$FFCE70,X`, `$FFCE78,X*2`) and the Epoch is id 7, its tiles sent by the
 record C2:FC68; the port had the party's seven and left the frame empty (2295 px). `0 px differ at port +0`; one

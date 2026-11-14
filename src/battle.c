@@ -21046,6 +21046,7 @@ int CtBattleExitPoll(CtBattleHost* h) {
 }
 
 static int battleBootIntro(const CtBattleHost* h);            // (below, with the boot's band arm)
+static void battleOamPrioBefore(const CtBattleHost* h);       // (below, with the mirror)
 int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
   CtBattlePictureTables(h, 0);                                  // (a compose that did not hand the page back)
   int r = battleTickBody(h, endRequest, input);
@@ -21162,9 +21163,21 @@ static uint8_t gOamCmpMem[0x10000], gOamShownMem[0x10000];
 static const CtBattleHost* gOamOwner;
 static int gOamCmpOn, gOamShownOn, gOamCmpF = -1;
 static void battleOamReset(const CtBattleHost* h) { gOamOwner = h; gOamCmpOn = gOamShownOn = 0; gOamCmpF = -1; }
+// The cells' OBJ priority (`$99B5 + cmb`, CF/EB1E's `$9930,X | $99A9,X`) is written after the compose in the cartridge's
+// frame by both of its writers -- a background program's op 0F (CD/2B5C `LDX $CD00 / STZ $99B5,X`, the runner CD/1609,
+// later in the same service) and the anim-script's D9 / DA (the main loop) -- so the mirror of a frame holds the
+// priority the frame before left. The port's compose comes after its runner and its main thread: the page's copy takes
+// the bytes the tick began with (battleOamPrioBefore, at the tick's head). MEASURED on the rule's cartridge, playthrough
+// leg 67 (Masa & Mune's tornado): `$99BB` 00 on row f32379 (CD:2B63), the same row in the port, and the picture changes
+// on f32382 -- row + 3, a pose's distance -- where the port's changed a picture early.
+static uint8_t gOamPrio[11]; static int gOamPrioF = -1; static const CtBattleHost* gOamPrioOwner;
+static void battleOamPrioBefore(const CtBattleHost* h) {
+  memcpy(gOamPrio, h->mem + 0x99B5, sizeof gOamPrio); gOamPrioOwner = h; gOamPrioF = h->frames;
+}
 static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JSR CF/E83A (the caller tests `$A028`)
   if (gOamOwner != h) battleOamReset(h);                           // (another host: nothing of it shipped yet)
   gOamCmpHost = *h; memcpy(gOamCmpMem, h->mem, sizeof gOamCmpMem); gOamCmpOn = 1; gOamCmpF = h->frames;
+  if (gOamPrioOwner == h && gOamPrioF == h->frames) memcpy(gOamCmpMem + 0x99B5, gOamPrio, sizeof gOamPrio);
 }
 // battleAdvanceAction is both halves of an action's frame: the service's engines (CF/EC78's feet, the trail, the effect
 // objects) and the main loop's script with its pose machine (C1/423A -> C1/42C4, whose C1/4307 `JSR C1/1C4A` publishes
@@ -21465,6 +21478,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // Twins, ended here with no victory). A harness may still set one (maxFrames > 0).
   int cap = h->maxFrames > 0 ? h->maxFrames : 0x7FFFFFFF;
   h->frames++;
+  battleOamPrioBefore(h);                                        // (the cells' priority as the frame before left it)
   // The rule's frame NMI, as the main thread will find it (battleSndPostJsl): the action frame's line wait CD/09AA (the
   // program's op C1 adds its own, battleFleeProgOp), and the pad latch from the band's arm on ($7E = 1/2).
   gBattleNmiLine = 0; gBattleNmiPad = battleFightNmiOn(h) && h->frames >= battleBootBandArm(h);

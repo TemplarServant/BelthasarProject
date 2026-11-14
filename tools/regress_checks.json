@@ -52407,6 +52407,74 @@
       ]
     },
     {
+      "name": "field-picture-low-priority-sprite-is-the-sub-pixel-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "low-priority-sprite-is-the-sub-pixel"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: low-priority-sprite-is-the-sub-pixel leg 67 +32401 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: low-priority-sprite-is-the-sub-pixel "
+      ],
+      "tier": "full",
+      "timeout_s": 1500,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Masa & Mune's tornado: the enemy at OBJ priority 0 is seen through the cave, added by the sub screen",
+      "notes": "A FIGHT'S SPRITE OF OBJ PRIORITY 0 / 1 IS THE SUB PIXEL OF ANY BG PIXEL THAT BEATS IT (field.c, the sub-pixel mask; battle.c battleOamPrioBefore; disasm/notes/battle_picture_lags.md sec. 10). Mode 1's order is BG3.1 > OBJ3 > BG1.1 > BG2.1 > OBJ2 > BG1.0 > BG2.0 > OBJ1 > BG3.0 > OBJ0: a priority-0 cell loses to BG1 and BG2 at either priority, and with OBJ on both screens and the sub screen added to the BGs it is seen through them, added. Measured on the rule's cartridge, playthrough leg 67 (Masa & Mune's tornado): the arena's lines are TM 13, TS 10, CGWSEL 02, CGADSUB 07 (`--hdma` from the state of f32399; the shadow blocks `$BE8D` 13 10 17 17 and `$BE95` 02 07 on both sides, unchanged through f32300-f32390); `$99BB`, the enemy's cell priority, is 00 on row f32379 on both sides, written by a background program's op 0F (CD:2B63, CD/2B5C `LDX $CD00 / STZ $99B5,X`); OAM 16-27 are attribute 38 on f32380 and 08 on f32400; the pictures f32380 and f32381 still show the enemy opaque and f32382 on show it added to the cave -- row + 3, a pose's distance. The port's mask held only the BG priority-1 pixels (the field's sprites settle the rest with a stencil), so the enemy stayed opaque on top: 1474-2066 px on each picture of f32382-f32420. This check is f32401, inside the form (an odd frame: the form steps every second frame, so one lag fits): 1948 px -> 0. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            if (both) { if (mlvl[bi] < (battlePhase ? 1 : 3)) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }\n",
+          "replace": "            if (both) { if (mlvl[bi] < 3) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }   /* MUT: only the BG priority-1 pixels beat a fight's sprite */\n",
+          "why": "an OBJ of priority 0 is under BG1.0 / BG2.0 too (the enemy's OAM attribute is 08 on f32400 and the cartridge shows it added to the cave's pixels)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-low-priority-reaches-the-mirror-a-frame-later-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "low-priority-reaches-the-mirror-a-frame-later"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: low-priority-reaches-the-mirror-a-frame-later leg 67 +32381 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: low-priority-reaches-the-mirror-a-frame-later "
+      ],
+      "tier": "full",
+      "timeout_s": 1500,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Masa & Mune's tornado begins on the cartridge's picture: the cells' priority is in the mirror a frame after its row",
+      "notes": "A FIGHT'S SPRITE OF OBJ PRIORITY 0 / 1 IS THE SUB PIXEL OF ANY BG PIXEL THAT BEATS IT (field.c, the sub-pixel mask; battle.c battleOamPrioBefore; disasm/notes/battle_picture_lags.md sec. 10). Mode 1's order is BG3.1 > OBJ3 > BG1.1 > BG2.1 > OBJ2 > BG1.0 > BG2.0 > OBJ1 > BG3.0 > OBJ0: a priority-0 cell loses to BG1 and BG2 at either priority, and with OBJ on both screens and the sub screen added to the BGs it is seen through them, added. Measured on the rule's cartridge, playthrough leg 67 (Masa & Mune's tornado): the arena's lines are TM 13, TS 10, CGWSEL 02, CGADSUB 07 (`--hdma` from the state of f32399; the shadow blocks `$BE8D` 13 10 17 17 and `$BE95` 02 07 on both sides, unchanged through f32300-f32390); `$99BB`, the enemy's cell priority, is 00 on row f32379 on both sides, written by a background program's op 0F (CD:2B63, CD/2B5C `LDX $CD00 / STZ $99B5,X`); OAM 16-27 are attribute 38 on f32380 and 08 on f32400; the pictures f32380 and f32381 still show the enemy opaque and f32382 on show it added to the cave -- row + 3, a pose's distance. The port's mask held only the BG priority-1 pixels (the field's sprites settle the rest with a stencil), so the enemy stayed opaque on top: 1474-2066 px on each picture of f32382-f32420. THIS check is the switch's timing. The cells' priority is written after the compose in the cartridge's frame by both of its writers (the program runner CD/1609 comes later in the same service; the anim-script's D9 / DA are the main loop's), so the OAM mirror of a frame holds the priority the frame before left; the port's compose comes after its runner and took the new byte at once -- the form began a picture early (f32381: 2044 px, the one picture left when the mask was right). The page's copy for the mirror keeps the bytes the tick began with. f32381 is the last picture before the form. The leg is played from its start. Re-pin only against the cartridge.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (gOamPrioOwner == h && gOamPrioF == h->frames) memcpy(gOamCmpMem + 0x99B5, gOamPrio, sizeof gOamPrio);\n",
+          "replace": "  /* MUT: the mirror takes the cells' priority of this tick */\n",
+          "why": "CF/E8AF composes before CD/1609 runs in the same service: `$99BB` 00 on row f32379 is on the cartridge's picture f32382, not f32381"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

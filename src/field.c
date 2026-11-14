@@ -18733,8 +18733,13 @@ int main(int argc, char** argv) {
             size_t bi = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]), i = (size_t)y * g_fw + x;
             if (!(mcov[bi] & be)) continue;
             // (OBJ on both screens: the priority-1 pixels -- BG3's, above every OBJ, and BG1's / BG2's, above an OBJ of
-            // priority 2 or less. A priority-0 pixel over an OBJ of priority 0 / 1 stays the stencil's, drawSprite.)
-            if (both) { if (mlvl[bi] < 3) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }
+            // priority 2 or less. A priority-0 pixel over an OBJ of priority 0 / 1 stays the stencil's, drawSprite --
+            // on the field. A fight's sprites are plot()'s, each with its cells' own priority (`$99B5 + cmb`), and every
+            // BG pixel that beats one is in the mask. MEASURED on the rule's cartridge, playthrough leg 67 (Masa & Mune's
+            // tornado, f32382 on): TM 13, TS 10, CGWSEL 02, CGADSUB 07 on the arena's lines, and the enemy's twelve OAM
+            // entries go from attribute 38 to 08 -- priority 0, under BG1 and BG2 at either priority; it shows as the sub
+            // pixel added to the cave's, where the port drew it opaque on top (1474-2066 px a picture).)
+            if (both) { if (mlvl[bi] < (battlePhase ? 1 : 3)) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }
             else g_objSubMask[i] = 4;
             memcpy(g_objSubRgb + i * 3, mainPre + bi * 3, 3);
           }

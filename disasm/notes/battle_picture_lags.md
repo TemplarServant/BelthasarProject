@@ -359,3 +359,36 @@ and leg 67 f18900 (398 px) are 0 px. Check `field-picture-an-item-is-not-the-swi
 
 (The baked ladder itself -- seat 0 only, whoever sits there -- is the port's own shortcut for the unscripted
 physical; not looked at here.)
+
+## 10. 2026-11-14: a sprite of OBJ priority 0 seen through the BG (Masa & Mune's tornado)
+
+Mode 1's order (BGMODE 09) is BG3.1 > OBJ3 > BG1.1 > BG2.1 > OBJ2 > BG1.0 > BG2.0 > OBJ1 > BG3.0 > OBJ0. A fight's
+cells carry `$99B5 + cmb` as their OAM priority (CF/EB1E; CC/E3F9's default is the fight's `$A5E3`, 2 or 3). Three
+things write it afterwards: the anim-script's ops D9 / DA and a background program's op 0F -- CD/2B5C `LDX $CD00 /
+STZ $99B5,X` -- which puts a combatant at priority 0, under BG1 and BG2 at either priority.
+
+Measured on the rule's cartridge, playthrough leg 67 (Denadoro's cave, Masa & Mune combined, the tornado):
+
+    the arena's lines   TM 13, TS 10, CGWSEL 02, CGADSUB 07 (`--hdma` from the state of f32399: math on BG1 BG2 BG3,
+                        add, no half; `$BE8D` 13 10 17 17 and `$BE95` 02 07 on both sides, f32300-f32390)
+    `$99BB`             00 on row f32379 (CD:2B63), both sides
+    OAM 16-27           the enemy's twelve entries: attribute 38 on f32380, 08 on f32400
+    pictures            f32380 and f32381 the enemy opaque; f32382 on, added to the cave's pixels (white 30 30 30 over
+                        the rock reads 31 28 27, 27 28 27 ..)
+
+So with OBJ on both screens and the sub screen added to the BGs, a cell under a BG pixel is that pixel's SUB pixel:
+main BG + OBJ. The port had the mechanism for the BG priority-1 pixels only (field.c g_objSubMask, set from the
+bake's levels: the field's sprites settle the lower levels with a stencil); in a fight every level that beats the
+cell is in the mask now -- 1474-2066 px on each picture of f32382-f32420 -> 0.
+
+And the switch's frame: the row is f32379 and the picture f32382, a pose's distance (sec. 2). Both writers come after
+the compose in the cartridge's frame -- the runner CD/1609 later in the same service, the script in the main loop --
+so the mirror of a frame holds the priority the frame before left. The port's compose comes after its runner: the
+mirror's copy of `$99B5..$99BF` is the tick's first state now (battle.c battleOamPrioBefore). Before, the form began
+a picture early (f32381: 2044 px).
+
+Checks `field-picture-low-priority-sprite-is-the-sub-pixel-vs-cartridge` (f32401) and
+`field-picture-low-priority-reaches-the-mirror-a-frame-later-vs-cartridge` (f32381).
+
+Not looked at: a cell of priority 0 / 1 under a BG pixel that has NO math, or with OBJ off the sub screen -- the
+cartridge hides it; the port still draws it on top. No measured picture has one.
