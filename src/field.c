@@ -19589,6 +19589,34 @@ int main(int argc, char** argv) {
           }
         battleMosaicApply(fb, CAMW, 0, mosAbove, mosPre);
         memcpy(mosFb, fb, sizeof mosFb);
+        // ...and the BG pixel a sprite is the sub pixel of (g_objSubMask, built above from each pixel's own place) is
+        // the block's too: the PPU applies the mosaic per BG before priority, so the pixel on top of a block's every
+        // column is its first column's on the anchored row -- its layer, its priority, its colour. MEASURED on the
+        // rule's cartridge, playthrough leg 65 (Denadoro, loc 092: a room under BG3's mist, TM 17, TS 13, CGWSEL 02,
+        // CGADSUB 64 on the arena's lines; the party runs from a fight): from f28120 the block over Marle's back is
+        // BG3's priority pixel and she is its sub pixel, half the colour -- (110,56) 16,3,0 -> 8,1,0 with the mist faded
+        // to black -- where her own place has no mist and the port drew her whole (101-400 px a picture, f28060-f28229).
+        if (g_objSubOn && f.sd) {
+          int be = 0, so = 0, hf = 0, both = 0, mw = 0, mh = 0;
+          const uint8_t* mainPre = CtFieldSceneMainScreen(f.sd, &be, &so, &hf, &both);
+          const uint8_t* mcov = CtFieldSceneCoverage(f.sd, &mw, &mh);
+          const uint8_t* mlvl = NULL; const uint8_t* slvl = NULL;
+          if (mainPre && mcov && mw == f.W && mh == f.H && (!both || CtFieldSceneObjLevels(f.sd, &mlvl, &slvl)))
+            for (int y = 0; y < CAMH; y++) {
+              const int mz = g_bMosSize[y];
+              if (mz <= 1) continue;
+              const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;
+              for (int x = 0; x < CAMW; x++) {
+                size_t bi = fieldBaseAt(&f, camx + x - x % mz + arenaD[ry * 4], bcamy + g_bMosSrc[y] + arenaD[ry * 4 + 1]);
+                size_t i = (size_t)y * g_fw + x;
+                g_objSubMask[i] = 0; g_objSubTop[i] = 0;
+                if (!(mcov[bi] & be)) continue;
+                if (both) { if (mlvl[bi] < 1) continue; g_objSubMask[i] = mlvl[bi]; g_objSubTop[i] = slvl[bi]; }
+                else g_objSubMask[i] = 4;
+                memcpy(g_objSubRgb + i * 3, mainPre + bi * 3, 3);
+              }
+            }
+        }
       }
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (cvs && !defeatHold) {

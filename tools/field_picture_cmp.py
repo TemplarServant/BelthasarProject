@@ -205,6 +205,12 @@ PICTURES = {
     # The port ran the loop with the STZ, so the mark's colour ramp began three frames late and stayed three steps
     # behind for the rest of the fight (142 px a picture; disasm/notes/battle_status_render.md, the last section).
     'close-status-loop-runs-with-the-wipe': dict(leg='95_magus', at=600, frames=69000, own=True),
+    # Denadoro (leg 65, loc 092: a room under BG3's mist -- TM 17, TS 13, CGWSEL 02, CGADSUB 64), the party runs from
+    # a fight and the screen goes to mosaic: a block's pixel is its first column's on the anchored row for every BG,
+    # so the mist's priority pixel covers the whole block and Marle under it is its sub pixel, half the colour
+    # ((110,56) 16,3,0 -> 8,1,0 with the mist faded to black); the port read the mask at each pixel's own place and drew
+    # her whole (101-400 px a picture, f28060-f28229).
+    'mosaic-block-makes-the-sprite-its-sub-pixel': dict(leg='65_denadoro', at=27600, frames=505, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

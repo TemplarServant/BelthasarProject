@@ -52685,6 +52685,40 @@
       ]
     },
     {
+      "name": "field-picture-mosaic-block-makes-the-sprite-its-sub-pixel-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "mosaic-block-makes-the-sprite-its-sub-pixel"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: mosaic-block-makes-the-sprite-its-sub-pixel leg 65 f27600 +505 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: mosaic-block-makes-the-sprite-its-sub-pixel "
+      ],
+      "tier": "full",
+      "timeout_s": 1200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the run-off's mosaic in a room under BG3's mist: the block over Marle makes her its sub pixel",
+      "notes": "UNDER THE RUN-OFF'S MOSAIC THE BG PIXEL ABOVE A SPRITE IS ITS BLOCK'S (field.c, the fight's compose after battleMosaicApply; disasm/notes/battle_flee.md sec. 12). The PPU applies the mosaic per BG before priority: every pixel of a block is the block's first column's on the anchored row -- its layer, its priority, its colour. In a room seen through BG3 (Denadoro, loc 092: TM 17, TS 13, CGWSEL 02, CGADSUB 64 on the arena's lines, BGMODE 09) a sprite under a BG3 priority pixel is that pixel's sub pixel, (mist + sprite) / 2. MEASURED on the rule's cartridge, playthrough leg 65, the party running from a fight (`$A013` 1 on row f28035): the pixel (110,56) of Marle's back is 16,3,0 (her palette's word 0070) on f28040-f28090, 9,3,1 on f28120 and 8,1,0 on f28150-f28180 -- half, under the mist's block faded to black -- where her own place has no mist. The port built the sub-pixel mask (g_objSubMask / g_objSubTop / g_objSubRgb) from each pixel's own place and drew her whole: 43 px on f28060 rising to 400 on f28105, 101 on the standing frames to f28229; with the mask read at the block's anchor every tenth picture f28050-f28230 is 0 px. The case is seeded at the leg's f27600, before the fight, and graded on f28105. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                size_t bi = fieldBaseAt(&f, camx + x - x % mz + arenaD[ry * 4], bcamy + g_bMosSrc[y] + arenaD[ry * 4 + 1]);\n",
+          "replace": "                size_t bi = fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);   /* MUT: the mask at the pixel's own place */\n",
+          "why": "the mosaic is applied per BG before priority: the block's first pixel is on top of the whole block"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

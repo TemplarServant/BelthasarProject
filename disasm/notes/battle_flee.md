@@ -457,3 +457,29 @@ Open:
 Checks: `field-picture-run-off-mosaic-by-the-line-vs-cartridge` (five mutations: the cut, the anchor, the line above,
 the priority tiles, the stepper of sec. 10); the forest's frame canaries `field-battle-flee-ranaway-box`,
 `field-battle-flee-objfade` and `field-battle-flee-end-forest` re-pinned with these three changes.
+
+## 12. The block a sprite is under (2026-11-14)
+
+Sec. 11's "the sprites are never in a block" is the sprites' own pixels. The BG pixel ABOVE one is a block's like any
+other, and in a room seen through BG3 that decides what the sprite is.
+
+Playthrough leg 65, Denadoro (loc 092): the arena's lines are TM 17, TS 13, CGWSEL 02, CGADSUB 64 -- BG3, the mist, on
+the main screen with the half add, OBJ on both screens -- and BGMODE 09 puts BG3's priority pixels above every sprite.
+Under one of them a sprite shows as the sub pixel: (mist + sprite) / 2. The party runs from a fight (`$A013` 1 on row
+f28035, the run-off's tick 281):
+
+    (110,56), a pixel of Marle's back      f28040-f28090  16, 3, 0    her palette's word 0070, no mist over her
+                                           f28120          9, 3, 1
+                                           f28150-f28180   8, 1, 0    half: the mist's block, faded to black
+    (108,72)                               f28090  9,17,15   f28120  6,10, 9   f28150  4, 8, 7
+
+The mist has no pixel at her own place; the block's first column on the anchored row has, and under the mosaic that
+pixel -- its layer, its priority, its colour -- is the whole block's (ppu.c:423-425, per BG before priority). The port
+built the sub-pixel mask (field.c `g_objSubMask` / `g_objSubTop` / `g_objSubRgb`) from each pixel's own place and drew
+her whole: 43 px on f28060 rising to 400 on f28105, 101 on the standing frames to f28229.
+
+field.c, the fight's compose: after `battleMosaicApply` the mask of every row with a block size is read at the
+block's anchor, as the foreground pass reads its priority tiles. f28050-f28230, every tenth picture: 0 px.
+
+Check: `field-picture-mosaic-block-makes-the-sprite-its-sub-pixel-vs-cartridge` (one mutation: the mask at the pixel's
+own place).
