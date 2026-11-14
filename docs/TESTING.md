@@ -3309,6 +3309,12 @@ entries wait three frames more, so her mark is 01 three rows before `$A013` clea
 `STZ $A013` and the mark's colour ramp stayed three steps behind (142 px a picture). `0 px differ at port -1`; one
 mutation. disasm/notes/battle_status_render.md, the last section.
 
+`field-picture-combo-tech-shows-its-partners-hands-vs-cartridge`: playthrough leg 95 (Magus), seeded at f600,
+f11648: Crono's Tech list with the cursor on a combo tech. C1/17FE -> C1/180F puts a hand on the chooser and one on
+each partner present (`$9EE7`'s nibbles) in OAM entries 0-2; the port left them empty (267-274 px a picture while
+the cursor stood on one). `0 px differ at port -1`; one mutation. disasm/notes/battle_multitarget_cursor.md, the
+last section.
+
 `field-picture-mosaic-block-makes-the-sprite-its-sub-pixel-vs-cartridge`: playthrough leg 65 (Denadoro, a room
 under BG3's mist), seeded at f27600, before the fight the party runs from, f28105 of the run-off's mosaic. A block's
 pixel is its first column's on the anchored row for every BG, so the mist's priority pixel covers its whole block

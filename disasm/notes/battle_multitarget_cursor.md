@@ -684,3 +684,38 @@ confirm five frames early (f682 against f687: the pass the hand stays). The queu
 ready at f415; Att opened f641, confirmed f653): the cartridge's `$95D5 = 01` from f653 with `$0900 = FE` and the hand's
 entries through f658, Marle's bracket `A4 4B 06 32 ...` at f659; the port's CT_BATTLE_TRACE `bracket` seat1 on battle f443 =
 field f659. The bracket after the Att cancel: the port's CT_BATTLE_TRACE `bracket` on battle f474 = field f690, the cartridge's f690.
+
+## The partners' hands of a combo tech (C1/17FE -> C1/180F), 2026-11-14
+
+OAM entries 0-3 have a third tenant beside the bracket and the target hand. C1/17DD, with nobody picking a target
+(`$9609` = 0) and the Tech list open (`$95DB` = 1), goes to C1/17FE (`python tools/romdis.py 0117DD 215 1 0`):
+
+```
+17FE  LDA $9EE3 / CMP #39 / BCS ->1808 / JMP C1/18AA          a single tech: the bracket again (C1/1115)
+1808  LDA $9EE7 / CMP #FF / BEQ ->1805                        a combo with no partner record: the bracket too
+180F  $0900 |= 55 ; $0701 / 05 / 09 / 0D = F0                 the four parked
+1825  $0703 / 07 / 0B = 32 ; $0702 / 06 / 0A = 00             name 00, attribute 32: the hand
+1839  X = $95D5          : $0700 = $1D0C,X + $9708,X - 10 ; $0701 = $1D23,X + $9713,X      the chooser
+1854  X = $9EE7 & 0F     : $0704 / $0705 the same                                           the first partner
+1871  $0900 &= FE & FB                                        entries 0 and 1 shown
+187B  $9EE7 & F0 != F0 -> X = it >> 4 (C1/011A) : $0708 / $0709 the same ; $0900 &= EF      the second partner
+18A7  JMP C1/1B14
+```
+
+So while the list's cursor stands on a dual or triple tech whose partners are present, a hand points at the chooser
+and at each partner, at the target hand's own place (the foot plus `$9708` / `$9713`, sec. 2).
+
+Measured on the rule's cartridge, playthrough leg 95 (Magus; Crono choosing, `$95D5` 00, feet 78,9F / 3E,9E / B0,9E,
+`$9713` F0 for the three):
+
+    f11640   $9EE3 3A  $9EE7 F2   $0900 FA   $0700.. 68 8F 00 32 / A0 8E 00 32 / 6C F0 00 32 / 74 F0 06 F2
+    f11700   $9EE3 42  $9EE7 F1   $0900 FA   $0700.. 68 8F 00 32 / 2E 8E 00 32 / (the same two parked)
+    f11740   $95DB 00             $0900 AA   the bracket's four
+
+The port's `CtBattleBracketBuild` returned "no bracket" for the combo and placed nothing: 267-274 px a picture,
+f11640-f11730. battle.c `battleMenuPassTail` now places the hands with `battleTargetHandSprite` (the same routine the
+target hand uses), and they reach the picture as the hand's entries do, at the next NMI. f11560-f11760, every fourth
+picture: 0 px.
+
+Check: `field-picture-combo-tech-shows-its-partners-hands-vs-cartridge` (f11648, the frame the second hand has just
+moved from seat 2 to seat 1; one mutation).

@@ -205,6 +205,12 @@ PICTURES = {
     # The port ran the loop with the STZ, so the mark's colour ramp began three frames late and stayed three steps
     # behind for the rest of the fight (142 px a picture; disasm/notes/battle_status_render.md, the last section).
     'close-status-loop-runs-with-the-wipe': dict(leg='95_magus', at=600, frames=69000, own=True),
+    # Magus (leg 95), f11648: Crono's Tech list with the cursor on a combo tech. C1/17FE -> C1/180F puts a hand on
+    # the chooser and one on each partner (`$9EE7`'s nibbles) in OAM entries 0-2, name 00, attribute 32, at the
+    # target hand's own place: `$9EE3` 3A / `$9EE7` F2 on f11640 (Crono and seat 2), 42 / F1 on f11700 (Crono and
+    # seat 1). The port left the entries empty (267-274 px a picture, f11640-f11730). f11648 is the frame the
+    # second hand has just moved, so one lag alone shows it.
+    'combo-tech-shows-its-partners-hands': dict(leg='95_magus', at=600, frames=11048, own=True),
     # Denadoro (leg 65, loc 092: a room under BG3's mist -- TM 17, TS 13, CGWSEL 02, CGADSUB 64), the party runs from
     # a fight and the screen goes to mosaic: a block's pixel is its first column's on the anchored row for every BG,
     # so the mist's priority pixel covers the whole block and Marle under it is its sub pixel, half the colour

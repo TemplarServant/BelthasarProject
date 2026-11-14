@@ -4798,6 +4798,20 @@ static void battleMenuPassTail(CtBattleHost* h, const CtBattleOamEntry* b1115) {
       h->handVis = 0;
       h->brkOn = (uint8_t)CtBattleBracketBuild(h, s, e);
       if (h->brkOn) for (int k = 0; k < 4; k++) { h->brkOam[k].x = e[k].x; h->brkOam[k].y = e[k].y; h->brkOam[k].name = e[k].name; h->brkOam[k].attr = e[k].attr; }
+      // C1/17FE-180D `LDA $9EE3 / CMP #39 / BCS` and `LDA $9EE7 / CMP #FF / BEQ`: the list's cursor is on a combo tech
+      // with its partners present -> C1/180F, the PARTNERS' HANDS. `$0900 |= 55`, Y = F0 on the four entries, name 00 and
+      // attribute 32 on entries 0-2; entry 0 on the chooser `$95D5`, entry 1 on `$9EE7 & 0F`, and entry 2 on `$9EE7 >> 4`
+      // (C1/011A) unless that nibble is F -- each at the target hand's own place, `$1D0C,X + $9708,X - 10` /
+      // `$1D23,X + $9713,X`, shown by `$0900 &= FE & FB` (and `& EF`). MEASURED on the rule's cartridge, playthrough leg
+      // 95 (Magus; Crono's Tech list): `$9EE3` 3A, `$9EE7` F2 on f11640 with `$0700..` 68 8F 00 32 / A0 8E 00 32 and
+      // `$0900` FA -- a hand on Crono (foot 78,9F) and one on seat 2 (B0,9E); `$9EE3` 42, `$9EE7` F1 on f11700 with the
+      // second hand at 2E 8E, seat 1 (3E,9E). The port left the entries empty: 267-274 px a picture, f11640-f11730.
+      else if (s[0x9EE3] >= 0x39 && s[0x9EE7] != 0xFF) {
+        h->handPage = 0xFF;
+        battleTargetHandSprite(h, 0, s[0x95D5]);                   // C1/1839-1851
+        battleTargetHandSprite(h, 1, s[0x9EE7] & 0x0F);            // C1/1854-186E
+        if ((s[0x9EE7] & 0xF0) != 0xF0) battleTargetHandSprite(h, 2, s[0x9EE7] >> 4);   // C1/187B-18A4
+      }
     }
     else if (s[0x95DB] == 2) bsItemTail(s);
   } else { h->brkOn = 0; h->handVis = 0; }                       // C1/1AFE: `$0900 |= 55`, Y = F0
