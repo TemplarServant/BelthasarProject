@@ -2837,6 +2837,9 @@ make happen) -- the harness takes the cartridge's `$0386` / `$4D` after each and
   host's (g_ctVramSink), so the records' slots `$0080` / `$0200` / `$0280` / `$1880` are the cartridge's when the stage
   opens (Frog and Magus were missing until their frames changed).
 
-Leg 95 against the rule's cartridge (pictures at the field's diagonal, port P = cartridge P + 2): the stage's frames
-where the two warp maps coincide differ by ~430 px -- the room's torch and candle flames, a tile-animation phase the
-field had before the vortex (f83980, at its best lag -3: 678 px at the same place) -- and by 10000-30000 px elsewhere: the warp's pace.
+Leg 95 against the rule's cartridge. The stage's pictures pair at port P = cartridge P + 1 (the fade's last steps:
+f85120 is 422 px at lags -1 and 0, 54016 at -2 -- the field's own diagonal is P + 2; WRAM is the same frame on both
+sides, the stage's `$08`, `$038D` and END f85144 included). Every 20th picture f83984-f85144 at lag -1: where the two warp
+maps coincide 422-777 px -- the room's torch and candle flames, a tile-animation phase the field had before the vortex
+(f83980, at its best lag -3: 678 px at the same place) -- and 7000-25000 px elsewhere: the warp's pace and, with it, the
+flash's blocks.
