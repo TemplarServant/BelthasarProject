@@ -289,3 +289,7 @@ carried on by mechanisms that quantise time:
   second A probed obj 21 while the queen's box was closing (f2891) and its scene ran forty frames early, where the
   cartridge activates it on the next real A (f2931). The H tokens now raise an edge only for a key the token before did
   not hold (field.c), and leg 17 is 0 px from f2100 to f6300.
+- **Leg 94, the Juggler's number (2026-11-15).** Crono's tech on the Juggler (cmb 7, f9561): the cartridge's "147" stands
+  32 lines above its foot (C1/5B5E: `$A00A` 01 from bit 5 of E4/F604 + id*10, offset `$971A` E0); the port rose it from
+  the foot, under the battle window. battle.c stages the record's flag and offsets and battlePopupOrigin takes C1/5B4D's
+  branch: f9560-f9630 0 px, and the audit's f10800-f16200 / f24300 / f24900 (the fight's other numbers on it) 0 px too.

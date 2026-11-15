@@ -937,6 +937,9 @@ static void stageAll(CtBattleHost* h) {
   // seat's command record +5) and CC/E30F-E318 `STA $99D4..$99D7` (A = FF: the confirm FIFO empty).
   // Note: only these bytes are written here; the engine keeps state of its own in the page CF/FB94 clears.
   memset(s + 0x93EE, 0, 21);                                               // CF/FB94 (this span)
+  memset(s + 0x9708, 0, 0x16); memset(s + 0xA003, 0, 11);                  // CF/FB94: the offsets and the flag the enemy
+                                                                           //   loader's CC/EB95-EBBE set (PEEK_POKE'd 55 at
+                                                                           //   $A00A: 00 by CF/FB9A, then CC/EBA0's INC)
   s[0x93F3] = s[0x93FA] = s[0x9401] = 0xFF;                                // FD/B7E1-B7E7
   // FD/B758-B767 (A = X = 0, FD/B732's `TDC / TAX`): the TP pool $B2DB-$B2DD that FD/ABF6 sums each kill into, $B2AF,
   // and $B2B0..$B2B5 -- the per-seat result flags (bit 7 a level-up, 08 / 04 / 02 a single / dual / triple tech,
@@ -8865,6 +8868,13 @@ static void battlePopupOrigin(const CtBattleHost* h, int tgt, int* cx, int* ry) 
     else if (r) { *cx = 16 * r[0] + r[2]; *ry = 16 * r[1] + r[3] - 15; }
     else        { *cx = CT_FX_CRONO_CX;   *ry = CT_FX_CRONO_RY; }   // invalid seat (never hit in practice) -> fallback
   }
+  // C1/5B4D `LDA $A003,Y / BNE`: a combatant whose graphics record flags it (bit 5 of E4/F604's byte, CC/EB95 -- only
+  // an enemy's loader sets it) takes its origin at `$1D0C + $9708` / `$1D23 + $9713` (C1/5B5E-5B6E, 8-bit adds): the
+  // Juggler's number stands 32 lines above its foot (E0). MEASURED, playthrough leg 94 f9561: `$A00A` 01, `$971A` E0.
+  if (h->mvInited && tgt >= 0 && tgt < 11 && s[0xA003 + tgt]) {
+    *cx = (BT_LIVEX(h, tgt) + s[0x9708 + tgt]) & 0xFF;
+    *ry = ((BT_LIVEY(h, tgt) + s[0x9713 + tgt]) & 0xFF) - 15;
+  }
 }
 // The rise, read from the ROM. The popup animator CF/E781 (battlePopupAnimator) adds one step a frame to every combatant's
 // digit row: `D1/5E10[$A3D2]`, or `D1/5E49[$A3D2]` while that combatant's `$A0DC` is set (CF/E794 `LDA $A0DC,Y / BNE`),
@@ -11296,10 +11306,15 @@ static void battleMoveInit(CtBattleHost* h) {
       // CC/EB75-EB83, the same loader, byte +4: `LDA $E4F604,X / STA $9700,Y` (the staged flags byte) then `AND #80
       // / BEQ / STA $A5C5,Y / STA $A5D0,Y` -- bit 7 alone, into $A5C5+slot (never read) and $A5D0+slot = $A5CD+cmb,
       // the byte C1/28C2 reads to skip a body: the airborne Avian Chaos (id $19, byte +4 = C0) blocks nobody.
-      // Not ported: the bit 5 branch (INC $A006,X). Bits 2 and 3 are handled below.
+      // Bits 2, 3 and 5 are handled below.
       { int f4 = fer ? fer[(size_t)id * 10 + 4] : 0;
         s[0x9700 + slot] = (uint8_t)f4;
         if (f4 & 0x80) { s[0xA5C5 + slot] = 0x80; s[0xA5CD + cmb] = 0x80; }
+        // CC/EB95-EBA3 `AND #20 / BEQ / LDA $80 / TAX / INC $A006,X` -- `$A003,cmb`, the flag C1/5B4D (the number's
+        // origin, battlePopupOrigin) reads; then CC/EBB0-EBBE `LDA $E4F605,X / STA $970B,Y`, `LDA $E4F606,X / STA
+        // $9716,Y` -- the offsets `$9708,cmb` / `$9713,cmb` it adds (and the hand's, CtBattleCursorOfs).
+        if (f4 & 0x20) s[0xA003 + cmb]++;   // (A FLAGGED ENEMY'S OWN OFFSET)
+        if (fer) { s[0x9708 + cmb] = fer[(size_t)id * 10 + 5]; s[0x9713 + cmb] = fer[(size_t)id * 10 + 6]; }
         // CC/EBA4-EBA9 `LDA $9700,Y / AND #04 / STA $A08F,Y` (no branch): `$A08C,cmb`, the part of the boss the arena is
         // (C1/5DEA, CD/0043's D0066 arm).
         s[0xA08F + slot] = (uint8_t)(f4 & 0x04);

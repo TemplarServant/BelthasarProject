@@ -3414,3 +3414,8 @@ walkscript `H` token raises an edge only for the keys the token before did not h
 `100:2,100:2` is one A held four frames. The port's second A probed an object while a box was closing and ran the queen's
 scene forty frames early (20470 px). `0 px`; one mutation. 26 such pairs in 11 legs changed with it (the playthrough
 check's re-pin of the same date).
+
+`field-picture-flagged-enemy-number-takes-its-offset-vs-cartridge`: playthrough leg 94 (Ozzie's barrier), played from
+f5500 and graded on f9600. C1/5B4D takes a damage number's origin at the foot plus `$9708/$9713` when the combatant's
+`$A003` is set -- bit 5 of its graphics record (E4/F604 + id*10, CC/EBA0) -- so the Juggler's "147" stands 32 lines above
+its foot (offset E0). The port rose it from the foot, under the battle window (117 px). `0 px`; one mutation.

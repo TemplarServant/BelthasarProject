@@ -51,6 +51,13 @@ no leading zeros** (a 1-damage-digit hit shows a single tile — observed a lone
   anchor: Crono's "14" centerX 134 vs his idle-sprite centerX 125 — the exact PC anchor formula is a BOUNDARY,
   the popup routine; measured constants below suffice for replay.)
 - **Measured per-target origin** (left-digit x, rest row y): **GATO leftX 128, restY 96 · Crono leftX 126, restY 129.**
+- **The origin, derived (2026-11-15).** C1/5B4D-5B6E: `LDA $A003,Y / BNE` -- clear: `$94/$95 = $1D0C,Y / $1D23,Y`
+  (the live foot); set: `$1D0C,Y + $9708,Y` / `$1D23,Y + $9713,Y` (8-bit adds). `$A003` is read nowhere else; only the
+  enemy loader sets it -- CC/EB95-EBA3 `AND #20 / BEQ / INC $A006,X` (X = the slot) on bit 5 of the graphics record's
+  byte E4/F604 + id*10 -- and CC/EBB0-EBBE store that record's bytes +1/+2 in `$970B/$9716,slot` (= `$9708/$9713,cmb`,
+  the hand's offsets too). CF/FB94 zero-fills `$2D00..$ACEB` at the boot. MEASURED, playthrough leg 94 f9561: the
+  Juggler (cmb 7) has `$A00A` 01 and `$971A` E0, and its "147" stands at y 132-139, 32 lines above its foot.
+  battle.c battleMoveInit / battlePopupOrigin.
 
 ### P1.4 Motion — a parabolic hop, MEASURED byte-exact, target-independent
 Step-1 dense sweep of the "17" popup (`arc` sweep). **Vertical offset from the rest row, per render frame,

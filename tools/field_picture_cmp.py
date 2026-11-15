@@ -244,6 +244,9 @@ PICTURES = {
     # Leg 93, a chest's "Got 1 Dark Mail!" (`06` + 13 x `EF` + "Got 1 {item}!"): the `06` token's indent is drawn, never
     # typed (`$0129` 07 on f26089, 30 iterations), so f26084 shows the text as far as the cartridge's ...
     'chest-message-indent-is-not-typed': dict(leg='93_ozzie_way', at=0, frames=26084, own=True),
+    # Leg 94 (Ozzie's barrier), Crono's tech on the Juggler (f9561): its graphics record flags it (E4/F604 bit 5 ->
+    # `$A00A` 01, CC/EBA0) and its offset `$971A` is E0, so C1/5B5E puts its "147" 32 lines above its foot.
+    'flagged-enemy-number-takes-its-offset': dict(leg='94_ozzie_barrier', at=5500, frames=4100, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's

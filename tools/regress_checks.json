@@ -53143,6 +53143,40 @@
       ]
     },
     {
+      "name": "field-picture-flagged-enemy-number-takes-its-offset-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "flagged-enemy-number-takes-its-offset"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: flagged-enemy-number-takes-its-offset leg 94 f5500 +4100 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: flagged-enemy-number-takes-its-offset "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a flagged enemy's damage number rises from its foot plus its graphics record's offset, as on the cartridge",
+      "notes": "C1/5B4D `LDA $A003,Y / BNE`: THE DAMAGE NUMBER'S ORIGIN IS THE FOOT `$1D0C/$1D23`, OR THE FOOT PLUS `$9708/$9713` (8-bit adds, C1/5B5E-5B6E) FOR A COMBATANT WHOSE `$A003` IS SET. Only the enemy loader sets it: CC/EB95-EBA3 INCs `$A006,slot` when bit 5 of its graphics record's byte E4/F604 + id*10 is set, and CC/EBB0-EBBE store the record's bytes +1/+2 (F605/F606) in `$970B/$9716,slot` (= `$9708/$9713,cmb`). CF/FB94 zero-fills `$2D00..$ACEB` at the boot (PEEK_POKE'd 55 at `$A00A`: 00 by CF/FB9A). Playthrough leg 94 (Ozzie's barrier), Crono's tech on the Juggler (cmb 7) on f9561: `$A00A` 01, `$971A` E0, so its \"147\" stands 32 lines above its foot (y 132-139); the port rose it from the foot, under the battle window (117 px on f9600). battle.c battleMoveInit / battlePopupOrigin. Played from f5500 of the leg (the fight boots on f5528), graded on f9600. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        if (f4 & 0x20) s[0xA003 + cmb]++;   // (A FLAGGED ENEMY'S OWN OFFSET)",
+          "replace": "        /* MUT: the record's bit 5 not staged */",
+          "why": "CC/EBA0's INC is the flag C1/5B4D reads; without it the number rises from the foot"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",
