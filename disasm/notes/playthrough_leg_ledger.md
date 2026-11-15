@@ -337,3 +337,24 @@ carried on by mechanisms that quantise time:
 - **Leg 58 (heckran cave), timing (2026-11-14).** The cave's torch a step off (f3300-f11400, 63-150 px): the field's tile
   animation (`$051D` / `$0530`) is a step ahead in the port from f3012 -- right after a fight's return the cartridge's
   main loop is parked two frames by the exit's sound handshake (the SPC fade lattice class, closed 2026-11-07).
+- **Leg 74, the fight's boot (2026-11-15), open.** The fight from f589 opens on four reptites at the same foot Y; on the
+  cartridge the OAM mirror stops changing when the fight begins (f588, no writer -- the field's last OAM stands) and
+  the boot's pictures (f590-f640) show the field's order, cmb 6 in front of 5, 4, 3 (OAM 28-43). The port draws the
+  boot with the compose's sort (CF/E87B, a tie keeps the lower object in front: 3, 4, 5, 6) -- 162 px a picture until
+  the compose takes over. Needs the frame the cartridge's compose first writes the mirror and the field draw list's
+  order for ties; not done. Also open: f2700 / f3000 (Ayla's pose, 246-734 px at both lags).
+- **Leg 117 (Kajar), 2026-11-15.** The audit's samples f26100-f32700 are 0 px at the fight's lag with the current tree.
+- **Leg 30 (the trial), open (2026-11-15).** From f3300 the scene's pictures differ in many places (99-4449 px at the
+  field's lag), and from f4800 the guards stand in another arrangement (757 px on f5100, no port frame within +-20
+  matches): a walk that ends elsewhere, not a shift in time. Not triaged.
+- **Leg 56 (Medina's gate, loc 1D1), open (2026-11-15).** From the leg's first frames the cartridge draws a white
+  furry creature at (104-136, 55-101) where the port draws another sprite (505-623 px, f30-f1200). The seed has obj 10
+  at tile (7,9) with `$1100` 06 and `$1101` E1; whether the port's seeded actor takes another sprite (the prescan's,
+  not the capture's -- the audit's known seeding gap) or the game draws another is not yet read.
+- **Leg 82 (Nizbel), the room a line off (2026-11-15), timing.** The fight from f2214 ends on f28853 in the port for
+  the cartridge's f28852 (`$0117` 0001; the 2026-11-07 class), so the field's `$0153` runs on the other phase and the
+  cutscene's camera pan stops a step short: the room is one line off (s20_shift dy +1: 0 px) through f28960-f29040
+  (25000-33000 px), the leg's f29100 / f30300 / f30600 samples with it.
+- **Leg 82, inside the Nizbel fight (2026-11-15).** The arena's torches are a step apart (23-28 px, two frames in four:
+  the tile animation's phase, the load clock class). Open: f14399-f14400 (430 px), Ayla's landing from a jump drawn
+  differently for two frames while `$1D24`, `$A4B0` and the pose `$9908` are the cartridge's frame for frame.
