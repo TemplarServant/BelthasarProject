@@ -229,3 +229,13 @@ carried on by mechanisms that quantise time:
   clear on the frame the fight is called in and set on the module's tick 1 -- steps on f2387, f2389, f2391, an even
   cadence through the transfer -- while the port has it set on the transfer's frame: f2386, f2388, f2391. One run behind
   from there. Before, the port ran no step on the transfer's frame at all and the two errors cancelled on this leg.
+
+- **Leg 26 (SAME), a fight's exit a frame early (2026-11-14, the picture audit's 37 samples).** The first fight's return
+  lands on f4687 in the port for the cartridge's f4688 (`$0117` 01 -> 00, `$0118` -> 01: the battle exit's lattice,
+  closed 2026-11-07), and from there the field runs a frame ahead: `$0153` on the other phase. Two quantised mechanisms
+  carry it into the pictures. The next fight stages its second enemy one pixel lower (record `$29BF + 5 * 12` fineY 0C
+  for 0B; its foot `$1D2B` 5C for 5B), a knight drawn one line down for the whole fight (~470 px a picture,
+  f5000-f6400). And loc 0C6's camera pan, which steps on the phase, starts a frame late (`$1D8D` one count behind from
+  f7414) and stops on the cartridge's own frame, a step short: `$1D0E` 0B where the cartridge's is 0A from f7550 -- the
+  room one line off (s20_shift: dy -1) until the next move (16000-26000 px, f7550-f9900). Every object position is the
+  cartridge's on f4600 and f4686; nothing else was found to differ.
