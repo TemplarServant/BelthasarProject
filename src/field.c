@@ -8265,6 +8265,10 @@ static int battleEnemyPoseBlitT(uint8_t* fb, int slot, int id, int poseIdx, int 
     if (slot >= 0 && slot < 8 && strcmp(cur, last[slot])) {
       snprintf(last[slot], sizeof last[slot], "%s", cur);
       fprintf(stderr, "enemycells slot%d %s\n", slot, cur);
+      if (getenv("CT_BATTLE_CELLWORDS"))                          // ...and each cell's four tile words (TL TR BL BR)
+        for (int c = 0; c < ncell; c++)
+          fprintf(stderr, "  cell%d name=%02X words %04X %04X %04X %04X\n", c, cells[c].name,
+                  cells[c].w[0], cells[c].w[1], cells[c].w[2], cells[c].w[3]);
     }
   }
   if (!CtBattleCmbSheetRaw(g_bEnemyMem, 3 + slot)) {
@@ -8402,6 +8406,13 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
   for (int slot = 0; slot < 8; slot++) {
     if (BATTLE_ZSKIP(3 + slot)) continue;                 // Z-sorted walk (slot -> cmb 3+slot)
     if (!h->dissolveActive[slot]) continue;
+    // A fallen enemy listed again is the combatant, not a corpse: C1/86BC-86C3 `$AF02,X := $AF0D,X` relists it for its
+    // block-2 counter, and until the delist after the counters the compose draws it with its live pose -- the counter's
+    // own script poses (battleEnemyGenRender). MEASURED on the rule's cartridge, playthrough leg 92 (Flea? killed by
+    // Crono's tech on f33095, its death counter "MP Buster"): `$AF02` F0 from f33095 to f33437 on both sides, the
+    // published pose `$990A` 05 on f33160, 07 on f33207, 00 on f33355, and the cartridge's VRAM tiles 40-57 are pose 05's
+    // words on f33200. The port drew the corpse's pose at death (00) over the live one (632 px a picture, f33164-f33356).
+    if (mem[0xAF02 + slot] != 0xFF) continue;
     int step = h->dissolveStepShown[slot];          // the level the NMI uploaded (CD/3ED2), not the routine's live one
     uint8_t id = mem[CT_ENEMY_BLOCK(slot) + 0];
     if (id == 0x92) {                                  // GATO: all 16 pal1 stance cells (absolute; the foot quad,

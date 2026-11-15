@@ -235,6 +235,12 @@ PICTURES = {
     'exchange-cursor-hand-over-the-picked': dict(leg='130_black_omen_gaspar', at=0, frames=11650, own=True),
     # ...and its close (C2/CC0E's fade, no task killed) fades the live screen: the wave and the sprite blocks go on.
     'exchange-close-fades-the-live-screen': dict(leg='130_black_omen_gaspar', at=0, frames=11758, own=True),
+    # Leg 92, Flea? (killed by Crono's tech on f33095) counters with "MP Buster" (its block 2): the counter's name box
+    # (CD/0295) runs in the action's handler tail on f33095-f33106, and the tech's effect teardown CD/0453 only inside
+    # the counter's open (C1/4058 -> C1/40A3 JSR C1/10FA -> CD/0009) on f33108-f33128; f33110 shows the box.
+    'counter-box-before-the-teardown': dict(leg='92_slash', at=32200, frames=910, own=True),
+    # ...and, relisted for that counter (`$AF02,X := $AF0D,X`), it is the combatant with the counter's poses, no corpse.
+    'fallen-counterer-keeps-its-live-pose': dict(leg='92_slash', at=32200, frames=1000, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

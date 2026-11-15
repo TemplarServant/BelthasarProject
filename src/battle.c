@@ -8577,6 +8577,7 @@ static int battleDissolvePackets(const CtBattleHost* h, int slot) {
 // Returns 1 while CD/0E05 runs, 0 on the frame its RTL is reached.
 static int battleFxTeardownDue(const CtBattleHost* h);           // CD/04B5-04C2 (with CD/0453, below)
 static int battleFxTeardown(CtBattleHost* h);
+static int battleFxTeardownAtOpen(CtBattleHost* h);              // C1/4058's C1/10FA -> CD/0009 (a counter's window)
 static void battleFxLoadBegin(CtBattleHost* h, int fx);           // CD/0EBD's frames (with the effect load, below)
 static void battleFxLoadRegs(CtBattleHost* h);
 static void battleFxLoadRegs2(CtBattleHost* h);
@@ -11960,6 +11961,9 @@ static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly) {
     }
     if (decodeOnly || h->ctrPendSlot != slot || h->ctrDecodeF == h->frames) continue;
     if (--h->enCounterDelay[slot] > 0) continue;                  // still counting down (about 4 render frames)
+    // C1/40A3's C1/10FA -> CD/0009: the provoking action's effect program torn down inside the open (CD/0453's frames,
+    // the main tick holding this loop), and `INC $A013` the frame after its last.
+    if (battleFxTeardownAtOpen(h)) { h->enCounterDelay[slot] = 1; continue; }
     battleOpenAction(h, cmb, 1);                                  // the decoded counter's window (C1/4058)
   }
 }
@@ -20750,7 +20754,17 @@ static int battleFxTeardownDue(const CtBattleHost* h) {          // CD/0009 -> C
   if (h->victoryHold || h->fleeStage || h->exitDemo) return 0;
   if (h->demoPass) return 0;                                       // C1/83AE `LDA $2989 / BIT #20 / BNE ->83B8`: the demo's
                                                                    //   pass ends the battle instead of `JMP C1/8120` (G0)
+  // Nor while the action's handler tail runs the counters (C1/8671-881C): the main loop does not iterate until C1/881C.
+  // A counter's own window reaches CD/0009 itself (C1/4058's C1/40A3 `JSR C1/10FA` -> C1/1110 `JSL CD0009`, before
+  // C1/40A6 `INC $A013`): battleFxTeardownAtOpen.
+  if (battleCounterPhase(h)) return 0;                             // (the handler's tail: no main loop)
   return 1;
+}
+static void battleFxTeardownEnter(CtBattleHost* h) {              // CD/04C4 JSR CD/0453
+  uint8_t* s = h->mem;
+  h->fxTeardownT = 1; h->fxTeardownLong = 1; h->fxTeardownRuns++;
+  if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-fx-teardown f%d enter CCA2=%02X 99D2=%02X CD07=%02X\n",
+                                         h->frames, s[0xCCA2], s[0x99D2], s[0xCD07]);
 }
 static int battleFxTeardown(CtBattleHost* h) {
   uint8_t* s = h->mem;
@@ -20764,11 +20778,25 @@ static int battleFxTeardown(CtBattleHost* h) {
     if (!battleFxTeardownDue(h)) return 0;
     // (No end-of-fight skip: the main loop's C1/8120 runs C1/0003 #03, the idle tick and its CD/0009, before C1/8130's
     //  checks, C1/B223 -> C1/813F (defeat) and C1/8167 (victory).)
-    h->fxTeardownT = 1; h->fxTeardownLong = 1; h->fxTeardownRuns++;
-    if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-fx-teardown f%d enter CCA2=%02X 99D2=%02X CD07=%02X\n",
-                                           h->frames, s[0xCCA2], s[0x99D2], s[0xCD07]);
+    battleFxTeardownEnter(h);
   }
   battleFxTeardownStep(h);
+  return 1;
+}
+// A counter's window, C1/4058: its two C1/007E waits, then C1/40A3 `JSR C1/10FA` reaches C1/1110 `JSL CD0009` before
+// C1/40A6 `INC $A013`, so an effect program the provoking action left loaded (`$CCEA` set, CD/04B5-04C2) is torn down
+// here, inside the open: CD/0453 runs its frames and the window opens after them. MEASURED on the rule's cartridge,
+// playthrough leg 92 (Crono's tech, then Flea?'s counter "MP Buster"): the action ends on f33095, the counter's name box
+// (CD/0295) takes f33095-f33106 (`$CCEC` 10 on f33097), CD/0453 is entered from C1:1110 on f33108 and its tail clears
+// `$CCEA` / `$CCA2` on f33128, and `$A013` rises on f33129. The port had run the teardown from the main loop on the
+// frame after the action, before the box (the box 21 frames late, f33100-f33120), which the main loop does not reach
+// while the handler's tail runs the counters. Returns 1 when the teardown was entered (the open waits for it).
+static int battleFxTeardownAtOpen(CtBattleHost* h) {
+  const uint8_t* s = h->mem;
+  if (h->fxTeardownT || h->exitCd0c || h->fbe5St) return 0;
+  if (s[0xCE11] || !s[0xCCEA] || s[0xA013]) return 0;            // CD/04B5-04C2
+  battleFxTeardownEnter(h);
+  battleFxTeardownStep(h);                                         // its first frame is the open's
   return 1;
 }
 // One frame of CD/0453 (h->fxTeardownT = 1 on the frame it is entered), for both of its callers: the main loop's

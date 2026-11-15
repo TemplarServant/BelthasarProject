@@ -3391,3 +3391,10 @@ fifteen frames early), and the build's pose request is played on P itself (C2/F6
 order: the picked cell's second hand (`$0774`) is behind the cursor's (`$0770`). The third pins the close: C2/CC0E's fade
 kills no task, so the wave and the sprites go on under it. `0 px` each; four mutations. disasm/notes/menu2_form_screen.md,
 the 2026-11-15 section.
+
+`field-picture-counter-box-before-the-teardown-vs-cartridge`, `field-picture-fallen-counterer-keeps-its-live-pose-vs-cartridge`:
+playthrough leg 92, Flea?'s death counter "MP Buster" after Crono's tech, seeded at f32200 and graded on f33110 and
+f33200. The first pins that the main loop's CD/0009 waits for the counters (the box from f33097) and that the tech's
+effect teardown runs inside the counter's open (C1/4058 -> C1/10FA -> CD/0009, f33108-f33128); the second that the
+relisted fallen enemy is drawn as the combatant, with the counter's poses, not as a corpse. `0 px` each; three
+mutations. disasm/notes/battle_counter_gating.md sec. 9.

@@ -52975,6 +52975,80 @@
       ]
     },
     {
+      "name": "field-picture-counter-box-before-the-teardown-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "counter-box-before-the-teardown"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: counter-box-before-the-teardown leg 92 f32200 +910 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: counter-box-before-the-teardown "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a counter's name box comes before the provoking action's effect teardown, which runs inside the counter's open",
+      "notes": "THE MAIN LOOP'S CD/0009 IS NOT REACHED WHILE THE HANDLER'S TAIL RUNS THE COUNTERS (battle.c battleFxTeardownDue / battleFxTeardownAtOpen; disasm/notes/battle_counter_gating.md sec. 9). CD/0453, the effect teardown, is entered from CD/04C4 when CD/0009 runs with `$CCEA` set and `$A013` clear. The main loop's CD/0009 (C1/10A0 / C1/10C0) waits for C1/881C; a counter's own window reaches it in C1/4058 (C1/40A3 `JSR C1/10FA` -> C1/1110 `JSL CD0009`) before C1/40A6 `INC $A013`. MEASURED on the rule's cartridge, playthrough leg 92: Crono's tech kills Flea? on f33095 and her block-2 counter 'MP Buster' decodes; its name box (CD/0295) shows from f33097 (`$CCEC` 10), CD/0453 is entered from C1:1110 on f33108 and clears `$CCEA` on f33128, `$A013` rises on f33129. The port ran the teardown from the main loop on the frame after the action and the box waited 21 frames (6144 px a picture, f33100-f33119). Seeded at f32200 (the party standing), graded on f33110. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (battleCounterPhase(h)) return 0;                             // (the handler's tail: no main loop)",
+          "replace": "  /* MUT: the main loop's CD/0009 during the counters */",
+          "why": "the main loop does not iterate while the handler's tail runs the counters (C1/8671-881C)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fallen-counterer-keeps-its-live-pose-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fallen-counterer-keeps-its-live-pose"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fallen-counterer-keeps-its-live-pose leg 92 f32200 +1000 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: fallen-counterer-keeps-its-live-pose "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Flea?'s death counter is drawn with its own poses, as on the cartridge",
+      "notes": "A FALLEN ENEMY RELISTED FOR ITS COUNTER IS THE COMBATANT, NOT A CORPSE (field.c battleDissolveRender; disasm/notes/battle_counter_gating.md sec. 9). C1/86BC-86C3 `$AF02,X := $AF0D,X` lists the fallen enemy again for its block-2 counter; until the delist after the counters the compose draws it with its live pose. MEASURED on the rule's cartridge, playthrough leg 92: `$AF02` F0 from f33095 to f33437 on both sides; `$990A` 05 on f33160, 07 on f33207, 00 on f33355; the VRAM tiles 40-57 are pose 05's record words on f33200. The port drew the corpse's pose at death (00) over the live one (632-660 px, f33164-f33356). The case also grades the counter's open (its window on f33129, after the teardown): without battleFxTeardownAtOpen the counter's poses come 21 frames early. Seeded at f32200, graded on f33200. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (mem[0xAF02 + slot] != 0xFF) continue;",
+          "replace": "    /* MUT: the relisted corpse drawn */",
+          "why": "C1/86BC relists the fallen enemy: the compose draws it alive, with the counter's poses"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    if (battleFxTeardownAtOpen(h)) { h->enCounterDelay[slot] = 1; continue; }",
+          "replace": "    /* MUT: no teardown in the counter's open */",
+          "why": "C1/4058's C1/10FA reaches CD/0009: the teardown runs before INC $A013, the window on f33129"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

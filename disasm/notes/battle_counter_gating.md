@@ -393,3 +393,33 @@ chooser at f6412. The port wiped at the counter window's open (battleOpenAction,
 frames early, the chooser switched at f6410, and the alignment's warp there put the rest of the fight a frame or two off
 (the HP chain diverged). battle.c: battleOpenWipe at the counter's decode (and after its message box), and
 battleOpenAction skips its own wipe when C1/4058 already ran (actOpenWiped), as battleArrive and battleDispatchOpen do.
+
+## §9 — 2026-11-15: THE COUNTER'S OPEN TEARS THE EFFECT DOWN; THE RELISTED VICTIM IS THE COMBATANT
+
+Measured on the rule's cartridge, playthrough leg 92 (Magus's castle, Flea?): Crono's tech kills her on f33095, the
+action's end, and her block 2 (condition 20, the fallen victim: §8) counters with "MP Buster".
+
+**The effect teardown runs inside the counter's open.** CD/0009 = CD/04AA enters CD/0453 (`JSR` at CD/04C4) when
+`$CE11` = 0, `$CCEA` != 0 and `$A013` = 0. The main loop's calls (C1/10A0, C1/10C0) are not reached while the action's
+handler tail runs the counter loop C1/8671-881C. The counter's window open C1/4058 is:
+
+    C1/4058  INC $A0FD / JSL CC/F06B / JSR C1/007E (wait: CD/0036 = CD/04A6, no CD/0453)
+    C1/4064  ... / JSL CC/F102 / JSR C1/007E
+    C1/40A3  JSR C1/10FA  -> C1/1110 JSL CD0009 -> CD/04C4 JSR CD/0453 (the teardown, here)
+    C1/40A6  INC $A013
+
+So: the counter decodes on f33095, its name box (CD/0295) shows from f33097 (`$CCEC` 10) with the dwell on f33105;
+CD/0453 is entered from C1:1110 on f33108 (cputrace), its tail clears `$CCEA` and `$CCA2` on f33128; `$A013` rises on
+f33129. The port had started the teardown from its main loop on the frame after the action, which held the box 21
+frames (box f33118, teardown f33096-f33116) though the window still opened on f33129. battle.c: battleFxTeardownDue
+refuses while battleCounterPhase; battleFxTeardownAtOpen enters CD/0453 at the counter's open and the window opens the
+frame after its last.
+
+**The relisted victim is the combatant.** C1/86BC-86C3 `$AF02,X := $AF0D,X` lists the fallen enemy again for its
+counter; `$AF02` stays F0 from f33095 to f33437 on both sides. Meanwhile the compose draws it as any live combatant:
+`$990A` (its published pose) 05 on f33160, 07 on f33207, 00 on f33355, and the VRAM tiles 40-57 hold pose 05's record
+words (DD:23F0 + 5 * 28) on f33200. The port queued the corpse at the kill (dissolveActive) and drew it -- the pose at
+death, 00 -- over the live renderer's (632-660 px). field.c battleDissolveRender skips a corpse while `$AF02` lists it.
+
+Checks: field-picture-counter-box-before-the-teardown-vs-cartridge, field-picture-fallen-counterer-keeps-its-live-pose-
+vs-cartridge. Leg 92's Flea? fight is 0 px from f33080 to f33600.

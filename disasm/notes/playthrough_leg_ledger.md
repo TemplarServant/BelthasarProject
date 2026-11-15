@@ -264,3 +264,9 @@ carried on by mechanisms that quantise time:
   f78817, New Game and Crono's naming `C8 C0` on f78853) and the leg's pad types into that screen. So the pinned end picture
   is the naming screen against the cartridge's field in loc 133; it moved by the naming arrows' fix (53929 -> 53927 px).
   The verdict with the clock and cursor put back is the row above (SYNC-ONLY).
+- **Leg 92 (DIFFERENT, timing), the picture audit (2026-11-15).** Fixed: the Flea? fight (f32800-f33600, 6144 px and
+  632 px a picture): her death counter's name box comes before Crono's tech's effect teardown, which runs inside the
+  counter's open, and the relisted fallen enemy is drawn as the combatant (disasm/notes/battle_counter_gating.md sec. 9).
+  Timing: the torches' 116 px samples (f26400-f117000) are the tile animation's run counter `$051D` one run behind from
+  loc 0A6's load (the counter resumes on f1297 for the cartridge's f1296: the load clock, the f1295+1 warp above), the
+  room's flames a step apart wherever they stand.
