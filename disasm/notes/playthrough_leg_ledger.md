@@ -293,3 +293,18 @@ carried on by mechanisms that quantise time:
   32 lines above its foot (C1/5B5E: `$A00A` 01 from bit 5 of E4/F604 + id*10, offset `$971A` E0); the port rose it from
   the foot, under the battle window. battle.c stages the record's flag and offsets and battlePopupOrigin takes C1/5B4D's
   branch: f9560-f9630 0 px, and the audit's f10800-f16200 / f24300 / f24900 (the fight's other numbers on it) 0 px too.
+- **Leg 94, the barrier's statues (2026-11-15).** The first fight's epilogue marks objs 16 / 17 removed (`$1A81` 0, the
+  `$1000` pause); a script undoes both (op 0x0C, op 0x90 on f18867) and the cartridge draws them rising from the pits.
+  The port's removal also set `dead`, so they stayed off the screen (1199 px on f18900); ct_vm.c now writes only the
+  two bytes and f18860-f18960 is 0 px.
+- **Leg 94 f32386-f32440, timing (2026-11-15).** The next fight's slot 0 (cmb 3, field obj 14) is staged with pose 0B
+  on the cartridge and 0A in the port (371 px, static). C0/05EB copies the object's `$0F01` on f32343; the cartridge's
+  drain committed 0B on f32342. The port's obj 14 animates three frames behind: its function starts with the call
+  obj 11 makes on f32228 on both sides, but its cadence countdown `$1001,X` expires on f32231 in the port and on f32228
+  on the cartridge -- every object's cadence in the room is one frame ahead in the port since the previous fight's exit
+  (the field returns on f30754 in the port, f30755 on the cartridge), the battle exit's release of the 2026-11-07
+  timing class. Carried as timing.
+- **Leg 90 (castle wings), the candles' flames (2026-11-15).** The picture audit's 116 px samples (f3600, f3700, f4200,
+  f4300; 0 px between) are the flames' tile animation a step apart: loc 0AB's load begins on f574 on both sides and the
+  run counter `$051D` resumes on f614 on the cartridge, f616 in the port (the load clock, closed 2026-10-13), one run
+  behind from there. Timing.

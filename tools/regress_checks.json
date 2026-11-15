@@ -53177,6 +53177,40 @@
       ]
     },
     {
+      "name": "field-picture-removed-enemy-shown-again-is-drawn-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "removed-enemy-shown-again-is-drawn"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: removed-enemy-shown-again-is-drawn leg 94 +18900 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: removed-enemy-shown-again-is-drawn "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an enemy the fight's epilogue removed and a script shows again is drawn, as on the cartridge",
+      "notes": "THE BATTLE EPILOGUE'S DEAD MARK IS TWO BYTES, NOT THE PORT'S `dead`: C0/07F3 `$1000,Y |= 80` (the cadence pause) and C0/0807 `$1A81,Y = 00` (C0/A88D's latch falls: not drawn, not activated). `dead` is `$1100` bit 7 (op 0x0A's kill); the two bytes are a script's to undo -- op 0x0C (C0/6282) clears the pause, op 0x90 (C0/4CD5) shows the object -- and the cartridge then draws it. Playthrough leg 94 (Ozzie's barrier): the first fight's epilogue marks the statues (objs 16 / 17), a call at priority 4 on f18861 brings them back, `$1A81` 01 by C0/4CDC on f18867, `$0F00` 80 by C0/A8F5, and they rise from the pits (OAM 48-55); the port's CtSceneBattleRemoveObj also set `dead`, which `placed` reads, and they stayed off the screen (1199 px on f18900). ct_vm.c CtSceneBattleRemoveObj. Played from the leg's start (the mark is the first fight's), graded on f18900. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  sc->actors[obj].draw = 2;   // (THE BATTLE'S MARK IS TWO BYTES)",
+          "replace": "  sc->actors[obj].dead = 1; sc->actors[obj].draw = 2; /* MUT: the mark is the port's dead */",
+          "why": "the epilogue's mark is $1A81 and the $1000 pause, which ops 0x0C / 0x90 undo"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

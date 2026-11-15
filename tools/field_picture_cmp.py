@@ -247,6 +247,9 @@ PICTURES = {
     # Leg 94 (Ozzie's barrier), Crono's tech on the Juggler (f9561): its graphics record flags it (E4/F604 bit 5 ->
     # `$A00A` 01, CC/EBA0) and its offset `$971A` is E0, so C1/5B5E puts its "147" 32 lines above its foot.
     'flagged-enemy-number-takes-its-offset': dict(leg='94_ozzie_barrier', at=5500, frames=4100, own=True),
+    # ...and the barrier's statues (objs 16 / 17): the first fight's epilogue marks them removed (`$1A81` 0, `$1000` bit
+    # 7), a script brings them back (op 0x0C, then op 0x90 on f18867) and they rise from the pits.
+    'removed-enemy-shown-again-is-drawn': dict(leg='94_ozzie_barrier', at=0, frames=18900, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's

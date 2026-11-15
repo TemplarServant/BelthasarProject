@@ -6321,12 +6321,16 @@ int CtSceneReconcileParty(CtScene* sc) {
   return n;
 }
 
-// battle_forest_return.md AD.3c: the battle epilogue's dead mark. Marks a battle enemy's field object removed:
-// excluded from the activation scan, never drawn or scheduled again. `dead` gives placed = 0 and the pass-1
-// scheduler skip; draw = 2 tags it removed (not hidden). Mover residue is cleared.
+// battle_forest_return.md AD.3c: the battle epilogue's dead mark. Marks a battle enemy's field object removed: the
+// ROM's two bytes below, `$1A81` = 0 (C0/A88D's latch falls: not drawn, not activated, not touched) and the `$1000`
+// bit 7 pause (C0/59EC: not scheduled). draw = 2 tags it removed (not hidden). Not the port's `dead`, which is `$1100`
+// bit 7 (op 0x0A's kill, C0/625F): a script undoes the mark -- op 0x0C (C0/6282) clears the pause and op 0x90 (C0/4CD5)
+// shows it again -- and the cartridge then draws it. MEASURED, playthrough leg 94: Ozzie's barrier's statues (objs 16
+// and 17, removed by the first fight's epilogue) are called at priority 4 on f18861, `$1A81` 01 by C0/4CDC on f18867,
+// `$0F00` 80 by C0/A8F5, and they rise on the screen; with `dead` set they stayed off it (1199 px on f18900).
 void CtSceneBattleRemoveObj(CtScene* sc, int obj) {
   if (!sc || obj < 0 || obj >= sc->nobj) return;
-  sc->actors[obj].dead = 1; sc->actors[obj].draw = 2;
+  sc->actors[obj].draw = 2;   // (THE BATTLE'S MARK IS TWO BYTES)
   sc->actors[obj].cadPause = 1;                     // = the $1000 bit 7 stored below: C0/59EC and C0/5AD1 read it
   // ...and the ROM's own dead mark, two bytes. C0/07ED-080C (m=1/x=0), the enemy epilogue:
   //   07ED: LDA $7E29C6,X / BNE ->080D      ; survivor -> restore field position instead

@@ -571,3 +571,12 @@ end `C1/B3BB` masks it down to **`&= 0x40`** for all eight slots, and bit 6 was 
 test is "was this staged mode-6", independent of death, dissolve or flight. Measured: GATO `$29EA
 0x42 -> 0x40` and he survives; the forest ambush `$29F6/$2A0E 01 -> 00` and both objects are
 dead-marked by `C0:07FB`. Full derivation: [battle_end_teardown_survivor.md](battle_end_teardown_survivor.md).
+
+### AD.3c addendum (2026-11-15) -- the mark is undone by a script
+"Never re-activates them" holds only while nothing touches the two bytes. Op 0x0C (C0/6282) clears the `$1000` bit 7
+pause and op 0x90 (C0/4CD5) stores `$1A81` = 01; C0/A88D's latch then rises and the object is drawn and scheduled again.
+MEASURED, playthrough leg 94 (Ozzie's barrier, loc 0AF): the statues objs 16 / 17, marked by the first fight's
+epilogue, are called at priority 4 on f18861 (`$1C20` 04), `$1A81` 01 by C0:4CDC on f18867, `$0F00` 80 by C0:A8F5,
+and the cartridge's OAM 48-55 draws them rising from the pits. The port's CtSceneBattleRemoveObj set its `dead` too
+(`$1100` bit 7's flag, op 0x0A's kill), which `placed` reads, so they never came back; it now writes only the two
+bytes. Check field-picture-removed-enemy-shown-again-is-drawn-vs-cartridge.

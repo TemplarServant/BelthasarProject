@@ -3419,3 +3419,9 @@ check's re-pin of the same date).
 f5500 and graded on f9600. C1/5B4D takes a damage number's origin at the foot plus `$9708/$9713` when the combatant's
 `$A003` is set -- bit 5 of its graphics record (E4/F604 + id*10, CC/EBA0) -- so the Juggler's "147" stands 32 lines above
 its foot (offset E0). The port rose it from the foot, under the battle window (117 px). `0 px`; one mutation.
+
+`field-picture-removed-enemy-shown-again-is-drawn-vs-cartridge`: playthrough leg 94 (Ozzie's barrier), played from the
+leg's start and graded on f18900. A fight's epilogue marks a defeated enemy with two bytes (`$1A81` 0, the `$1000`
+pause); a script undoes them (op 0x0C, op 0x90) and the cartridge draws the object again -- the barrier's statues rise
+from the pits. The port also set its `dead` (op 0x0A's kill), which kept them off the screen (1199 px). `0 px`; one
+mutation.
