@@ -32,3 +32,19 @@ pose at the four points before the body, oldest first. Only the PCs' renderer dr
 After: 13 trail frames, the dash's box (40,0)-(110,130): 8 exact, 4 within 2-32 px, f9646 / c7667 372 px (the copies:
 the record phase against the cartridge — the tech's own timing residual, the ~18 frames the port reaches the dash early).
 `$A4A4`'s ROM writers (CF/F21D, F37F, F401) are not ported; it is 0 through this dash on the cartridge too.
+
+## An enemy's afterimage (2026-11-15)
+
+"No measured enemy afterimage" is gone: MEASURED on the rule's cartridge, playthrough leg 91 (loc 0A9's fight from
+f42586), the enemy's action `$9877` 7B (script CD/8D1F) arms the afterimage on cmb 3 (record period `$AB6A` 3, draw period
+`$AB80` 2): on f69901 OAM 24-55 are four more copies of its cells 40-4E at (128,13), (122,25), (116,38), (110,53) behind
+the body's 16-23 at (130,10), every other frame, through the jump (f69882-f69960). The history `$AB96..` / `$ABA1..` is the
+port's frame for frame. field.c battleEnemyTrail draws them for the generic enemy renderer as battleStanceRender does for
+the PCs (before the body, oldest first). Check field-picture-enemy-afterimage-is-drawn-vs-cartridge.
+
+Open, the same for both: on the frames where a record and a draw land together (every sixth frame here, `rr` 3 and `dd`
+2) the cartridge's copies stand at the point just recorded and the port's a record behind (up to 415 px). The draw
+countdown `$AB8B` runs on the other parity in the port (the compose at the tick's end sees the arm of the same tick, the
+cartridge's compose -- CF/E778 in the frame service, after CF/E756's record -- sees it a frame later); moving the record
+to the compose (both at the tick's end) makes the jump's ascent exact but its descent and the Ice Sword's graded frames
+wrong, so neither placement is the cartridge's. Not resolved.

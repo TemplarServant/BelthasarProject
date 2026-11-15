@@ -8301,6 +8301,18 @@ static int battleEnemyPoseBlitT(uint8_t* fb, int slot, int id, int poseIdx, int 
   }
   return 1;
 }
+// The afterimage of an enemy (CF/E92C, battle.c battleTrailCompose), as the PCs' (battleStanceRender): on the frames its
+// countdown lands the compose puts the combatant's current cells down four more times at the recorded points (the foot +
+// `$A4A4` / `$A4AF` as CF/ED18 kept them), in OAM after the body -- behind it -- newest first, so painted oldest first.
+// The arm `A4 rr dd` (C1/691B) serves any combatant. MEASURED on the rule's cartridge, playthrough leg 91 (loc 0A9's
+// fight), the enemy's action `$9877` 7B: on f69901 OAM 24-55 are four more copies of cmb 3's cells 40-4E at (128,13),
+// (122,25), (116,38), (110,53) behind the body's 16-23 at (130,10), every other frame (`$AB7D` 2) -- a column of the
+// jumper's images the port did not draw (up to 1457 px a picture, f69882-f69960).
+static void battleEnemyTrail(uint8_t* fb, const CtBattleHost* h, int slot, int id, int pose, int etype, const uint16_t* pal) {
+  const int c = 3 + slot;
+  if (!h || !h->trailShown[c]) return;
+  for (int k = 3; k >= 0; k--) battleEnemyPoseBlitT(fb, slot, id, pose, etype, h->trailXShown[c][k], h->trailYShown[c][k], pal);
+}
 static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h) {
   if (!fb || !mem || !h) return;
   g_bEnemyMem = mem;
@@ -8341,6 +8353,7 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
         gx = 16 * rec[0] + rec[2]; gy = 16 * rec[1] + rec[3];
         battleEnemyLiveDelta(mem, h, slot, &gdx, &gdy);
         gx += gdx + battleHopX(h, 3 + slot); gy += gdy + battleHopY(h, 3 + slot);
+        battleEnemyTrail(fb, h, slot, id, h->ascPmPose[3 + slot], etype, gw);   // (behind the body: OAM after it)
         if (battleEnemyPoseBlitT(fb, slot, id, h->ascPmPose[3 + slot], etype, gx, gy, gw)) continue;
       }
     }
@@ -8355,6 +8368,7 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     footX = 16 * rec[0] + rec[2]; footY = 16 * rec[1] + rec[3];
     battleEnemyLiveDelta(mem, h, slot, &ldx, &ldy);
     footX += ldx + battleHopX(h, 3 + slot); footY += ldy + battleHopY(h, 3 + slot);
+    battleEnemyTrail(fb, h, slot, id, rest, etype, pw);
     battleEnemyPoseBlitT(fb, slot, id, rest, etype, footX, footY, pw);
   }
 }

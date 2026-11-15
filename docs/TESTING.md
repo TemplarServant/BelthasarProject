@@ -3433,3 +3433,8 @@ under a front BG3 pixel, or the fixed colour where none is: the purple disc of a
 
 `field-picture-corpse-level-ships-in-packets-vs-cartridge`: the same leg, graded on f9000. A corpse's dither level ships
 in packets, one an NMI (CD/3ED2); the cells of the packets shipped are a level ahead (43 px before). `0 px`; one mutation.
+
+`field-picture-enemy-afterimage-is-drawn-vs-cartridge`: playthrough leg 91 (loc 0A9's fight), played from the leg's start
+and graded on f69900. The afterimage (`A4`, CF/ED18, CF/E92C) is any combatant's: the enemy's jump in action 7B leaves four
+copies of its cells behind it (1005 px before). `0 px`; one mutation. Open: the record/draw coincidence frames (up to
+415 px, every sixth frame), as for the PCs.

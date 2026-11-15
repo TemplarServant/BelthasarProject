@@ -255,6 +255,9 @@ PICTURES = {
     'bg3-disc-adds-the-sprites-under-it': dict(leg='137_lavos_spawns_summit', at=0, frames=4640, own=True),
     # ...and slot 0's corpse (type 3: four $400 packets a level) shows its first packet a level ahead (f9000).
     'corpse-level-ships-in-packets': dict(leg='137_lavos_spawns_summit', at=0, frames=9000, own=True),
+    # Leg 91 (loc 0A9's fight, from f42586), the enemy's action `$9877` 7B: cmb 3 jumps with an afterimage (`A4`), four
+    # copies of its cells at the recorded points behind the body, every other frame.
+    'enemy-afterimage-is-drawn': dict(leg='91_flea', at=0, frames=69900, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's

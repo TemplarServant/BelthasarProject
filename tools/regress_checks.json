@@ -53279,6 +53279,40 @@
       ]
     },
     {
+      "name": "field-picture-enemy-afterimage-is-drawn-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "enemy-afterimage-is-drawn"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: enemy-afterimage-is-drawn leg 91 +69900 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: enemy-afterimage-is-drawn "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an enemy's afterimage is drawn: four copies of its cells at the recorded points, as on the cartridge",
+      "notes": "THE AFTERIMAGE IS ANY COMBATANT'S: `A4 rr dd` (C1/691B) arms it on the track's combatant, CF/ED18 records the points and CF/E92C (from the compose) puts the combatant's current cells down four more times at them, in OAM after the body. The port drew it for the PCs only (battleStanceRender). Playthrough leg 91 (loc 0A9's fight from f42586), the enemy's action `$9877` 7B: cmb 3 jumps with record period 3 and draw period 2, and on f69901 OAM 24-55 are four copies of its cells 40-4E at (128,13) (122,25) (116,38) (110,53) behind the body at (130,10); the port drew no copies (1005 px on f69900, up to 1457 px a picture f69882-f69960). field.c battleEnemyTrail. Played from the leg's start (a seed inside the fight's leg runs another fight), graded on f69900. Open: on the frames where a record and a draw land together (every sixth here) the port's copies are a record behind (up to 415 px), the residual the PCs' afterimage carries too (attract-087-ice-sword-afterimage-vs-oracle's notes). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (!h || !h->trailShown[c]) return;",
+          "replace": "  return; /* MUT: no enemy afterimage */",
+          "why": "the copies are the enemy's own cells at the recorded points"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

@@ -312,3 +312,7 @@ carried on by mechanisms that quantise time:
   alone on the sub screen and added into it, f4585-f4715, up to 6353 px) was not drawn, and slot 0's corpse showed its
   dither level whole where the cartridge ships it packet by packet (33-44 px, f8972-f9100). Both fixed (battle.c
   battleFxSubObjOnly, field.c battleDissolveBlitCells); the leg's audit samples f4400-f9300 are 0 px at the fight's lag.
+- **Leg 91, the enemy's afterimage (2026-11-15).** The picture audit's f62700-f92100 samples (103-1005 px) are cmb 3's jump
+  in action 7B: the cartridge draws four afterimage copies behind it (`A4`, CF/E92C), the port drew them for PCs only.
+  Fixed (field.c battleEnemyTrail): f69860-f69970 is 0 px but for the record/draw coincidence frames (every sixth, up to
+  415 px, open in battle_afterimage.md) and the landing (f69962-f69970, 197 px, not yet read).
