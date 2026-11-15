@@ -358,3 +358,14 @@ carried on by mechanisms that quantise time:
 - **Leg 82, inside the Nizbel fight (2026-11-15).** The arena's torches are a step apart (23-28 px, two frames in four:
   the tile animation's phase, the load clock class). Open: f14399-f14400 (430 px), Ayla's landing from a jump drawn
   differently for two frames while `$1D24`, `$A4B0` and the pose `$9908` are the cartridge's frame for frame.
+- **Leg 110 (Mt. Woe), the run-off's gauge (2026-11-15).** Fixed: the run-off's end reloaded seat 0's ATB (42 / 42) where
+  the cartridge's stays 00 / 01 (the flee leaves through C1/8212, not C1/BCE1): the exit's pictures showed the gauge
+  empty (224 px, f21000). Open: f26100 (10480 px at both lags), f15300.
+- **Leg 111 (Mt. Woe chests), open (2026-11-15).** f13800: the target hand's pulse a step apart (88 px, both lags);
+  f14397-f14405: the target's name ("Gargoyle") a frame later in the port; f14406+: 34 px under the window's bottom
+  line at (136-147, 32-36).
+- **Leg 115 (Dalton), open (2026-11-15).** The overworld sequence of the Blackbird (loc 1F4, f9900-f10230): a vertical
+  beam (x 125-131, f9960-f10050, 142-1308 px), whole frames (f10080-f10110, f10230) and the Blackbird itself, drawn by
+  the cartridge on f10170-f10200 at (72-183, 95-182) with no OAM on screen (a background layer) and absent in the port.
+  Not read.
+- **Leg 110 f26100 (10480 px at both lags), open.** Mt. Woe's mist layer at another phase (as Death Peak's snow, 134).

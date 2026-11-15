@@ -3447,3 +3447,7 @@ bit 3 (58 px before). `0 px`; one mutation.
 the leg's start and graded on f1800. When an enemy's chosen victim has fallen, C1/8DE4 draws a living PC and stores it as
 the victim list's first and the animation's mask (C1/8DF7-8DFF); the ball then rolls to Marle, not to the fallen Lucca
 (1378 px before). `0 px`; one mutation.
+
+`field-picture-run-off-reloads-no-gauge-vs-cartridge`: playthrough leg 110 (Mt. Woe, a fight run away), seeded on the
+field at f20400 and graded on f21000. The run-off's end reloads no ATB gauge (the flee leaves through C1/8212, not the
+turn's close C1/BCE1): seat 0's stays full on the exit's pictures (224 px before). `0 px`; one mutation.

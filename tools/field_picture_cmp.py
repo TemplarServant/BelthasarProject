@@ -262,6 +262,8 @@ PICTURES = {
     'shadow-in-palette-5-is-drawn': dict(leg='95_magus', at=0, frames=14400, own=True),
     # Leg 29 (the fight from f778): the ball's chosen victim fell; C1/8DE4's re-draw makes Marle the script's target too.
     'redrawn-victim-is-the-scripts-target': dict(leg='29_gate_home', at=0, frames=1800, own=True),
+    # Leg 110 (the fight from f20536, run away): the run-off's end reloads no gauge -- seat 0's stays full (f21000).
+    'run-off-reloads-no-gauge': dict(leg='110_mt_woe_summit', at=20400, frames=600, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's

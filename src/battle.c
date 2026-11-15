@@ -14963,7 +14963,11 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // ...but not a counter's. C1/BCE1 reloads `$B18B`'s timer at the close of a turn; a when-hit counter runs inside the
     // provoking turn's C1/8706 loop and leaves through C1/882F (`$B18B := 00`) without reaching it -- the counter takes
     // no turn of the counterer's, so his own countdown runs on through it.
-    if (!wasCounter) {
+    // ...nor the run-off's: its script ends the window and the flee's end goes through C1/8212's chain, not the turn's
+    // close. MEASURED on the rule's cartridge, playthrough leg 110 (the fight from f20536, run away): the run-off's window
+    // ends on f20975 and seat 0's `$99DD` / `$9F22` stay 00 / 01 -- its gauge full on the exit's pictures; the port
+    // reloaded them to 42 / 42 and drew the gauge empty (224 px, f21000).
+    if (!wasCounter && !h->actEndByScript) {   // (NO RELOAD FOR THE RUN-OFF)
     battleAtbLoad(s, atk);                                      // reload the countdown (C1/BCE5-BCEB, C1/BD6F: a PC's $9F22 too)
     battleAtbRearm(s, atk);                                     //   ...and re-arm its flag (C1/BCEE-BCF5)
     }

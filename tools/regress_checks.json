@@ -53381,6 +53381,40 @@
       ]
     },
     {
+      "name": "field-picture-run-off-reloads-no-gauge-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "run-off-reloads-no-gauge"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: run-off-reloads-no-gauge leg 110 f20400 +600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: run-off-reloads-no-gauge "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the run-off's end reloads no gauge, as on the cartridge",
+      "notes": "THE RUN-OFF TAKES NO TURN'S CLOSE: its script ends the window and the flee's end goes through C1/8212's chain, not C1/BCE1's reload. Playthrough leg 110 (the fight from f20536, run away): the run-off's window ends on f20975 and seat 0's `$99DD` / `$9F22` stay 00 / 01, its gauge full on the exit's pictures; the port reloaded them to 42 / 42 at the window's end and drew the gauge empty (224 px on f21000). battle.c, the span end's reload. Seeded on the field at f20400, graded on f21000. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (!wasCounter && !h->actEndByScript) {   // (NO RELOAD FOR THE RUN-OFF)",
+          "replace": "    if (!wasCounter) { /* MUT: the run-off reloads */",
+          "why": "seat 0's gauge stays full through the exit"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",
