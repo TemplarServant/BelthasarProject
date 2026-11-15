@@ -326,3 +326,14 @@ carried on by mechanisms that quantise time:
   compositor keeps BG3's map at $7C00 only (battleFxBg3PixelP returns 0 below it) and BG3's characters as the effect's
   sheets, so the port has no BG3 there and draws the hand whole (128 px). Needs the field's BG3 map and characters
   carried into the fight; not done.
+- **Leg 29, the ball's re-drawn victim (2026-11-15).** The ball chose Lucca on f1422 and acted after she fell: the
+  cartridge's re-draw C1/8DE4 gives Marle and stores her in `$AD8E`, `$AECC` and the mask `$AE95` (C1/8DF7-8DFF), so the
+  script's target `$A017` is 02. The port hit Marle but left the mask on Lucca and the ball rolled to her; the fight
+  went another way (f1724-f5400, 260-1700 px). Fixed (battle.c, the C1/8DE4 arm): f1800-f6600 is 0 px. Open: f1660
+  (one frame, Lucca standing in the port, 503 px: her fall's pose shows the previous pose's tiles a frame in the
+  port). Timing: f7500 (319 px) and the gate's swirl from f8400 (2300-2900 px, a palette step apart) -- the fight's exit
+  lands a frame early in the port (`$0117` 00 on f6722 for the cartridge's f6723, the 2026-11-07 class) and the room's
+  animations keep the offset.
+- **Leg 58 (heckran cave), timing (2026-11-14).** The cave's torch a step off (f3300-f11400, 63-150 px): the field's tile
+  animation (`$051D` / `$0530`) is a step ahead in the port from f3012 -- right after a fight's return the cartridge's
+  main loop is parked two frames by the exit's sound handshake (the SPC fade lattice class, closed 2026-11-07).

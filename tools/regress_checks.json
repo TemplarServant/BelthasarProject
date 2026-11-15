@@ -53347,6 +53347,40 @@
       ]
     },
     {
+      "name": "field-picture-redrawn-victim-is-the-scripts-target-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "redrawn-victim-is-the-scripts-target"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: redrawn-victim-is-the-scripts-target leg 29 +1800 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: redrawn-victim-is-the-scripts-target "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an enemy whose victim fell re-draws a living PC and its animation goes to that PC, as on the cartridge",
+      "notes": "C1/8DE4-8DFF: WHEN THE TURN'S VICTIM HAS LEFT THE ROSTER, A LIVING PC IS DRAWN (`LDA #30 / JSR C1/AF22 / LSR` x4 until `$AEFF` holds one) AND STORED AS THE VICTIM LIST'S FIRST: `STA $AD8E / STA $AECC / JSR C1/AD09` -- the mask `$AE95` the animation's roles come from (CC/F186: `$A017`). The port drew the PC and hit it, but left `$AECC` and `$AE95` as the turn had built them. Playthrough leg 29 (the fight from f778): the ball's turn chose Lucca (01) on f1422; she fell before it acted, and on f1686 the re-draw gives Marle (02): `$AD8E` 02 by C1:8DFB, `$AECC` 02 by C1:8DFF, `$AE95` 0020 by C1:AD31, `$A017` 02. In the port `$A017` stayed 01 and the ball rolled to the fallen Lucca (1378 px on f1800) -- and the fight went another way from there (f2100-f5400, 600-1700 px). battle.c, the C1/8DE4 arm. Played from the leg's start, graded on f1800. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      s[0xAD8E] = (uint8_t)tgt; s[0xAECC] = (uint8_t)tgt;               // (THE RE-DRAWN VICTIM)",
+          "replace": "      /* MUT: the re-draw does not reach $AECC */",
+          "why": "the mask the animation's target comes from is the re-drawn PC's"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

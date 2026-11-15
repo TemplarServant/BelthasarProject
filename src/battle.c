@@ -11450,6 +11450,14 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
       if (!anyPc) return;                                              // C1/8DE1 JMP C1/8EA6
       const uint8_t* rom = CtBattleRom(NULL);
       do { tgt = battleRng(s, rom, 0x2F) >> 4; } while (s[0xAEFF + tgt] == 0xFF);   // C1/8DE4-8DF5
+      // C1/8DF7-8DFF `TXA / STA $AD8E / TXA / STA $AECC / JSR C1/AD09`: the drawn PC is the victim list's first and the
+      // mask `$AE95` the animation's roles come from (CC/F186: `$A017`). MEASURED on the rule's cartridge, playthrough leg
+      // 29 (the fight from f778): the ball's turn chose Lucca (01) on f1422; she fell before it acted, and on f1686 the
+      // re-draw gives Marle (02): `$AD8E` 02 by C1:8DFB, `$AECC` 02 by C1:8DFF, `$AE95` 0020 by C1:AD31, so `$A017` is 02
+      // and the ball rolls to her. The port kept `$AECC` 01 and `$AE95` 0040 -- the script's target the fallen Lucca, the
+      // ball rolled the other way (up to 1378 px, f1724-f1800) though the hit landed on Marle.
+      s[0xAD8E] = (uint8_t)tgt; s[0xAECC] = (uint8_t)tgt;               // (THE RE-DRAWN VICTIM)
+      battleTargetMask(s);                                             // C1/8DFF JSR C1/AD09
     }
     h->aiTurnAdv[slot] = 1;                                            // C1/8E4A steps the entry when the action returns
   }

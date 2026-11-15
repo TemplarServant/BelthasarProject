@@ -3442,3 +3442,8 @@ copies of its cells behind it (1005 px before). `0 px`; one mutation. Open: the 
 `field-picture-shadow-in-palette-5-is-drawn-vs-cartridge`: playthrough leg 95 (Magus's fight), played from the leg's
 start and graded on f14400. A combatant's shadow takes the palette `$A5E3 | $9F46` names -- 5 while CD/1B8B holds `$9F46`
 bit 3 (58 px before). `0 px`; one mutation.
+
+`field-picture-redrawn-victim-is-the-scripts-target-vs-cartridge`: playthrough leg 29 (the fight from f778), played from
+the leg's start and graded on f1800. When an enemy's chosen victim has fallen, C1/8DE4 draws a living PC and stores it as
+the victim list's first and the animation's mask (C1/8DF7-8DFF); the ball then rolls to Marle, not to the fallen Lucca
+(1378 px before). `0 px`; one mutation.
