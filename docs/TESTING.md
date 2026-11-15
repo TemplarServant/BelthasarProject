@@ -3438,3 +3438,7 @@ in packets, one an NMI (CD/3ED2); the cells of the packets shipped are a level a
 and graded on f69900. The afterimage (`A4`, CF/ED18, CF/E92C) is any combatant's: the enemy's jump in action 7B leaves four
 copies of its cells behind it (1005 px before). `0 px`; one mutation. Open: the record/draw coincidence frames (up to
 415 px, every sixth frame), as for the PCs.
+
+`field-picture-shadow-in-palette-5-is-drawn-vs-cartridge`: playthrough leg 95 (Magus's fight), played from the leg's
+start and graded on f14400. A combatant's shadow takes the palette `$A5E3 | $9F46` names -- 5 while CD/1B8B holds `$9F46`
+bit 3 (58 px before). `0 px`; one mutation.

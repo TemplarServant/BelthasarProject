@@ -53313,6 +53313,40 @@
       ]
     },
     {
+      "name": "field-picture-shadow-in-palette-5-is-drawn-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "shadow-in-palette-5-is-drawn"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: shadow-in-palette-5-is-drawn leg 95 +14400 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: shadow-in-palette-5-is-drawn "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a combatant's shadow is drawn in the palette its attribute names, 5 as well as 1, as on the cartridge",
+      "notes": "THE SHADOW'S ATTRIBUTE IS `$A5E3 | $9F46` (CF/EA8A): OBJ palette 1 from the boot (CC/E37D `$9F46` = 02), palette 5 while CD/1B8B's `EOR #08` holds bit 3. Playthrough leg 95 (Magus's fight), action `$9877` 9F: OAM 20, Magus's shadow (`$A5DB` 01), is tile 002 at (120,124) attribute 3A, its pixels palette 5's colour 15 (CGRAM DF, (5,5,5)) on f14400; the port drew the shadow in palette 1 only and left it out (58 px). field.c battleShadowRender reads another palette from the page the NMI uploaded (h->fxCgram). Played from the leg's start, graded on f14400. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (spal == 1) { if (!CtBattleObjPal1Tail(palw)) return; }",
+          "replace": "  if (spal != 1) return; if (!CtBattleObjPal1Tail(palw)) return; /* MUT: palette 1 only */",
+          "why": "the attribute's palette is 5 on f14400"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

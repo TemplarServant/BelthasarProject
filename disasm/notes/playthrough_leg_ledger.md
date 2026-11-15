@@ -316,3 +316,13 @@ carried on by mechanisms that quantise time:
   in action 7B: the cartridge draws four afterimage copies behind it (`A4`, CF/E92C), the port drew them for PCs only.
   Fixed (field.c battleEnemyTrail): f69860-f69970 is 0 px but for the record/draw coincidence frames (every sixth, up to
   415 px, open in battle_afterimage.md) and the landing (f69962-f69970, 197 px, not yet read).
+- **Leg 95, Magus's shadow in palette 5 (2026-11-15).** During action 9F `$9F46` bit 3 is set (CD/1B8B) and the
+  shadow's attribute is 3A: palette 5's colour 15 on the cartridge (f14400, 58 px). The port drew it in palette 1 only;
+  fixed (field.c battleShadowRender). The leg's f14300 (10 px), f15400 (799 px), f16100 (1 px), f17100 (3 px) and
+  f17400 (489 px) are other, not yet read.
+- **Leg 93 f38400-f38700, open (2026-11-15).** The target hand at (184-199, 33-44) is dimmed on the cartridge: lines
+  33-160 run TM 17 TS 13 CGADSUB 44 (BG3 math, half, the sub screen added) with BG3 at map $7000 / chr $5000 -- the
+  room's BG3 layer, in front of the sprites (BGMODE bit 3) -- so the hand shows as (BG3 + hand) / 2. The battle's effect
+  compositor keeps BG3's map at $7C00 only (battleFxBg3PixelP returns 0 below it) and BG3's characters as the effect's
+  sheets, so the port has no BG3 there and draws the hand whole (128 px). Needs the field's BG3 map and characters
+  carried into the fight; not done.

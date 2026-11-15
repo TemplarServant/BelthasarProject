@@ -8878,9 +8878,15 @@ static int battleHiddenObj(const uint8_t* mem, const CtBattleHost* h, int cmb) {
 static void battleShadowRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost* h, int cmb) {
   if (!fb || !mem || !h || !h->mvInited || cmb < 0 || cmb >= 11 || !h->ascShadow[cmb]) return;
   if (mem[0x9FF7 + cmb]) return;                                         // CF/EA8F
-  if ((((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7) != 1) return;
+  // The attribute's palette: `$A5E3 | $9F46`, 1 from the boot (CC/E37D `$9F46` = 02) -- and 5 while CD/1B8B's `EOR #08`
+  // holds bit 3 of `$9F46`. MEASURED on the rule's cartridge, playthrough leg 95 (Magus's fight, action `$9877` 9F): OAM 20,
+  // Magus's shadow (`$A5DB` 01), is tile 002 at (120,124) attribute 3A, its pixels palette 5's colour 15 (CGRAM DF,
+  // (5,5,5)) on f14400 and through the holes of his robe on f17100; the port drew the shadow in palette 1 only and left it
+  // out (58 px / 3 px). Palette 1 is FF:9E0A's tail as before; another is read from the page the NMI uploaded.
+  const int spal = ((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7;
   uint16_t palw[16];
-  if (!CtBattleObjPal1Tail(palw)) return;
+  if (spal == 1) { if (!CtBattleObjPal1Tail(palw)) return; }
+  else for (int i = 0; i < 16; i++) { int c = (128 + spal * 16 + i) * 2; palw[i] = (uint16_t)(h->fxCgram[c] | (h->fxCgram[c + 1] << 8)); }
   static uint8_t win[0x12][32];
   static const int name[4] = { 0x00, 0x01, 0x10, 0x11 };                 // VRAM $02 $03 $12 $13, rebased
   for (int q = 0; q < 4; q++) { const uint8_t* s = CtBattleShadowTile(q); if (!s) return; memcpy(win[name[q]], s, 32); }

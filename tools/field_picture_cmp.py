@@ -258,6 +258,8 @@ PICTURES = {
     # Leg 91 (loc 0A9's fight, from f42586), the enemy's action `$9877` 7B: cmb 3 jumps with an afterimage (`A4`), four
     # copies of its cells at the recorded points behind the body, every other frame.
     'enemy-afterimage-is-drawn': dict(leg='91_flea', at=0, frames=69900, own=True),
+    # Leg 95 (Magus's fight), action `$9877` 9F: Magus's shadow in OBJ palette 5 (`$9F46` bit 3, CD/1B8B), f14400.
+    'shadow-in-palette-5-is-drawn': dict(leg='95_magus', at=0, frames=14400, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's
