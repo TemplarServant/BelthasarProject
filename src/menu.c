@@ -1977,7 +1977,7 @@ void CtMenuSprRequest(int charId, int animId) {
 void CtMenuSprTick(const CtMenuHost* h) {
   if (getenv("CT_SPRDBG")) {   /* debug: the block state this frame, per character */
     for (int c = 0; c < 7; c++) if (g_mspr[c].want || g_mspr[c].cur)
-      fprintf(stderr, "[mspr] c%d want=%02X cur=%02X frame=%d count=%d pose=%02X\n",
+      printf("[mspr] c%d want=%02X cur=%02X frame=%d count=%d pose=%02X\n",
               c, g_mspr[c].want, g_mspr[c].cur, g_mspr[c].frame, (int8_t)g_mspr[c].count, g_mspr[c].pose);
   }
   // The upload budget (2F65D STZ $0D73 / 2F678 CMP $0D75 / BCS): a block advances only while $0D73 < $0D75, and a new
@@ -3124,14 +3124,19 @@ void CtMenuRenderExchange(const CtMenuHost* h, uint8_t* fb, int pickBlink) {
   // reserve column (C2/E964-E977 `LDA $56 / BEQ / LDA #40 / TSB $0773`): it points left there. The picked cell's second
   // hand takes the word the first had at the pick (C2/8A31 `LDA $0772 / STA $0DA1`, C2/8A8B `LDX $0DA1 / STX $0776`):
   // flipped when the pick was on the reserve column.
-  int c = m[0x54] & 0x0F; if (c > 6) c = 6;
-  mHandFlip = m[0x56] != 0;
-  mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);
+  // The second hand is the OAM entry after the cursor's ($0774 behind $0770), so where the two overlap -- the cursor
+  // still on the picked cell -- the cursor's is in front: the second is drawn first here, as on the Form and Item
+  // screens. MEASURED on the rule's cartridge, playthrough leg 130 (Lucca picked, f11634): on the blink's visible half
+  // (`$0DA0` bit 0 clear, C2/8A45 `JSR C2/8B6E / BCS`) the cursor's hand shows whole over the second; the port drew the
+  // second on top (70 px a picture, four frames in eight, f11641-f11668).
   if (m[0x0F00] != 0xFF && pickBlink) {
     int pc = m[0x0D9C] & 0x0F; if (pc > 6) pc = 6;
     mHandFlip = pc >= 3;
     mHandCursor(h, fb, m[0x9380 + pc * 6] + 2, m[0x9381 + pc * 6] - 1);
   }
+  int c = m[0x54] & 0x0F; if (c > 6) c = 6;
+  mHandFlip = m[0x56] != 0;
+  mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);
   mHandFlip = 0;
 }
 

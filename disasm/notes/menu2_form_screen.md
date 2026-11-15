@@ -1537,3 +1537,30 @@ port's shot N - 1 against the cartridge's `--peek` N, 0 px over the fade-in's en
 code, but no state reaches one of its twelve sites: ungraded. (3) A song post a busy driver holds past S0 + 2 is modelled
 as moving P; the cartridge would run C2/C649 first and hold only the fade-in (C2/C7CB) -- not measured. (4) The overworld's
 own poll (C2/2552: `$027C == 5 ? 1 : 5`) is not this launcher and is not ported.
+
+## Screen $07 against the cartridge's playthrough (2026-11-15)
+
+Playthrough leg 130 opens the exchange with the script's `C8 00` right after Magus's naming screen, picks Lucca, swaps and
+closes with B. Four port differences, each measured on the rule's cartridge and fixed:
+
+* **The entry fade starts from the resume's brightness.** C0/0CCE's fade (`LDA $19 / BEQ / BMI / DEC $19`) runs from the
+  byte the field has. The naming's resume (C0/2824, `INC $19` at C0/2829) lights the field 01 .. 0F over f11288-f11302, so
+  the exchange fades 0E .. 00 over f11307-f11321 and switches on f11322 ($0A00 = 05, C2:8020), `$67` = 07 on f11337, the
+  song post `14 3E` f11338-f11361, P on f11363. The port wrote the byte but left the scene's brightness at the naming's 0:
+  it opened the exchange at once, fifteen frames early (field.c fieldResume now syncs it, and so do the menu block's resume
+  and entry fade).
+* **The build's pose request is played on P.** C2/CB74 `JSR C2/C805` -> C2/C973 asks the cursor's member to walk; C2/F643's
+  task, spawned by the init chain, walks the blocks in P's own scan: Marle's `$1851` = 01 01 with count 06 on f11363, her
+  pose steps on f11370 and every seventh frame. The port played it from P + 1.
+* **The second hand is behind the cursor's.** C2/8A45 (`JSR C2/8B6E / BCS ->8A91`) lays the picked cell's hand in `$0774`
+  at (x + 2, y - 1) of the cell (C2/8B85) with the word `$0DA1` = `$0772` at the pick (C2/8A31: `20 30` here), on the
+  blink's half where `$0DA0` bit 0 is clear. The cursor's hand is `$0770`, the entry before, so it is in front where the
+  two overlap. `$0DA0/$0DA3` step alike on both sides.
+* **The close fades the live screen.** C2/CC0E: `81 08 01 01` (C2/CBF7), the C2/83CA fade (`$0D10` 0D .. 00 over
+  f11753-f11760), the `$2141` wait (C2/CC28, a C2/821E yield a frame), `11 <$0F0E> 80 80` and `81 10 xx xx` (C2/CBEB), then
+  C2/C802 JMP C2/82B2. No task is killed until then: the wave (`$0F10/$0F11` every second frame) and the sprite blocks
+  (Lucca's `$1891` counting on, its frame wrapping on f11754) go on under the fade.
+
+What stays: the close's song handshakes (the `$2141` wait, `11 4B`, `81 10 FF`) take f11761-f11773 on the cartridge and
+end a frame earlier in the port, so the RTL is f11773 for f11774 and the field's resume a frame early (f11798 for
+f11799) -- the SPC/C7 pace, the timing class closed on 2026-11-07.

@@ -222,6 +222,19 @@ PICTURES = {
     # The port moved him without publishing it: Lucca took a ring entry where she stands a frame on the cartridge, and
     # the followers stopped 2-3 px short -- Marle drawn in front where Lucca is (419 px a picture to f195000).
     'momentum-step-is-a-moving-lead': dict(leg='125_blackbird_wing', at=183040, frames=1160, own=True),
+    # Magus's name (leg 130, the naming screen): after the fifth letter `$0F06` is 5 (C2/E341), and C2/E34A puts the arrows
+    # at min($0F06, 4) -- over the last letter. The port drew them a letter further right (292 px, f9500-f10800).
+    'full-name-keeps-the-arrows-on-its-last-letter': dict(leg='130_black_omen_gaspar', at=0, frames=10000, own=True),
+    # The exchange after Magus's naming (leg 130): the naming's resume lights the field (`$0119` 01 .. 0F, C0/2829) and
+    # the `C8 00` exchange fades from there (f11307-f11321); with the scene's brightness left at the naming's 0 the port
+    # opened it at once, fifteen frames early (its wave 7000 px off). On P the build's C2/C973 request is played by
+    # C2/F643's task in the same scan: Marle's pose steps on f11370, f11377 .. (f11407 is a step's picture, on a frame
+    # whose wave pins the offset: the pictures before and after it show other steps of the wave).
+    'exchange-opens-after-the-naming-resume': dict(leg='130_black_omen_gaspar', at=0, frames=11407, own=True),
+    # ...the picked cell's second hand ($0774) is the OAM entry after the cursor's ($0770): the cursor's is in front.
+    'exchange-cursor-hand-over-the-picked': dict(leg='130_black_omen_gaspar', at=0, frames=11650, own=True),
+    # ...and its close (C2/CC0E's fade, no task killed) fades the live screen: the wave and the sprite blocks go on.
+    'exchange-close-fades-the-live-screen': dict(leg='130_black_omen_gaspar', at=0, frames=11758, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

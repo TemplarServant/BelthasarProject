@@ -3376,3 +3376,18 @@ f183040 with the party standing, graded on f184200. On f183147 a script takes th
 his momentum: C0/881E runs with explore off and leaves `$1D33` 20, which the lead's B0 pushes and the followers' gap test
 reads. The port moved him without publishing it; the followers stopped 2-3 px short and Marle was drawn where Lucca is
 (419 px). `0 px differ at port -2`; one mutation. disasm/notes/party_follower_ring.md, the 2026-11-14 section.
+
+`field-picture-full-name-keeps-the-arrows-on-its-last-letter-vs-cartridge`: playthrough leg 130 (the Black Omen, Magus's
+name), played from the leg's start and graded on f10000, the name typed in full. C2/E34A puts the naming screen's arrows
+at min(`$0F06`, 4): after the fifth letter the index is 5 and the arrows stay over that letter. The port drew them a
+letter further right (292 px). `0 px differ at port +0`; one mutation. disasm/notes/naming_screen_sfx.md, the 2026-11-15
+section.
+
+`field-picture-exchange-opens-after-the-naming-resume-vs-cartridge`, `field-picture-exchange-cursor-hand-over-the-picked-vs-cartridge`,
+`field-picture-exchange-close-fades-the-live-screen-vs-cartridge`: playthrough leg 130, the `C8 00` exchange after Magus's
+naming, played from the leg's start and graded on f11407, f11650 and f11758. The first pins two things: the menu resume's
+`$0119` (C0/2829) is the scene's brightness, so the exchange fades from the lit field (the port had opened it at once,
+fifteen frames early), and the build's pose request is played on P itself (C2/F643's task). The second pins the hands'
+order: the picked cell's second hand (`$0774`) is behind the cursor's (`$0770`). The third pins the close: C2/CC0E's fade
+kills no task, so the wave and the sprites go on under it. `0 px` each; four mutations. disasm/notes/menu2_form_screen.md,
+the 2026-11-15 section.

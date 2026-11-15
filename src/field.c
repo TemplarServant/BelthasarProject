@@ -3996,7 +3996,11 @@ static void drawNameScreen(uint8_t* fb, const uint8_t* font, int charId, const c
   }
   for (int i = 0; i < 5; i++)                             // the entered name (menu font, with shadow)
     if (buf[i] && buf[i] != ' ') drawMenuGlyph(fb, asciiToCt(buf[i]), NS_NX + i * 8, NS_NAMETOP);
-  { int tx = NS_NX + pos * 8 - 2;                         // name-edit cursor = the 11x12 triangle
+  // The arrows' x is C2/E34A's: `LDA $0F06 / CMP #05 / BCC / LDA #04 / ASL x3 / ADC #9C / STA $0880 / STA $0884` -- the
+  // edit index, but never past the last letter: a full name ($0F06 = 5, C2/E341) keeps them over its fifth. MEASURED on
+  // the rule's cartridge, playthrough leg 130 (Magus's name, five letters typed): the arrows over the fifth letter from
+  // f9500 to f10800, where the port drew them a letter further right (292 px a picture).
+  { int tx = NS_NX + (pos < 5 ? pos : 4) * 8 - 2;         // name-edit cursor = the 11x12 triangle
     nsBlitTri(fb, nsTri, tx, 25, 1);                      //   above the name (V-flipped), apex down
     nsBlitTri(fb, nsTri, tx, 47, 0); }                    //   below the name, apex up; both move with pos
   nsBlitSprite(fb, nsHand, NS_HANDX + curCol * NS_PITCH, NS_HANDY + curRow * NS_PITCH);  // grid hand
@@ -11678,6 +11682,8 @@ int main(int argc, char** argv) {
   int menuFormPickTask = 0;                                  // task slot 6 = C2/8A45, the Form's picked panel's hand
   int menuFormAnimReq = 0;                                   // C2/C805 ran this frame: its C2/C840 JSR C2/C973;
                                                              //   -1 = C2/C6E7's STZ $1811 for all seven (all still)
+  int menuSprBuiltAtP = 0;                                  // the exchange's build played the blocks at P (C2/F643)
+  static CtMenuHost menuExchMh; int menuExchMhOk = 0;      // the exchange's last host (its close's fade redraws with it)
   int menuItemAAFF = 0;                                      // C2/AAFF yielded: the next frame redraws the rows, $68 := 2
   uint8_t* menuFb = (uint8_t*)malloc((size_t)CAMW * CAMH * 3);
   struct {                         // the C0/011B save block, mirrored on the live values:
@@ -12970,7 +12976,8 @@ int main(int argc, char** argv) {
         && !inLoadFade) {
       menuPhase = 1; menuT = fieldMenuFadeT0(menuTest ? NULL : f.vm, inWorld); menuScreen = 0x07; menuExchOn = 2; menuExch68 = 0;   // (C0/0CCE is the next frame's)
       memcpy(menuFb, fb, (size_t)CAMW * CAMH * 3);
-      if (getenv("CT_SHOPTRACE")) printf("exchange: f%d op C8 00 -> mode 5, screen $07\n", frameNo);
+      if (getenv("CT_SHOPTRACE")) printf("exchange: f%d op C8 00 -> mode 5, screen $07 (bright %d, $0119 %02X)\n", frameNo,
+                                         CtSceneBright(f.vm), s7[0x0119]);
     }
     // ---- The load shell (op 0xC8, operand odd): C0/0CF8 `BIT #01 / BNE` -> C0/0D00 `LDA #00` -> C0/0D18 `JSL C2:8000`
     // with A = 0: the same C0/0C76 -> C0/0CC7 fade and C0/0CEA save as the shop and the naming. (From power-on `C8 41`
@@ -13844,7 +13851,7 @@ int main(int argc, char** argv) {
         if (menuT >= 17 && !(menuPhase == 1 && menuOwStashT > 0)) {
           menuOwStashT = -1;
           if (menuPhase == 1) {                      // black -> the mode-3 shell comes up (C2/8000)
-            menuPhase = 2; menuT = 0;
+            menuPhase = 2; menuT = 0; menuSprBuiltAtP = 0;
             menuShellF = -1; menuBri = 0; menuBriPic = 0; menuRngCur = 0;  // the same shell (see menuShellF); -1: the
                                                      // menu block below advances it this frame (the field's switch
                                                      // runs after that increment), so C = this frame = 0 there too
@@ -13959,6 +13966,12 @@ int main(int argc, char** argv) {
     if (fieldResume) {                                       // C0/2824's iteration (see fieldResume): C0/2829
       menuT++;                                               // `INC $19`, and C0/00DE = `JSL FD/C2C1` ($0153 flips) /
       s7[0x0119] = (uint8_t)(menuT > 15 ? 15 : menuT);      // (the byte: measured 01 .. 0F over the resume, C0:282B)
+      // The byte is the scene's brightness from here (sc->bright, which the next menu's entry fade starts from:
+      // fieldMenuFadeT0). MEASURED on the rule's cartridge, playthrough leg 130: Magus's naming closes and its resume
+      // lights the field 01 .. 0F (f11288-f11302); the `C8 00` exchange after it fades 0E .. 00 over f11307-f11321 and
+      // switches on f11322. The port's sc->bright had stayed 0, so the exchange opened at once, fifteen frames early
+      // (its wave fifteen frames ahead, 7000 px a picture).
+      CtSceneSyncBright(f.vm);                               // (C0/2829's byte is the scene's brightness)
       if (menuT >= 1 && menuT <= 15) {                       // `JSL FD/FFF7` (the colour records); the IRQ's tiles
         // C0/2830 JSR C0/881E (with $1F = 0: no d-pad) before C0/00DE: its camera tail C0/99DE / 91AC / 93E1 runs every
         // iteration, and with it the layers' own drift ($1D37-$1D3A into $1D3D-$1D40 and the counters $1D8B-$1D92).
@@ -14031,7 +14044,7 @@ int main(int argc, char** argv) {
         int bri = 15 - menuT; if (bri > 15) bri = 15; if (bri < 0) bri = 0;
         // ...and the byte itself: C0/1949 / C0/0CD4 / C0/19B2 `DEC $19`. The field is halted under the fade, so nothing
         // reads it before the resume's C0/2829 puts it back up.
-        if (f.vm && !inWorld && menuT >= 1) s7[0x0119] = (uint8_t)bri;
+        if (f.vm && !inWorld && menuT >= 1) { s7[0x0119] = (uint8_t)bri; CtSceneSyncBright(f.vm); }
         for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFb[i] * bri / 15);
         if (menuT >= 16) {
           // C0/011B field-state save at black: $0102-4 lead tile/facing + the $7F1D09-26 block mirrored on the live
@@ -14078,7 +14091,7 @@ int main(int argc, char** argv) {
           // ROM $7E:0194-0196, the party shadow C0/1A1B compares against on the way out. Taken here,
           // with the rest of the C0/011B field-state save, so a Form exchange is detectable at close.
           mSave.party[0] = s7[0x2980]; mSave.party[1] = s7[0x2981]; mSave.party[2] = s7[0x2982];
-          menuPhase = 2; menuT = 0; prevBBtn = 1;            // require a fresh B press to close ($00F6 is an
+          menuPhase = 2; menuT = 0; prevBBtn = 1; menuSprBuiltAtP = 0;   // require a fresh B press to close ($00F6 is an
                                                              // edge byte - a key held across the open must not
                                                              // instantly dismiss the screen)
           prevLBtn = prevRBtn = prevABtn = 1;                // same edge guard for the ribbon L/R/A keys
@@ -14268,7 +14281,17 @@ int main(int argc, char** argv) {
             CtMenuExchFigure(1);                             // block 7's tiles uploaded ($8240, 7E:9693)
             menuExchWaveP = frameNo; }
           s7[0x0D75] = 2;                                    // C2/CA39 ($0D75 = 02 by C2:CA3C at P)
-          menuFormAnimReq = 1;
+          // The build's C2/CB74 JSR C2/C805 -> C2/C973 asks the cursor's member to walk, and C2/F643's task -- spawned by
+          // the init chain, a walk of the blocks every frame -- plays the request in this same frame's scan. MEASURED on
+          // the rule's cartridge, playthrough leg 130 (the exchange after Magus's naming): Marle's block `$1851` = 01 01
+          // with its count 06 on P (f11363), the first step on f11370, every seventh frame from there. The port played
+          // it from P + 1 (the main screen's first frame, where the blocks were also built), a frame behind on every
+          // step: one picture in seven differed (Marle's pose, 233-297 px).
+          { CtMenuHost sh; memset(&sh, 0, sizeof sh); sh.mem = s7;
+            for (int c = 0; c < 7; c++) { sh.spriteAnim[c] = mnSprAnim[c]; sh.spriteAnimLen[c] = mnSprAnimLen[c]; }
+            CtMenuSprReset(&sh); menuSprBuiltAtP = 1;
+            CtMenuSprFormAnims(&sh, s7[0x0F0D] < 9 ? s7[0x0F0D] : -1, s7[0x0F00] < 9 ? s7[0x0F00] : -1);
+            CtMenuSprTick(&sh); }
         }
         // P: C2/8A98's task steps now, after the build above: C2/D52B spawns it at the end of C2/DACA, so on the frame
         // the build runs (P = S0 under the rule) its first step follows the build's $0DA0 = $0DA3 = 0.
@@ -15713,7 +15736,7 @@ int main(int argc, char** argv) {
         { static uint8_t fpd[9]; CtMenuFormPanels(s7, glb, fpd);
           int optOnScreen = menuRibbonWait > 0 ? menuOptShown : menuOpt;
           CtMenuSetFormPanelDim(((menuScreen == 5) || (menuScreen == 0 && optOnScreen == 4)) ? fpd : 0); }
-        if (menuT <= 1) CtMenuSprReset(&mh);                 // the blocks are (re)built on menu open
+        if (menuT <= 1 && !menuSprBuiltAtP) CtMenuSprReset(&mh);   // the blocks are (re)built on menu open (or at P, above)
         if (menuScreen == 3 && menuStatSub >= 1) CtMenuSprBlock7(&mh, menuStatChar);   // C2/BA09: the caster's copy
         if (menuScreen == 5) {
           if (menuFormAnimReq > 0) CtMenuSprFormAnims(&mh, menuFormSlot, menuFormPick);
@@ -15877,7 +15900,8 @@ int main(int argc, char** argv) {
         else if (menuScreen == 0x07 && menuExchOn) {       // Exchange (screen $07)
                                     CtMenuExchWaveNext(menuExchWaveP >= 0 && !((frameNo + 1 - menuExchWaveP) & 1) &&
                                                        menuExchSong != 2 && !menuExchHold);   // (the task's next step)
-                                    CtMenuRenderExchange(&mh, fb, !(s7[0x0DA0] & 1)); }
+                                    CtMenuRenderExchange(&mh, fb, !(s7[0x0DA0] & 1));
+                                    menuExchMh = mh; menuExchMhOk = 1; }   // (the close's fade draws with it)
         else if (menuScreen == 5) { CtMenuChrome(fb, 5, menuOpt, 0);
                                     uint8_t fp9[9]; CtMenuFormPanels(s7, glb, fp9);
                                     // the picked hand: C2/8A45 shows it while C2/8B6E's $0DA0 bit 0 is clear
@@ -16248,6 +16272,17 @@ int main(int argc, char** argv) {
         if (menuBri > 0) {
           menuBri = (menuBri - 2 < 0) ? 0 : menuBri - 2;
           if (menuLoaderOn) ldrFadeF++;
+          // Screen $07's close is C2/CC0E's own fade (C2/83CA), not C2/82B2's: no task is killed until the song is back,
+          // so BG3's wave (FF/F716, stepped above) and C2/F643's sprite blocks go on under the fade. MEASURED on the
+          // rule's cartridge, playthrough leg 130 (B on f11752): `$0D10` 0D .. 00 over f11753-f11760 while `$0F10/$0F11`
+          // step every second frame and Lucca's block `$1891` counts on (its frame wrapping on f11754). The port faded
+          // the frozen image: the wave stood still under the fade (818-1797 px, f11756-f11761).
+          if (menuExchOn && menuExchMhOk) {
+            CtMenuSprTick(&menuExchMh);
+            CtMenuExchWaveNext(menuExchWaveP >= 0 && !((frameNo + 1 - menuExchWaveP) & 1) &&
+                               menuExchSong != 2 && !menuExchHold);
+            CtMenuRenderExchange(&menuExchMh, menuFrozen, !(s7[0x0DA0] & 1));
+          }
           for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFrozen[i] * menuBri / 15);
         } else if (menuExchOn && menuExchSong == 1 && menuExchBusy()) {
           memset(fb, 0, (size_t)CAMW * CAMH * 3);            // C2/CC28 `LDA $2141 / BEQ` -- C2/CC2E JSR C2/821E: the driver
@@ -16428,7 +16463,8 @@ int main(int argc, char** argv) {
           if (!inWorld) fieldWaitEC60(s7);                   // C0/2839 JSR C0/EC60: the idle counter counts the resume too
         }
         int bri = menuT; if (bri > 15) bri = 15;
-        if (f.vm && !inWorld) s7[0x0119] = (uint8_t)bri;     // C0/2829 INC $19 (01 .. 0F over the resume)
+        // C0/2829 INC $19 (01 .. 0F over the resume); the byte is the scene's brightness (as fieldResume's).
+        if (f.vm && !inWorld) { s7[0x0119] = (uint8_t)bri; CtSceneSyncBright(f.vm); }
         for (size_t i = 0; i < (size_t)CAMW * CAMH * 3; i++) fb[i] = (uint8_t)(menuFb[i] * bri / 15);
         if (menuT >= 15) {
           menuPhase = 0;
@@ -16448,7 +16484,7 @@ int main(int argc, char** argv) {
             if (menuExchOn == 2 && f.vm) CtSceneShopDone(f.vm);   //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
             if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                                s7[0x2980], s7[0x2981], s7[0x2982]);
-            menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
+            menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
           }
           if (menuTest) {
             printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",
@@ -17946,6 +17982,9 @@ int main(int argc, char** argv) {
     }
     // (needs CT_DUMPWRAM=<path> too: the flat 128 KB image, $7E then the whole of bank $7F. fopen(NULL) aborts the
     //  MSVC CRT with no output, so the path is required.)
+    // probe: CT_DUMPVRAM=<path> with CT_DUMPWRAM_AT -- the field's VRAM image (64 KB, word-ordered as the PPU's) that frame
+    if (getenv("CT_DUMPVRAM") && getenv("CT_DUMPWRAM_AT") && frameNo == fieldDumpAt(frameNo)) {
+      FILE* vf = fopen(getenv("CT_DUMPVRAM"), "wb"); if (vf) { fwrite(g_fieldVram, 2, 0x8000, vf); fclose(vf); } }
     if (f.vm && getenv("CT_DUMPWRAM") && getenv("CT_DUMPWRAM_AT") && frameNo==fieldDumpAt(frameNo)) {  // probe: dump 128KB WRAM at frame N
       FILE* wf=fopen(getenv("CT_DUMPWRAM"),"wb"); if(wf){
         fwrite(CtSceneMem7E(f.vm),1,0x20000,wf); fclose(wf);
@@ -19590,7 +19629,7 @@ int main(int argc, char** argv) {
         if (menuExchOn == 2) CtSceneShopDone(f.vm);          //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
         if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                            s7r[0x2980], s7r[0x2981], s7r[0x2982]);
-        menuExchOn = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
+        menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
       }
       if (menuTest) {
         printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",

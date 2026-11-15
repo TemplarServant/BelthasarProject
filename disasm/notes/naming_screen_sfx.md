@@ -748,3 +748,18 @@ Measured: playthrough leg 108, the Epoch's naming (the screen up from the cartri
 seven portraits (ids 0-6) and the Epoch's frame stood empty: 2295 px of f35700. `assets/extract_assets.py`
 pack_portraits now packs the eighth from the record and the eighth pointer; field.c (nsPortrait[8]) loads and draws
 it. Check `field-picture-naming-portrait-of-the-epoch-vs-cartridge` (0 px).
+
+## The arrows over a full name (2026-11-15)
+
+The two arrows above and below the name take their x (`$0880` / `$0884`) from C2/E34A:
+
+    C2/E34A  PHP / SEP #20 / LDA $0F06 / CMP #05 / BCC C2/E356 / LDA #04
+    C2/E356  ASL / ASL / ASL / ADC #9C / STA $0880 / STA $0884 / PLP / RTS
+
+`$0F06` is the edit index; C2/E340 `INY / CPY #06 / BCS / STY $0F06` lets it reach 5 once the fifth letter is typed.
+The arrows take min(`$0F06`, 4): over a full name they stay on its last letter.
+
+Measured: playthrough leg 130, Magus's name typed in full (the screen up f9500-f10800). The cartridge's arrows stand over
+the fifth letter; the port drew them at index 5, one letter further right: 292 px a picture. field.c drawNameScreen now
+clamps the index the same way. Check `field-picture-full-name-keeps-the-arrows-on-its-last-letter-vs-cartridge` (0 px,
+292 without the clamp).

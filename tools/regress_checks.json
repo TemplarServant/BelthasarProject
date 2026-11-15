@@ -51071,7 +51071,7 @@
         "playthrough: 101_ioka_rest SAME -- locs 130 12A 12E 131 12A 12E 12B 1F3 113 1F3 116 1F3 115 | story 98 | party 000501 | gold 2954 | hp 415 (2) | ctrl 9 | end picture 0 px at port -2",
         "playthrough: 102_nizbel SAME -- locs 115 1F3 12B 12E 12A 131 12E 12A 130 | story 98 | party 000501 | gold 2954 | hp 172 (5) | ctrl 7 | end picture 0 px at port -1",
         "playthrough: 103_lever_rest DIFFERENT -- locs 130 12E 12A 12F 12A 12E 130 12A 12E 131 12A 12E 12B 1F3 12B 1F3 116 | story 98 | party 000501 | gold 2954 | hp 415 (3) | ctrl 11 | end picture 53074 px at port +0",
-        "playthrough: 104_black_tyrano DIFFERENT -- locs 116 1F3 12B 12E 12A 131 12E 12A 130 12E 12A 12C 12D 1F3 105 1F3 133 | story 98 99 | party 000501 000181 000105 | gold 2954 | hp 363 (5) | ctrl 9 | end picture 53929 px at port +0",
+        "playthrough: 104_black_tyrano DIFFERENT -- locs 116 1F3 12B 12E 12A 131 12E 12A 130 12E 12A 12C 12D 1F3 105 1F3 133 | story 98 99 | party 000501 000181 000105 | gold 2954 | hp 363 (5) | ctrl 9 | end picture 53927 px at port +0",
         "playthrough: 105_zeal SAME -- locs 133 15F 1F4 151 1F4 161 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 149 191 192 148 192 191 149 191 14A 14B 14A 191 149 14C 14D 15F 133 1F2 0F1 133 | story 99 40 99 9F A2 A5 A8 40 A8 | party 000105 | gold 2954 | hp 1 (3) | ctrl 38 | end picture 0 px at port +0",
         "playthrough: 106_end_of_time SAME -- locs 133 1F3 116 1F3 112 111 110 1D0 | story A8 AB 40 AB | party 000105 | gold 2954 | hp 436 (4) | ctrl 8 | end picture 0 px at port -1",
         "playthrough: 107_keepers_dome DIFFERENT -- locs 1D0 0E3 0E2 1F2 0E1 0E0 0DF 1F2 0EC 0ED 0EC 1F2 0F1 0F2 0F3 | story AB 40 AB | party 000105 | gold 4034 | hp 335 (5) | ctrl 49 | end picture 57344 px at port +0",
@@ -52829,6 +52829,148 @@
           "find": "        lw[0x1D32] = g_collRam[0x1D32]; lw[0x1D33] = g_collRam[0x1D33];\n        lw[0x1D34] = g_collRam[0x1D34]; }\n      if (atB0) {\n",
           "replace": "        /* MUT: the momentum's velocity is not published */ (void)0; }\n      if (atB0) {\n",
           "why": "C0/9175 leaves the momentum's velocity in $1D32/$1D33 on a locked frame: `$1D33` 20 on f183147, the push and Lucca's held cursor"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-full-name-keeps-the-arrows-on-its-last-letter-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "full-name-keeps-the-arrows-on-its-last-letter"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: full-name-keeps-the-arrows-on-its-last-letter leg 130 +10000 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: full-name-keeps-the-arrows-on-its-last-letter "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a full name keeps the naming screen's arrows over its last letter",
+      "notes": "C2/E34A PUTS THE ARROWS AT min($0F06, 4) (field.c drawNameScreen; disasm/notes/naming_screen_sfx.md, the 2026-11-15 section). `LDA $0F06 / CMP #05 / BCC / LDA #04 / ASL x3 / ADC #9C / STA $0880 / STA $0884`: the edit index, which C2/E341 lets reach 5 after the fifth letter, but the arrows never pass the last letter. MEASURED on the rule's cartridge, playthrough leg 130 (Magus's name typed in full): the arrows stand over the fifth letter f9500-f10800; the port drew them a letter further right, 292 px a picture. The case plays the leg from its start (the previous leg's last key first) and grades f10000. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  { int tx = NS_NX + (pos < 5 ? pos : 4) * 8 - 2;",
+          "replace": "  { int tx = NS_NX + pos * 8 - 2; /* MUT: no clamp */",
+          "why": "C2/E34A's CMP #05 / LDA #04: a full name keeps the arrows over its fifth letter"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-exchange-opens-after-the-naming-resume-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "exchange-opens-after-the-naming-resume"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: exchange-opens-after-the-naming-resume leg 130 +11407 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: exchange-opens-after-the-naming-resume "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the exchange after the naming's resume fades in from the lit field and plays the cursor member's walk from P, as on the cartridge",
+      "notes": "THE MENU RESUME'S BRIGHTNESS IS THE SCENE'S, AND THE EXCHANGE'S BUILD PLAYS ITS POSE ON P (field.c fieldResume and the shell's P; disasm/notes/menu2_form_screen.md, the 2026-11-15 section). C0/2829 `INC $19` lights the field 01 .. 0F over the resume; the next menu's entry fade (C0/0CCE `LDA $19 / BEQ / DEC`) starts from that byte. MEASURED on the rule's cartridge, playthrough leg 130: Magus's naming closes, its resume lights the field f11288-f11302, the `C8 00` exchange fades 0E .. 00 over f11307-f11321 and switches on f11322. The port's scene brightness had stayed at the naming's 0: the exchange opened at once, fifteen frames early (its BG3 wave fifteen frames ahead, 7000 px a picture). On P the build's C2/CB74 -> C2/C805 -> C2/C973 request is played by C2/F643's task in the same scan (Marle's block `$1851` 01 01, count 06 on f11363; steps on f11370 + 7k); the port played it from P + 1, one picture in seven off (233-297 px; f11407 is a step's picture, on a frame whose wave pins the offset). The case plays the leg from its start. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      CtSceneSyncBright(f.vm);                               // (C0/2829's byte is the scene's brightness)",
+          "replace": "      /* MUT: the resume's byte is not the scene's brightness */",
+          "why": "C0/2829's INC $19 is the brightness the next menu's entry fade (C0/0CCE) starts from"
+        },
+        {
+          "file": "src/field.c",
+          "find": "            CtMenuSprTick(&sh); }",
+          "replace": "            (void)sh; } /* MUT: the pose request waits for P + 1 */",
+          "why": "C2/F643's task plays the build's C2/C973 request in P's own scan (count 06 on f11363)"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-exchange-cursor-hand-over-the-picked-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "exchange-cursor-hand-over-the-picked"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: exchange-cursor-hand-over-the-picked leg 130 +11650 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: exchange-cursor-hand-over-the-picked "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the exchange's cursor hand is in front of the picked cell's second hand, as on the cartridge",
+      "notes": "THE PICKED CELL'S SECOND HAND IS BEHIND THE CURSOR'S (menu.c CtMenuRenderExchange; disasm/notes/menu2_form_screen.md, the 2026-11-15 section). C2/8A45 lays the second hand in `$0774` (x + 2, y - 1, the word `$0DA1` the first had at the pick) on the blink's visible half (`JSR C2/8B6E / BCS`: `$0DA0` bit 0 clear); the cursor's is `$0770`, the entry before it, so where they overlap the cursor's is in front -- as the port already drew the Form and Item screens. MEASURED on the rule's cartridge, playthrough leg 130 (Lucca picked on f11634, the cursor still on her): `$0DA0/$0DA3` step alike on both sides and the cursor's hand shows whole; the port drew the second on top (70 px, four frames in eight, f11641-f11668). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/menu.c",
+          "find": "  mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]);",
+          "replace": "  mHandCursor(h, fb, m[0x9380 + c * 6], m[0x9381 + c * 6]); if (m[0x0F00] != 0xFF && pickBlink) { int pc = m[0x0D9C] & 0x0F; if (pc > 6) pc = 6; mHandFlip = pc >= 3; mHandCursor(h, fb, m[0x9380 + pc * 6] + 2, m[0x9381 + pc * 6] - 1); } /* MUT: the second hand on top */",
+          "why": "the second hand is $0774, the OAM entry after the cursor's $0770"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-exchange-close-fades-the-live-screen-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "exchange-close-fades-the-live-screen"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: exchange-close-fades-the-live-screen leg 130 +11758 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: exchange-close-fades-the-live-screen "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the exchange's close fades its live screen: the wave and the sprites go on under the fade, as on the cartridge",
+      "notes": "SCREEN $07'S CLOSE FADES THE LIVE SCREEN (field.c, menuPhase 4; disasm/notes/menu2_form_screen.md, the 2026-11-15 section). C2/CC0E's close is its own C2/83CA fade, then the `$2141` wait and the song's posts, and only then C2/C802 JMP C2/82B2: no task is killed under the fade, so BG3's wave (FF/F716) and C2/F643's sprite blocks go on. MEASURED on the rule's cartridge, playthrough leg 130 (B on f11752): `$0D10` 0D .. 00 over f11753-f11760 while `$0F10/$0F11` step every second frame and Lucca's block `$1891` counts on; the port faded the frozen image (818-1797 px a picture, f11756-f11761). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (menuExchOn && menuExchMhOk) {",
+          "replace": "          if (0 && menuExchOn && menuExchMhOk) { /* MUT: the frozen image */",
+          "why": "C2/CC0E's fade kills no task: the wave and the sprite blocks step under it"
         }
       ]
     },

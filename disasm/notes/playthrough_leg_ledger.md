@@ -239,3 +239,28 @@ carried on by mechanisms that quantise time:
   f7414) and stops on the cartridge's own frame, a step short: `$1D0E` 0B where the cartridge's is 0A from f7550 -- the
   room one line off (s20_shift: dy -1) until the next move (16000-26000 px, f7550-f9900). Every object position is the
   cartridge's on f4600 and f4686; nothing else was found to differ.
+- **Leg 134 (SAME), Death Peak's walkers (2026-11-15).** Every field load of the leg ends a frame or more early in the
+  port (the load clock, closed 2026-10-13), so the play clock `$0400` runs ahead: +1 frame from 0F4's load (the clock
+  resumes on f64 for the cartridge's f65), +3 by 0F5's (f16266: 2A05 for 2705). C0/0C70 seeds the field's RNG cursor
+  `$01F8` from the clock at each load -- the cursor is the clock's low byte on both sides (cartridge 1A at clock 1A36, the
+  port 1B at 1B36; 27 / 2A at 0F5) -- so the room's wandering enemies take other rolls: the same walkers on other paths
+  (400-1200 px a picture f16200-f21000, the audit's 39 samples). The user's 2026-11-07 class: a random roll moved by a
+  timing artefact.
+- **Leg 130 (SAME), the rest of the picture audit (2026-11-15).** Fixed: the naming screen's arrows over a full name
+  (C2/E34A, f9500-f10800) and four differences of the exchange after it (the entry fade from the resume's brightness, the
+  pose request on P, the hands' order, the live close: disasm/notes/menu2_form_screen.md, the 2026-11-15 section). Timing,
+  carried: loc 1A7's cutscene starts a frame or more off (above); the port enters loc 1D0 on f4724 for the cartridge's
+  f4719, the scene there runs on the pad's A presses and its exit lands on f5304 for f5305, and the port stays a frame
+  ahead through 071 and into 1AC (its
+  load f5854 for f5855, the same 33 frames on both sides). In 1AC object 7 runs every fourth frame (`$100E` 4-3-2-1) and
+  waits for the lead's walk; its visits fall a frame earlier in the port (f8350 for f8351), so the condition the walk makes
+  true between them is seen a visit later: its `E3 00` (C0/3C0D, `$011F` = 0) on f8362 for f8359, the camera three lines
+  further down for the rest of the scene (`$1D0E`/`$1D96`; 19000 px a picture, f8360-f9000). After the exchange the close's
+  song handshakes end a frame early (the SPC/C7 pace, closed 2026-11-07) and the field resumes on f11798 for f11799; the
+  same lattice moves the camera again (f11900-f12050) and the followers by a pixel or two after it.
+- **Leg 104 (DIFFERENT), the port's party falls (re-read 2026-11-15).** Without the cartridge's play clock and cursor put
+  back, the port reaches loc 12D at f42503 for the cartridge's f41847 and the Black Tyrano fight takes other rolls (the
+  2026-11-07 class): the party's HP reaches 0 on f77957, the game restarts (loc 000 on f78352, the load shell `C8 41` on
+  f78817, New Game and Crono's naming `C8 C0` on f78853) and the leg's pad types into that screen. So the pinned end picture
+  is the naming screen against the cartridge's field in loc 133; it moved by the naming arrows' fix (53929 -> 53927 px).
+  The verdict with the clock and cursor put back is the row above (SYNC-ONLY).
