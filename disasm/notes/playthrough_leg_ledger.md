@@ -308,3 +308,7 @@ carried on by mechanisms that quantise time:
   f4300; 0 px between) are the flames' tile animation a step apart: loc 0AB's load begins on f574 on both sides and the
   run counter `$051D` resumes on f614 on the cartridge, f616 in the port (the load clock, closed 2026-10-13), one run
   behind from there. Timing.
+- **Leg 137, the summit's fight (2026-11-15).** Two picture bugs: action 84's purple disc (BG3 in front, the sprites
+  alone on the sub screen and added into it, f4585-f4715, up to 6353 px) was not drawn, and slot 0's corpse showed its
+  dither level whole where the cartridge ships it packet by packet (33-44 px, f8972-f9100). Both fixed (battle.c
+  battleFxSubObjOnly, field.c battleDissolveBlitCells); the leg's audit samples f4400-f9300 are 0 px at the fight's lag.

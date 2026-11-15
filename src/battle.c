@@ -16067,6 +16067,7 @@ void CtBattleBegin(CtBattleHost* h) {
   for (int fi = 0; fi < CT_BATTLE_FX_POOL; fi++) h->popups[fi].active = 0;
   for (int di = 0; di < 8; di++) { h->dissolveActive[di] = 0; h->dissolveStep[di] = 0; h->deadStanding[di] = 0; h->deadStandFrame[di] = 0; h->deadNoCmd[di] = 0; }
   for (int di = 0; di < 8; di++) h->deathSfxDue[di] = h->dissolveStepShown[di] = h->dissolvePkt[di] = h->deathFxAfter[di] = 0;
+  memset(h->dissolvePktShown, 0, sizeof h->dissolvePktShown);
   h->deathFxSlot = -1; h->deathFxId = 0; h->deathFxT = 0; h->deathFxW = 0; h->deathFxTd = 0;
   h->headPend = 0; h->deathHeadF = -1;
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
@@ -18625,6 +18626,15 @@ void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, c
   memcpy(gBattleFxRowModelled, keepModelled, sizeof keepModelled); memcpy(gBattleFxRow, keepRow, sizeof keepRow);
   gBattleFxFixCarry = keepCarry;
 }
+// A line whose colour math adds a sub screen of the sprites alone (TS = OBJ, CGWSEL bit 1) to BG3 and nothing else
+// (CGADSUB bits 0-1, 3-5 clear), with no OBJ window on that sub screen. ppu_getPixel(sub) is then the sprite under the
+// pixel, or the backdrop -- the fixed colour, unhalved (ppu_handlePixel). MEASURED on the rule's cartridge, playthrough
+// leg 137 (the summit's fight), action `$9877` 84: lines 65-153 run TM 17 TS 10 CGWSEL 02 CGADSUB 04 BGMODE 49 with
+// W34SEL 0F on op 8B's circle, and the cartridge shows BG3's purple disc over the party, each sprite added into it
+// (f4585-f4715); the port left such lines out of the compose and drew no disc (up to 6353 px a picture).
+static int battleFxSubObjOnly(int TS, int TSW, int cgwsel, int cgadsub, const uint8_t* ws) {
+  return (cgwsel & 0x02) && (TS & 0x1F) == 0x10 && !(cgadsub & 0x3B) && !((TSW & 0x10) && (ws[2] & 0x0A));
+}
 // One row's pixels under the row's registers (btFxCompose; R = what its HDMA left for the line).
 typedef struct { int TM, TS, TMW, TSW, cgwsel, cgadsub, fixR, fixG, fixB, hs3, vs3; uint8_t reg[0x40]; } BtFxRegs;
 static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattleHost* h, int x0, int wide, int line,
@@ -18635,6 +18645,7 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
     int bg3Main = (TM & 0x04) != 0, addSub = (cgwsel & 0x02) != 0;
     int subRest = addSub && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B)
                   && !(cgadsub & 0x3B);
+    int subObj = battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws);   // the sub screen is the sprites alone (below)
     if (!(cgadsub & 0x3F) && !bg3Main) return;                     // no math, no BG3 on this line: the arena stands
     int sub3 = (TS & 0x04) != 0, win3M = (TMW & 0x04) != 0, win3S = (TSW & 0x04) != 0;
     int half = (cgadsub & 0x40) != 0, subtract = (cgadsub & 0x80) != 0;
@@ -18684,6 +18695,20 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
                                            | (uint32_t)half << 16 | (uint32_t)fixR << 17 | (uint32_t)fixG << 22
                                            | (uint32_t)fixB << 27;
         continue;                                                  // the fb keeps the arena's pixel for now
+      }
+      if (math && front && subObj) {                               // the sub screen is the sprites alone: the sprite under
+        if (wide) {                                                //   this pixel, or the fixed colour (no halving) where
+          if (subtract) { r -= fixR; g -= fixG; b -= fixB; } else { r += fixR; g += fixG; b += fixB; }   // there is none --
+          if (r > 31) r = 31; if (g > 31) g = 31; if (b > 31) b = 31;   //   the sides have no sprite
+          if (r < 0) r = 0; if (g < 0) g = 0; if (b < 0) b = 0;
+          d[0] = (uint8_t)((r << 3) | (r >> 2)); d[1] = (uint8_t)((g << 3) | (g >> 2)); d[2] = (uint8_t)((b << 3) | (b >> 2));
+          continue;
+        }
+        gBattleFxFront[line * W + x] = 3;                          // finished by CtBattleFxFrontApply once the sprites
+        gBattleFxFrontMath[line * W + x] = (uint32_t)r | (uint32_t)g << 5 | (uint32_t)b << 10 | (uint32_t)subtract << 15
+                                           | (uint32_t)half << 16 | (uint32_t)fixR << 17 | (uint32_t)fixG << 22
+                                           | (uint32_t)fixB << 27;   //   are drawn (the fb keeps the arena's pixel)
+        continue;
       }
       if (math) {
         int sr = fixR, sg = fixG, sb = fixB, subLayer = 5;
@@ -18788,7 +18813,8 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     // cleared by CD/0CF7; the 07D Frog Squash tints the frog through them). The HUD band's lines point at its own
     // blocks ($C02B / $C02F) and are drawn by CtBattleHudRender.
     gBattleFxRowModelled[line] = from[2] == 0xBE8D && (from[3] == 0xBE95 || (from[3] >= 0xBB05 && from[3] < 0xBB05 + 0x180))
-                                 && !(cgwsel & 0x01) && (!(addSub && (TS & 0x1B)) || subRest);
+                                 && !(cgwsel & 0x01) && (!(addSub && (TS & 0x1B)) || subRest
+                                                         || battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws));
     if ((wide || arenaRows) && line < 256) {                       // (the widescreen: each arena row's registers, for the
       BtFxRegs* R = &wideRegs[line]; wideOk[line] = gBattleFxRowModelled[line];   //  HUD's band rows below)
       wideHud[line] = from[2] == 0xC02B || from[2] == 0xC02F || from[3] == 0xC02B || from[3] == 0xC02F;
@@ -18885,16 +18911,17 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
 // of every OBJ and BG1/BG2 priority tile. Marked 2: ppu_handlePixel's math against the sub screen, now the pixel under
 // it. A sub-screen pixel that is the backdrop (no BG1/BG2 there in `cov`, and nothing drawn over it since the
 // compositor) is layer 5: the fixed colour is added instead, without halving.
-void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov) {
+void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov, const uint8_t* objPal) {
   if (!fb || !atCompose || W <= 0 || H <= 0 || W > 256 || H > 256) return;
   for (int i = 0; i < W * H; i++) {
     uint8_t* d = fb + (size_t)i * 3;
     const uint8_t* c = atCompose + (size_t)i * 3;
     if (gBattleFxFront[i] == 1) { memcpy(d, c, 3); continue; }
-    if (gBattleFxFront[i] != 2) continue;
+    if (gBattleFxFront[i] != 2 && gBattleFxFront[i] != 3) continue;
     uint32_t m = gBattleFxFrontMath[i];
     int r = m & 0x1F, g = (m >> 5) & 0x1F, b = (m >> 10) & 0x1F, sub = (m >> 15) & 1, half = (m >> 16) & 1;
-    int back = cov && !(cov[i] & 3) && d[0] == c[0] && d[1] == c[1] && d[2] == c[2];
+    int back = gBattleFxFront[i] == 3 ? !(objPal && objPal[i] != 0xFF)   // (3: the sub screen is the sprites alone)
+             : cov && !(cov[i] & 3) && d[0] == c[0] && d[1] == c[1] && d[2] == c[2];
     int sr = back ? (int)((m >> 17) & 0x1F) : d[0] >> 3, sg = back ? (int)((m >> 22) & 0x1F) : d[1] >> 3,
         sb = back ? (int)((m >> 27) & 0x1F) : d[2] >> 3;
     if (sub) { r -= sr; g -= sg; b -= sb; } else { r += sr; g += sg; b += sb; }
@@ -20564,6 +20591,7 @@ static void battleNmiHead(CtBattleHost* h) {
   memcpy(h->objPalShown, h->objPalCmp, sizeof h->objPalShown);    // the combatants' attributes the compose wrote
   battleOamUpload(h);                                             // ...and the mirror they are in: CF/E300-E330
   memcpy(h->dissolveStepShown, h->dissolveStep, sizeof h->dissolveStepShown);   // CD/3ED2's tiles: the corpse's dither level
+  memcpy(h->dissolvePktShown, h->dissolvePkt, sizeof h->dissolvePktShown);      // ...and the next level's packets shipped
   memcpy(h->fxObjShown, h->fxObjCmp, sizeof h->fxObjShown);       // ...and the effect objects' cells
   memcpy(h->fxObjMatShown, h->fxObjMatCmp, sizeof h->fxObjMatShown);
   h->fxObjGateShown = h->fxObjGateCmp;
@@ -21302,7 +21330,7 @@ int CtBattleOamShown(const CtBattleHost* live, CtBattleHost* out, const uint8_t*
 #define OAM_LIVE(m) memcpy(&out->m, &live->m, sizeof out->m)
   OAM_LIVE(fxWinSel); OAM_LIVE(fxWinTbl); OAM_LIVE(fxCgram);
   OAM_LIVE(fxOamCloud); OAM_LIVE(fxOamCloudHi); OAM_LIVE(fxOamCloudOn);
-  OAM_LIVE(objPalShown); OAM_LIVE(fxScriptFlashMask); OAM_LIVE(dissolveStepShown);
+  OAM_LIVE(objPalShown); OAM_LIVE(fxScriptFlashMask); OAM_LIVE(dissolveStepShown); OAM_LIVE(dissolvePktShown);
   OAM_LIVE(fxObjShown); OAM_LIVE(fxObjMatShown); OAM_LIVE(fxObjGateShown);
   OAM_LIVE(brkOamShown); OAM_LIVE(brkOnShown); OAM_LIVE(handOamShown); OAM_LIVE(handVisShown); OAM_LIVE(handPageShown);
   OAM_LIVE(stripVram); OAM_LIVE(msgStripVram); OAM_LIVE(msgStripLive);

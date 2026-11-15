@@ -327,3 +327,15 @@ battle-corpse-holds-its-foot-through-the-dissolve-vs-rule-cartridge).
 The suite's re-pins (22 checks) are frame moves of +4 per death in the port's own drives (values unchanged), the dither's
 pictures, and three cartridge checks that now match exactly (Blue Shield's deaths [818, 1030], the Roly's dissolve, the
 mimic fight). One chain (tyranno-ff24) moved by the drive's fixed 30-frame A grid; see its check notes.
+
+## A level ships in packets (2026-11-15)
+
+CD/00CA-0107 ANDs a level into the corpse's tiles (CD/010A twice) and CD/3ED2 ships them: `$53` = CE:F156[`$967C`]
+bytes from CE:F166[cmb] to VRAM CE:F17C[cmb] (the combatant's own tile base), `$400` a packet (`$1000` with `$CE0F` set),
+`$CA27` += the packet and `$CA2A` += its words each time, one packet an NMI (`INC $CA26`, then frames until the NMI's DMA
+clears it). So while a level is under way the shipped packets' tiles show it and the rest the level before. MEASURED on
+the rule's cartridge, playthrough leg 137 (the summit's fight): slot 0's corpse (type 3: $1000 bytes, four packets)
+steps `$CCFE` every four frames from f8974; on f9000 its cells 40-4E (tiles 40-5F, the first packet) have the dither-11
+pixels cleared and the others not. The port drew the corpse at the level the last packet completed (33-44 px a picture,
+f8972-f9100); field.c battleDissolveBlitCells now takes the packets the NMI shipped (h->dissolvePktShown). Check
+field-picture-corpse-level-ships-in-packets-vs-cartridge.

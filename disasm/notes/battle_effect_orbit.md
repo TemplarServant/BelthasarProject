@@ -425,3 +425,16 @@ Two things the harness met that are not the compositor's:
   Measured, not modelled -- OPEN: the write line is where the CPU stands in the frame (a CPU-timing question of the kind
   CLAUDE.md's zelda3 section is about, but not one the rule as written decides: it names beam-counter reads, lag frames
   and NMI-off loads only). A decision is the user's.
+
+## 12. A sub screen of the sprites alone (2026-11-15)
+
+ppu_handlePixel's operand for a main pixel whose layer takes the math, with CGWSEL bit 1: ppu_getPixel(sub) -- with TS =
+OBJ alone, the sprite under the pixel, or the backdrop, which gives the fixed colour unhalved. MEASURED on the rule's
+cartridge, playthrough leg 137 (the summit's fight), action `$9877` 84 (script CD/D4D0): lines 65-153 run TM 17 TS 10 TMW
+17 TSW 17 CGWSEL 02 CGADSUB 04 BGMODE 49, W34SEL 0F, WBGLOG 30, window 1 = op 8B's circle (CD/31AA). BG3's priority tiles
+are in front of everything (sec. 9) and inside the circle each sprite is added into the purple disc (f4585-f4715). The
+compositor left every line with BG1/BG2/OBJ on the sub screen out (gBattleFxRowModelled) unless the sub screen was the
+main screen less BG3 (sec. 10), so the port drew no disc (up to 6353 px). battle.c battleFxSubObjOnly admits the OBJ-alone
+case (CGADSUB on BG3 only, no OBJ window on the sub screen): a front pixel is marked 3 in gBattleFxFront and
+CtBattleFxFrontApply adds the sprite field.c drew there (objPal), or the fixed colour. Check
+field-picture-bg3-disc-adds-the-sprites-under-it-vs-cartridge.

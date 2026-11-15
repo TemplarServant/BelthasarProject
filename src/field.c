@@ -8383,14 +8383,22 @@ static void battleDissolveLivePal(const CtBattleHost* h, int cmb, uint16_t* out)
 // ctBattleDissolveDither[y][x] >= step (the matrix is tile-local, repeating every 8). A negative step (the hold) draws
 // the whole sprite; 0..31 thins it (the caller invokes this only while dissolveActive). Cells, tiles and palette come
 // from the caller, so it serves any enemy.
+// A level ships in packets, one an NMI (CD/3ED2: `$CA27` += the packet, `$CA2A` += its words, from the combatant's own
+// tile base CE:F17C[cmb]): while a level is under way the tiles of the `pkt` packets shipped already show it, the others
+// the level before. `pktTiles` = a packet's tiles (CE0F clear: $400 bytes = 32; set: $1000 = 128); `tiles` index the
+// combatant's VRAM from its base. MEASURED on the rule's cartridge, playthrough leg 137 (the summit's fight): slot 0's
+// corpse (type 3, `$967C` 03: $1000 bytes, four packets) steps `$CCFE` every four frames from f8974, and its picture
+// has cells 40-4E (tiles 40-5F, the first packet) a level ahead of the rest -- dither 11 cleared there only on f9000;
+// the port drew the whole corpse at one level (33-44 px a picture, f8972-f9100).
 static void battleDissolveBlitCells(uint8_t* fb, const CtDissolveCell* cells, int ncell, int step,
-                                    const uint8_t (*tiles)[32], int ntile, const uint16_t* pal4) {
+                                    const uint8_t (*tiles)[32], int ntile, const uint16_t* pal4, int pkt, int pktTiles) {
   for (int c = 0; c < ncell; c++) {
     int ti0 = cells[c].tile;
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = ti0 + cx + 0x10 * cy;
         if (ti < 0 || ti >= ntile) continue;
+        const int lv = (step >= 0 && pkt > 0 && pktTiles > 0 && ti / pktTiles < pkt) ? step + 1 : step;   // (A LEVEL IN PACKETS)
         const uint8_t* t = tiles[ti];
         for (int yy = 0; yy < 8; yy++) {
           int p0 = t[yy*2], p1 = t[yy*2+1], p2 = t[16+yy*2], p3 = t[16+yy*2+1];
@@ -8398,7 +8406,7 @@ static void battleDissolveBlitCells(uint8_t* fb, const CtDissolveCell* cells, in
             int b = 7 - xx;
             int v = ((p0>>b)&1) | (((p1>>b)&1)<<1) | (((p2>>b)&1)<<2) | (((p3>>b)&1)<<3);
             if (v == 0) continue;                          // CGRAM index 0 = transparent
-            if (ctBattleDissolveDither[yy][xx] < step) continue;   // this pixel already dither-cleared
+            if (ctBattleDissolveDither[yy][xx] < lv) continue;     // this pixel already dither-cleared
             uint16_t w = pal4[v];                          // the corpse's live OBJ palette (battleDissolveLivePal)
             plot(fb, cells[c].x + cx*8 + xx, cells[c].y + cy*8 + yy,
                  ((w&31)<<3)|((w&31)>>2), (((w>>5)&31)<<3)|(((w>>5)&31)>>2), (((w>>10)&31)<<3)|(((w>>10)&31)>>2));
@@ -8436,7 +8444,7 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
       }
       uint16_t livePal[16];
       battleDissolveLivePal(h, 3 + slot, livePal);
-      battleDissolveBlitCells(fb, cells, nc, step, ctBattleStanceObjTiles, CT_STANCE_NTILE, livePal);
+      battleDissolveBlitCells(fb, cells, nc, step, ctBattleStanceObjTiles, CT_STANCE_NTILE, livePal, 0, 0);   // (one packet)
     }
     else if (mem[0x29BF + slot * 12 + 6] == 0 && (mem[0x967C + 3 + slot] & 7) <= 3) {
       // Generic enemy (battle_facing_engine.md sec. 5): dissolve the pose held at death with the cells the live renderer
@@ -8480,7 +8488,8 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
       }
       uint16_t livePal[16];
       battleDissolveLivePal(h, 3 + slot, livePal);
-      battleDissolveBlitCells(fb, cells, ncell, step, scratch, 0x60, livePal);
+      battleDissolveBlitCells(fb, cells, ncell, step, scratch, 0x60, livePal, h->dissolvePktShown[slot],
+                              mem[0xCE0F] ? 0x80 : 0x20);   // CD/3EF8: the packet $1000 or $400 bytes
     }
     // types above 3: not drawn (as in the alive render)
   }
@@ -19905,7 +19914,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
       if (fxFrontOn)                                  // mode 1 + $2105 bit 3 (ppu.c actMode 8): BG3's priority tiles are
-        CtBattleFxFrontApply(fb, CAMW, CAMH, fxFrontFb, cvwin);   // in front of every OBJ and BG1/BG2 priority tile --
+        CtBattleFxFrontApply(fb, CAMW, CAMH, fxFrontFb, cvwin, objPal);   // in front of every OBJ and BG1/BG2 priority tile --
                                                        // and the Ice crystal's are added to what is under them
       if (fxFrontOn) {                                 // ...and the sprites' own share of the rows' colour math: the clip,
         long nm = CtBattleFxObjMath(fb, CAMW, CAMH, objPal, &liveHost);   // and CGADSUB bit 4 on OBJ palettes 4-7

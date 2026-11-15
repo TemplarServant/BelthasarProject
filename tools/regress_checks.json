@@ -53211,6 +53211,74 @@
       ]
     },
     {
+      "name": "field-picture-bg3-disc-adds-the-sprites-under-it-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "bg3-disc-adds-the-sprites-under-it"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: bg3-disc-adds-the-sprites-under-it leg 137 +4640 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: bg3-disc-adds-the-sprites-under-it "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a line whose sub screen is the sprites alone adds them to BG3's front pixels, as on the cartridge",
+      "notes": "ppu_handlePixel ON A LINE WHOSE SUB SCREEN IS THE SPRITES ALONE (TS 10, CGWSEL bit 1, CGADSUB on BG3 only): a BG3 pixel in front (mode 1, BGMODE bit 3, a priority tile) takes the sprite under it as the operand, or the fixed colour unhalved where none is. Playthrough leg 137 (the summit's fight), action `$9877` 84: lines 65-153 run TM 17 TS 10 TMW 17 TSW 17 CGWSEL 02 CGADSUB 04 BGMODE 49 with W34SEL 0F on op 8B's circle window, and the cartridge draws BG3's purple disc over the party with each sprite added into it (f4585-f4715, up to 6353 px). The port's battle compositor left lines with a sub screen of BG1/BG2/OBJ out of the compose (gBattleFxRowModelled) and drew no disc. battle.c battleFxSubObjOnly: such a front pixel is marked 3 and CtBattleFxFrontApply finishes it against field.c's objPal. Played from the leg's start, graded on f4640. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  return (cgwsel & 0x02) && (TS & 0x1F) == 0x10 && !(cgadsub & 0x3B) && !((TSW & 0x10) && (ws[2] & 0x0A));",
+          "replace": "  return 0; /* MUT: no OBJ-only sub screen */",
+          "why": "the disc's lines are left out of the compose without it"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-corpse-level-ships-in-packets-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "corpse-level-ships-in-packets"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: corpse-level-ships-in-packets leg 137 +9000 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: corpse-level-ships-in-packets "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a corpse's dither level ships packet by packet: the shipped cells are a level ahead, as on the cartridge",
+      "notes": "CD/3ED2 SHIPS A DITHER LEVEL IN PACKETS, ONE AN NMI ($400 bytes, or $1000 with `$CE0F` set, from the combatant's tile base CE:F17C[cmb]): while a level is under way the shipped tiles show it and the rest the level before. Playthrough leg 137 (the summit's fight): slot 0's corpse (type 3, `$967C` 03: $1000 bytes, four packets) steps `$CCFE` every four frames from f8974 (CD/0102), and on f9000 its cells 40-4E (tiles 40-5F, the first packet) have the dither-11 pixels cleared, the rest not; the port drew the whole corpse at the level the last packet completed (33-44 px a picture, f8972-f9100). field.c battleDissolveBlitCells takes h->dissolvePktShown. Played from the leg's start, graded on f9000. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        const int lv = (step >= 0 && pkt > 0 && pktTiles > 0 && ti / pktTiles < pkt) ? step + 1 : step;   // (A LEVEL IN PACKETS)",
+          "replace": "        const int lv = step; /* MUT: one level for the whole corpse */",
+          "why": "the first packet's cells are a level ahead on f9000"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

@@ -9603,9 +9603,9 @@ static int runSweepFxCompose(const char* romPath, const char* statePath, int f0,
         rgbO[i * 3 + 2] = (uint8_t)((b5 << 3) | (b5 >> 2));
         objPal[i] = (uint8_t)((ci >> 4) & 7);
       }
-      CtBattleFxFrontApply(rgbO, 256, 224, atc, covWin);
+      CtBattleFxFrontApply(rgbO, 256, 224, atc, covWin, objPal);
       CtBattleFxObjMath(rgbO, 256, 224, objPal, &hh); }
-    CtBattleFxFrontApply(rgb, 256, 224, atc, covWin);                  // no sprites here: a front pixel's sub screen is
+    CtBattleFxFrontApply(rgb, 256, 224, atc, covWin, NULL);            // no sprites here: a front pixel's sub screen is
                                                                        //   the arena base (sprite pixels are not graded)
     extern uint8_t gBattleFxRowModelled[256];
     { extern uint8_t g_ppuLineCgwsel[240], g_ppuLineCgadsub[240]; extern uint16_t g_ppuLineFix[240];

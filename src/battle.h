@@ -608,6 +608,7 @@ typedef struct CtBattleHost {
   int dissolveStepShown[8];  // ...as the NMI shipped it: CD/3ED2 uploads the ANDed tiles at the NMI, so the picture draws
                              //   the level of the frame before (battleNmiHead, beside the CGRAM page)
   int dissolvePkt[8];        // CD/3ED2's packets the running level has shipped (a level is CE:F156[$967C] / $400 of them)
+  int dissolvePktShown[8];   // ...as the NMI shipped them: the tiles of those packets show the next level already
   int deathFxAfter[8];       // the routine's CD/0E05 effect still to run after its dissolve (D0073 `LDA #40`), 0 = none
   int deathFxSlot;           // the slot whose routine is inside CD/0E05 (-1 = none) ...
   int deathFxId;             // ...the effect it loads (D008E #38 / D0073 #40)
@@ -936,8 +937,9 @@ extern uint8_t gBattleFxArenaRows[256];
 // The widescreen's arena (a mod): the same compose over a wider picture whose view starts at column x0 -- see battle.c.
 void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, const uint8_t* mem, const CtBattleHost* h, int x0);
 // ...and after the sprites: BG3's front pixels come back from `atCompose` (the fb as the compositor left it), and those
-// whose colour math adds the sub screen (the main screen less BG3) are finished against the pixel now under them.
-void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov);
+// whose colour math adds the sub screen (the main screen less BG3) are finished against the pixel now under them, those
+// whose sub screen is the sprites alone against the sprite drawn there (`objPal` != FF; NULL = none) or the fixed colour.
+void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov, const uint8_t* objPal);
 // ...and last, the sprites' own share of the rows the compositor evaluated: the clip, and the colour math of the OBJ
 // pixels of palettes 4-7 (CGADSUB bit 4). `objPal` = per pixel the OBJ palette of the sprite on top (0xFF = none).
 // Returns the pixels it changed. ct --sweepfxcompose grades it on the cartridge's own OBJ layer.

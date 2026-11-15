@@ -3425,3 +3425,11 @@ leg's start and graded on f18900. A fight's epilogue marks a defeated enemy with
 pause); a script undoes them (op 0x0C, op 0x90) and the cartridge draws the object again -- the barrier's statues rise
 from the pits. The port also set its `dead` (op 0x0A's kill), which kept them off the screen (1199 px). `0 px`; one
 mutation.
+
+`field-picture-bg3-disc-adds-the-sprites-under-it-vs-cartridge`: playthrough leg 137 (the summit's fight), played from the
+leg's start and graded on f4640. On lines whose sub screen is the sprites alone (TS 10) the colour math adds the sprite
+under a front BG3 pixel, or the fixed colour where none is: the purple disc of action 84 over the party (6353 px before).
+`0 px`; one mutation.
+
+`field-picture-corpse-level-ships-in-packets-vs-cartridge`: the same leg, graded on f9000. A corpse's dither level ships
+in packets, one an NMI (CD/3ED2); the cells of the packets shipped are a level ahead (43 px before). `0 px`; one mutation.

@@ -250,6 +250,11 @@ PICTURES = {
     # ...and the barrier's statues (objs 16 / 17): the first fight's epilogue marks them removed (`$1A81` 0, `$1000` bit
     # 7), a script brings them back (op 0x0C, then op 0x90 on f18867) and they rise from the pits.
     'removed-enemy-shown-again-is-drawn': dict(leg='94_ozzie_barrier', at=0, frames=18900, own=True),
+    # Leg 137 (the summit's fight), action `$9877` 84: lines whose sub screen is the sprites alone (TS 10) add them to
+    # BG3's purple disc inside op 8B's circle window (f4585-f4715) ...
+    'bg3-disc-adds-the-sprites-under-it': dict(leg='137_lavos_spawns_summit', at=0, frames=4640, own=True),
+    # ...and slot 0's corpse (type 3: four $400 packets a level) shows its first packet a level ahead (f9000).
+    'corpse-level-ships-in-packets': dict(leg='137_lavos_spawns_summit', at=0, frames=9000, own=True),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's
