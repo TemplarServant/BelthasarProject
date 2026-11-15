@@ -432,3 +432,21 @@ scripted walk ends f115609, obj 2's A26B advances `$01AC` 3E, 3F, then 3F -> 40 
 the followers (g_daObj), so its follower saw D9's reset and stood: the party went into the fight with Marle and Lucca
 1 px lower (`$29B0` fineY 0E for 0D, C0/0430), every effect point resolved on them 1 px lower ($A2B0/$A2B2), and an
 enemy's action ran a frame longer (the warp at f117097). ct_vm.c ctRingReset: one reset for both ops, recorded the same.
+
+## 2026-11-14 -- the lead's momentum on a locked frame is a moving lead (playthrough leg 125)
+
+C0/881E runs whether or not the player has the control: with `$011F` = 0 it skips only the d-pad (C0/88EE), and C0/88E5
+still copies the momentum `$1D2A/$1D2B` into the accumulator, C0/8A6D clamps it and C0/9175 leaves the velocity in
+`$1D32/$1D33`. The lead's op B0 then pushes it (C0/9E29) and the followers' gap test reads it (A275 `LDA $1D32 / ORA
+$1D33`: 0x18 behind a moving lead, 0x10 behind a standing one). The host's branch for that frame (field.c, explore off,
+`$0120` set) moved the lead on the momentum but never copied the five bytes out of its collision page, so the scene's
+`$1D32/$1D33` stayed as the frame's clear left them: 00.
+
+MEASURED on the rule's cartridge, playthrough leg 125 (loc 171, the Blackbird): the pad holds Down; the lead stands at
+`$1882` 18CF f183142-f183146 (blocked, `$1D33` 00), and on f183147 a script takes the control and he goes on 2 px,
+`$1D33` 20, the head `$01AB` 75 -> 76, Lucca's cursor `$01AC` holding at 62 -- she stands that frame. The port had
+`$1D33` 00 there: no push, the 0x10 gap, Lucca took an entry a frame early, and the followers stopped short of the
+cartridge's places: on f184200 Lucca's `$1884` 1B0E and Ayla's `$188A` 1B07 where the cartridge's are 1B30 / 1B38, Marle
+1B00 on both. The three stand almost on one spot, and that is enough to change who is drawn in front: Lucca on the
+cartridge, Marle in the port (419 px a picture f183300-f195000). With the bytes published, `$01AB-$01AD`, `$1D32/$1D33` and the three positions are the cartridge's on
+every row f183140-f183160. Check `field-picture-momentum-step-is-a-moving-lead-vs-cartridge`.

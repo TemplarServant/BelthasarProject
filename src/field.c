@@ -17698,6 +17698,17 @@ int main(int argc, char** argv) {
       int atB0 = CtSceneActorAtB0(f.vm, pObj) && !CtSceneLeadInstalled(f.vm);
       double stepFromX = px, stepFromY = py;
       fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, 0, 0, 0, atB0 ? 1 : 0, &camReqX, &camReqY);
+      // ...and C0/881E's bytes are the scene's here too: the momentum's velocity C0/9175 leaves in $1D32/$1D33 (and the
+      // intent and shape bytes) is what the lead's B0 pushes into the ring and what the followers' gap test reads (A275
+      // `LDA $1D32 / ORA $1D33`: 0x18 behind a moving lead, 0x10 behind a standing one). MEASURED on the rule's cartridge,
+      // playthrough leg 125 (171, the Blackbird): on f183147 a script takes the control and the lead goes on 2 px down on
+      // his momentum, `$1D33` 20 and the head `$01AB` 75 -> 76; Lucca's cursor `$01AC` holds and she stands a frame. The
+      // port moved the lead with `$1D33` left 00: no push, the 0x10 gap, Lucca took an entry a frame early -- and the
+      // followers stopped 2-3 px short (Lucca 1B0E for 1B30), Marle drawn in front where Lucca is (419 px to f195000).
+      { uint8_t* lw = CtSceneMem7E(f.vm);
+        lw[0x1D2C] = g_collRam[0x1D2C]; lw[0x1D2D] = g_collRam[0x1D2D];
+        lw[0x1D32] = g_collRam[0x1D32]; lw[0x1D33] = g_collRam[0x1D33];
+        lw[0x1D34] = g_collRam[0x1D34]; }
       if (atB0) {
         if (px != stepFromX || py != stepFromY) CtSceneLeadStepFromLocked(f.vm, stepFromX, stepFromY);
         CtSceneSetActorPosF(f.vm, pObj, px, py);

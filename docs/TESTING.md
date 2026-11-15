@@ -3370,3 +3370,9 @@ f83960, made from the route by tools/ending_stage_cmp.py `--picture 85`). The ca
 (its main loop never waits), so each port picture is graded against the cartridge's state once its NMI has returned,
 drawn the rule's way, and the warp pass by pass (the port's renderer on the cartridge's WRAM at each pass); 1158 frames,
 0 px; 422 passes, 0 maps that differ; 3 RNG calls that read another open bus, named. Two mutations.
+
+`field-picture-momentum-step-is-a-moving-lead-vs-cartridge`: playthrough leg 125 (the Blackbird, loc 171), seeded at
+f183040 with the party standing, graded on f184200. On f183147 a script takes the control and the lead goes on 2 px on
+his momentum: C0/881E runs with explore off and leaves `$1D33` 20, which the lead's B0 pushes and the followers' gap test
+reads. The port moved him without publishing it; the followers stopped 2-3 px short and Marle was drawn where Lucca is
+(419 px). `0 px differ at port -2`; one mutation. disasm/notes/party_follower_ring.md, the 2026-11-14 section.

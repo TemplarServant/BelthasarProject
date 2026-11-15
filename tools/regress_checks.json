@@ -52799,6 +52799,40 @@
       ]
     },
     {
+      "name": "field-picture-momentum-step-is-a-moving-lead-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "momentum-step-is-a-moving-lead"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: momentum-step-is-a-moving-lead leg 125 f183040 +1160 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: momentum-step-is-a-moving-lead "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the lead's momentum on a locked frame is a moving lead: the followers stand where the cartridge's do",
+      "notes": "C0/881E RUNS ON A LOCKED FRAME TOO, AND ITS VELOCITY IS THE SCENE'S (field.c, the branch for explore off with $0120 set; disasm/notes/party_follower_ring.md, the 2026-11-14 section). With `$011F` = 0 C0/881E skips only the d-pad: C0/88E5 copies the momentum `$1D2A/$1D2B`, C0/8A6D clamps it, C0/9175 leaves `$1D32/$1D33`, the lead's op B0 pushes it into the ring (C0/9E29) and the followers' gap test reads it (A275: 0x18 behind a moving lead, 0x10 behind a standing one). The host's branch moved the lead on the momentum and never published the bytes. MEASURED on the rule's cartridge, playthrough leg 125 (loc 171): on f183147 a script takes the control and the lead goes on 2 px, `$1D33` 20, `$01AB` 75 -> 76, Lucca's `$01AC` holding -- she stands a frame; the port's `$1D33` was 00 and she took an entry. On f184200 Lucca's `$1884` 1B0E and Ayla's `$188A` 1B07 for the cartridge's 1B30 / 1B38: the three PCs almost on one spot, Marle drawn in front where the cartridge draws Lucca -- 419 px a picture f183300-f195000 (the audit's 60 samples). The case is seeded at f183040, the party standing before the walk (a seed inside the walk carries the mid-walk seed's own artefacts: 3069 px), and graded on f184200. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        lw[0x1D32] = g_collRam[0x1D32]; lw[0x1D33] = g_collRam[0x1D33];\n        lw[0x1D34] = g_collRam[0x1D34]; }\n      if (atB0) {\n",
+          "replace": "        /* MUT: the momentum's velocity is not published */ (void)0; }\n      if (atB0) {\n",
+          "why": "C0/9175 leaves the momentum's velocity in $1D32/$1D33 on a locked frame: `$1D33` 20 on f183147, the push and Lucca's held cursor"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

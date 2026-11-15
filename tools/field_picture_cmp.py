@@ -217,6 +217,11 @@ PICTURES = {
     # ((110,56) 16,3,0 -> 8,1,0 with the mist faded to black); the port read the mask at each pixel's own place and drew
     # her whole (101-400 px a picture, f28060-f28229).
     'mosaic-block-makes-the-sprite-its-sub-pixel': dict(leg='65_denadoro', at=27600, frames=505, own=True),
+    # The Blackbird (leg 125, loc 171): on f183147 a script takes the control and the lead goes on 2 px on his momentum --
+    # C0/881E runs with explore off and leaves `$1D33` 20, which the lead's B0 pushes and the followers' gap test reads.
+    # The port moved him without publishing it: Lucca took a ring entry where she stands a frame on the cartridge, and
+    # the followers stopped 2-3 px short -- Marle drawn in front where Lucca is (419 px a picture to f195000).
+    'momentum-step-is-a-moving-lead': dict(leg='125_blackbird_wing', at=183040, frames=1160, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX
