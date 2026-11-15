@@ -1516,9 +1516,16 @@ static CtMotFrame* g_mot;                        // (the picture's owners while 
 // tools/ow_wave_cmp.py (world 1F5) and tools/epoch_board_cmp.py --omen check it. Both waves move a line a frame, so a
 // one-line index error looks like a one-frame picture lag. (Mode 7's matrix has its own, OW_M7_LINE.)
 #define OW_HDMA_LINE 0
-// Mode 7 (the gauge, the world map): the matrix tables' entry and the screen Y of the formula are y + 1, from the pictures
-// of ow-epoch-gauge and the map checks (not re-derived with the 1F5 trace).
+// Mode 7 (the gauge, the world map): the screen Y of the formula is y + 1 (screen row y is line y + 1), from the pictures
+// of ow-epoch-gauge and the map checks.
 #define OW_M7_LINE 1
+// ...but a matrix TABLE's entry for screen row y is y, as every other HDMA table's: the oracle's PPU (snes/snes.c) inits
+// HDMA at line 0 with no transfer (dma_initHdma), and the transfer a line makes at H 1104 is what the next line renders
+// with (ppu_runLine at H 512 of lines 1..224) -- so line s, screen row s - 1, shows table unit s - 1. MEASURED on the rule's
+// cartridge, playthrough leg 109 (the time gauge, f8584-f8640): with entry y + 1 the swirl stood a line -- a pass, since
+// it moves a line a frame -- ahead of the palette the same NMI uploads, and every twelfth picture (a palette cycle's step)
+// was the cartridge's geometry under the other palette (33000 px); with entry y every picture is the cartridge's.
+#define OW_M7_HDMA_LINE 0
 static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line, uint16_t* out) {
   for (int ch = 0; ch < 8; ch++) {
     uint8_t dm, bb; uint16_t t;
@@ -1707,10 +1714,10 @@ static void worldComposeGauge(World* w, uint8_t* fb) {
     uint16_t v;
     int A = (int16_t)(zp[0x2C] | (zp[0x2D] << 8)), B = (int16_t)(zp[0x2E] | (zp[0x2F] << 8));
     int C = (int16_t)(zp[0x30] | (zp[0x31] << 8)), D = (int16_t)(zp[0x32] | (zp[0x33] << 8));
-    if (owHdmaWordAt(wr, en, 0x1B, line, &v)) A = (int16_t)v;
-    if (owHdmaWordAt(wr, en, 0x1C, line, &v)) B = (int16_t)v;
-    if (owHdmaWordAt(wr, en, 0x1D, line, &v)) C = (int16_t)v;
-    if (owHdmaWordAt(wr, en, 0x1E, line, &v)) D = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1B, y + OW_M7_HDMA_LINE, &v)) A = (int16_t)v;   // (the table's entry y: OW_M7_HDMA_LINE)
+    if (owHdmaWordAt(wr, en, 0x1C, y + OW_M7_HDMA_LINE, &v)) B = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1D, y + OW_M7_HDMA_LINE, &v)) C = (int16_t)v;
+    if (owHdmaWordAt(wr, en, 0x1E, y + OW_M7_HDMA_LINE, &v)) D = (int16_t)v;
     int l = wh0, r = wh1;
     if (owHdmaWordAt(wr, en, 0x26, y, &v)) { l = v & 0xFF; r = v >> 8; }   // a window's edges: entry y (owWin1Line's; the matrix entry y + 1)
     int cH = hs - xc, cV = vs - yc;
@@ -6520,7 +6527,11 @@ static int fieldTreasureMessage(int result, int itemId, int value, char* out, in
   for (long a = off; a < rl && o < cap - 1; a++) {
     uint8_t v = CtRomByte(rom, 0x400000L, (long)(a));
     if (v == 0x00) break;                                          // terminator
-    if (v == 0x06) { o = fieldCtAppend(out, o, cap, "\n   "); continue; }   // newline + 3 spaces
+    // 0x06 = newline + the token's own indent, drawn and never typed: TB_IND, as the dialogue packer marks it (C0/2126
+    // spends one iteration on the token). MEASURED on the rule's cartridge, playthrough leg 93 ("Got 1 Dark Mail!",
+    // `06` + 13 x `EF` + "Got 1 {item}!"): `$0129` 06 on f26059, 07 on f26089 -- 30 iterations, the 3 spaces free; the
+    // port typed them (33, its 07 on f26092) and the box's close came a frame early.
+    if (v == 0x06) { o = fieldCtAppend(out, o, cap, "\n\x02\x02\x02"); continue; }
     if (v == 0x0D || v == 0x0E || v == 0x0F) {                     // {num}: the gold amount
       char nb[12]; snprintf(nb, sizeof nb, "%d", value);
       o = fieldCtAppend(out, o, cap, nb); continue;
@@ -6623,7 +6634,7 @@ static int fieldTreasureProbe(Field* f, int loc, double px, double py, int pfac)
     g_chestMsgSeq++;
     if (getenv("CT_CHESTDBG")) {                              // one line, the message's centring stripped so the
       const char* m = g_chestMsg;                             // text itself is gradable by a check
-      while (*m == '\n' || *m == ' ') m++;
+      while (*m == '\n' || *m == ' ' || *m == TB_IND) m++;   // (TB_IND: the 06 token's own indent)
       fprintf(stderr, "chest: loc %d tile(%d,%d) idx %d payload %04X -> result %d item %d gold %d msg '%s'\n",
               loc, tile & 0xFF, (tile >> 8) & 0xFF, idx, pay, result, itemId, value, m);
     }
@@ -12703,20 +12714,26 @@ int main(int argc, char** argv) {
         }
         if (!*wp && wleft == 0 && g_wsEndAt < 0) {          // the script is spent: CT_DUMPWRAM_AT=end dumps here
           g_wsEndAt = frameNo; printf("walkscript-end f%d" CT_NL, frameNo); }
+        // A held key's edge is a key the frame before did not hold, as the cartridge's pad reads it: two `H` tokens
+        // back to back with the same key are one press (the route's `100:2,100:2` is A held four frames).
+        static unsigned wPrevMask = 0;
+        unsigned wNow = 0;
         if (wleft > 0) {
           if (wc == 'H') {
-            wsMask = (uint16_t)whm;
+            unsigned nb = wfirst ? (whm & ~wPrevMask) : 0;           // (the keys this frame newly holds)
+            wsMask = (uint16_t)whm; wNow = whm;
             if (whm & 0x080) wsDx = 1; else if (whm & 0x040) wsDx = -1;
             if (whm & 0x020) wsDy = 1; else if (whm & 0x010) wsDy = -1;
-            if (wfirst) { if (whm & 0x010) upPressed = 1;   if (whm & 0x020) downPressed = 1;
-                          if (whm & 0x040) leftPressed = 1; if (whm & 0x080) rightPressed = 1; }
-            if (whm & 0x100) { wsAHeld = 1; if (wfirst) talkPressed = 1; }
-            if (wfirst && (whm & 0x001)) wsB = 1;
-            if (wfirst && (whm & 0x008)) wsStart = 1;
-            if (wfirst && (whm & 0x200)) wsMenu = 1;
+            if (nb & 0x010) upPressed = 1;   if (nb & 0x020) downPressed = 1;
+            if (nb & 0x040) leftPressed = 1; if (nb & 0x080) rightPressed = 1;
+            if (whm & 0x100) { wsAHeld = 1; if (nb & 0x100) talkPressed = 1; }
+            if (nb & 0x001) wsB = 1;
+            if (nb & 0x008) wsStart = 1;
+            if (nb & 0x200) wsMenu = 1;
           }
           wfirst = 0; wleft--;
         }
+        wPrevMask = wNow;
       }
     } else
     if (walkPipe) {
@@ -12770,9 +12787,11 @@ int main(int argc, char** argv) {
       // scan from the start finds it, and a frame number that goes back restarts it) -- a route of 3.4 M frames and
       // 10^5 tokens rescanned from its start every frame cost O(frames x tokens).
       static const char* wsCurBase = NULL; static const char* wsCurP = NULL; static int wsCurAt = 0;
-      if (wsCurBase != walkScript || frameNo < wsCurAt) { wsCurBase = walkScript; wsCurP = walkScript; wsCurAt = 0; }
+      static unsigned wsCurPrevHm = 0;                     // the keys the token before the cached one held
+      if (wsCurBase != walkScript || frameNo < wsCurAt) { wsCurBase = walkScript; wsCurP = walkScript; wsCurAt = 0; wsCurPrevHm = 0; }
       const char* p = wsCurP;
       int at = wsCurAt;
+      unsigned prevHm = wsCurPrevHm;
       while (*p) {
         const char* tokP = p;
         char c = *p++;
@@ -12781,18 +12800,22 @@ int main(int argc, char** argv) {
         if (*p == ':') p++;
         int n = (int)strtol(p, (char**)&p, 10);
         if (frameNo >= at && frameNo < at + n) {
-          wsCurP = tokP; wsCurAt = at;
+          wsCurP = tokP; wsCurAt = at; wsCurPrevHm = prevHm;
           if (c == 'H') {
-            int first = frameNo == at;
+            // A held key's edge is a key the token before did not hold, as the cartridge's pad reads it: the route's
+            // `100:2,100:2` is A held four frames, one press (the --walkfile parser above, the same rule). MEASURED,
+            // playthrough leg 17 (the queen's room): the second token's A was a second press in the port, which probed
+            // obj 21 while the box was still closing (f2891) -- the cartridge activates it only on the next real A (f2931).
+            unsigned nb = frameNo == at ? (hm & ~prevHm) : 0;
             wsMask = (uint16_t)hm;
             if (hm & 0x080) wsDx = 1; else if (hm & 0x040) wsDx = -1;
             if (hm & 0x020) wsDy = 1; else if (hm & 0x010) wsDy = -1;
-            if (first) { if (hm & 0x010) upPressed = 1;   if (hm & 0x020) downPressed = 1;
-                         if (hm & 0x040) leftPressed = 1; if (hm & 0x080) rightPressed = 1; }
-            if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }
-            if (first && (hm & 0x001)) wsB = 1;
-            if (first && (hm & 0x008)) wsStart = 1;
-            if (first && (hm & 0x200)) wsMenu = 1;
+            if (nb & 0x010) upPressed = 1;   if (nb & 0x020) downPressed = 1;
+            if (nb & 0x040) leftPressed = 1; if (nb & 0x080) rightPressed = 1;
+            if (hm & 0x100) { wsAHeld = 1; if (nb & 0x100) talkPressed = 1; }
+            if (nb & 0x001) wsB = 1;
+            if (nb & 0x008) wsStart = 1;
+            if (nb & 0x200) wsMenu = 1;
             break;
           }
           // u/d/l/r also raise the d-pad edge on the token's first frame, as 'a' raises A: a decision box's option
@@ -12815,6 +12838,7 @@ int main(int argc, char** argv) {
           break;
         }
         at += n;
+        prevHm = c == 'H' ? hm : 0;
         if (*p == ',') p++;
       }
     }
@@ -17444,8 +17468,8 @@ int main(int argc, char** argv) {
           tbLine = tbLast + 1; tbReveal = 0; tbPageFollowed = 1;         // 1FB4 JSR C0/20B2: the line buffer clears
           tbBufPos = -1; tbBufN = 0;
         } else if (chestBox) {                                   // the host box: no script to advance, but
-          uint8_t* cs7 = CtSceneMem7E(f.vm);                     // the same machine: 2081 `LDA #0D / STA $29`
-          if (cs7) cs7[0x0129] = 0x0D;                           // -> tbMachineTick ramps it out and clears
+          CtSceneTextboxCloseArm(f.vm);                          // the same machine: 2081 `LDA #0D / STA $29`, the
+                                                                 // ramp (tbMachineTick) from its next frame
         } else CtSceneAdvance(f.vm);                             // $0129/$0126/$0154.5 at the end (204D)
       } else if (bx && bx[0x011F] != 0 && !pressSpent) {
         // C0/1AC1 `LDA $1F / BNE ->1AC6 / RTS`: with $011F == 0 (op 0xE3 00, a cutscene's control lock) the

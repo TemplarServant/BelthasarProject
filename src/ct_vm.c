@@ -6660,6 +6660,14 @@ void CtSceneAdvance(CtScene* sc) {
   sc->tbCloseArmed = 1;                          // ...and C0/2081 returns: the 0x0D arm (C0/2032) is only
                                                  //   dispatched on the box machine's next frame
 }
+// The same C0/2081 for the host's treasure box (no script parked on it): `LDA #0D / STA $29` and the ramp from the box
+// machine's next frame. MEASURED on the rule's cartridge, playthrough leg 93 ("Got 1 Dark Mail!", A on f26096): `$0129`
+// 0D with `$0127` still 28 on f26097, 24 on f26098; the port had ramped on the press's own frame.
+void CtSceneTextboxCloseArm(CtScene* sc) {
+  if (!sc) return;
+  w8(sc->mem, 0x7E0129, 0x0D);
+  sc->tbCloseArmed = 1;
+}
 // C0/2126's end: the typewriter has drawn the page's last character (the host owns that string), so the
 // machine leaves state 6: 21D8 `LDA #07 / STA $29 / LDA #81 / STA $36` and 21C2 `LDX #FFFF / STX $34`.
 // (The $0216 arm at 21A8, an in-string pause, is CtSceneTextboxPause.)

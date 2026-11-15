@@ -241,6 +241,15 @@ PICTURES = {
     'counter-box-before-the-teardown': dict(leg='92_slash', at=32200, frames=910, own=True),
     # ...and, relisted for that counter (`$AF02,X := $AF0D,X`), it is the combatant with the counter's poses, no corpse.
     'fallen-counterer-keeps-its-live-pose': dict(leg='92_slash', at=32200, frames=1000, own=True),
+    # Leg 93, a chest's "Got 1 Dark Mail!" (`06` + 13 x `EF` + "Got 1 {item}!"): the `06` token's indent is drawn, never
+    # typed (`$0129` 07 on f26089, 30 iterations), so f26084 shows the text as far as the cartridge's ...
+    'chest-message-indent-is-not-typed': dict(leg='93_ozzie_way', at=0, frames=26084, own=True),
+    # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
+    'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
+    # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's
+    # walkscript raised a second A on the second token and probed obj 21 while the box was closing (f2891), its scene
+    # forty frames ahead. f3000 shows the queen's box on both sides.
+    'held-key-is-one-press': dict(leg='17_queen', at=0, frames=3000, own=True),
     # The Epoch's naming (leg 108: the screen opens on f35404 and stands), f35700. The naming screen's portrait is read
     # by the name's id through `$FFCE70,X` (base tile) and `$FFCE78,X*2` (palette) at C2/EC38, and the tiles are the
     # PCs' portrait block for ids 0-6; id 7, the Epoch, has no place in that block: C2/E44D (`CMP #07 / BCC / LDX

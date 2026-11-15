@@ -3398,3 +3398,19 @@ f33200. The first pins that the main loop's CD/0009 waits for the counters (the 
 effect teardown runs inside the counter's open (C1/4058 -> C1/10FA -> CD/0009, f33108-f33128); the second that the
 relisted fallen enemy is drawn as the combatant, with the counter's poses, not as a corpse. `0 px` each; three
 mutations. disasm/notes/battle_counter_gating.md sec. 9.
+
+`field-picture-chest-message-indent-is-not-typed-vs-cartridge`, `field-picture-chest-box-closes-from-the-next-frame-vs-cartridge`:
+playthrough leg 93, a chest's "Got 1 Dark Mail!", played from the leg's start and graded on f26084 and f26100. The
+first pins that the treasure string's `06` token carries its three-space indent, drawn and never typed (30 typewriter
+iterations, as the cartridge's); the second that the closing A only stores `$0129` = 0D and the ramp starts the box
+machine's next frame. `0 px` each; two mutations. disasm/notes/textbox.md, the 2026-11-15 section.
+
+`ow-epoch-time-gauge-vs-oracle` (re-pinned 2026-11-15): the gauge's pictures pair at P + 1 and are 0 px, the last line too,
+since the mode-7 matrix tables are read at entry y for screen row y (field.c OW_M7_HDMA_LINE, derived from the oracle's
+HDMA timing; disasm/notes/ow_time_gauge.md sec. 6). One mutation (entry y + 1).
+
+`field-picture-held-key-is-one-press-vs-cartridge`: playthrough leg 17, played from the leg's start and graded on f3000. A
+walkscript `H` token raises an edge only for the keys the token before did not hold, as the cartridge's pad: the route's
+`100:2,100:2` is one A held four frames. The port's second A probed an object while a box was closing and ran the queen's
+scene forty frames early (20470 px). `0 px`; one mutation. 26 such pairs in 11 legs changed with it (the playthrough
+check's re-pin of the same date).

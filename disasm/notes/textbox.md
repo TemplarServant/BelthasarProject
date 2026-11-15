@@ -643,3 +643,21 @@ reported once (`tbwindow:`). Graded: tools/textbox_rule_cmp.py 0 frames differ o
 0 threshold; on Marle's decision close (s439) each ramp frame changes exactly the band's last row, now equal to the
 cartridge's (the bitmap was 256 px off). The menus' 9-patch (drawCtWindowRect) and the battle's message band
 (drawCtMsgWindow24) still read the baked picture.
+
+## The treasure box against the cartridge (2026-11-15)
+
+Playthrough leg 93, a chest's "Got 1 Dark Mail!". `$DE:FF00` entry 0 (at `$DE:FF0A`) is
+
+    06  EF x 13  A6 C8 CD (Got)  EF  D5 (1)  EF  1F (item)  DE (!)  00
+
+* **The `06` token's indent is not typed.** The typewriter C0/2126 spends one iteration on the token, as on every
+  dialogue line break (the cost model above): `$0129` 06 on f26059, 07 on f26089 -- 30 iterations = the token, 13
+  spaces, "Got", a space, "1", a space, the item name's 9 letters and "!". The port's treasure decoder wrote the token
+  as a newline and three literal spaces and typed them (33, 07 on f26092). It now writes TB_IND, as the dialogue packer.
+* **The close ramps from the next frame.** The A on f26096: `$0129` = 0D with `$0127` still 28 on f26097, then 24 on
+  f26098 .. 00 and `$0129` 00 on f26108 -- C0/2081 `LDA #0D / STA $29` returns, and C0/2032 runs on the box machine's next
+  frame, as for a script's box (CtSceneAdvance's tbCloseArmed). The port's chest path stored 0D bare and ramped on the
+  press's frame. ct_vm.c CtSceneTextboxCloseArm.
+
+The box's frames are now the cartridge's (f26045-f26108). The pendulums above the party there run a frame or two apart
+(the leg's carried timing).

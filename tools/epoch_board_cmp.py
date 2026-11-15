@@ -203,7 +203,7 @@ def omen():
 
 
 GAUGE_O = ['0:60', '100:2'] + ['0:30', '100:2'] * 93 + ['0:44', '2:2', '0:98', '10:2', '0:88', '100:2', '0:520']
-GAUGE_SHOTS = [3182, 3202, 3242, 3580, 3610]   # the gauge (needle turning, turning, still), the arrival on 1F1 (P+2)
+GAUGE_SHOTS = [3182, 3202, 3242, 3580, 3610]   # the gauge (needle turning, turning, still), the arrival on 1F1 (P+1)
 # From the 1F6 load at story D4 (the cartridge's f3003, before the free flight) the port is one frame further behind: that load
 # runs C2/2D91 (the Black Omen's art), 38 frames on both sides (the cartridge's NMI-off stretch, calls 3003-3041, 13,743,004
 # cycles; the same load at story D3, calls 2159-2196, is 37), which the port charges since c9e939d. Every press and picture
@@ -289,12 +289,15 @@ def gauge():
         oi = {d: v for d, v in o}; pi = {d: v for d, v in p}
         for d in sorted(set(oi) | set(pi)):
             print('gauge:   +%d cartridge %s port %s' % (d, '/'.join(oi[d]) if d in oi else '-', '/'.join(pi[d]) if d in pi else '-'))
-    for f in GAUGE_SHOTS:                                # the port's picture P is the cartridge's --peek P + 2
+    # The gauge's picture P is the cartridge's --peek P + 1: its matrix tables are read at entry y for screen row y (field.c
+    # OW_M7_HDMA_LINE, the oracle's HDMA), and with them the swirl, its palette cycle and the last line are the cartridge's
+    # at P + 1 (2026-11-15; the P + 2 before was the swirl a line -- a pass -- ahead of its palette).
+    for f in GAUGE_SHOTS:
         o_raw = os.path.join(OUT, 'gauge_o%d.raw' % f)
         bs, t = [], 0
         for it in GAUGE_O:
             b, n = it.split(':'); n = int(n)
-            if t + n >= f + 2: bs.append('%s:%d' % (b, f + 2 - t)); break
+            if t + n >= f + 1: bs.append('%s:%d' % (b, f + 1 - t)); break
             bs.append(it); t += n
         subprocess.run([os.path.join(ROOT, 'build', 'ct.exe'), '--peek', os.path.join(JK, 'states', 'ch24.state'), o_raw,
                         '--btnscript', ','.join(bs)], cwd=ROOT, env=dict(os.environ, CT_ORACLE_LOGICAL='1'), capture_output=True)
@@ -302,7 +305,7 @@ def gauge():
         oo = raw_rgb(o_raw, True)
         n = sum(po(x, y) != oo(x, y) for y in range(0, 224) for x in range(256))
         nl = sum(po(x, 223) != oo(x, 223) for x in range(256))
-        print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + WORLD_D4_SHIFT, f + 2, n, nl))
+        print('gauge: picture port f%d / cartridge f%d %d px differ (%d on the last line)' % (f + WORLD_D4_SHIFT, f + 1, n, nl))
     return 0
 
 

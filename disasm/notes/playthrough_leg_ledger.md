@@ -270,3 +270,22 @@ carried on by mechanisms that quantise time:
   Timing: the torches' 116 px samples (f26400-f117000) are the tile animation's run counter `$051D` one run behind from
   loc 0A6's load (the counter resumes on f1297 for the cartridge's f1296: the load clock, the f1295+1 warp above), the
   room's flames a step apart wherever they stand.
+- **Leg 49 (SAME), loc 0E2's fades (2026-11-15).** The leg's picture audit samples f9000-f11100 (7000-35635 px, whole
+  frames) are fade levels two frames apart. Loc 0E2's load ends a frame off in the port (its ramp starts f657 for the
+  cartridge's f656: the load clock); from there the scene's script runs off the cartridge's frames (the `$0117` 0001
+  of f5360 lands on f5364), its text boxes open two frames early (`$0127` growing from f8033 for f8035) though they close on the pad's own A on both sides (f8088), and
+  the op after each box, the `$0117` = 80 fade, lands two frames early (f8103 for f8105, f8294 / f8296, f8485 / f8487,
+  f8804 / f8806); Robo's naming screen (`C8 C3`) fades out from f11061 for f11063 and in from f11094 for f11096.
+- **Leg 35 (SAME), the Dragon Tank fight a frame off (2026-11-15).** The fight starts on f1705 on both sides (`$0117`
+  0100), but the port's first idle iteration comes a frame early (`$993A` 01 on f1728 for the cartridge's f1729: the
+  boot's pace, as legs 109 / 118). The menu pass then runs a frame ahead of the cartridge's, so the pad's A of f1809 is
+  seen on f1813 for f1810, and the command commits on f1837 for f1834; in those three frames the tank's own turn comes
+  due, and its message (`CD/0295`, id 02) plays before Crono's action in the port (the action opens on f1856 for
+  f1838). From there the ATB timers run apart (Lucca's 1C for 1E at f11857), the turns land a few frames apart and the
+  Grinder's wheel stands in other poses (200 px a picture in the audit's 39 samples).
+- **The harness's held keys (2026-11-15).** The route's pad has 26 places in 11 legs (14, 16, 17, 23, 25, 27, 42, 45, 46, 50,
+  51) where one key fills two consecutive segments (`100:2,100:2`). The cartridge's --btnscript holds it with no release:
+  one press. The port's --walkscript raised the key's edge again on the second token: a phantom press. Leg 17 shows it: the
+  second A probed obj 21 while the queen's box was closing (f2891) and its scene ran forty frames early, where the
+  cartridge activates it on the next real A (f2931). The H tokens now raise an edge only for a key the token before did
+  not hold (field.c), and leg 17 is 0 px from f2100 to f6300.

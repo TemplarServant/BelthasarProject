@@ -307,6 +307,7 @@ int CtSceneTextbox(const CtScene* sc, int* tableAddr, int* strIndex);
 // next visit). The host draws the window ramping out; the script resumes on its first visit with $0129 == 0.
 int CtSceneTextboxUnparking(const CtScene* sc);
 void CtSceneAdvance(CtScene* sc);              // dismiss the current textbox (player confirmed)
+void CtSceneTextboxCloseArm(CtScene* sc);      // the treasure box's C0/2081: $0129 = 0D, the ramp from the next frame
 void CtSceneTextboxRevealDone(CtScene* sc, int pendingCode);  // typewriter drew the page's last char: 6 -> 7 (C0/21D8)
 void CtSceneTextboxPause(CtScene* sc, int n);            // the typewriter met `03 n` (C0/21A8): a timed pause, or `03 00`'s close
 int  CtSceneTextboxResumeArmed(const CtScene* sc);       // a pause ran out this frame (C0/2096 RTL): no typing until the next

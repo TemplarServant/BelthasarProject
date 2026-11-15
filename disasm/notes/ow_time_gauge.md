@@ -88,3 +88,18 @@ $1BB7` the same to `$027C = 7`; the picture pixel for pixel but the last line (b
   13 px of the needle's edge differ while it turns.
 - The trip flags `$7F01F4 & 0A` / `$7F01F5 & 02` (the world is rebuilt anyway, said once),
   the `$027C = 9` menu.
+
+## 6. The matrix tables' entry, and the picture at P + 1 (2026-11-15)
+
+Screen row y takes the matrix tables' entry y, not y + 1. The oracle's PPU (snes/snes.c, dma.c): `dma_initHdma` at line 0,
+H 16, loads each channel's table address and count with no transfer; `dma_doHdma` at H 1104 of every line 0..224 makes the
+transfer the NEXT line renders with (`ppu_runLine` at H 512 of lines 1..224). So line s -- screen row s - 1 -- shows the
+unit transferred on line s - 1: row y, entry y, as every other HDMA table of the port reads it (window 1, the BG waves).
+The mode-7 formula's own Y stays the line, y + 1.
+
+With entry y + 1 the swirl (which moves a line a pass) stood a pass ahead of the palette the same NMI uploads (C2/01A6's
+CGRAM DMA, C2/02B2's entry copy and then the pass: cputrace on playthrough leg 109, f8570 + 18..21, lines 225-228). The
+palette cycle C2:1FBB steps every 12 frames (`$0920` 2929 -> 0825 on f8590): on those frames the cartridge showed the port's
+geometry under the next palette (33000 px), and the last line read past the 224-line table (158-201 px). With entry y every
+picture of the gauge is the cartridge's at P + 1 -- the world module's pairing (epoch_board_cmp.py), which the gauge's
+P + 2 had only seemed to break: ow-epoch-time-gauge-vs-oracle's five pictures are 0 px, the last line too.

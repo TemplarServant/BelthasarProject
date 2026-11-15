@@ -19219,7 +19219,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "selftest: scene 26 naming=-1 name='', 0 NPCs, player (488,621) cam(352,480) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=28 fgpx=802208 fgskip=0 -> 256x224 fnv32=2EB73CE8"
+        "selftest: scene 26 naming=-1 name='', 0 NPCs, player (488,621) cam(352,480) f0 topF=1 botF=1, textbox=0 idx=0 choice=0 sel=0 page=0/1 reveal=25 fgpx=802208 fgskip=0 -> 256x224 fnv32=2EB73CE8"
       ],
       "pin": [
         "^selftest: scene 26 .* fnv32="
@@ -19227,7 +19227,7 @@
       "tier": "quick",
       "timeout_s": 120,
       "note_pass": "a second press on an opened chest awards NOTHING and shows the ROM's 'Empty!' box",
-      "notes": "USER REPORT (translated from Portuguese): 'chests do not open'. The whole treasure-chest subsystem was ABSENT from src/ -- a chest is not an event object and uses no event opcode (op 0xCA AddItem has 220 script sites for CT's 249 treasures, and every one sampled is a hidden Tab pickup), it is a dedicated engine subsystem: the per-location table at $F5:F000 (513 u16 local pointers, then 4-byte records `u16 tile=(ty<<8)|tx, u16 payload`; 249 records / 118 locations / 16 gold / 5 alias records), the $7E:70C0 plane built by C0/A712 at every location load, the probe C0/1DF4 reached by the A handler's FALL-THROUGH `C0/1ADC BRL ->1DF4` (our field_action_probe.md:26 called that branch 'nothing happens' -- corrected), the opened-flag bank $7F:0001..$7F:0020, the award leaves C1/D005 / C1/D0A2 behind JSL C1/8003, and the metatile bump C0/16DC ($FE->$FF, $E0->$E1) requested by $0117 bit1 + $015D. Dossier: disasm/notes/field_treasure_chests.md. THIS CHECK is the already-open arm: C0/1E3E reads $7F0001,X, and when the bit is already set C0/1E44 BNE ->1E8D skips the flag store, the $0117 bump request AND the award entirely, leaving only result 2 -- whose string is $DE:FF00 entry 2, 'Empty!'. MEASURED on the oracle: a second A press writes NOTHING ($7F0001 stays 40, $7E2400 stays CA, $7E551E stays FF, $0117 never set) and renders the centred 'Empty!' box. The fnv pins that frame; the trace pins the result code and the text.\n\nRE-PIN 2026-08-28 (the ONE-SCANLINE ORIGIN, disasm/notes/field_scanline_origin.md). The SNES shows BG line `vScroll + 1` on the FIRST VISIBLE SCANLINE -- BGnVOFS is not the row displayed at the top of the screen; the PPU fetches row `y + VOFS` for scanline y counting from 1, so screen row 0 shows source row VOFS + 1. Our compositor sampled `camy + y`, so the WHOLE FIELD PICTURE -- map AND sprites, which share that origin -- sat exactly ONE SCANLINE TOO LOW, in every scene, since the first render. MEASURED against the oracle on a STATIC room (loc 26, `--peek` vs our `--selftest`, 200 rows x 256 px): before, dy=+0 differs in 21812/51200 pixels (42.6%) and dy=+1 in 445 (0.87%); after, dy=+0 differs in 445 and dy=+1 in 21731 -- an exact mirror -- with per-row diffs of ZERO for every pure-map row (10..25) and for the player's body rows (143..165). The BATTLE screen shares the field compositor and moved with it, verified the same way against saves/gato_inbattle.state: its background band now differs in 1 pixel out of 10240 (0.0%) at dy=0 against 57% at either neighbour. Every fnv in this wave moved for that one reason; no check's SUBJECT changed. Found by the scene-254 render A/B. RE-PIN 2026-09-03 (the field's V-IRQ force blank, defect #1): scanlines 211..223 of every field and battle frame are black now, as on hardware (C0/0B44 VTIME = 211, C0/ECCC INIDISP := $80 at that line's H-blank, D1/FE97 the same in battle; measured on the oracle's framebuffers). Only the frame hash moved -- every other token of the line is identical, verified token by token before this re-pin. RE-PINNED 2026-09-24 (the textbox's 4-line window, $0131): the dialogue window holds FOUR lines and a page CLEARS (C0/2126's line cursor $0131 wraps 3 -> 0; 338 ROM pages have four lines), the text sits at window top + 10 (measured on two oracle boxes, every line), and a pressed page's 1FB4 runs the frame AFTER the press (C0/2086 returns, as 2081 does) -- the lockstep box projection is now CLEAN over s439's 1099 frames and s434's 799 (it read 'apart f101..f479' / 'f391..f514'). Frame and picture pins here move with those three facts.",
+      "notes": "USER REPORT (translated from Portuguese): 'chests do not open'. The whole treasure-chest subsystem was ABSENT from src/ -- a chest is not an event object and uses no event opcode (op 0xCA AddItem has 220 script sites for CT's 249 treasures, and every one sampled is a hidden Tab pickup), it is a dedicated engine subsystem: the per-location table at $F5:F000 (513 u16 local pointers, then 4-byte records `u16 tile=(ty<<8)|tx, u16 payload`; 249 records / 118 locations / 16 gold / 5 alias records), the $7E:70C0 plane built by C0/A712 at every location load, the probe C0/1DF4 reached by the A handler's FALL-THROUGH `C0/1ADC BRL ->1DF4` (our field_action_probe.md:26 called that branch 'nothing happens' -- corrected), the opened-flag bank $7F:0001..$7F:0020, the award leaves C1/D005 / C1/D0A2 behind JSL C1/8003, and the metatile bump C0/16DC ($FE->$FF, $E0->$E1) requested by $0117 bit1 + $015D. Dossier: disasm/notes/field_treasure_chests.md. THIS CHECK is the already-open arm: C0/1E3E reads $7F0001,X, and when the bit is already set C0/1E44 BNE ->1E8D skips the flag store, the $0117 bump request AND the award entirely, leaving only result 2 -- whose string is $DE:FF00 entry 2, 'Empty!'. MEASURED on the oracle: a second A press writes NOTHING ($7F0001 stays 40, $7E2400 stays CA, $7E551E stays FF, $0117 never set) and renders the centred 'Empty!' box. The fnv pins that frame; the trace pins the result code and the text.\n\nRE-PIN 2026-08-28 (the ONE-SCANLINE ORIGIN, disasm/notes/field_scanline_origin.md). The SNES shows BG line `vScroll + 1` on the FIRST VISIBLE SCANLINE -- BGnVOFS is not the row displayed at the top of the screen; the PPU fetches row `y + VOFS` for scanline y counting from 1, so screen row 0 shows source row VOFS + 1. Our compositor sampled `camy + y`, so the WHOLE FIELD PICTURE -- map AND sprites, which share that origin -- sat exactly ONE SCANLINE TOO LOW, in every scene, since the first render. MEASURED against the oracle on a STATIC room (loc 26, `--peek` vs our `--selftest`, 200 rows x 256 px): before, dy=+0 differs in 21812/51200 pixels (42.6%) and dy=+1 in 445 (0.87%); after, dy=+0 differs in 445 and dy=+1 in 21731 -- an exact mirror -- with per-row diffs of ZERO for every pure-map row (10..25) and for the player's body rows (143..165). The BATTLE screen shares the field compositor and moved with it, verified the same way against saves/gato_inbattle.state: its background band now differs in 1 pixel out of 10240 (0.0%) at dy=0 against 57% at either neighbour. Every fnv in this wave moved for that one reason; no check's SUBJECT changed. Found by the scene-254 render A/B. RE-PIN 2026-09-03 (the field's V-IRQ force blank, defect #1): scanlines 211..223 of every field and battle frame are black now, as on hardware (C0/0B44 VTIME = 211, C0/ECCC INIDISP := $80 at that line's H-blank, D1/FE97 the same in battle; measured on the oracle's framebuffers). Only the frame hash moved -- every other token of the line is identical, verified token by token before this re-pin. RE-PINNED 2026-09-24 (the textbox's 4-line window, $0131): the dialogue window holds FOUR lines and a page CLEARS (C0/2126's line cursor $0131 wraps 3 -> 0; 338 ROM pages have four lines), the text sits at window top + 10 (measured on two oracle boxes, every line), and a pressed page's 1FB4 runs the frame AFTER the press (C0/2086 returns, as 2081 does) -- the lockstep box projection is now CLEAN over s439's 1099 frames and s434's 799 (it read 'apart f101..f479' / 'f391..f514'). Frame and picture pins here move with those three facts. RE-PINNED 2026-11-15: reveal 28 -> 25, the treasure string's `06` token no longer counts its three-space indent as typed letters (field.c fieldTreasureMessage, TB_IND; the cartridge's 30 typewriter iterations, playthrough leg 93); the picture's hash is unchanged.",
       "mutations": [
         {
           "file": "src/field.c",
@@ -44968,11 +44968,11 @@
         "gauge: the way back 69 frames on the cartridge, 69 in the port",
         "gauge: the trip into $01F1 at +466 on the cartridge, +466 in the port; at the end the same",
         "gauge: on the new world the Epoch first moves at +512 on the cartridge, +512 in the port",
-        "gauge: picture port f3606 / cartridge f3184 158 px differ (158 on the last line)",
-        "gauge: picture port f3626 / cartridge f3204 214 px differ (201 on the last line)",
-        "gauge: picture port f3666 / cartridge f3244 201 px differ (201 on the last line)",
-        "gauge: picture port f4004 / cartridge f3582 0 px differ (0 on the last line)",
-        "gauge: picture port f4034 / cartridge f3612 57344 px differ (256 on the last line)"
+        "gauge: picture port f3606 / cartridge f3183 0 px differ (0 on the last line)",
+        "gauge: picture port f3626 / cartridge f3203 0 px differ (0 on the last line)",
+        "gauge: picture port f3666 / cartridge f3243 0 px differ (0 on the last line)",
+        "gauge: picture port f4004 / cartridge f3581 0 px differ (0 on the last line)",
+        "gauge: picture port f4034 / cartridge f3611 0 px differ (0 on the last line)"
       ],
       "pin": [
         "^gauge: "
@@ -45017,9 +45017,15 @@
           "find": "          cyc += 524674L + 2248948L;",
           "replace": "          cyc += 524674L;   /* MUT */",
           "why": "C2/7389's loads are 2,248,948 cycles of the NMI-off stretch: without them the gauge comes up 6 frames early"
+        },
+        {
+          "file": "src/field.c",
+          "find": "#define OW_M7_HDMA_LINE 0",
+          "replace": "#define OW_M7_HDMA_LINE 1 /* MUT */",
+          "why": "screen row y renders with the HDMA unit of line y (the transfer at the end of the line above)"
         }
       ],
-      "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1). RE-PINNED 2026-10-17 with the world map: the way back is now the cartridge's 69 frames (C2/2C93 priced by owRebuildCycles -- its decompressions plus a rest measured on world 0, graded by the oracle's own stretch on 1F6: 12,049,946 cycles, the model 12,050,166) and the trip lands at +466 on both; the end differs by the world's LOAD into 1F1 (C2's loader on the load clock, ROADMAP F1): the Epoch's first step there at +514 against +512 -- before, a way back 2 frames short hid it. Re-pin only from a fix of that clock. | RE-PINNED 2026-10-22 (the power-on, disasm/notes/boot_loader.md sec. 10 and field_load_cost.md sec. 12): --boot and a cold --scene 433 start at the reset now -- the SPC in its boot ROM, C0/0053's driver upload on the loader clock, the cartridge's 33 black frames before loc 0, the title's opening priced (74 frames), the overlay's END in its own frame; --scene 433 numbers the power-on run from frame 91 (ATTRACT_FRAME0). UNVERIFIED HERE (its saves are not in this checkout): the Start press moves to the power-on's title (n:133 -> n:198) and every port frame after it +65 (the tools' port offsets with it); to be confirmed on a machine with the inputs. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the world load into 1F1 is the ROM's walk (13,872,474 cycles, 39 black frames): the Epoch's first step is +511 against the cartridge's +512 (was +514) and the arrival picture f4033 is pixel for pixel (residual (c) gone); the frame left is the stretch's C2/24DA head (the cartridge's starts there, 14,186,002 cycles) that the port's C0/0B5A walk does not price. ==== MUTATION [2] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it. | RE-PINNED 2026-11-05 (c9e939d, C2/2D91 -- the Black Omen's art from story D4 -- priced in the world loads): ch24 reaches story D4 in the drive, and the 1F6 load there (the cartridge's f3003) runs C2/2D91 on both sides: 38 frames (the cartridge's NMI-off stretch, calls 3003-3041, 13,743,004 cycles; the same load at story D3, calls 2159-2196, is 37), so the port's world is one frame further behind from it: tools/epoch_board_cmp.py WORLD_D4_SHIFT (= FLIGHT_SHIFT + 1) places Y, the walkscript's Up (n:143 -> n:144) and the pictures there. Every graded state is now the cartridge's: the gauge, the way back (69), the trip (+466), the end, and the Epoch's first step on 1F1 at +512 on both (was +511: the frame residual the 2026-10-22 note left was C2/2D91's price in the 1F1 load). RESIDUAL (c) BACK, the other way: the arrival picture is the cartridge's --peek 3612 one frame later (port f4035, not f4034; f4034 is one fade-in step darker, every pixel) -- the 1F1 load's picture a frame behind its state, the load clock (ROADMAP F1)."
+      "notes": "THE EPOCH'S TIME GAUGE (disasm/notes/ow_time_gauge.md; ROADMAP G1a item 3). ch24 driven to the free flight (the cartridge's f3073), Y: `$027C = 8` (C2/45C7), C2/261D's fade (C2:2EC1, 18 NMIs), the NMI-off stretch (C2/2E23's stash + C2/26A8 + C2/7389, priced 3,915,526 cycles = 11 frames, the cartridge's 12-frame gap to the first gauge pass), the gauge (controller $6AC8, swirl $6F85, markers $7143, palette scripts), Up (12000 B.C. -> 600 A.D.), A: `$02AF = 01F1`, `$027C = 7`, the fade-out (C2:74B3), C2/2E72 + C2/2C93, the fade-in, the Epoch's state 6 / 7 (C2/4728, script C2:4AAD), loc 1F1 and the arrival (C2/4387, script C2:4B8C). `$1BB7` compared only while the gauge is up and from the controller's first write (outside it the byte is a field fill the port does not make). PINNED RESIDUALS: (a) the way back is a frame short and the trip two frames early -- the port prices C2/2C93 with the X menu's model (ct_lz_world_return_cost + a remainder measured on world 0); on 1F6 the cartridge's C2/2C93 is 11,225,250 cycles (--callrom), some 0.8 M more, as the X menu's return there would be too (the load clock, ROADMAP F1); (b) the gauge picture's last line (scanline 224, after the HDMA tables' 224 lines) is not the cartridge's: 158-201 px on that line, the rest pixel for pixel (P+2) but for 13 px of the needle's edge while it turns (f3560: its two line buffers a turn step apart); (c) port f3968 is the cartridge's f3611, not f3612 -- the trip's location load a frame apart (F1). RE-PINNED 2026-10-17 with the world map: the way back is now the cartridge's 69 frames (C2/2C93 priced by owRebuildCycles -- its decompressions plus a rest measured on world 0, graded by the oracle's own stretch on 1F6: 12,049,946 cycles, the model 12,050,166) and the trip lands at +466 on both; the end differs by the world's LOAD into 1F1 (C2's loader on the load clock, ROADMAP F1): the Epoch's first step there at +514 against +512 -- before, a way back 2 frames short hid it. Re-pin only from a fix of that clock. | RE-PINNED 2026-10-22 (the power-on, disasm/notes/boot_loader.md sec. 10 and field_load_cost.md sec. 12): --boot and a cold --scene 433 start at the reset now -- the SPC in its boot ROM, C0/0053's driver upload on the loader clock, the cartridge's 33 black frames before loc 0, the title's opening priced (74 frames), the overlay's END in its own frame; --scene 433 numbers the power-on run from frame 91 (ATTRACT_FRAME0). UNVERIFIED HERE (its saves are not in this checkout): the Start press moves to the power-on's title (n:133 -> n:198) and every port frame after it +65 (the tools' port offsets with it); to be confirmed on a machine with the inputs. RE-PINNED 2026-10-22 (ce84bdb..404971a, run on Windows with the saves): the world load into 1F1 is the ROM's walk (13,872,474 cycles, 39 black frames): the Epoch's first step is +511 against the cartridge's +512 (was +514) and the arrival picture f4033 is pixel for pixel (residual (c) gone); the frame left is the stretch's C2/24DA head (the cartridge's starts there, 14,186,002 cycles) that the port's C0/0B5A walk does not price. ==== MUTATION [2] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it. | RE-PINNED 2026-11-05 (c9e939d, C2/2D91 -- the Black Omen's art from story D4 -- priced in the world loads): ch24 reaches story D4 in the drive, and the 1F6 load there (the cartridge's f3003) runs C2/2D91 on both sides: 38 frames (the cartridge's NMI-off stretch, calls 3003-3041, 13,743,004 cycles; the same load at story D3, calls 2159-2196, is 37), so the port's world is one frame further behind from it: tools/epoch_board_cmp.py WORLD_D4_SHIFT (= FLIGHT_SHIFT + 1) places Y, the walkscript's Up (n:143 -> n:144) and the pictures there. Every graded state is now the cartridge's: the gauge, the way back (69), the trip (+466), the end, and the Epoch's first step on 1F1 at +512 on both (was +511: the frame residual the 2026-10-22 note left was C2/2D91's price in the 1F1 load). RESIDUAL (c) BACK, the other way: the arrival picture is the cartridge's --peek 3612 one frame later (port f4035, not f4034; f4034 is one fade-in step darker, every pixel) -- the 1F1 load's picture a frame behind its state, the load clock (ROADMAP F1). RE-PINNED 2026-11-15: the matrix tables' entry for screen row y is y (field.c OW_M7_HDMA_LINE; the oracle inits HDMA at line 0 with no transfer and line s renders with the unit line s - 1 transferred), and the gauge's pictures pair at P + 1: all five 0 px, the last line too (was 158-201 px there, and 57344 on f4034 at the old P + 2)."
     },
     {
       "name": "ow-dactyl-ride-vs-oracle",
@@ -47301,30 +47307,16 @@
       ],
       "expect": [
         "chest-close: cartridge $0129 00@f0 02@f11 03@f12 04@f13 05@f14 06@f25 07@f51 0D@f280 00@f291",
-        "chest-close: port      $0129 01@f11 02@f12 03@f13 04@f14 05@f15 06@f26 07@f55 0D@f281 00@f292",
+        "chest-close: port      $0129 01@f11 02@f12 03@f13 04@f14 05@f15 06@f26 07@f52 0D@f281 00@f292",
         "chest-close: f12 57323/57344 identical",
-        "chest-close: f39 57292/57344 identical",
-        "chest-close: f40 57250/57344 identical",
-        "chest-close: f41 57219/57344 identical",
-        "chest-close: f42 57271/57344 identical",
-        "chest-close: f43 57285/57344 identical",
-        "chest-close: f44 57316/57344 identical",
-        "chest-close: f45 57273/57344 identical",
-        "chest-close: f46 57270/57344 identical",
-        "chest-close: f47 57221/57344 identical",
-        "chest-close: f48 57221/57344 identical",
-        "chest-close: f49 57225/57344 identical",
-        "chest-close: f50 57247/57344 identical",
-        "chest-close: f51 57290/57344 identical",
-        "chest-close: f52 57317/57344 identical",
-        "chest-close: 305/320 frames identical"
+        "chest-close: 319/320 frames identical"
       ],
       "pin": [
         "^chest-close: "
       ],
       "timeout_s": 120,
       "note_pass": "a chest's box closes when the chest leaves the camera (C0/274D's bit-5 arm C0/2758): $0129 0D and 00 on the cartridge's frames (+1, the key), the picture's residuals pinned",
-      "notes": "C0/274D's bit-5 arm, C0/2758-277D (disasm/notes/field_caption_plane.md sec. 7): with none of $0154 bits 2/3/4 and bit 5 set (a chest's box, C0/1F1C `LDA #20 / TSB $54`, the only setter in bank C0), the main loop compares the chest's tile $015D/$015E (C0/1E52 `LDX $DB / STX $5D`, the only writer; --writer C0:1E54) with the camera's columns $1D0A/2..$1D0C/2 and rows $1D0E/2..$1D10/2 every frame (M8: `LDA / LSR / CMP $5D / BCS|BCC 2779`) and, outside, `2779 LDA #0D / STA $29` -- the box machine's close ramp C0/2032 from the next frame. The chest box does not hold the lead: he walks with it up. Fixture saves/field_re/s49_chest_walk.state (the rule's cartridge: --teleport 49 12 38 0 from s19_power_tab.state, loc 031 below the chest (12,37); the tool remakes it byte-identical when missing). Drive: A f10, Down f34, Right f134, Down f534. CARTRIDGE: $015D = 0C25 at f11, $0129 = 07 from f51; f280 `$1D0E` = 4A (the camera's top row = the chest's row 25) and $0129 = 0D (C0:277D) the same frame, rewritten every frame; $0127 24..00 f281-290; $0129 = 00 (C0:204F) / $0154 = 00 (C0:2055) f291. The port kept $015D in field.c's collision RAM (g_collRam), not the scene's WRAM, and had no arm: its box stood in state 7 forever. Now $015D/$015E live in the scene page (C0/16DC's bump reads them there too) and move.c CtVmCaption274D runs the arm after the box machine and the camera. PORT: 0D at f281, 00 at f292 = the cartridge's + 1, the same +1 every earlier edge shows (02 05 06). PINNED RESIDUALS, not this arm: the chest box's open ramp (f12-24) and typewriter (07 at port f55 vs cartridge f51+1: 3 frames late; the cartridge draws this box with C2/0003, the port with the field's textbox); the close ramp's picture f281-288 (the cartridge squeezes the text with the window, the port clips it -- the same residual the power-tab check pins on an A-press close, f166-169); f203-244 the camera X 1 px apart while the lead stands at a wall (cartridge $1D93 = 02 f203-245); from f246 Marle's follower sprite (~286 px). Re-pin only when one of those is fixed (verified against the cartridge's frames). | 2026-10-10 re-pinned: 179 -> 180/320 frames identical (the box's text on the NMI's frame, field-textbox-under-the-rule-vs-logical-oracle). | RE-PINNED 2026-10-11 (180 -> 188 of 320 frames identical; f17-f24 now equal and f281-f288 256 px closer, exactly one row each; no frame worse): the field box is drawn as the PPU draws it (field.c drawCtWindowPpu): BG1's window pixels in CGRAM's colours with HDMA channel 6's per-line CGADSUB/COLDATA (FD/D52D's records, now ported at the location entry), so the band's last line, where channel 6 is already back on the map's record (no BG1 math) while channel 4 still shows the window, shows the window's raw colour instead of the bitmap's baked gradient row. 2026-10-18 (ROADMAP F14, closed): f203-244 are exact now -- a sound upload (`JSL C7/0004`, the CPU in C7/09E5) holds the main loop from inside f203's event pass to f245, after C0/881E stepped the camera and before FD/C2C1 and C0/A810: the picture keeps the HDMA set built at f202 (HOFS 113; field.c draws the map at the shown word) and the lead at his words (1390; the host's copy had taken the step). 188 -> 230 frames identical. ==== MUTATION [4] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it.",
+      "notes": "C0/274D's bit-5 arm, C0/2758-277D (disasm/notes/field_caption_plane.md sec. 7): with none of $0154 bits 2/3/4 and bit 5 set (a chest's box, C0/1F1C `LDA #20 / TSB $54`, the only setter in bank C0), the main loop compares the chest's tile $015D/$015E (C0/1E52 `LDX $DB / STX $5D`, the only writer; --writer C0:1E54) with the camera's columns $1D0A/2..$1D0C/2 and rows $1D0E/2..$1D10/2 every frame (M8: `LDA / LSR / CMP $5D / BCS|BCC 2779`) and, outside, `2779 LDA #0D / STA $29` -- the box machine's close ramp C0/2032 from the next frame. The chest box does not hold the lead: he walks with it up. Fixture saves/field_re/s49_chest_walk.state (the rule's cartridge: --teleport 49 12 38 0 from s19_power_tab.state, loc 031 below the chest (12,37); the tool remakes it byte-identical when missing). Drive: A f10, Down f34, Right f134, Down f534. CARTRIDGE: $015D = 0C25 at f11, $0129 = 07 from f51; f280 `$1D0E` = 4A (the camera's top row = the chest's row 25) and $0129 = 0D (C0:277D) the same frame, rewritten every frame; $0127 24..00 f281-290; $0129 = 00 (C0:204F) / $0154 = 00 (C0:2055) f291. The port kept $015D in field.c's collision RAM (g_collRam), not the scene's WRAM, and had no arm: its box stood in state 7 forever. Now $015D/$015E live in the scene page (C0/16DC's bump reads them there too) and move.c CtVmCaption274D runs the arm after the box machine and the camera. PORT: 0D at f281, 00 at f292 = the cartridge's + 1, the same +1 every earlier edge shows (02 05 06). PINNED RESIDUALS, not this arm: the chest box's open ramp (f12-24) and typewriter (07 at port f55 vs cartridge f51+1: 3 frames late; the cartridge draws this box with C2/0003, the port with the field's textbox); the close ramp's picture f281-288 (the cartridge squeezes the text with the window, the port clips it -- the same residual the power-tab check pins on an A-press close, f166-169); f203-244 the camera X 1 px apart while the lead stands at a wall (cartridge $1D93 = 02 f203-245); from f246 Marle's follower sprite (~286 px). Re-pin only when one of those is fixed (verified against the cartridge's frames). | 2026-10-10 re-pinned: 179 -> 180/320 frames identical (the box's text on the NMI's frame, field-textbox-under-the-rule-vs-logical-oracle). | RE-PINNED 2026-10-11 (180 -> 188 of 320 frames identical; f17-f24 now equal and f281-f288 256 px closer, exactly one row each; no frame worse): the field box is drawn as the PPU draws it (field.c drawCtWindowPpu): BG1's window pixels in CGRAM's colours with HDMA channel 6's per-line CGADSUB/COLDATA (FD/D52D's records, now ported at the location entry), so the band's last line, where channel 6 is already back on the map's record (no BG1 math) while channel 4 still shows the window, shows the window's raw colour instead of the bitmap's baked gradient row. 2026-10-18 (ROADMAP F14, closed): f203-244 are exact now -- a sound upload (`JSL C7/0004`, the CPU in C7/09E5) holds the main loop from inside f203's event pass to f245, after C0/881E stepped the camera and before FD/C2C1 and C0/A810: the picture keeps the HDMA set built at f202 (HOFS 113; field.c draws the map at the shown word) and the lead at his words (1390; the host's copy had taken the step). 188 -> 230 frames identical. ==== MUTATION [4] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it. RE-PINNED 2026-11-15: the treasure string's `06` token no longer types its indent (field.c fieldTreasureMessage, TB_IND) -- the box reaches 07 on the cartridge's frame (07@f52 for 07@f55) and the typing frames f39-f52 are the cartridge's: 319/320 (was 305/320); f12 is the opening's own residual.",
       "mutations": [
         {
           "file": "src/move.c",
@@ -53045,6 +53037,108 @@
           "find": "    if (battleFxTeardownAtOpen(h)) { h->enCounterDelay[slot] = 1; continue; }",
           "replace": "    /* MUT: no teardown in the counter's open */",
           "why": "C1/4058's C1/10FA reaches CD/0009: the teardown runs before INC $A013, the window on f33129"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-chest-message-indent-is-not-typed-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "chest-message-indent-is-not-typed"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: chest-message-indent-is-not-typed leg 93 +26084 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: chest-message-indent-is-not-typed "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a chest's message types as the cartridge's: the line-break token's indent is not typed",
+      "notes": "THE TREASURE MESSAGE'S 06 TOKEN CARRIES ITS INDENT, DRAWN AND NEVER TYPED (field.c fieldTreasureMessage; disasm/notes/textbox.md, the 2026-11-15 section). `$DE:FF00` entry 0 is `06` + 13 x `EF` + \"Got 1 {item}!\"; the typewriter C0/2126 spends one iteration on the token (the dialogue's TB_IND rule). MEASURED on the rule's cartridge, playthrough leg 93 (\"Got 1 Dark Mail!\"): `$0129` 06 on f26059, 07 on f26089 -- 30 iterations; the port typed the token's three spaces (33, 07 on f26092), its text three letters behind. Played from the leg's start, graded on f26084. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    if (v == 0x06) { o = fieldCtAppend(out, o, cap, \"\\n\\x02\\x02\\x02\"); continue; }",
+          "replace": "    if (v == 0x06) { o = fieldCtAppend(out, o, cap, \"\\n   \"); continue; } /* MUT: the indent typed */",
+          "why": "C0/2126 spends one iteration on 06; its three spaces are the token's"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-chest-box-closes-from-the-next-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "chest-box-closes-from-the-next-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: chest-box-closes-from-the-next-frame leg 93 +26100 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: chest-box-closes-from-the-next-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a chest's box closes on the cartridge's frames: its ramp starts the frame after the press",
+      "notes": "THE TREASURE BOX'S CLOSE IS C0/2081, THE RAMP FROM THE MACHINE'S NEXT FRAME (ct_vm.c CtSceneTextboxCloseArm; disasm/notes/textbox.md, the 2026-11-15 section). The A sets `$0129` = 0D and returns; C0/2032's DECs of `$0127` run on the box machine's next frame, as for a script's box (CtSceneAdvance). MEASURED on the rule's cartridge, playthrough leg 93: A on f26096, `$0129` 0D with `$0127` 28 on f26097, 24 on f26098 .. 00 on f26108; the port ramped on the press's frame, a frame early (2304 px on f26100). Played from the leg's start, graded on f26100. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          CtSceneTextboxCloseArm(f.vm);                          // the same machine: 2081 `LDA #0D / STA $29`, the",
+          "replace": "          { uint8_t* cs7m = CtSceneMem7E(f.vm); if (cs7m) cs7m[0x0129] = 0x0D; }   /* MUT: no close arm */",
+          "why": "C0/2081 only stores 0D; C0/2032's ramp runs on the machine's next frame"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-held-key-is-one-press-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "held-key-is-one-press"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: held-key-is-one-press leg 17 +3000 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: held-key-is-one-press "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a key held across two walkscript tokens is one press, as on the cartridge",
+      "notes": "THE WALKSCRIPT'S HELD KEYS RAISE AN EDGE ONLY FOR A KEY THE TOKEN BEFORE DID NOT HOLD (field.c, the --walkscript / --walkfile parsers; docs/DEBUG_SURFACE.md, the raw pad). The cartridge's --btnscript holds a key across consecutive segments with no release, so the route's `100:2,100:2` is one A held four frames. The port raised the edges again on every H token's first frame: in playthrough leg 17 (the queen's room) the second token's A was a second press, which probed obj 21 (C0/1CFC) while the box was still closing (`$0129` 0D, f2891) and ran its scene forty frames early; on the cartridge obj 21 is activated by the next real A (f2929-f2930) on f2931. 26 such pairs in 11 legs (14, 16, 17, 23, 25, 27, 42, 45, 46, 50, 51). Played from the leg's start, graded on f3000 (the queen's box on both sides; 20470 px before). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            unsigned nb = frameNo == at ? (hm & ~prevHm) : 0;",
+          "replace": "            unsigned nb = frameNo == at ? hm : 0; /* MUT: every token's keys are new */",
+          "why": "a key held across consecutive segments is one press on the cartridge's pad"
         }
       ]
     },
