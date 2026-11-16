@@ -5473,12 +5473,19 @@ void CtSceneTick(CtScene* sc) {
   // Note: the VM reads $00F0 but never writes it. The input bytes belong to the joypad routine (C2/84D2),
   // which is the host's (field.c fieldPadNmi; --vmdiff uses CtSceneSetButtons).
   // Only on a main-loop frame: C0/2848's ramp (see loadFadeIn) never reaches C0/0097.
-  if (!sc->loadFadeIn && head)
+  // THE PARK. While a script's `JSL $C7:0004` waits inside the runner (C0/00C4 JSR C0/5A46) nothing of the loop runs, and
+  // on the frame it returns the iteration goes on from the visit: the head -- C0/0097's latches, C0/0C76 (the `$0117`
+  // drain and the two fades), C0/881E, C0/1F87, C0/21E1, C0/274D -- ran before the call and does not run again.
+  // MEASURED on the rule's cartridge (leg 11's `EA 1F`, f1569-f1609, with C0/1F24's fade armed by a poke: `$0118` bit 1,
+  // target 05, rate 01): `$0119` 0E .. 0A to f1568, 0A on every frame of the park and on f1609, 09 on f1610, 05 on
+  // f1618. The port's fade went on through the park (05 on f1578). song_load_freeze.md sec. 9.
+  const int parked = sc->sndPostResumeFreeze || sc->sndWait > 0;   // (THE PARK HAS NO HEAD) this tick is lost, or the return's
+  if (!sc->loadFadeIn && head && !parked)
     w8(sc->mem, 0x7E0151, (uint8_t)(r8(sc->mem, 0x7E0151) | r8(sc->mem, 0x7E00F0)));   // 009A TSB $51
   // The message box machine C0/1F87, in the ROM's frame slot (C0/00AD, after the A handler and before the VM).
   // It lives here because the event ops read its bytes and --vmdiff runs the VM without a field layer. It is a
   // main-loop leg, so the load's fade-in ramp does not run it.
-  if (!sc->loadFadeIn && body) tbMachineTick(sc);
+  if (!sc->loadFadeIn && body && !parked) tbMachineTick(sc);
 
   gVmTick++;
   // The song-upload freeze, decided first (the sndWait fields; song_load_freeze.md sec. 6). While the main
@@ -5504,7 +5511,12 @@ void CtSceneTick(CtScene* sc) {
   // Not after a frame whose NMI a style tilemap took: that NMI `BRL EC15`s past B1B2 (CtFieldNmiTilemapArm).
   if (legsOn() && !nmiTilemap) CtAnimUploadFlush(sc->mem->s, NULL);
   if (xk == CT_XF_STYLE) { ctXferStyleFrame(sc); return; }   // C0/179A's branch: C0/00DE and the NMI, nothing else
-  if (!sc->sndFrozenTick) CtSceneCameraTick(sc);         // the field camera, once per frame for every VM host
+  // ...and once per ITERATION: the JSL parks inside the runner (C0/00C4 JSR C0/5A46), after the iteration's own camera
+  // leg (C0/00A7 JSR C0/881E), and on the return frame the iteration goes on from the visit -- FD/C2C1, the legs, the
+  // draw -- with no head: the camera and the layers' drift do not step again. MEASURED on the rule's cartridge,
+  // playthrough leg 11 (loc 008, `EA 1F` posted on f1569, back on f1609): BG3's drift remainders `$1D3F` / `$1D40` read
+  // 0C 0C from f1569 to f1609 and step on f1610 (01 02); `$0153` flips on f1609 (the builder, after the runner).
+  if (!sc->sndFrozenTick && !sndResuming) CtSceneCameraTick(sc);   // (THE RESUMED ITERATION HAS NO HEAD)
   // Op 0xE0 fade-change drain (C0/0C8A, before the script scheduler): while $0117 bit 7 is latched, DEC the
   // $0119 fade counter once per frame; at 0 (or negative, the ROM's BMI) commit (CtSceneExitCommit) and raise
   // locChange for the host; the new scene's memInit models the load's `STZ $17` (C0/0B96). An op 0xE0 in frame N
@@ -5515,7 +5527,7 @@ void CtSceneTick(CtScene* sc) {
   // host whose controller runs before this tick latches the head's byte first (CtSceneHeadLatch).
   uint8_t d117 = sc->head117Set ? sc->head117 : (uint8_t)r8(sc->mem, 0x7E0117);
   sc->head117Set = 0;
-  if (!sc->sndFrozenTick && !sc->loadFadeIn && head && (d117 & 0x80)) {
+  if (!parked && !sc->loadFadeIn && head && (d117 & 0x80)) {
     int fc = r8(sc->mem, 0x7E0119);
     if (fc != 0 && !(fc & 0x80)) {
       // 0C97 DEC $19, and sc->bright with it (it stands for $0119's low nibble, which the NMI's C0/EC4E shows
@@ -5536,7 +5548,7 @@ void CtSceneTick(CtScene* sc) {
   //   1F4B LDA $19 / DEC A / BEQ ->1F53 / STA $19 / RTS       darken; reaching 0 stores and clears the bit
   // So rate r steps every r+1 frames. sc->bright stands for $0119's low nibble. It is part of C0/0C76, so it
   // waits out the $0117 bit 5 service with the rest of the head (`head`).
-  if (head && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x02)) {
+  if (head && !parked && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x02)) {
     sc->bright = r8(sc->mem, 0x7E0119) & 0x0F;                                  // 1F24 LDA $19 / AND #0F: the byte, whoever wrote it
     int cur = sc->bright, tg = r8(sc->mem, 0x7E011B);
     if (cur == tg) w8(sc->mem, 0x7E0118, r8(sc->mem, 0x7E0118) & ~0x02);       // 1F2A -> 1F55
@@ -5555,7 +5567,7 @@ void CtSceneTick(CtScene* sc) {
   //   1F60 BCS ->1F72 (above: down)                         below: up
   //   1F62/1F72 LDA $24 / BEQ / DEC $24 / RTS               the countdown, then
   //   1F69/1F79 LDA $23 / STA $24 / INC $21 (DEC $21)       reload it and step
-  if (head && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x08)) {
+  if (head && !parked && !sc->loadFadeIn && (r8(sc->mem, 0x7E0118) & 0x08)) {
     uint8_t c21 = r8(sc->mem, 0x7E0121), c22 = r8(sc->mem, 0x7E0122);
     if (c21 == c22) w8(sc->mem, 0x7E0118, r8(sc->mem, 0x7E0118) & ~0x08);     // 1F5E -> 1F82
     else if (r8(sc->mem, 0x7E0124)) w8(sc->mem, 0x7E0124, r8(sc->mem, 0x7E0124) - 1);   // 1F62/1F72 -> DEC $24
@@ -5571,7 +5583,7 @@ void CtSceneTick(CtScene* sc) {
   // stage's common init clears from $0920 on), `$46 = 1`, two C0/EC60 waits, NMI on, `$010F = 80`, then `LDA #85 / JML
   // C3:0000`: $C3 entry 5 (seq_entry5.c; sequence_table.md sec. 17). The stage is requested here; the host prices the two
   // waits into its opening (field.c). Not ported: entries 0C-0D (C0/264F, 2329).
-  if (!sc->sndFrozenTick && !sc->loadFadeIn && body) {
+  if (!parked && !sc->loadFadeIn && body) {
     int st39 = r8(sc->mem, 0x7E0139);
     if (st39 == 0x0B && !sc->seqHas) {
       // 260E-2625: BG1's tilemap rebuilt at the camera into $7E:C800 (`D = $1D00 / JSR C0/75E9`), re-origined (C0/74D4) and,

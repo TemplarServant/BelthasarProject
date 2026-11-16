@@ -315,3 +315,37 @@ The phase is the master clock's against the CPU's accesses; it is not uniform (t
 
 The V-IRQ at `cutLine` (D1/FEB5, line 211) writes `$420C = 0` and ends the HDMA; with `nmiOn`, an NMI taken inside
 C7 writes `$0128` to `$420C` (D1/F4E6's absolute `STA $420C`, DB = 0) and enables them.
+
+## 9. The return frame has no head (2026-11-16)
+
+Sec. 6's suspended tick ran the camera leg again on the return frame. The listing says it cannot:
+
+```
+C0/0097  pad latches / 00A1 JSR C0/18D9 / 00A4 JSR C0/0C76 / 00A7 JSR C0/881E / 00AA JSR C0/1AAC
+C0/00AD  JSL C0/1F87 / 00B1 JSR C0/21E1 / 00B4 JSR C0/274D
+C0/00B7  JSR C0/00BF:  C0/59D9, C0/5A46 (the runner -- the `JSL $C7:0004` is in one of its visits), FD/C2C1, FD/FFF7,
+                       C0/A810, C0/CA76, BRL the draw
+C0/00BA  JSR C0/EC60 / BRA 0097
+```
+
+The call parks ONE iteration, inside the runner, and the iteration goes on from the visit when it returns. MEASURED on
+the rule's cartridge, playthrough leg 11 (the Telepod's room, loc 008, `EA 1F`): posted on f1569, `$1E00` 10 until
+f1608 and 00 on f1609; BG3's drift remainders `$1D3F` / `$1D40` (5 / 16 and 6 / 16 a frame) 0C 0C on f1569-f1609 and
+01 02 on f1610; `$0153` flips on f1609 and f1610. The port stepped the drift on f1609: one frame ahead for the rest of
+the room, i.e. a pixel of BG3 off on three pictures in eight (the Gate's ring, legs 11 and 12: 3-21 px). ct_vm.c: the
+resume tick does not call CtSceneCameraTick. Checks leg-window-drift-holds-across-a-song-load-vs-cartridge,
+field-picture-gate-ring-after-a-song-load-vs-cartridge.
+
+**The rest of the head, measured with a poke (the same day).** The port's tick also stepped C0/0C76's two fades and the
+box machine C0/1F87 on every frame of the park, latched the pad (`TSB $51`), and ran the `$0117` drain and C0/21E1 /
+C0/274D again on the return frame. The state is leg 11's f1560 with C0/1F24's fade armed (`PEEK_POKE`: `$0118` bit 1,
+`$011B` = 05, `$011C` = 01) and X pressed on f1580-f1581:
+
+    cartridge  $0119  0E 0E 0D 0D 0C 0C 0B 0B 0A | 0A x41 (f1569-f1609) | 09 09 08 08 07 07 06 06 05   ($0118 bit 1 off f1619)
+    port       $0119  0E .. 0A                   | 09 09 08 08 .. 05 (f1578), off f1579
+    $00F0 = 40 on f1581; $0151 stays 80 on the cartridge
+
+So the whole head holds: ct_vm.c takes `parked` (a tick lost to the call, or the return's) once at the top of the tick
+and every head leg tests it. Tool tools/song_park_cmp.py (60 frames, seven cells, 0 differing; 50 before), check
+song-park-holds-the-loops-head-vs-cartridge. Not measured: a text box open across the call (the box machine is gated
+on the same flag, by the listing).

@@ -51035,7 +51035,7 @@
         "playthrough: 41_arris_password SAME -- locs 0DB 158 0DB 0DD 0D8 0D7 | story 35 | party 000201 | gold 1339 | hp 95 (1) | ctrl 13 | end picture 0 px at port -1",
         "playthrough: 42_arris_beyond SAME -- locs 0D7 0D9 | story 35 | party 000201 | gold 1384 | hp 88 (2) | ctrl 7 | end picture 0 px at port -1",
         "playthrough: 43_arris_info_center DIFFERENT -- locs 0D9 0DA | story 35 | party 000201 | gold 1584 | hp 101 (4) | ctrl 11 | end picture 49684 px at port +4",
-        "playthrough: 44_day_of_lavos SAME -- locs 0DA 1F2 0DA 1F7 0DA | story 35 36 | party 000201 | gold 1584 | hp 101 (1) | ctrl 5 | end picture 0 px at port -3",
+        "playthrough: 44_day_of_lavos SAME -- locs 0DA 1F2 0DA 1F7 0DA | story 35 36 | party 000201 | gold 1584 | hp 101 (1) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 45_bike_key DIFFERENT -- locs 0DA 0D9 0D7 0D8 0D6 | story 36 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 7 | end picture 54257 px at port +0",
         "playthrough: 46_johnny SAME -- locs 0D6 1F2 0DF | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 47_race SAME -- locs 0DF 10F 0DF | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 5 | end picture 0 px at port +0",
@@ -53996,6 +53996,176 @@
           "find": "      if (CtSceneFrameLegsOn() && i != pObj && !(CtSceneMem7E(f.vm)[0x1B00 + i * 2] & 0x80)) { actorAf[i] = -1; continue; }   // (THE DRAW GATE)",
           "replace": "      /* MUT: a latched object is drawn at once */",
           "why": "C0/B309 draws on C0/B701's carry: `$1B00,X` below the arity with bit 7 clear is SEC"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-drift-holds-across-a-song-load-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "drift-holds-across-a-song-load"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: drift-holds-across-a-song-load leg 11 f1560+70: 30 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: drift-holds-across-a-song-load "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the layers' drift holds for the whole of a song's upload and steps again on the frame after the return, as on the cartridge",
+      "notes": "A SONG'S UPLOAD PARKS ONE ITERATION, AND THE ITERATION GOES ON. The field's main loop is C0/0097 .. C0/00BD: the pad latches, C0/18D9, C0/0C76, C0/881E (the controller, the camera and the layers' drift), C0/1AAC, C0/1F87, C0/21E1, C0/274D, then C0/00BF -- C0/59D9, the runner C0/5A46, FD/C2C1, FD/FFF7, C0/A810, C0/CA76, the draw -- and the wait C0/EC60. A script's `EA nn` calls `JSL $C7:0004` from inside the runner; while the upload's handshakes wait nothing of the loop runs, and when the call returns the SAME iteration goes on from the visit: the rest of the queue, the builder, the legs, the draw. Its head ran before the park and does not run again. The port ran the camera leg (CtSceneCameraTick: the scroll and the three layers' drift) once more on the return frame. MEASURED on the rule's cartridge, playthrough leg 11, the Telepod's room (loc 008): `EA 1F` posts on f1569 and is back on f1609 (`$1E00` 10 -> 00, `$1E12` 71 18); BG3 drifts 5 / 16 and 6 / 16 of a pixel a frame and its remainders `$1D3F` / `$1D40` read 0C 0C from f1569 to f1609, 01 02 on f1610; `$0153` flips on f1609 (FD/C2C1, after the runner) and again on f1610. The port stepped the drift on f1609 too and stayed a frame ahead for the rest of the room: BG3 one pixel off on three pictures in eight -- the Gate's ring, which is BG3 seen between the iris's edge and the swirl's sprites (3-21 px along it, legs 11 and 12). THE WINDOW: leg 11 f1560 + 70, the remainders and BG3's two scroll counters (`$1D8F`, `$1D91`): thirty steps, the held one 41 frames long on both sides (the port: 40). RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (!sc->sndFrozenTick && !sndResuming) CtSceneCameraTick(sc);   // (THE RESUMED ITERATION HAS NO HEAD)",
+          "replace": "  if (!sc->sndFrozenTick) CtSceneCameraTick(sc);   /* MUT: the camera leg again on the return frame */",
+          "why": "the JSL parks inside C0/5A46, after the iteration's C0/881E: the return frame goes on from the visit"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-gate-ring-after-a-song-load-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "gate-ring-after-a-song-load"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: gate-ring-after-a-song-load leg 11 f1560 +1714 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: gate-ring-after-a-song-load "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Gate's ring is the cartridge's 1700 frames after the song's upload: BG3's drift kept its phase across the park",
+      "notes": "A SONG'S UPLOAD PARKS ONE ITERATION, AND THE ITERATION GOES ON. The field's main loop is C0/0097 .. C0/00BD: the pad latches, C0/18D9, C0/0C76, C0/881E (the controller, the camera and the layers' drift), C0/1AAC, C0/1F87, C0/21E1, C0/274D, then C0/00BF -- C0/59D9, the runner C0/5A46, FD/C2C1, FD/FFF7, C0/A810, C0/CA76, the draw -- and the wait C0/EC60. A script's `EA nn` calls `JSL $C7:0004` from inside the runner; while the upload's handshakes wait nothing of the loop runs, and when the call returns the SAME iteration goes on from the visit: the rest of the queue, the builder, the legs, the draw. Its head ran before the park and does not run again. The port ran the camera leg (CtSceneCameraTick: the scroll and the three layers' drift) once more on the return frame. MEASURED on the rule's cartridge, playthrough leg 11, the Telepod's room (loc 008): `EA 1F` posts on f1569 and is back on f1609 (`$1E00` 10 -> 00, `$1E12` 71 18); BG3 drifts 5 / 16 and 6 / 16 of a pixel a frame and its remainders `$1D3F` / `$1D40` read 0C 0C from f1569 to f1609, 01 02 on f1610; `$0153` flips on f1609 (FD/C2C1, after the runner) and again on f1610. The port stepped the drift on f1609 too and stayed a frame ahead for the rest of the room: BG3 one pixel off on three pictures in eight -- the Gate's ring, which is BG3 seen between the iris's edge and the swirl's sprites (3-21 px along it, legs 11 and 12). THE PICTURE: the state is cut on f1560, before the upload; graded on f3274 at the field's lag (`lag=-2`), one of the three pictures in eight the drift's lead put a pixel of BG3 off (18 px). f3250-f3340, every frame: 91 of 91 at 0 px. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (!sc->sndFrozenTick && !sndResuming) CtSceneCameraTick(sc);   // (THE RESUMED ITERATION HAS NO HEAD)",
+          "replace": "  if (!sc->sndFrozenTick) CtSceneCameraTick(sc);   /* MUT: the camera leg again on the return frame */",
+          "why": "the JSL parks inside C0/5A46, after the iteration's C0/881E: the return frame goes on from the visit"
+        }
+      ]
+    },
+    {
+      "name": "song-park-holds-the-loops-head-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/song_park_cmp.py"
+      ],
+      "env": {},
+      "expect": [
+        "songpark: fade armed and X pressed across `EA 1F`: 60 frames, 0 differing; the fade holds 42 frames at 0A"
+      ],
+      "pin": [
+        "^songpark: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/song_park_cmp.py",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fade in progress and the pad's accumulator hold for the whole of a song's upload, as on the cartridge",
+      "notes": "THE PARK HAS NO HEAD. The field's main loop is the head -- C0/0097's pad latches (`TSB $51` / `TSB $50`), C0/18D9, C0/0C76 (the `$0117` drain and the two fades C0/1F24 / C0/1F5A), C0/881E (the controller, the camera, the layers' drift), C0/1AAC, the box machine C0/1F87, C0/21E1, C0/274D -- and then C0/00BF: the runner C0/5A46, FD/C2C1, the legs, the draw. A script's `EA nn` calls `JSL $C7:0004` from inside the runner; nothing of the loop runs while it waits, and on the frame it returns the same iteration goes on from the visit. The port froze the scheduler and the camera for the lost frames but went on stepping the fades and the box machine through them, latched the pad, and ran the `$0117` drain and C0/21E1 again on the return frame. MEASURED on the rule's cartridge with a poke: the state is playthrough leg 11's f1560 (loc 008, nine frames before `EA 1F`) with C0/1F24's fade armed (`$0118` bit 1, target 05, a step every other frame) and X pressed on f1580-f1581. `$0119` walks 0E .. 0A to f1568, reads 0A on every frame of the park and on the return frame f1609, 09 on f1610 and 05 on f1618 (the port: 05 on f1578, forty frames early); `$00F0` = 40 on f1581 and `$0151` stays 80 -- the press inside the park is not accumulated. Seven cells, 60 frames, 0 differing (50 before). The state comes from the route (tools/leg_window_cmp.py's cache), the poke from PEEK_POKE. RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  const int parked = sc->sndPostResumeFreeze || sc->sndWait > 0;   // (THE PARK HAS NO HEAD) this tick is lost, or the return's",
+          "replace": "  const int parked = 0;   /* MUT: the head runs through the park */",
+          "why": "the JSL waits inside C0/5A46: C0/0097 .. C0/00B4 ran before it and do not run again"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-overworld-walk-starts-on-the-events-last-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "overworld-walk-starts-on-the-events-last-frame"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: overworld-walk-starts-on-the-events-last-frame leg 68 f1+60: 49 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: overworld-walk-starts-on-the-events-last-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "on the overworld the lead takes its first pixel on the frame an event hands the walk back, and the followers start from there, as on the cartridge",
+      "notes": "THE FRAME AN EVENT HANDS THE WALK BACK IS THE WALK'S FIRST. The overworld lead's handler C2/3404: `$027E` against `$027F` and `$0280` against `$0281` zero its phase (340E-3421), and module 0 dispatches on `$0280` and the phase (C2/3449 `JMP ($345D,X)`). When an event cell's script ends, `$0280` is 0 again while `$0281` still reads 1 for one pass: the phase is zeroed and the row is the free roam's, whose phase 0 -- the init C2/34F8 (the spot from `$0283` / `$0285`, the velocities, the cells) -- FALLS INTO the input frame C2/3567. The lead reads the pad and steps on that frame. The port sent every frame with `$0281` set to the event's handler, whose init returned: the walk began a frame late. And the followers' own init (C2/3BC2, on the same compare, in their later blocks) takes their spot from `$0283` / `$0285` on that frame -- from a lead that has stepped. MEASURED on the rule's cartridge, playthrough leg 68 (the overworld, loc 1F1, Down held from the leg's first frame): `$0280` 01 -> 00 on f23, `$0281` on f24; the lead's Y `$0285` / `$0E08` 0250 -> 0251 on f24 and a pixel a frame from there; the two followers' Y `$0E48` / `$0E88` 0250 -> 0251 on f24, standing there until their walk. The port: the lead's first pixel on f25, the followers at 0250 -- a pixel behind for the rest of the walk, so their targets (`$0E60` = 18 for 17 on f48), their steps and their walk frames were out of the cartridge's (78-230 px on every picture of f290-f312). THE WINDOW: leg 68 f1 + 60, the lead's Y and the two followers': 49 steps, 0 differing (38 before). RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0)) {   // (THE EVENT'S LAST FRAME IS THE WALK'S FIRST)",
+          "replace": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {   /* MUT: the walk a frame late */",
+          "why": "C2/3449 dispatches on `$0280` and the phase; `$0281` only zeroes the phase (3419), and C2/34F8 falls into the input frame"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-overworld-followers-after-an-event-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "overworld-followers-after-an-event"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: overworld-followers-after-an-event leg 68 +300 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: overworld-followers-after-an-event "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the overworld's followers walk in step with the cartridge's after an event handed the walk back",
+      "notes": "THE FRAME AN EVENT HANDS THE WALK BACK IS THE WALK'S FIRST. The overworld lead's handler C2/3404: `$027E` against `$027F` and `$0280` against `$0281` zero its phase (340E-3421), and module 0 dispatches on `$0280` and the phase (C2/3449 `JMP ($345D,X)`). When an event cell's script ends, `$0280` is 0 again while `$0281` still reads 1 for one pass: the phase is zeroed and the row is the free roam's, whose phase 0 -- the init C2/34F8 (the spot from `$0283` / `$0285`, the velocities, the cells) -- FALLS INTO the input frame C2/3567. The lead reads the pad and steps on that frame. The port sent every frame with `$0281` set to the event's handler, whose init returned: the walk began a frame late. And the followers' own init (C2/3BC2, on the same compare, in their later blocks) takes their spot from `$0283` / `$0285` on that frame -- from a lead that has stepped. MEASURED on the rule's cartridge, playthrough leg 68 (the overworld, loc 1F1, Down held from the leg's first frame): `$0280` 01 -> 00 on f23, `$0281` on f24; the lead's Y `$0285` / `$0E08` 0250 -> 0251 on f24 and a pixel a frame from there; the two followers' Y `$0E48` / `$0E88` 0250 -> 0251 on f24, standing there until their walk. The port: the lead's first pixel on f25, the followers at 0250 -- a pixel behind for the rest of the walk, so their targets (`$0E60` = 18 for 17 on f48), their steps and their walk frames were out of the cartridge's (78-230 px on every picture of f290-f312). THE PICTURE: leg 68 f300 at the overworld's lag (`lag=-1`), 0 px (78 before); f20-f320 every fourth frame: 76 of 76 at 0 px. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0)) {   // (THE EVENT'S LAST FRAME IS THE WALK'S FIRST)",
+          "replace": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {   /* MUT: the walk a frame late */",
+          "why": "C2/3449 dispatches on `$0280` and the phase; `$0281` only zeroes the phase (3419), and C2/34F8 falls into the input frame"
         }
       ]
     },

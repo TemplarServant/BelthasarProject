@@ -3527,3 +3527,23 @@ drawn from its first staged template (C0/B701's carry: `$1B00,X` bit 7 after the
 Playthrough leg 63, Zenan Bridge, the state cut on f1530: three objects latched on f1543, two staged on f1544, the third
 on f1545 -- the pictures of f1545 (none of them; the port showed three, 1100 px) and f1546 (two; 383 px). `lag=-2`; one
 mutation, shared. disasm/notes/anim_drain_cad9.md sec. 19.
+
+`leg-window-drift-holds-across-a-song-load-vs-cartridge` and `field-picture-gate-ring-after-a-song-load-vs-cartridge`:
+a script's song load (`EA nn`) parks one iteration of the main loop inside the runner, and the iteration goes on from
+the visit -- its camera leg, which ran before, does not run again on the return frame. Playthrough leg 11, the
+Telepod's room: BG3's drift remainders hold for the 41 frames of `EA 1F` (the window, f1560 + 70) and the Gate's ring
+-- BG3 between the iris and the swirl -- is the cartridge's 1700 frames later (f3274, 18 px before). One mutation,
+shared. disasm/notes/song_load_freeze.md sec. 9.
+
+`leg-window-overworld-walk-starts-on-the-events-last-frame-vs-cartridge` and
+`field-picture-overworld-followers-after-an-event-vs-cartridge`: on the overworld the frame an event hands the walk back
+(`$0280` 0, `$0281` still 1) is the lead's init AND its first input frame (C2/34F8 falls into C2/3567), and the
+followers' init takes their spot from the lead after that step. Playthrough leg 68: the lead's and the followers' Y
+over the first 60 frames (49 steps) and the picture on f300 (`lag=-1`, 78 px before). One mutation, shared.
+disasm/notes/ow_party_followers.md sec. 7.
+
+`song-park-holds-the-loops-head-vs-cartridge` (tools/song_park_cmp.py): the main loop's head across a script's song
+load, from a poked cartridge state -- playthrough leg 11's f1560 with a brightness fade armed (`$0118` bit 1, target
+05) and X pressed inside the park. The fade's `$0119` holds 0A for the 42 frames to the return and steps again on the
+frame after; the press is not accumulated in `$0151`. Seven cells, 60 frames, 0 differing. One mutation.
+disasm/notes/song_load_freeze.md sec. 9.

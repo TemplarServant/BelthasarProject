@@ -82,6 +82,23 @@ WINDOWS = {
     # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
     'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
                            cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
+    # The overworld, world 1F3: A on an entrance. The lead's input frame stores `$027C` = 3 itself (C2/35EC), so the
+    # followers -- later blocks of the same pass -- find it and stand (C2/3B1B): their Y stops on the frame before
+    # (`$0D88` / `$0DC8` = 02B6 / 02A6 from f592) and their +28 loses the walk's bit on f593.
+    'overworld-exit-stops-the-followers': dict(leg='76_', start=560, frames=45,
+                                               cells=[('7E027C', 1), ('7E0D88', 2), ('7E0DC8', 2), ('7E0D98', 1), ('7E0DD8', 1)]),
+    # The overworld, loc 1F1, Down held: an event's script hands the walk back (`$0280` 01 -> 00 on f23) and on the next
+    # frame the lead's handler re-inits (C2/3419: `$0280` against `$0281`) and falls into its input frame -- the first
+    # pixel of the walk is that frame's (`$0285` 0250 -> 0251 on f24). The followers' own init (C2/3BC2) takes their spot
+    # from `$0283` / `$0285` on the same frame, after the lead's step: they stand at 0251 until their walk begins.
+    'overworld-walk-starts-on-the-events-last-frame': dict(leg='68_', start=1, frames=60,
+                                                           cells=[('7E0285', 2), ('7E0E48', 2), ('7E0E88', 2)]),
+    # The Telepod's room, loc 008: the script's `EA 1F` parks the main loop inside the runner for 40 frames (f1569-f1609)
+    # while BG3 drifts (5 / 16 and 6 / 16 of a pixel a frame). The iteration's camera leg ran before the runner, and on
+    # the return frame the iteration goes on from the visit: the drift's remainders `$1D3F` / `$1D40` hold 0C 0C from
+    # f1569 to f1609 and step on f1610. The cells: the remainders and BG3's two scroll counters.
+    'drift-holds-across-a-song-load': dict(leg='11_', start=1560, frames=70,
+                                           cells=[('7E1D3F', 2), ('7E1D8F', 2), ('7E1D91', 2)]),
     # The prison's fight, loc 048: the staging's records of the two HIDDEN enemies, slots 2 and 3 (`$29D7`, `$29E3`, 12
     # bytes each; C0/0557). +2 / +3 are the on-screen pixel C0/AB45 last stored (`$0A00,Y` / `$0A80,Y` & 0F: 8 / 3 and
     # 8 / F for two objects on the same spot), +4 the drain's frame byte `$0F01,Y` -- FF, nothing was ever staged for a

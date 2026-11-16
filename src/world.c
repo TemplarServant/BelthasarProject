@@ -3951,7 +3951,12 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
                                               obPutW(ram + 0x1BF1, (uint16_t)c->leadDx); obPutW(ram + 0x1BF3, (uint16_t)c->leadDy); }
     // In a vehicle's modules ($027E != 0) or an event the lead's handler is obLeadModule, not the host's mover, and it
     // runs here in its slot like any block.
-    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {
+    // (Not on the frame an event hands the walk back: `$0280` is 0 again and `$0281` still 1, so 3419 zeroes the phase and
+    // the dispatch -- on `$0280` and the phase, C2/3449 -- is the free roam's row 0: the init C2/34F8, which FALLS INTO the
+    // input frame. The lead reads the pad and takes its first pixel on that frame. MEASURED on the rule's cartridge,
+    // playthrough leg 68, Down held: `$0280` 01 -> 00 on f23, `$0281` on f24, and the lead's Y `$0E08` / `$0285` 0250 ->
+    // 0251 on f24 -- where the followers' own init (C2/3BC2, the same compare) takes their spot from it.)
+    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0)) {   // (THE EVENT'S LAST FRAME IS THE WALK'S FIRST)
       obLeadModule(ram, B, c);
       int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8);
       continue;
@@ -3973,6 +3978,8 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
     if (cls == 0x3404) {
       if (ram[0x027C] > 1) obAnimTick(ram, B);                             // 3439-3448: neither 0 nor 1 -- the tick alone
       else {
+        if (ram[0x027E] != ram[0x027F]) B[2] = 0;                          // 340E-3416
+        if (ram[0x0280] != ram[0x0281]) B[2] = 0;                          // 3419-3421
         if (B[2] == 0) {
           B[2] = 1;                                                        // 34FC INC $0002,X
           obPutW(B + OWOBJ_XPOS, obW(ram + 0x0283)); obPutW(B + OWOBJ_YPOS, obW(ram + 0x0285));   // 3515-351E

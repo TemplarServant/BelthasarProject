@@ -279,6 +279,26 @@ PICTURES = {
     # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
     # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
     'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
+    # Leg 51, the factory's fight (from f585): the boot's init stores the HDMA preset base `$CA25` = 08 (D1/F290) and
+    # leaves the request counter `$CA24` alone, so a leftover there makes the first V-IRQ install preset 08 + `$CA22`.
+    # Without the store the leftover base (29) installed preset 2A: the room's top 88 lines torn for the boot (5774 px).
+    'fight-boot-installs-its-own-hdma-preset': dict(leg='51_security', at=570, frames=30, own=True, lag=-1),
+    # Leg 61, Truce Canyon's fight (from f2387): until the fight's first compose is uploaded the OAM is the field's, and
+    # so is each cell's OBJ priority -- object 11's cells read attribute 22 (priority 2) on f2387-f2447 and 32 from f2448.
+    # The enemy's wing stays behind the foliage's priority tiles for the boot's 60 pictures (62 px a picture in front).
+    'fight-boot-keeps-the-fields-priority': dict(leg='61_zenan_supplies', at=2360, frames=40, own=True, lag=-1),
+    # Leg 76, the overworld (world 1F3): the party walks onto an entrance with A held. The frame the lead takes it the
+    # followers stand where they are; the port walked them a pixel on, in the walk's pose (192 px through the fade).
+    'overworld-followers-stand-on-the-exit-frame': dict(leg='76_forest_maze', at=0, frames=600, own=True, lag=-1),
+    # Leg 68, the overworld (loc 1F1): the walk an event handed back. The followers were a pixel behind the cartridge's
+    # from the first frame (their init copied a lead that had not stepped yet), so their trail and their walk frames
+    # were out of step for the whole walk (78-230 px on every picture). The overworld's pictures are the port's a frame on.
+    'overworld-followers-after-an-event': dict(leg='68_porre', at=0, frames=300, own=True, lag=-1),
+    # Leg 11, the Telepod's room (loc 008): the Gate's ring is BG3 seen between the iris's edge and the swirl's sprites,
+    # and BG3 drifts a fraction of a pixel a frame. The song's upload (`EA 1F`, f1569-f1609) parks the main loop inside
+    # the runner; a camera leg run again on the return frame put the drift a frame ahead for the rest of the room -- one
+    # pixel of BG3 on three pictures in eight (f3274: 18 px along the ring). The state is cut before the upload.
+    'gate-ring-after-a-song-load': dict(leg='11_gate', at=1560, frames=1714, own=True, lag=-2),
     # Leg 63, Zenan Bridge (loc 087): three objects (21-23) come into the camera's window as the party walks west. The
     # latch C0/A88D takes them on f1543 (`$0F00,X` = 80, `$0F01,X` = FF, `$1B00,X` = 0), the drain stages two on f1544
     # and the third on f1545 (`$0F01,X` = 13, `$1B00,X` = 80 from the draw pass), and the picture shows none on f1545,

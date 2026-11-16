@@ -161,3 +161,27 @@ NMI, so a long one would hold the main thread, not the pass.
 - It answers "zones" only on reaching `34 0F 2F`: the cathedral and forest exits do, the attract's five world legs do not.
 - Without this gate the attract lost its stand-in post and 17 cartridge-graded attract checks failed. With it they all
   pass.
+
+## 7. The frame an event hands the walk back (2026-11-16)
+
+The lead's handler C2/3404 has the followers' two compares (340E-3421: `$027E` / `$027F`, `$0280` / `$0281` -> phase 0)
+and dispatches module 0 on `$0280` and the phase alone (C2/3449). So on the pass after an event's script put `$0280`
+back to 0 -- `$0281` still 1 -- the lead runs the free roam's phase 0, the init C2/34F8, and 34F8 does not return: past
+`JSR C2/3987` it goes on at 354C (`LDA $0014,X / STA $08 / LDA $0018,X / STA $0A / JSR C2/39D5 / JSR C2/39AE`) into
+the input frame C2/3567. The lead reads the pad on that frame.
+
+MEASURED on the rule's cartridge, playthrough leg 68 (loc 1F1, Down held): `$0280` 01 -> 00 on f23, `$0281` on f24;
+`$0285` (and the lead's +18, `$0E08`) 0250 -> 0251 on f24; the followers' +18 (`$0E48`, `$0E88`) 0250 -> 0251 on f24 too
+-- phase 0's `+14/+18 := $0283/$0285` (sec. 3), read after the lead's block stepped -- and standing there until their
+walk (f48: +2A / +2C from the ring, +30 = 17).
+
+The port sent the lead's block to the event's handler on every frame with `$0280` or `$0281` set; that handler's
+`$0280 = 0` arm did the init and returned, so the first pixel was the next frame's and the followers started a pixel
+behind (+30 = 18): their steps and walk frames were out of the cartridge's for the whole walk (78-230 px a picture).
+world.c: the pass dispatches on `$027E` and `$0280`; the free roam's arm makes the two compares itself.
+
+Checks: leg-window-overworld-walk-starts-on-the-events-last-frame-vs-cartridge,
+field-picture-overworld-followers-after-an-event-vs-cartridge.
+
+Not ROM, noticed on the way: obAnimRun increments the block's +3E on every tick (`OWOBJ_ANIMCTR`, kept for the old
+captured-atlas boat's frame picker); the cartridge leaves that byte alone (`$0E6E` 00 for the port's 01, 02, 03 ...).

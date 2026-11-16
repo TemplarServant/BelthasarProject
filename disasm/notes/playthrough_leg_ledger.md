@@ -432,3 +432,28 @@ carried on by mechanisms that quantise time:
   runs two frames behind the cartridge (the latch above: f1545 for f1543), and the party stands 2-3 px further west
   and a walk frame apart (`$0F21` 08 for 09; HYPOTHESIS: the script stops the pad's walk two frames later): 734 px in the party's box on every picture of f1500-f2030 at every lag, 0 px
   from a state cut on f1530. Where the two frames come from was not traced (the room loads on f504; the load's own frames are the class of legs 58 and 90).
+- **Legs 11 and 12, the Gate's ring: FIXED (2026-11-16).** The audit's f3300 / f2100 samples (3-31 px on three pictures in
+  eight). The ring is BG3, and BG3's drift was a frame ahead since the song's upload on f1569: the port ran the camera
+  leg again on the frame the upload returned. Leg 11 f3250-f3340: 91 of 91 at 0 px. song_load_freeze.md sec. 9. Leg 12
+  f2070-f2130: 59 of 61; f2101 / f2102 keep 2 px each on row 51 (x 126-127, then 133-134): open. They are pixels of OAM #6 (tile 10C, a sparkle
+  moving 7 px a frame) that the cartridge shows and the port does not. The room's five sparkles (objects 16-20, class 0)
+  commit their frame 03 one after the other -- f2096, f2097 (two), f2098, f2101 (the drain is refused while the
+  upload gate `$09A0` holds work, C0/CA76's prologue). Not the uploads' latency: C0/B1B2 sends the whole queue in the
+  NMI that reaches it (B1D1 `LDA $A0,X / BEQ ->B201`, two DMAs an entry, B201 `STZ $A0`). Five sprites overlap on
+  those pixels (OAM #6, #11, #19, #23, #27); which one the port draws differently is not read yet.
+- **The audit's window pass, 2026-11-16 (build 515bf1f, before the song-load fix above).** The 76 legs that ever had a
+  differing sample, a picture every 300 frames, each graded at the port frames -5..+2 around the cartridge's: 4786 samples,
+  4187 equal at one of the two usual lags, 104 equal at another lag only (a stretch a frame or more off), 495 differing at
+  every lag. Of those 495, 402 are in fifteen legs' long stretches (26: 61, 35: 37, 49: 17, 55: 12, 58: 15, 65: 33, 78: 13,
+  92: 26, 95: 10, 120: 18, 122: 17, 125: 21, 127: 61, 130: 22, 134: 39) and 93 in 48 legs with one to seven each (11, 12,
+  17, 29, 30, 37, 38, 40, 42, 44-47, 51, 54, 56, 60, 61, 64, 67, 68, 71, 74, 76, 82, 86, 88-91, 93, 94, 96, 100, 101,
+  103-106, 111-113, 115, 121, 131, 133, 135, 136). A sample that fits no lag is not yet a drawing difference: leg 63's
+  party (above) and leg 37's mover (f4180-f4211: an object 6-7 px a frame along y 141-149, a frame apart on the two
+  sides) are state a stretch's offset left behind. Each is to be read: fixed, or tied to the frame its offset began.
+  Read so far from this list: 11 and 12 (fixed, above), 17 (the tile runner's counter since the load), 34 (fixed), 63.
+  Leg 68 f290-f312 (the overworld, lag -1): the two followers' walk frames are out of step with the cartridge's (78-230 px
+  on every picture); not read further.
+- **Leg 68, the overworld's followers: FIXED (2026-11-16).** Not the seed: the walk an event hands back began a frame late
+  in the port (the lead's init did not fall into its input frame) and the followers' init copied a lead that had not
+  stepped. f20-f320: 76 of 76 at 0 px. ow_party_followers.md sec. 7. Leg 76 f600 (192 px in the same box) is another
+  thing: its party is not in the blocks `$0DF0` / `$0E30` / `$0E70` there; not read.
