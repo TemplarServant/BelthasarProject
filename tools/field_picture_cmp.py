@@ -279,6 +279,15 @@ PICTURES = {
     # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
     # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
     'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
+    # Leg 08, Leene's Bell (loc 1B7): Marle's `96 19 07` reaches the tile and snaps to its centre (C0/305D). The snap's own
+    # velocity is 10 / 10, and the selector the op runs on it (4FA5 JSR C0/5614) reads 10 + 10 = $20 as a RUN for a
+    # character below 4: eight pictures of the run's frames (f1187-f1194), then the walk. f1190 (222 px: she walked on).
+    'tile-snap-reselects-the-animation': dict(leg='08_candy', at=0, frames=1190, own=True, lag=-2),
+    # Leg 48, Lab 32's road (loc 0E0): the Octopods are class-1 sprites (`$1201,X` & 3 = 1), staged in two drain visits --
+    # pass 1 (C0/D28A) commits `$0F01,X`, pass 2 (C0/D30D) a frame later queues the tiles and writes the OBJ template -- so
+    # the cartridge shows the new frame a picture after a class-0 sprite would. f5091: object 20 between the two (commit
+    # f5089, `$1B28` 81) still stands sideways (861 px of this frame; the room is still, so `lag`).
+    'multi-pass-sprite-shows-its-templates-frame': dict(leg='48_lab32_road', at=0, frames=5091, own=True, lag=-2),
     # Johnny's race WON (the branch leg 47b; the race's picture is the port's P+1, so `lag`). f2985: inside the fanfare's
     # post (f2971-f2990) the main loop stands under the NMI that made it, so the bikes keep the frames they had -- Johnny's
     # is not redrawn rearing (298 px of this frame). f2997: the run-out begins on the cartridge's frame -- the post took its

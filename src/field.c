@@ -19068,7 +19068,18 @@ int main(int argc, char** argv) {
       if (CtSceneFrameLegsOn() && i != pObj && (CtSceneMem7E(f.vm)[0x1201 + i * 2] & 3) == 3) { actorAf[i] = 0; continue; }
       if (CtSceneFrameLegsOn() && i != pObj) {
         uint8_t f01 = CtSceneMem7E(f.vm)[0x0F01 + i * 2];
-        if (f01 != 0xFF) { actorAf[i] = f01; continue; }
+        if (f01 != 0xFF) {
+          // A sprite staged over several drain visits shows its new frame when the LAST one writes the template and
+          // queues the tiles, not at the commit: class 1 commits `$0F01,X` in pass 1 (C0/D28A, `$1B00,X` -> 1) and
+          // finishes in pass 2 (C0/D30D); class 2 commits in p0 and finishes in p2 (`$1B00,X` 1, 2 on the way). Until
+          // then the picture is the template's frame (move.c CtAnimShownFrame). `$1780,X` = 3 is class 1's one-visit arm.
+          const uint8_t* am7 = CtSceneMem7E(f.vm);
+          int acls = am7[0x1201 + i * 2] & 3, apass = am7[0x1B00 + i * 2] & 0x7F;
+          uint8_t ashown = CtAnimShownFrame(i);
+          if (ashown != 0xFF && am7[0x1780 + i * 2] != 3 &&
+              ((acls == 1 && apass == 1) || (acls == 2 && (apass == 1 || apass == 2)))) f01 = ashown;   // (THE TEMPLATE'S FRAME)
+          actorAf[i] = f01; continue;
+        }
       }
       int am, ai, ail, alp, ast;
       int agen = CtSceneActorAnim(f.vm, i, &am, &ai, &ail, &alp, &ast);

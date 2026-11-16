@@ -335,6 +335,9 @@ int CtAnimUploadFlush(uint8_t* ram, uint8_t* vram);
 // activation latch and the "no frame yet" sentinel). A precondition: CtObjListLink links only when $0E01,X is
 // already negative, which C0/B204 sets.
 void CtObjSceneInit(uint8_t* ram, int nobj);
+// The frame object `obj`'s OBJ template holds ($0F01,X when C0/CCB6.. last wrote it), FF if none since the scene's init:
+// what the cartridge draws while a class-1 / class-2 sprite is between its commit and its last staging pass.
+uint8_t CtAnimShownFrame(int obj);
 // C0/571A-58AA: the location load's per-object default fill, written through the $2180 WRAM port. Thirteen arrays get
 // their initial value per object; $1000,X = 4 clears the op-0x0B pause bit the activate guard C0/5AD1 refuses on.
 // `body16` is the script's 32-byte-per-object fn-pointer table ($7F:2001), used only for the $1180,X fn0 seed; NULL

@@ -256,3 +256,20 @@ mutation puts 0x94 back on the exact-tile arm and is killed. Suite 389 pass / 0 
 The ROM-derived part — the part the mutation grades — is the RELATION between the two pinned lines: the op
 completes while the tiles differ by one on each axis and match on neither. Re-pin only after checking that
 still holds.
+
+## The snap is seen: its velocity is published and the animation re-selected (2026-11-16)
+
+Sec. 2's listing has both facts; the port's snap had neither. C0/305D opens `STZ $1900,X / STZ $1980,X` and stores its own
+pair (10 or F0, and 10) while the position's low byte is off the tile's centre-bottom, and the three ops that have the
+anim layer run the selector on it before they yield: 4F9A `BCS ->4FA5 JSR C0/5614` (0x96), 50D9 -> 50E4 (0x97), 5028 ->
+5037 (0x9A). Ops 0xA0 / 0xA1 call the snap and yield with no selector (5162 -> 516A, 51E6 -> 51EE). The selector
+(C0/5630-568A) adds the two magnitudes: 0 the idle, under $20 the walk (anim 01), $20 and over the RUN (anim 06) for a
+character below 4 (`$1100,X`) -- so a diagonal snap, 10 + 10, is eight frames of running and the straight one after it
+a walk again.
+
+MEASURED on the rule's cartridge, playthrough leg 08, loc 1B7, Marle's `96 19 07` (object 3): `$1906` / `$1986` = 00 1F
+to f1184 (the walk's last issue), 10 10 on f1185-f1192, 00 10 from f1193; `$1686` = 06 by C0:5684 on f1185 with the
+phase 01 then 02 (C0:CA09, C0:C9CE), 01 by C0:5657 on f1193; `$0F07` 21, 9A, 0B. The port moved her on the same pixels
+(its mover's own velocity) with the pair stale and the walk's frames. ct_vm.c mvArriveSnap305D writes the pair and,
+for the three ops, runs CtVmMoveStepAnim. Checks field-picture-tile-snap-reselects-the-animation-vs-cartridge and
+leg-window-tile-snap-anim-vs-cartridge.

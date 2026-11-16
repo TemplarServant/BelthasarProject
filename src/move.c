@@ -4902,8 +4902,17 @@ static void ctAnimAppend(uint8_t* r, int idx, int dstBOff, int srcBOff, int lenA
 // +0/+1 (the on-screen X) and +5 are left alone. `recOff` = past the tile words: $20 / $40 / $60 by class.
 // The priority rule differs: class 0 tests each piece's +4 against #E8 (CD4F/CD6B/...); classes 1 and 2 have no
 // CMP #E8 and split by piece index, pieces 0-3 taking $0C00,Y and the rest $0C01,Y (D4C6/D4DB; DA23/DA38/DA4D).
+// The frame an object's template holds: `$0F01,X` as it stood when the template was last written -- what the draw pass's
+// emitters (C0/B788..) put on the screen. A class-0 sprite commits, appends and writes its template in one visit; a
+// class-1 one commits in pass 1 (D28A) and appends / writes the template in pass 2 (D30D), a class-2 one commits in p0 and
+// does so in p2: between the two the cartridge still shows the frame before (CtAnimShownFrame, the field's actor loop).
+// FF = no template since the scene's init.
+static uint8_t g_ctAnimShown[64];
+uint8_t CtAnimShownFrame(int obj) { return (obj >= 0 && obj < 64) ? g_ctAnimShown[obj] : 0xFF; }
+
 static void ctAnimTemplate(uint8_t* r, const uint8_t* rom, int romLen, int idx,
                            int rec, int recBank, int pieces, int recOff, int e8Test, int jumpAt) {
+  if (idx >= 0 && idx < 0x80 && !(idx & 1)) g_ctAnimShown[idx >> 1] = r[0x0F01 + idx];   // (THE TEMPLATE'S FRAME)
   int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);   // CCB8 8-bit LDX / CCBA 16-bit LDA / CCBF TAX
   int y16 = r[0x016D] | (r[0x016E] << 8);                // CD2C LDY $6D, Y 16-bit (REP #10 at CCBD)
   int tile = r[0x0D00 + y16] & 0xFF;                     // CD2E, an 8-bit load
@@ -5657,6 +5666,7 @@ int CtAnimUploadFlush(uint8_t* r, uint8_t* vram) {
 // through the WRAM port ($2180, DP = $2100); only the destinations and values matter here.
 void CtObjSceneInit(uint8_t* r, int nobj) {
   int k;
+  for (k = 0; k < 64; k++) g_ctAnimShown[k] = 0xFF;  // (no template yet: CtAnimShownFrame)
   for (k = 0; k < 0x1E; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free
   for (k = 0; k < 8;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes
                                                      //   cleared, though C0/E952 hands out only four

@@ -394,3 +394,18 @@ carried on by mechanisms that quantise time:
   of `$7F0136` bit 7, which the bike's `16 36 80 86 05` turns into `FF 09` -- needs the Race Log, and no state of the
   route holds it (the chest on Lab 32's road is not opened by legs 48 or 107). A branch leg that takes it, picks the
   mode and races is what would grade `FF 09`'s setup (the six patched bytes) and $7E:4677's lanes at 46C3.
+- **Leg 48 (Lab 32's road), the Octopods a picture early: FIXED (2026-11-16).** The audit's f5100 sample (25 px, an eye)
+  was the visible end of a general bug: every animation step of a class-1 field sprite was drawn in the frame of its
+  `$0F01,X` commit, one drain visit before its tiles and template (861-918 px on three pictures in five while the three
+  walk). f5040-f5160, every frame: 0 px. anim_drain_cad9.md sec. 17.
+- **Leg 08 (Leene's Bell), Marle's snap to the stall's tile: FIXED (2026-11-16).** The audit's f1200 sample (110 px). Op
+  0x96 on its target's tile runs the centre snap C0/305D each visit, which publishes 10 / 10, then 00 / 10, and the
+  selector C0/5614 on it: 10 + 10 = $20 is the RUN for a character below 4, so Marle runs eight frames (`$1686` 06 by
+  C0:5684 on f1185) and walks again on f1193. The port's snap published nothing and re-selected nothing: `$1906` /
+  `$1986` stale, the walk's frames through the snap (105-237 px on fifteen pictures). f1150-f1260, every frame: 0 px.
+  ct_vm.c mvArriveSnap305D; checks field-picture-tile-snap-reselects-the-animation, leg-window-tile-snap-anim.
+- **The audit's grid, 2026-11-16 (build with the race's win).** A picture every 300 frames over the 76 legs that had a
+  differing sample: 2,900 samples, 539 differing at both of the usual lags -- stretches a frame or more off for a timing
+  reason counted in. The windowed pass (best lag in -2..+5) is what separates them; legs 08-34 read so far have one
+  sample each that fits no lag (11 f3300 6 px, 12 f2100 14 px, 17 f1800 98 px, 21 f1500 10 px, 32 f7500 48 px, 34 f16800
+  148 px): open.

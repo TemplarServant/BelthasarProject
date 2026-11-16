@@ -2157,16 +2157,25 @@ static void mvForceIdle(CtScene* sc, int obj) {
 // So the step is diagonal: X and Y correct together on one visit. Returns 1 = stepped (the handler yields, IP
 // parked), 0 = on the tile's centre-bottom (the handler completes). After the SEC, 0x96/0x97 re-anim (JSR C0/5614)
 // before `TYX / CLC`; 0xA0 goes straight to `516A TYX / CLC / RTS`.
-static int mvArriveSnap305D(CtScene* sc, int obj) {
+static int mvArriveSnap305D(CtScene* sc, int obj, int anim) {
+  uint32_t x = (uint32_t)obj * 2;
   // The two tests read the position's low byte only (`LDA $1800,X / AND #F0 / CMP #80`, `LDA $1880,X / AND #F0 /
   // CMP #F0`): the pixel inside the tile, 8 = the centre, 15 = the bottom. X: 3079 BCS -> F0 (-1 px) above, 10 below.
   // Y: 3099 BCS never takes below F0, so +1 px.
   int nx = ((int)floor(sc->fx[obj] * 16.0)) & 0xF0, ny = ((int)floor(sc->fy[obj] * 16.0)) & 0xF0;
   int dix = (nx == 0x80) ? 0 : (nx > 0x80 ? -1 : 1), diy = (ny == 0xF0) ? 0 : 1;
+  // The snap publishes its own velocity: 305F / 3062 `STZ $1900,X / STZ $1980,X` first (so an aligned object leaves
+  // 00 / 00), then 307B / 3082 `LDA #10` or `#F0 / STA $1900,X` and 309B `LDA #10 / STA $1980,X`.
+  w8(sc->mem, 0x7E1900u + x, dix ? (dix > 0 ? 0x10 : 0xF0) : 0x00);
+  w8(sc->mem, 0x7E1980u + x, diy ? 0x10 : 0x00);
   if (!dix && !diy) return 0;
   sc->mx[obj] = dix ? (dix > 0 ? 1 : -1) : 0;    // 307B/3082
   sc->my[obj] = diy ? (diy > 0 ? 1 : -1) : 0;    // 309B/30A7, the same visit
   sc->cycles[obj] = 1; sc->hasTask[obj] = 1;     // 3092/30A2 `LDA #01 / STA $1A01,X` + SEC
+  // ...and ops 0x96 / 0x97 / 0x9A re-select the animation on it before they yield (4F9A `BCS ->4FA5 JSR C0/5614`, 50D9
+  // -> 50E4, 5028 -> 5037): a diagonal snap is 10 + 10 = $20, the selector's RUN for a character below 4 (C0/5647 /
+  // 5671), a straight one $10, the walk. Ops 0xA0 / 0xA1 yield with no selector (5162 -> 516A, 51E6 -> 51EE).
+  if (anim) { CtVmMoveStepAnim(sc->mem->s, (int)x); ctAnimSyncActor(&sc->actors[obj], sc->mem->s, x); }   // (THE SNAP'S ANIM)
   return 1;
 }
 static int mv30B3Arm(CtScene* sc, int obj, int tgtObj, int anim) {
@@ -2326,7 +2335,7 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     double cx = dtx * 16 + 8, cy = dty * 16 + 8;
     double dpx = cx - sc->fx[obj], dpy = cy - sc->fy[obj];
     if (dxr == 0 && dyr == 0) {                      // op 0xA0's arrival (C0/5184): not a C0/568B site
-      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj)) return 1;   // 5158-5162 -> 516A
+      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj, 0)) return 1;   // 5158-5162 -> 516A
       sc->hasTask[obj] = 0; return 0;
     }
     // Not arrived: the common path below issues the step, as C0/516D-518D does: 516D JSR C0/ABA2 (the heading from
@@ -2338,10 +2347,10 @@ static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 
     // C0/4F90 (0x96) and C0/50CF (0x97) `LDA $1C81,X / BIT #01 / BEQ / JSR C0/305D / BCS`: bit 0, not != 0.
     // 0x97 is 0x96 with the two operands read through the scene vars; from 50B9 its bytes are 0x96's.
     if ((op == 0x96 || op == 0x97 || op == 0x9A) && (sc->c1C81[obj] & 1)) {   // (0x9A: 501E-5028)
-      if (mvArriveSnap305D(sc, obj)) return 1;   // 4F97 / 50D6 JSR C0/305D / BCS -> JSR C0/5614, TYX / CLC
+      if (mvArriveSnap305D(sc, obj, 1)) return 1;   // 4F97 / 50D6 JSR C0/305D / BCS -> JSR C0/5614, TYX / CLC
     }
     if (op == 0xA1) {                              // C0/5191 = 0x97 without the anim/facing layer (as move.c):
-      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj)) return 1;   // 51DF / 51E3 -> 51EE, no 5614
+      if ((sc->c1C81[obj] & 1) && mvArriveSnap305D(sc, obj, 0)) return 1;   // 51DF / 51E3 -> 51EE, no 5614
       sc->hasTask[obj] = 0; return 0;              // 51E8 INX x3 / SEC -- and no JSR C0/568B
     }
     sc->hasTask[obj] = 0; mvForceIdle(sc, obj); return 0;   // aligned (or snap off) -> complete: C0/4F9C JSR C0/568B, then the SEC exit

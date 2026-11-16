@@ -82,6 +82,12 @@ WINDOWS = {
     # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
     'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
                            cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
+    # Leene's Bell, loc 1B7: Marle (object 3) walks to the stall, `96 19 07`. On the target's tile the op runs the snap
+    # C0/305D each visit -- it publishes its own velocity (`$1906` / `$1986`: 00 1F the walk's, 10 10 from f1185, 00 10 from
+    # f1193) -- and the selector C0/5614 on it: 10 + 10 is the run (`$1686` = 06, phase 1 then 2; `$0F07` 21, 9A), 00 + 10
+    # the walk again (01; 0B). The cells: the pair, the animation and its phase, the committed frame.
+    'tile-snap-anim': dict(leg='08_', start=1150, frames=100,
+                           cells=[('7E1906', 1), ('7E1986', 1), ('7E1686', 2), ('7E0F07', 1)]),
     # Johnny's race WON (the branch leg 47b). The player's finish (`$53` == 8 first: $7E:4788) puts the run-out's step
     # $7E:4677 in the race step's slot and the wait $7E:4755 in the steering's, and asks for the fanfare (`$038A` = 1B).
     # `$0388` stays set the twenty frames its post takes (C3/09A4's JSL, inside the NMI: f2971-f2990), the lane and `$B2`

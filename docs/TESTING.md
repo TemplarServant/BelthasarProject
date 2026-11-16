@@ -3492,3 +3492,14 @@ for each: 20 tasks, 8 hooks, 0 without. One mutation (the run-out's case removed
 the leg's f600). The effect's lines run TMW 17 against TSW 00 with no window enabled on any layer, so neither mask
 hides anything and the sub screen is the main screen less BG3: the bursts are added over the hall and the party
 (6069 px before). `0 px`; one mutation (the raw masks compared). disasm/notes/battle_effect_orbit.md sec. 10.
+
+`field-picture-multi-pass-sprite-shows-its-templates-frame-vs-cartridge`: playthrough leg 48, loc 0E0's Octopods on
+f5091 (`lag=-2`). A class-1 sprite commits its frame in the drain's pass 1 and gets its tiles and OBJ template in
+pass 2, a visit later; the picture is the template's frame, so the turn is a picture later than `$0F01,X`'s
+(861 px before). `0 px`; one mutation. disasm/notes/anim_drain_cad9.md sec. 17.
+
+`field-picture-tile-snap-reselects-the-animation-vs-cartridge` and `leg-window-tile-snap-anim-vs-cartridge`:
+playthrough leg 08, Marle's walk to the stall (`96 19 07`). On the target's tile the op snaps the object to the tile's
+centre with C0/305D, which publishes its own velocity, and re-selects the animation on it (C0/5614): the diagonal
+10 + 10 is a run for a character below 4. The picture on f1190 (`lag=-2`, 222 px before) and four cells over 100
+frames (`$1906`, `$1986`, `$1686`, `$0F07`: 12 steps, 0 differing). One mutation each.

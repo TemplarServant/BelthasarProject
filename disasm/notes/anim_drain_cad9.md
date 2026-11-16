@@ -983,3 +983,30 @@ field-marle-join-walk-anim): the drawn frames are the rule's oracle's on every f
 * **The 07D battle staging** is the rule's: the five enemy records ($29BF, the field poses at the battle's entry) are
   the rule's oracle's byte for byte (`--monitor 7E29BF:60` under `CT_ORACLE_LOGICAL=1 CT_ORACLE_VIRTUAL_BEAM=1`); slot 4
   is 00 there and 01 on the real cartridge, whose schedule is its real beam's (the 07D battle frames: -15 px).
+
+## 17. What the screen shows: the TEMPLATE's frame (2026-11-16)
+
+`$0F01,X` is the frame the drain decided on; the picture is the OBJ template's ($7F:4802 + `$1700,X`), which the draw
+pass's emitters (C0/B788..) read, over the tiles the NMI's C0/B1B2 uploads. Sec. 12's first law says when both move:
+once per sprite, in the visit that returns CLC. So:
+
+| class | commits `$0F01,X` | appends the tiles, writes the template | `$1B00,X & 7F` in between |
+|---|---|---|---|
+| 0 (C0/CBDC) | the one visit | the same visit | -- |
+| 1, `$1780,X` = 3 (C0/CF21) | the one visit | the same visit | -- |
+| 1 (C0/D28A, then C0/D30D) | pass 1 | pass 2 | 1 |
+| 2 (C0/D546.. p0, p1, p2) | p0 | p2 | 1, then 2 |
+
+MEASURED on the rule's cartridge, playthrough leg 48, loc 0E0 (three Octopods, objects 19-21, `$1201,X` = 01), from
+the state at f5080: object 19's `$0F27` 1D -> 07 on f5080 by C0:D2A3 with `$1B26` = 81 and the arena's owners `$0BC0` =
+26 26; on f5081 the append (C0:D394 / D3AC, `$0940` = 3800) and `$1B26` = 80 (the release C0/B751); `$09A0` cleared by
+C0/B203 on f5082. Object 20 the same a frame earlier each time (f5079 / f5084 / f5089), object 21 on f5083 / f5088.
+With two visits a pass (sec. 16) every pass here is one sprite's pass 2 and the next one's pass 1. The picture: object
+20's new frame (commit f5089) is on the cartridge's f5092, where a class-0 sprite's would be on f5091.
+
+The port drew `$0F01,X` in the frame of the commit: every step of a class-1 sprite a picture early, of a class-2 one
+two (861-918 px on three pictures in five in that room; the WRAM equal on every frame). field.c's actor loop now draws
+the frame the template last took -- move.c keeps it as the template is written (ctAnimTemplate -> CtAnimShownFrame) --
+while the object's class and `$1B00,X` say a pass is owed. Check
+field-picture-multi-pass-sprite-shows-its-templates-frame-vs-cartridge. Not played on a compared frame: a class-2
+sprite's two owed passes (Zombor's legs are the attract's; the suite's attract checks are its test).
