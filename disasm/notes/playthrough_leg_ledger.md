@@ -389,3 +389,8 @@ carried on by mechanisms that quantise time:
   legs are the tool for the others; none but 47b exists yet.
 - **Leg 95, Magus's fire (f17340-f17406): fixed 2026-11-15.** The bursts were not added over the hall (up to 11171 px,
   34 pictures): the effect's window masks compared raw where no window is on. 0 px now. battle_effect_orbit.md.
+- **Open: the re-race with the Race Log (`FF 09`) is not played on either side (2026-11-16).** Scene 223 / 225: Johnny's
+  talk opens with `C9 DD 12` (event op C9, C0/3780: no item $DD -> jump), so the robot's mode choice -- the only writer
+  of `$7F0136` bit 7, which the bike's `16 36 80 86 05` turns into `FF 09` -- needs the Race Log, and no state of the
+  route holds it (the chest on Lab 32's road is not opened by legs 48 or 107). A branch leg that takes it, picks the
+  mode and races is what would grade `FF 09`'s setup (the six patched bytes) and $7E:4677's lanes at 46C3.

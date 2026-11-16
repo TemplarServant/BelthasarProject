@@ -2463,7 +2463,10 @@ after the lost race runs two late, f3243 against f3241, its pictures fitting two
 clock, the class closed on 2026-10-13. Checks: playthrough-leg-47b-race-won, leg-window-race-win-run-out and three
 field-picture-race-win-* (docs/TESTING.md). A during the run-out (`$34E3`: the fade, then the END at once) was played on
 both sides and is not pinned: A on f3121, loc 0E1 on f3235 on the cartridge and in the port. Not played: the re-race
-`FF 09` (its lanes at 46C3 are transliterated, no capture grades them).
+`FF 09` (its lanes at 46C3 are transliterated, no capture grades them). It needs the Race Log: Johnny's talk (scene 223
+obj13 fn1) opens with `C9 DD 12` -- event op C9 (C0/3780: `JSL C1:8003`, A = 0, Y = the item; none -> jump) --, and only
+past it does the robot (obj14 fn3 / fn1) offer the mode whose answer is `$7F0136` bit 7, the bike's `FF 09`. No state
+of the playthrough's route holds item $DD.
 
 **The census (tools/race_task_census.py, check race-overlay-tasks-all-native).** A task or a hook the native stage has
 no `case` for is skipped without a word, which is how the win stayed unported. The census reads the overlay as the
