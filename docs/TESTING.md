@@ -3451,3 +3451,23 @@ the victim list's first and the animation's mask (C1/8DF7-8DFF); the ball then r
 `field-picture-run-off-reloads-no-gauge-vs-cartridge`: playthrough leg 110 (Mt. Woe, a fight run away), seeded on the
 field at f20400 and graded on f21000. The run-off's end reloads no ATB gauge (the flee leaves through C1/8212, not the
 turn's close C1/BCE1): seat 0's stays full on the exit's pictures (224 px before). `0 px`; one mutation.
+
+`field-picture-fight-boot-keeps-the-fields-oam-vs-cartridge`: playthrough leg 74 (a fight of four reptites on one foot
+line), played from the leg's start and graded on f620, inside the fight's boot. Until the first compose is uploaded (the
+band's arm frame's) the screen keeps the field's OAM, whose order is the draw list's -- cmb 6 in front of 5, 4, 3 --
+not the compose's sort (162 px before, 54 pictures). `0 px`; one mutation.
+
+### leg-window-doomed-pc-pose-vs-cartridge (`tools/leg_window_cmp.py doomed-pc-pose`)
+
+Playthrough leg 29, a window of 1000 frames from the field at f700 through the ball's hit on Lucca (1 HP): her published
+pose `$9908`, her HP `$5EB0` and the action's freeze `$A013`, step for step. The close's C1/41BE flags the seat the shown
+damage fells and C1/416A publishes the fallen pose two rows before the HP is written (`$9908` 40 on f1656, the HP on
+f1658). `10 steps compared, 0 differing`; one mutation (the pose with the HP write: 4 steps differ).
+
+`field-picture-marle-keeps-her-published-pose-in-the-close-vs-cartridge` and
+`field-picture-script-hop-reaches-the-mirror-a-frame-later-vs-cartridge`: playthrough leg 29's fight, played from the
+leg's start, each graded at the fight's own lag (`lag=-1` in tools/field_picture_cmp.py: a still scene fits another port
+frame too). f2117: in the close of Marle's Revive she stands at her own seat with the pose her script published -- not
+the baked crossbow trajectory's pose at seat 1's anchor (837 px before). f3734: the enemy's hop in place, stepped by a
+script's op C4 / C5 in the main loop, is on the picture a frame after a service's hop would be (676 px before). `0 px`
+each; one mutation each.

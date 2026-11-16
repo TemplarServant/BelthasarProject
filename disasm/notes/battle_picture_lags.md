@@ -436,3 +436,18 @@ the next frame. So an un-uploaded pose is on the screen as the OLD tiles at the 
 
 field.c ctAnimengPcBlitOn takes the tiles' record and the offsets' record apart. Check
 `field-picture-held-tiles-stand-on-the-new-cells-vs-cartridge` (f1800); sec. 6's own check stands.
+
+## A script's hop is a main-loop value (2026-11-15)
+
+`$A4AF,X` has two writers. The slide's hop is the service's (CF/F158-F18B, in the stepper before the compose): row r on
+picture r + 2, like a foot. Ops C4 / C5 are the script's: C1/6F9A reads two operands (the goal `$80`, the step `$81`;
+C5 = C1/6FEF with the goal 0) and, a track below 4, `LDX $A014,X / LDA $A4AF,X / CMP $80 / BEQ ->advance / CLC / ADC
+$81 / STA $A4AF,X` (C1/6FBF-6FC9; track 4 walks the list `$A018,Y` the same way, C1/6FCE-6FE1). The main loop runs after
+the frame's compose, so the mirror has the step a frame later: row r on picture r + 3, like a pose.
+
+MEASURED on the rule's cartridge, playthrough leg 29 (the enemy's action `$9877` 36, its hop in place): `$A4B2` F0 E8 E4
+E2 E1 E2 E4 E8 F0 00 by C1:6FCC on rows f3732, 34, 36, 38, 40, 43, 45, 47, 49, 51 -- the same rows in the port -- and the
+pictures differ from the port's on exactly row + 2 (f3734 .. f3753), the cartridge still showing the offset before.
+battle.c: the op notes the offset the frame's service left (battleOamHopBefore) and battleOamPosesKeep puts it back
+into the compose's copy, as for a script's teleport of a foot. Check
+field-picture-script-hop-reaches-the-mirror-a-frame-later-vs-cartridge.

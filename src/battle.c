@@ -12045,6 +12045,12 @@ static void battleAscGetPos(const CtBattleHost* h, int t, int* x, int* y) {
 // $A014,X / TAX` then `$A35D,X := $1D0C,X ... CF/F113 writes $1D0C,X/$1D23,X` -- with no test of who the
 // combatant is. So a co-actor's track moves the co-actor and a PC caster's track moves the PC.
 static uint16_t gOamPosScript;   // bit c: a script's teleport (ops 19 / 1A / 1B, C1/561F) wrote combatant c's foot this frame
+static uint16_t gOamHopScript;   // bit c: a script's op C4 / C5 (C1/6FC9 / C1/6FE1) stepped combatant c's offset `$A4AF` this frame
+static int gOamPreHop[11];       // ...and the offset the frame's service left there, before the op's first step
+static void battleOamHopBefore(const CtBattleHost* h, int c) {
+  if (c < 0 || c >= 11 || (gOamHopScript & (1 << c))) return;
+  gOamPreHop[c] = h->ascHopY[c]; gOamHopScript |= (uint16_t)(1 << c);
+}
 // ...and an EFFECT OBJECT's point (C1/561F's other branch, a track >= 8: C1/5652 `LDA $A2B6 / ASL / TAX / LDA $80 / STA
 // $A240,X / STZ $A241,X / LDA $81 / STA $A250,X / STZ $A251,X`). The teleport is the main loop's; the frame's compose
 // ran before it, in the IRQ chain, right after the movers (CF/E750 .. CF/E8AF). So an object a script places is on the screen a picture after one its mover stepped. MEASURED on the
@@ -13755,11 +13761,13 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           if (t == 4) { int cs[11], nc = battleAscCmbs(h, t, cs), eq = 0;
             for (int i = 0; i < nc; i++) { int c = cs[i];            // C1/6FCE: the first equal target advances the op;
               if (h->mem[0xA4AF + c] == X) { eq = 1; break; }        //   the ones before it have stepped
+              battleOamHopBefore(h, c);
               h->mem[0xA4AF + c] = (uint8_t)(h->mem[0xA4AF + c] + Y); battleAscOffsetMirror(h, c); }
             if (!eq) adv = 0;
             break; }
           { int c = h->ascRole[t]; if (c < 0 || c >= 11) break;
             if (h->mem[0xA4AF + c] == X) break;                      // C1/6FC4 BEQ -> C1/6FEA: advance
+            battleOamHopBefore(h, c);                                // (the main loop's store: the mirror's a frame later)
             h->mem[0xA4AF + c] = (uint8_t)(h->mem[0xA4AF + c] + Y); battleAscOffsetMirror(h, c); adv = 0; }
           break; }
         case 0xD8: {                                                 // `D8 xx yy zz`: the shake (C1/74B4 -> mover mode 6)
@@ -14626,6 +14634,25 @@ static void battleFxProgramArm(CtBattleHost* h, int fx);   // CD/0F2C + CD/0D53 
 static void battleFxActionLoad(CtBattleHost* h, int fx);   // C1/4833-48EB (defined with the effect load)
 static void battleFxActionLoadFrame(CtBattleHost* h, int rel);   // ...the same, one frame of it (with the effect load)
 static void battleFxLoadPalArm(uint8_t* s);                 // CD/0E79 (defined with CD/0453's CD/0E61)
+// C1/4136-4146, the close's walk of the victims `$AC5C,X` up to the FF: an entry 0 / 1 / 2 -- a PC -- takes C1/4148
+// (the doomed test, three more waits); none goes straight to `STZ $A013`. The port's list is the action's (the run-off's
+// own, C1/895B, is the page's).
+static int battleClosePcVictim(const CtBattleHost* h) {
+  const uint8_t* s = h->mem;
+  if (h->actEndByScript) return (s[0xAC5C] & 0x80) == 0 && s[0xAC5C] < 3;
+  for (int i = 0; i < h->actTgtN; i++) if (h->actTgtList[i] >= 0 && h->actTgtList[i] < 3) return 1;
+  return 0;
+}
+// C1/41BE: for each seat k, `$A119,k` = 1 when the action's set-0 record shows damage (`$AD9E + 4k` = 3) with a value
+// (`$AD9C + 4k`) on a living PC (`$5E30 + $80 k`) that the value fells -- HP - value zero or a borrow (C1/41E2-41EC);
+// else 0 (C1/4202-420E store all three).
+static void battleCloseDoomed41BE(uint8_t* s) {
+  for (int k = 0; k < 3; k++) {
+    int kind = s[0xAD9E + 4 * k] | (s[0xAD9F + 4 * k] << 8), v = s[0xAD9C + 4 * k] | (s[0xAD9D + 4 * k] << 8);
+    int hp = s[0x5E30 + 0x80 * k] | (s[0x5E31 + 0x80 * k] << 8);
+    s[0xA119 + k] = (uint8_t)(kind == 3 && hp && v && v >= hp);
+  }
+}
 // Advance the action window one render frame (called every post-intro frame, before the logic-tick gate): the death
 // sounds, the popups and flashes, the action's script, and the window's close.
 static void battleAdvanceAction(CtBattleHost* h) {
@@ -14728,9 +14755,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
       // C1/4116 `JSR C1/007E` + CC/F06B + the C1/305C loop (no wait in it), then C1/4138 walks the target list $AC5C:
       // an entry 0/1/2 (a PC victim) takes C1/4148 -- C1/414B, C1/41B4, C1/41B7 = three more waits; the FF terminator
       // first takes C1/41BA `STZ $A013` at once. So 5 frames with a PC victim, 2 without.
-      int pcIn = 0;
-      for (int i = 0; i < h->actTgtN; i++) if (h->actTgtList[i] >= 0 && h->actTgtList[i] < 3) pcIn = 1;
-      if (h->actEndByScript) pcIn = ((s[0xAC5C] & 0x80) == 0 && s[0xAC5C] < 3);   // the run-off's own list (C1/895B)
+      int pcIn = battleClosePcVictim(h);                           // (the run-off's own list: C1/895B)
       h->actSpan = h->actEndRel + 2 + (pcIn ? 3 : 0);
     }
     { int e2 = h->actEndRel + 1 + h->actEndHold;                    // C1/40E1's re-test frame
@@ -14746,7 +14771,21 @@ static void battleAdvanceAction(CtBattleHost* h) {
                                 // (142 px a picture).
                                 battleStatusCloseService(h);
                                 h->actCloseWiped = 1;                //   (once: the act-end below does not repeat it)
-                                h->menuPassHold = 1; } }             //   (C1/4116 on: no C1/10FA menu pass to the close)
+                                h->menuPassHold = 1;                 //   (C1/4116 on: no C1/10FA menu pass to the close)
+                                // ...then C1/4138's walk: with a PC among the victims, C1/4148 `JSR C1/41BE` -- the seats
+                                // the shown damage will fell (`$A119,k`) -- before C1/414B's wait.
+                                if (battleClosePcVictim(h)) battleCloseDoomed41BE(s); }
+      // C1/414E-41AC, after that wait: each flagged seat's fallen pose D1:5F42[char * 4 + facing] through C1/1C4A, the
+      // flag cleared, then `LDA #02 / STA $A118` (the NMI's countdown to the seats' tile upload, CF/E510) and the two
+      // waits C1/41B4 / C1/41B7 to `STZ $A013` -- so a PC the action kills is down two rows before its HP is written.
+      // MEASURED on the rule's cartridge, playthrough leg 29 (the ball's hit on Lucca, 1 HP): `$9876` 01 on f1653, the
+      // wipe on f1655 (CC:F0EC), `$9908` 40 by C1:1C69 on f1656, `$5EB0` 0000 (C1:ED12) and `$A013` 00 on f1658; her
+      // fallen picture from f1659. The port published the pose with the HP write (two pictures late, 503 px each).
+      else if (rel == e2 + 2 && h->actCloseWiped && (s[0xA119] | s[0xA11A] | s[0xA11B])) {
+        for (int k = 0; k < 3; k++)
+          if (s[0xA119 + k]) { s[0xA119 + k] = 0; CtBattlePcLadderFallen(h, k); }   // (THE DOOMED SEAT'S POSE)
+        s[0xA118] = 2;                                             // C1/41AF
+      } }
   }
   // Project $993C onto the render fields (flashTarget/fxFlashPal, read by the renderer as combatant and stance-palette
   // number). $993C is the OAM attribute's palette field (bits 1-3, one frame later), so the number is $9888 >> 1:
@@ -21292,7 +21331,8 @@ static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JS
 // puts them back into the compose's copy.
 // ...and so is the ground shadow's flag: the script's ops D0 / D1 write `$A5D8,X` (h->ascShadow), which the compose's
 // CF/EA8A reads -- the Hetake's hop: the cell on picture f442 and its shadow under it on f443, a picture later. (The
-// hop's offset `$A4AF` is the service's own, CF/F158-F18B: it stays the frame's.)
+// hop's offset `$A4AF` is the service's own, CF/F158-F18B: it stays the frame's -- but for a script's ops C4 / C5,
+// battleOamPosesKeep's last lines.)
 static uint8_t gOamPrePub[0x26]; static int gOamPreAscOn; static int gOamPreAscPose[11]; static int gOamPreF = -1;
 static uint8_t gOamPreShadow[11]; static CtFxPopup gOamPrePopups[CT_BATTLE_FX_POOL]; static uint8_t gOamPreX[11], gOamPreY[11];
 static int gOamPreLadder[3];
@@ -21305,6 +21345,7 @@ static void battleOamPosesBefore(const CtBattleHost* h) {
   for (int c = 0; c < 11; c++) gOamPreShadow[c] = (uint8_t)h->ascShadow[c];
   memcpy(gOamPrePopups, h->popups, sizeof gOamPrePopups);
   memcpy(gOamPreX, h->mem + 0x1D0C, 11); memcpy(gOamPreY, h->mem + 0x1D23, 11); gOamPosScript = 0;
+  gOamHopScript = 0;                                               // (its pre-step values: taken at the op)
   for (int c = 0; c < 3; c++) gOamPreLadder[c] = h->pcLadderPose[c];   // (the ladder's own copy of what it published)
   gOamPreF = h->frames;
 }
@@ -21326,6 +21367,14 @@ static void battleOamPosesKeep(const CtBattleHost* h) {
   // on row f716 -- pictures f716 and f718, a held picture between them that the port did not have.
   for (int c = 0; c < 11; c++)
     if (gOamPosScript & (1 << c)) { gOamCmpMem[0x1D0C + c] = gOamPreX[c]; gOamCmpMem[0x1D23 + c] = gOamPreY[c]; }
+  // ...and the offset `$A4AF` a script's op C4 / C5 steps (C1/6F9A: `LDA $A4AF,X / CMP $80 / BEQ / CLC / ADC $81 / STA
+  // $A4AF,X`, C1/6FC9 and its target-list twin C1/6FE1): the main loop's too, where a slide's hop is the service's
+  // (CF/F158-F18B) and stays the frame's. MEASURED on the rule's cartridge, playthrough leg 29 (the enemy's action
+  // `$9877` 36, its hop in place): `$A4B2` F0 E8 E4 E2 E1 E2 E4 E8 F0 00 by C1:6FCC on rows f3732-f3751, the same rows in
+  // the port, each step on the cartridge's picture row + 3 like a pose; the port's mirror took the step on its own
+  // frame, a picture early (294-676 px on the step's picture, ten of them a hop).
+  for (int c = 0; c < 11; c++)
+    if (gOamHopScript & (1 << c)) { gOamCmpHost.ascHopY[c] = gOamPreHop[c]; gOamCmpMem[0xA4AF + c] = (uint8_t)gOamPreHop[c]; }   // (THE SCRIPT'S HOP)
 }
 static void battleOamComposeIfNone(CtBattleHost* h) {
   if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) { battleOamCompose(h); battleOamPosesKeep(h); }
@@ -21360,6 +21409,9 @@ static int battleBootBandArm(const CtBattleHost* h) {
   if (battleRuleNmiOnHold()) return priced ? 2 + h->bootApuFrames + 3 + 1 : CT_BHUD_ARM_FRAME - 11;
   return priced ? 1 + h->bootApuFrames + 18 : CT_BHUD_ARM_FRAME;
 }
+// ...for the picture: the frame the fight's NMI and its frame service begin on (`$7E` = 1, C1/0034's JSL CD/0003) -- the
+// band's seed and the compose's first store of the OAM mirror (CF:EB60). Before it the screen keeps the field's OAM.
+int CtBattleBootArmFrame(const CtBattleHost* h) { return h ? battleBootBandArm(h) : 0; }
 // The strip's NMI upload (disasm/notes/battle_hud_upload_pipeline.md sec. 1): D1/E77C -> CD/0C95 -> CD/088D with the
 // fight's NMI (`$7E` = 1 / 2; 0 in the boot, CD/09F1, until C1/0034's JSL CD/0003, as the pad latch's gate in
 // battleNmiTail), `$CE0F` = 0 and no Start pause (`$CD02`, CD/08AF): CD/08B4 JSL C1/0009 = JML CF/E300, whose

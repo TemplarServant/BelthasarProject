@@ -925,6 +925,7 @@ void CtBattlePictureTables(CtBattleHost* h, int begin);
 int CtBattleOamShown(const CtBattleHost* live, CtBattleHost* out, const uint8_t** mem);
 // 1 when the NMI at the head of the next frame uploads the OAM mirror and the strip (CD/088D's gates, CF/E300).
 int CtBattleNmiUploads(const CtBattleHost* h);
+int CtBattleBootArmFrame(const CtBattleHost* h);   // the frame the fight's own NMI / frame service start on (the band's arm)
 // The MOSAIC register per fb row (HDMA channel 6's table $7E:C975, the line cuts): size[r] the block size (1 = none),
 // src[r] the fb row the row's BG pixels are taken from (-1 = the line above the picture). Returns the rows with one.
 int CtBattleMosaicRows(const uint8_t* mem, int H, uint8_t* size, int16_t* src);

@@ -18,6 +18,8 @@ go on with the LEG'S OWN next frames of pad, and the port's first key is the leg
     fieldpicture: <name> leg <leg> f<at> +<n> frames of the leg's pad: <d> px differ at port <lag>
 
 `<lag>` is the port frame that fits best in -6..+6 around the cartridge's (the port's picture P is the cartridge's P+2).
+A picture with `lag` is graded at that port frame alone: what it pins is WHEN a thing is drawn, in a scene so still that
+another frame of the port would fit (FIELDPIC_LAGS=1 prints every port frame's count).
 --png writes build/_fieldpic/<name>.png: the cartridge, the port, the pixels apart.
 
 Regression checks: the `field-picture-*` family (docs/TESTING.md).
@@ -264,6 +266,15 @@ PICTURES = {
     'redrawn-victim-is-the-scripts-target': dict(leg='29_gate_home', at=0, frames=1800, own=True),
     # Leg 110 (the fight from f20536, run away): the run-off's end reloads no gauge -- seat 0's stays full (f21000).
     'run-off-reloads-no-gauge': dict(leg='110_mt_woe_summit', at=20400, frames=600, own=True),
+    # Leg 74 (the fight from f589, four reptites on one foot line): the boot's pictures keep the field's OAM -- the
+    # draw list's order -- until the first compose is uploaded (f644); graded inside the boot.
+    'fight-boot-keeps-the-fields-oam': dict(leg='74_dreamstone', at=0, frames=620, own=True),
+    # Leg 29's fight (from f778). Marle (seat 2) uses a Revive on Lucca (seat 1): on the close's four frames (f2116-f2119)
+    # Lucca stands and Marle stands at her own place -- no baked trajectory's pose at seat 1's anchor. A still scene: `lag`.
+    'marle-keeps-her-published-pose-in-the-close': dict(leg='29_gate_home', at=0, frames=2117, own=True, lag=-1),
+    # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
+    # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
+    'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's
@@ -387,6 +398,15 @@ def run(name, want_png):
         print('fieldpicture: %s leg %s: the port drew no picture' % (name, legs[i]['name'].split('_')[0]))
         return 1
     k, n = P.picture_grade(c, pics)
+    if os.environ.get('FIELDPIC_LAGS'):                       # every port frame's count (to choose a pinned `lag`)
+        print('  lags: ' + ' '.join('%+d:%d' % (q, sum(1 for j in range(0, len(c), 3) if c[j:j + 3] != pics[q][j:j + 3]))
+                                      for q in sorted(pics)))
+    if 'lag' in d:                                            # a picture whose difference is WHEN a thing is drawn in
+        k = d['lag']                                          # a still scene: graded at its own port frame, not the best
+        if k not in pics:
+            print('fieldpicture: %s leg %s: no port picture at %+d' % (name, legs[i]['name'].split('_')[0], k))
+            return 1
+        n = sum(1 for j in range(0, len(c), 3) if c[j:j + 3] != pics[k][j:j + 3])
     print('fieldpicture: %s leg %s%s +%d %s: %d px differ at port %+d' % (
         name, legs[i]['name'].split('_')[0], ' f%d' % d['at'] if d.get('at') else '', d['frames'],
         "frames of the leg's pad" if own else 'idle frames', n, k))

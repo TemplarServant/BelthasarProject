@@ -7165,8 +7165,49 @@ static int g_bDrawOnly = -1;      // -1 = draw everyone; else only this combatan
 // battleCombatantsRender, 0xFF where none drew. NULL = not recorded (the headless vehicles). See the battle compose.
 /* g_bObjPrioMask: declared with plot(), which stamps it */
 #define BATTLE_ZSKIP(cmb) (g_bDrawOnly >= 0 && (cmb) != (g_bDrawOnly))
+// Until the fight's first compose is on the screen the OAM is the FIELD's. The boot's NMI uploads no OAM (`$7E` = 0,
+// CD/09F1) and the frame service's compose first runs on the frame of the band's arm (CF:EB60's first store of the
+// mirror `$0700`, the row `$CA1E/$CA1F` take FF / 17), so the pictures of the boot show the field's last upload: the
+// sprites in the order C0/B2A5 walked the draw list -- the bucket heads `$0E00,Y` from $7E down, each chain through
+// `$0E81,X`, the priority group first (`$0F80 & 0C`, C0/B334) -- as C0/0918 saved the object page to $7F:2000 at the
+// entry. MEASURED on the rule's cartridge, playthrough leg 74 (the fight from f589, four reptites on one foot line):
+// the mirror's last field store is on f587, `$98CA` runs 01-04 on f638-f641, the compose's first store and the band's
+// seed are on f642; the pictures f590-f643 keep OAM 28-43 = objs 12, 11, 10, 9 (the saved list's bucket 5E; slots 3, 2,
+// 1, 0 by `$01A3+slot`), then the party 1, 2, 3 (bucket 46) -- cmb 6 in front of 5, 4, 3 -- and from f644 the compose's
+// (a tie keeps the lower object in front: 3, 4, 5, 6). The port drew the boot with the compose's sort (162 px a picture).
+// The port draws the combatants at their staged places with their staged poses, which are the field's; an object of the
+// field's list that is no combatant is not drawn (not measured: no such fight read yet).
+// g_bFieldOam = the live page ($7E, with the save at +$12000) while the picture's sprites are the field's, else NULL.
+static const uint8_t* g_bFieldOam;
+static int battleFieldOamOrder(const uint8_t* live, const uint8_t* mem, int* out) {
+  const uint8_t* sv = live + 0x12000 - 0x0920;               // the saved page: $0920..$1DFF at $7F:2000
+  int cmbOf[64], grp[22], n = 0, seen = 0;
+  for (int o = 0; o < 64; o++) cmbOf[o] = -1;
+  for (int seat = 2; seat >= 0; seat--) {                    // `$0197/$0199/$019B`: the party's objects (C0/0871)
+    int X = live[0x197 + seat * 2];
+    if (!(X & 0x81) && X / 2 < 64) cmbOf[X / 2] = seat;
+  }
+  for (int slot = 0; slot < 8; slot++) {                     // `$01A3+slot`: the staging's back-map (C0/0557)
+    int X = live[0x1A3 + slot];
+    if (!(X & 0x81) && X / 2 < 64) cmbOf[X / 2] = 3 + slot;
+  }
+  for (int Y = 0x7E; Y >= 0; Y -= 2)                         // B2A5 LDY #007E ... B2C0 DEY / DEY / BPL
+    for (int o = sv[0x0E00 + Y]; !(o & 0x80); o = sv[0x0E81 + o]) {   // B2A8 / B2B4 LDA $0E81,X
+      if ((o & 1) || o / 2 >= 64 || ++seen > 64) return -1;  // (a malformed chain: the caller keeps the compose's sort)
+      int cmb = cmbOf[o / 2];
+      if (cmb < 0 || (mem && !mem[0x96F5 + cmb]) || n >= 22) continue;
+      out[n] = cmb | 0x40; grp[n] = fieldPrioLayer(sv[0x0F80 + o]); n++;   // walked first = the group's lowest slot = front
+    }
+  for (int i = 1; i < n; i++) {                              // the group first: C (slot 4), the default (28), B (104)
+    int ko = out[i], kg = grp[i], j = i - 1;
+    for (; j >= 0 && grp[j] < kg; j--) { out[j + 1] = out[j]; grp[j + 1] = grp[j]; }
+    out[j + 1] = ko; grp[j + 1] = kg;
+  }
+  return n;
+}
 // The list, front-first (index 0 = lowest OAM index = frontmost): CF/E83F's build and sort.
 static int battleObjOrder(const uint8_t* mem, const CtBattleHost* h, int* out) {
+  if (g_bFieldOam) { int nf = battleFieldOamOrder(g_bFieldOam, mem, out); if (nf > 0) return nf; }   // (THE FIELD'S OAM)
   int key[22], n = 0;
   for (int cmb = 0; cmb < 11; cmb++) {                       // FE83F: obj 0x0C..0x16, in object order
     if (mem && !mem[0x96F5 + cmb]) continue;                 // FE845 LDA $96E9,Y / BEQ: not present
@@ -7338,6 +7379,13 @@ static int battleMarleAtkPose(const uint8_t* mem, const CtBattleHost* h, int* md
   if (mdx) *mdx = 0; if (mdy) *mdy = 0;
   if (!h || !h->actActive) return -1;
   if (h->ascOn) return -1;                                        // a running script poses her (the pose engine)
+  // ...and so does an action that HAS a script, to its last frame: a tech, a physical running its own, an item (battle.c
+  // battleSkeleton's three gates for Crono's baked swing). After the close's wipe (CC/F06B, C1/4119) no script is live
+  // and the action is still open for the walk of the victims (C1/4138-41BA); her picture is the pose it published,
+  // `$9907,X`. MEASURED on the rule's cartridge, playthrough leg 29 (Marle, seat 2, uses a Revive on Lucca, seat 1): on
+  // f2116-f2119, the close's four frames, Lucca stands and Marle stands at her own place with her pose D9; the port drew
+  // the baked trajectory's last pose at seat 1's anchor -- Marle on Lucca's spot -- and no Marle at hers (837 px each).
+  if (h->actTechId > 0 || h->actPhysScript || h->actItemId > 0) return -1;   // (THE SCRIPT'S ACTION)
   int atk = h->actAttacker;
   if (atk < 0 || atk >= 3 || mem[0x2980 + atk] != 1) return -1;   // not Marle (PC seat, char id 1)
   int idx = h->frames - h->actStart;
@@ -19887,7 +19935,12 @@ int main(int argc, char** argv) {
       // (the rising numbers are OAM too, each in its combatant's entry: CF/E781 animates them in the frame service,
       //  ahead of the compose -- the mirror's)
       g_bNoPopups = defeatHold;
+      // (...and before the fight's first compose is uploaded, the field's OAM: battleFieldOamOrder. The compose shown is
+      //  the one of the frame before the picture's; the first is the band's arm frame's.)
+      g_bFieldOam = (battlePhase && g_battleObjSaved
+                     && (bOam ? g_bOamHost.frames : liveHost.frames) < CtBattleBootArmFrame(&liveHost)) ? bmem : NULL;
       battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
+      g_bFieldOam = NULL;
       g_bNoPopups = 0;
       if (bMot) { g_mot = NULL; g_motOwn = CT_MOT_FIXED; memcpy(g_motPic, fb, (size_t)CAMW * CAMH * 3); mot->valid = 1; }
       g_bObjPrioMask = NULL;

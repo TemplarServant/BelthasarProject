@@ -372,3 +372,40 @@ ending the hold, a step every frame). `field-battle-crit-flash1` gained the disp
 Eleven re-pinned with the attribution in their notes (intro-window shots; synthetic renders that now draw the
 seed's `$9907`); two anchors re-anchored (the victory-arm one to the `$9907` branch, killed); one retired with
 its reason (the solo check's presence gate is enforced upstream by the draw-order list).
+
+### 8. The fallen pose is the close's, not the HP write's (2026-11-15)
+
+D1:5F42's one-shot has its own publisher in the action's close. C1/4136-4146 walks the victims `$AC5C,X`; with a PC
+among them (an entry 0 / 1 / 2):
+
+```
+C1/4148  JSR C1/41BE      per seat k: `$AD9E + 4k` = 3 (damage), `$5E30 + $80 k` (HP) != 0, `$AD9C + 4k` != 0 and
+                          HP - value zero or a borrow -> `$A119,k` = 1, else 0 (C1/4202-420E store all three)
+C1/414B  JSR C1/007E      a frame
+C1/414E  per flagged seat: STZ the flag, `$9679` = k, `$967B` = D1:5F42[($2980,k) * 4 + $96DB,k], JSR C1/1C4A
+C1/41AF  LDA #02 / STA $A118    the NMI's countdown (CF/E510: at 0 the seats' tile buffers are uploaded)
+C1/41B4  JSR C1/007E / C1/41B7 JSR C1/007E
+C1/41BA  STZ $A013
+```
+
+`$A119-$A11B` are read by the status scan (C1/2FBF / C1/2FF1: "doomed") and written only here.
+
+MEASURED on the rule's cartridge, playthrough leg 29 (the ball's hit on Lucca, 1 HP): `$9876` 01 on f1653 (C1:4D03),
+the wipe on f1655 (CC:F0EC), `$9908` 40 by C1:1C69 on f1656, `$5EB0` 0000 by C1:ED12 and `$A013` 00 on f1658; her
+fallen picture from f1659 (row + 3). The port published the pose from the HP write (battleApplyHpED1A), two pictures
+late. battle.c: battleCloseDoomed41BE on the wipe's frame and the publish on the frame after it (the script-ended
+close; the HP write's publish stays for a death no close's walk announced). Check
+leg-window-doomed-pc-pose-vs-cartridge.
+
+### 9. The close's tail is the published pose's -- no baked trajectory (2026-11-15)
+
+Between the close's wipe (CC/F06B, C1/4119) and `STZ $A013` (C1/41BA) no script is live and the action is still open.
+The actor's picture there is `$9907,X` as its script left it. The port's baked trajectory of Marle's crossbow
+(ctMarleAtkTraj, 79 frames captured from GATO's fight; field.c battleMarleAtkPose / battleMarleAttackRender) was gated
+on a live script only: in the tail of every action of hers it drew the trajectory's last pose (D9) at seat 1's anchor
+-- her own seat in GATO's fight, where the pose is also the one her script publishes, so nothing showed there.
+MEASURED on the rule's cartridge, playthrough leg 29 (Marle in seat 2 uses a Revive on Lucca in seat 1): f2116-f2119,
+Lucca standing and Marle at her own place; the port drew Marle on Lucca's spot and none at hers (837 px each; one
+picture more at f3026, f4574 and f5575, her other actions). The gate is now battleSkeleton's three for Crono's baked
+swing: a tech, a physical running its script, an item -- every action a ROM-backed fight opens. Check
+field-picture-marle-keeps-her-published-pose-in-the-close-vs-cartridge.

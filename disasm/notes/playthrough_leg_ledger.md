@@ -369,3 +369,12 @@ carried on by mechanisms that quantise time:
   the cartridge on f10170-f10200 at (72-183, 95-182) with no OAM on screen (a background layer) and absent in the port.
   Not read.
 - **Leg 110 f26100 (10480 px at both lags), open.** Mt. Woe's mist layer at another phase (as Death Peak's snow, 134).
+- **Leg 74, the fight's boot: FIXED (2026-11-15).** The boot's pictures (f590-f643) keep the field's OAM, the draw
+  list's order (battle_sprite_zorder.md, "The boot"); the port's are 0 px now. Still open: f2700 / f3000 (Ayla's pose).
+- **Leg 29 f1659-f1660: FIXED (2026-11-15).** Lucca's fall two pictures late: the close's C1/41BE / C1/416A publish
+  the fallen pose two rows before the HP write (battle_pc_pose_ladder.md sec. 8). Still open in the leg's fight: three
+  windows of alternate frames (f1206-f1219, f3182-f3190, f3734-f3749; 294-676 px), not yet read.
+- **Leg 29's fight is the cartridge's frame for frame (2026-11-15).** Fixed after the fall: the enemy's hop in place
+  (a script's op C4 / C5: a picture early, three hops) and the close of Marle's actions (the baked crossbow pose at seat
+  1's anchor, f2116-f2119 and three single pictures). f790-f6696, every frame at the fight's lag: 0 px. The last three
+  (f6697-f6699, 25 px) are the exit's frame (timing).

@@ -138,3 +138,33 @@ priority-3 cell. `CT_BATTLE_PRIOTRACE` counts the cell pixels over priority tile
 s9x splice (no VRAM), and no attract fight puts a priority-3 cell over a priority tile. Open: an effect object carries
 its own priority (`$AB5F,X`, the same default) -- the port records the combatant's for the effect cells it draws in the
 same iteration.
+
+## The boot: the field's OAM until the first compose (2026-11-15)
+
+The compose (CF/E83A) is the fight's frame service's, and that service starts with the fight's NMI (`$7E` = 1, C1/0034's
+JSL CD/0003): the boot's NMI (`$7E` = 0, CD/09F1) uploads no OAM and runs no compose. So from the fight's entry to the
+first compose's upload the hardware OAM is the field's last one -- the sprites as C0/B2A5 walked the draw list on the
+field's last frame (field_draw_list_order.md).
+
+MEASURED on the rule's cartridge, playthrough leg 74 (the fight from f589; `--monitor 0770:4,0710:4,A028,98CA`):
+
+| row | |
+|---|---|
+| f587 | the mirror's last field store (`$0770` = 88 AF 68 22: obj 12's first cell) |
+| f591 | CF:FB86 `STZ $98CA` (the module's entry) |
+| f638 | CF/FB94's clear; `$98CA` 01 (CC:F05B) |
+| f639-f641 | `$98CA` 02, 03, 04 (the boot NMI's staged uploads CC/E000); `$7E` = 01 on f641 |
+| f642 | the compose's first store (CF:EB60: `$0710` = 58 AF 40 22, cmb 3 at entry 4) and the band's seed `$CA1E/$CA1F` = FF / 17 |
+
+The pictures f590-f643 keep OAM 28-43 = objs 12, 11, 10, 9 (the saved list's bucket 5E; the staging's back-map `$01A3` =
+12 14 16 18, so slots 3, 2, 1, 0), then the party's objs 1, 2, 3 (bucket 46): cmb 6 in front of 5, 4, 3. From f644 the
+compose's order: 3, 4, 5, 6 (a tie keeps the lower object in front). The port's band seed is on the same row (f642).
+
+The port composed from the fight's first frame, so its boot showed the compose's order (162 px a picture where the four
+reptites overlap, 54 pictures). field.c battleFieldOamOrder: while the compose shown is older than the band's arm frame
+(CtBattleBootArmFrame), the combatants are ordered by the saved list's walk (the page C0/0918 copied to $7F:2000, the
+priority group `$0F80 & 0C` first), each object mapped to its combatant by `$0197/$0199/$019B` and `$01A3+slot`. A
+malformed chain keeps the compose's sort (a port-side guard).
+
+Not modelled, not measured: an object of the field's list that is no combatant would stay on the cartridge's screen
+through the boot; the port draws none (no such fight read yet).

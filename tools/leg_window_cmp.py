@@ -75,6 +75,13 @@ WINDOWS = {
     #           icon restarts the three windows ($968C FF FF FF) and the next pass starts them at entry 0 (f22045)
     # Not graded: the fight's boot to its first window (the port's boot is 13 frames shorter: the first-window class) and
     # the close's scan frame itself (the port's close service runs on the frame $A013 falls, three frames after C1/4127).
+    # Leg 29 (the fight from f778): the ball's hit on Lucca, who has 1 HP. The close's walk of the victims finds a PC
+    # (C1/4138), C1/41BE flags the seat the shown damage fells (`$A11A`) on the wipe's frame, and after C1/414B's wait
+    # C1/416D-418B publishes her fallen pose D1:5F42[char * 4 + facing] through C1/1C4A: `$9908` 40 on f1656, two rows
+    # before C1/ED12 writes her HP (f1658, with `STZ $A013`). The port published the pose with the HP write.
+    # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
+    'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
+                           cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
     'fight-poses': dict(leg='119_', start=16200, frames=5900, free=[(16201, 16420), (21440, 21449)],
                         cells=[('7E968C', 3), ('7E9922', 3), ('7EA098', 1), ('7E96DB', 3)]),
     # The 2300 A.D. map, world 1F2: the Epoch sets down (`$0294` = F3, the BG3 visit skipped) with the lead's velocity
