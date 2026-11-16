@@ -409,3 +409,14 @@ carried on by mechanisms that quantise time:
   reason counted in. The windowed pass (best lag in -2..+5) is what separates them; legs 08-34 read so far have one
   sample each that fits no lag (11 f3300 6 px, 12 f2100 14 px, 17 f1800 98 px, 21 f1500 10 px, 32 f7500 48 px, 34 f16800
   148 px): open.
+- **Legs 32 and 21, a sprite's priority is its template's: FIXED (2026-11-16).** The audit's leg 32 f7500 (48 px) and leg
+  21 f1500 (10 px) samples. The pieces' OAM attributes are written with the template; the port read `$0C00,X` /
+  `$0C01,X` live. 32: f7470-f7530 0 px; 21: f1480-f1520 0 px. anim_drain_cad9.md sec. 18. Still open from that batch:
+  the Gate's window edge (legs 11 f3300, 12 f2100: 3-31 px on three frames in eight while it opens), leg 17 f1799-f1800
+  (98 px, two frames), leg 34 f16800 (148 px, a fight).
+- **Leg 17 (the castle, loc 07A), the torches two frames ahead: the tile animation's phase (2026-11-16).** The audit's f1800
+  sample (98 px on f1799-f1800: the flames and the glows under the floor). The room loads on f1541 on both sides; from
+  there the runner's call counter `$051D` is one behind in the port (BC for the cartridge's BD on f1794) with `$0153`
+  equal, so records 0-5 take the other parity and their accumulators (`$05B0`: 2448, 24F4, 25A0) step on f1794 / f1797 /
+  f1801 for the cartridge's f1795 / f1799 / f1803. One call's difference at the load -- the class of legs 58 and 90
+  (the load's own frames). Not proven here from one state; the count is what was measured.

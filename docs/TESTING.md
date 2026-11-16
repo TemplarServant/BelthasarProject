@@ -3503,3 +3503,10 @@ playthrough leg 08, Marle's walk to the stall (`96 19 07`). On the target's tile
 centre with C0/305D, which publishes its own velocity, and re-selects the animation on it (C0/5614): the diagonal
 10 + 10 is a run for a character below 4. The picture on f1190 (`lag=-2`, 222 px before) and four cells over 100
 frames (`$1906`, `$1986`, `$1686`, `$0F07`: 12 steps, 0 differing). One mutation each.
+
+`field-picture-sprite-keeps-its-templates-priority-vs-cartridge` and
+`field-picture-walker-keeps-its-templates-priority-vs-cartridge`: a sprite's pieces keep the OBJ priority their
+template took; a pair the mover changed since shows from the object's next template. Leg 32 f7504: a standing guard
+stays in front of the arch the scroll brings over his head (81 px before). Leg 21 f1500: a follower's feet stay hidden
+four pictures after she left the tile that hid them (10 px). `lag=-2` each; one mutation, shared.
+disasm/notes/anim_drain_cad9.md sec. 18.

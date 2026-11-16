@@ -279,6 +279,13 @@ PICTURES = {
     # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
     # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
     'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
+    # A sprite's pieces keep the priority their template took (`$0C00,X` / `$0C01,X` ORed into each record's attribute, C0/CD47..):
+    # the pair the mover changes since is on the screen from the object's next template. Leg 32 f7504 (the castle's cell
+    # block): the guard stands with his template's priority 3 while the pair reads 20 20, and the camera's scroll brings the
+    # arch over his head -- he stays in front of it (81 px). Leg 21 f1500 (the inn): Lucca steps off a tile whose pair
+    # hides her feet's row; the row stays hidden until her next frame (10 px).
+    'sprite-keeps-its-templates-priority': dict(leg='32_cell', at=0, frames=7504, own=True, lag=-2),
+    'walker-keeps-its-templates-priority': dict(leg='21_inn', at=0, frames=1500, own=True, lag=-2),
     # Leg 08, Leene's Bell (loc 1B7): Marle's `96 19 07` reaches the tile and snaps to its centre (C0/305D). The snap's own
     # velocity is 10 / 10, and the selector the op runs on it (4FA5 JSR C0/5614) reads 10 + 10 = $20 as a RUN for a
     # character below 4: eight pictures of the run's frames (f1187-f1194), then the walk. f1190 (222 px: she walked on).

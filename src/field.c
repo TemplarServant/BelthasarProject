@@ -19483,6 +19483,10 @@ int main(int argc, char** argv) {
         { const uint8_t* w7 = CtSceneMem7E(f.vm);
           tp = (w7[0x0C00 + o * 2] >> 4) & 3;                     // $0C00, the top half
           bp = (w7[0x0C01 + o * 2] >> 4) & 3;                     // $0C01, the bottom half
+          // ...as the object's template took them: the pieces' attributes are the template's (C0/CD47..), so a pair the
+          // mover changed since is on the screen only from the next template (move.c CtAnimShownPrio).
+          { uint8_t tp0, tp1;
+            if (CtSceneFrameLegsOn() && CtAnimShownPrio(o, &tp0, &tp1)) { tp = (tp0 >> 4) & 3; bp = (tp1 >> 4) & 3; } }   // (THE TEMPLATE'S PRIORITY)
           tf = tp == 3; bf = bp == 3; }
         int rstart = 0, rspan = 0, rphase = 0;                 // op-0x88 palette rotation (the Telepod swirl)
         int rot = CtSceneActorPalRot(f.vm, o, &rstart, &rspan, &rphase);

@@ -1010,3 +1010,19 @@ the frame the template last took -- move.c keeps it as the template is written (
 while the object's class and `$1B00,X` say a pass is owed. Check
 field-picture-multi-pass-sprite-shows-its-templates-frame-vs-cartridge. Not played on a compared frame: a class-2
 sprite's two owed passes (Zombor's legs are the attract's; the suite's attract checks are its test).
+
+## 18. ...and the template's PRIORITY (2026-11-16)
+
+The same law for the attribute. Sec. 10 / 13: each record's +7 is the template's -- `$0F81,Y | $0D01,Y` and one of
+`$0C00,Y` / `$0C01,Y` by the piece (class 0: its Y displacement against $E8; classes 1 / 2: pieces 0-3 against the
+rest) -- and the emitters write +0 / +1 only. So the pair the mover's C0/AD90 (or an op 0x8E, or the loader's C0/4C42)
+stores in `$0C00,X` / `$0C01,X` reaches the screen at the object's next template, never before.
+
+MEASURED on the rule's cartridge. Leg 32 (the cell block), f7495-f7504: object 5's pair reads 20 20 and its four OAM
+pieces (--peek's .oam: tiles 168 / 16A / 16C / 16E) carry priority 3; its frame stands, so no template is written, and
+the arch the camera's scroll brings over his head stays behind him (the port: 16 px growing to 81). Leg 21 (the inn),
+f1500-f1503: a follower's feet row at y 191 stays hidden four pictures after she has left the tile that hid it (the
+port: 10 px). field.c's actor loop takes the pair the template took (move.c CtAnimShownPrio, kept in ctAnimTemplate
+with the frame of sec. 17). Checks field-picture-sprite-keeps-its-templates-priority-vs-cartridge and
+field-picture-walker-keeps-its-templates-priority-vs-cartridge. Not done: the LEAD, which the host draws apart from
+the actors' loop with the live pair (its template is the host's own).

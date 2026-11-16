@@ -4909,12 +4909,23 @@ static void ctAnimAppend(uint8_t* r, int idx, int dstBOff, int srcBOff, int lenA
 // FF = no template since the scene's init.
 static uint8_t g_ctAnimShown[64];
 uint8_t CtAnimShownFrame(int obj) { return (obj >= 0 && obj < 64) ? g_ctAnimShown[obj] : 0xFF; }
+// ...and the priority pair its pieces took: each record's attribute (+7) is written by the template alone -- `$0F81,Y |
+// $0D01,Y` and one of `$0C00,Y` / `$0C01,Y` (CD47.. / D4C6..) -- and the emitters store only the position (+0 / +1). So a
+// change of `$0C00,X` / `$0C01,X` (the mover's C0/AD90, op 0x8E) reaches the screen at the object's NEXT template.
+static uint8_t g_ctAnimShownPrio[64][2], g_ctAnimShownOk[64];
+int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1) {
+  if (obj < 0 || obj >= 64 || !g_ctAnimShownOk[obj]) return 0;
+  *p0 = g_ctAnimShownPrio[obj][0]; *p1 = g_ctAnimShownPrio[obj][1];
+  return 1;
+}
 
 static void ctAnimTemplate(uint8_t* r, const uint8_t* rom, int romLen, int idx,
                            int rec, int recBank, int pieces, int recOff, int e8Test, int jumpAt) {
   if (idx >= 0 && idx < 0x80 && !(idx & 1)) g_ctAnimShown[idx >> 1] = r[0x0F01 + idx];   // (THE TEMPLATE'S FRAME)
   int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);   // CCB8 8-bit LDX / CCBA 16-bit LDA / CCBF TAX
   int y16 = r[0x016D] | (r[0x016E] << 8);                // CD2C LDY $6D, Y 16-bit (REP #10 at CCBD)
+  if (idx >= 0 && idx < 0x80 && !(idx & 1)) {            // (THE TEMPLATE'S PRIORITY)
+    g_ctAnimShownPrio[idx >> 1][0] = r[0x0C00 + y16]; g_ctAnimShownPrio[idx >> 1][1] = r[0x0C01 + y16]; g_ctAnimShownOk[idx >> 1] = 1; }
   int tile = r[0x0D00 + y16] & 0xFF;                     // CD2E, an 8-bit load
   int attr = (r[0x0F81 + y16] | r[0x0D01 + y16]) & 0xFF; // CD47-CD4D -> $D9
   for (int e = 0; e < pieces; e++) {
@@ -5666,7 +5677,7 @@ int CtAnimUploadFlush(uint8_t* r, uint8_t* vram) {
 // through the WRAM port ($2180, DP = $2100); only the destinations and values matter here.
 void CtObjSceneInit(uint8_t* r, int nobj) {
   int k;
-  for (k = 0; k < 64; k++) g_ctAnimShown[k] = 0xFF;  // (no template yet: CtAnimShownFrame)
+  for (k = 0; k < 64; k++) { g_ctAnimShown[k] = 0xFF; g_ctAnimShownOk[k] = 0; }   // (no template yet: CtAnimShownFrame / Prio)
   for (k = 0; k < 0x1E; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free
   for (k = 0; k < 8;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes
                                                      //   cleared, though C0/E952 hands out only four

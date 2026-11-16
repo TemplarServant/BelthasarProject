@@ -338,6 +338,8 @@ void CtObjSceneInit(uint8_t* ram, int nobj);
 // The frame object `obj`'s OBJ template holds ($0F01,X when C0/CCB6.. last wrote it), FF if none since the scene's init:
 // what the cartridge draws while a class-1 / class-2 sprite is between its commit and its last staging pass.
 uint8_t CtAnimShownFrame(int obj);
+// ...and the priority pair (`$0C00,X`, `$0C01,X`) that template's pieces took; 0 if none was written since the init.
+int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1);
 // C0/571A-58AA: the location load's per-object default fill, written through the $2180 WRAM port. Thirteen arrays get
 // their initial value per object; $1000,X = 4 clears the op-0x0B pause bit the activate guard C0/5AD1 refuses on.
 // `body16` is the script's 32-byte-per-object fn-pointer table ($7F:2001), used only for the $1180,X fn0 seed; NULL

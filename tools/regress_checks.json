@@ -53688,6 +53688,74 @@
       ]
     },
     {
+      "name": "field-picture-sprite-keeps-its-templates-priority-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "sprite-keeps-its-templates-priority"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: sprite-keeps-its-templates-priority leg 32 +7504 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: sprite-keeps-its-templates-priority "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a standing sprite keeps the priority its template took, as on the cartridge: the guard stays in front of the arch the scroll brings over him",
+      "notes": "A SPRITE'S PRIORITY ON THE SCREEN IS ITS TEMPLATE'S. Each piece's OAM attribute (the record's +7) is written by the anim drain's template alone -- `$0F81,Y | $0D01,Y` ORed with `$0C00,Y` or `$0C01,Y` (C0/CD47.., D4C6..: anim_drain_cad9.md sec. 10, 13) -- and the draw pass's emitters store only the position (+0 / +1). So when the mover (C0/AD90) or an op 0x8E changes an object's pair, the screen keeps the old priority until that object's next template: the next animation frame the drain serves. The port read the live pair at every draw. MEASURED on the rule's cartridge, playthrough leg 32 (the cell block), f7495-f7504: object 5's pair `$0C0A` / `$0C0B` reads 20 20 (behind the BG's priority tiles) while its four OAM pieces (tiles 168-16E, at (118,94) (122,78) (122,110) (134,94)) carry priority 3; nothing re-templates it (its frame stands), and as the camera follows the lead the arch scrolls down over his head -- he stays in front of it. The port drew him behind (16 px growing to 81 over ten frames). Graded on f7504 at the field's lag (`lag=-2`). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            if (CtSceneFrameLegsOn() && CtAnimShownPrio(o, &tp0, &tp1)) { tp = (tp0 >> 4) & 3; bp = (tp1 >> 4) & 3; } }   // (THE TEMPLATE'S PRIORITY)",
+          "replace": "            (void)tp0; (void)tp1; }   /* MUT: the live pair */",
+          "why": "the pieces' attributes are the template's; the emitters do not rewrite them"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-walker-keeps-its-templates-priority-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "walker-keeps-its-templates-priority"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: walker-keeps-its-templates-priority leg 21 +1500 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: walker-keeps-its-templates-priority "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a walking follower keeps the priority its template took until its next animation frame, as on the cartridge",
+      "notes": "A SPRITE'S PRIORITY ON THE SCREEN IS ITS TEMPLATE'S. Each piece's OAM attribute (the record's +7) is written by the anim drain's template alone -- `$0F81,Y | $0D01,Y` ORed with `$0C00,Y` or `$0C01,Y` (C0/CD47.., D4C6..: anim_drain_cad9.md sec. 10, 13) -- and the draw pass's emitters store only the position (+0 / +1). So when the mover (C0/AD90) or an op 0x8E changes an object's pair, the screen keeps the old priority until that object's next template: the next animation frame the drain serves. The port read the live pair at every draw. Playthrough leg 21 (the Truce Inn), f1500-f1503: Lucca, following, has walked off a tile whose pair puts her feet's pieces behind the floor's edge; on the cartridge the row of her feet at y 191 stays hidden until her next animation frame is staged, in the port it showed at once (10 px on four pictures). Graded on f1500 at the field's lag (`lag=-2`). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            if (CtSceneFrameLegsOn() && CtAnimShownPrio(o, &tp0, &tp1)) { tp = (tp0 >> 4) & 3; bp = (tp1 >> 4) & 3; } }   // (THE TEMPLATE'S PRIORITY)",
+          "replace": "            (void)tp0; (void)tp1; }   /* MUT: the live pair */",
+          "why": "the pieces' attributes are the template's; the emitters do not rewrite them"
+        }
+      ]
+    },
+    {
       "name": "leg-window-tile-snap-anim-vs-cartridge",
       "argv": [
         "python",
