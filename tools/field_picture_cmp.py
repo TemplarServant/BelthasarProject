@@ -262,6 +262,10 @@ PICTURES = {
     'enemy-afterimage-is-drawn': dict(leg='91_flea', at=0, frames=69900, own=True),
     # Leg 95 (Magus's fight), action `$9877` 9F: Magus's shadow in OBJ palette 5 (`$9F46` bit 3, CD/1B8B), f14400.
     'shadow-in-palette-5-is-drawn': dict(leg='95_magus', at=0, frames=14400, own=True),
+    # The same fight, Magus's fire (f17340-f17406): lines 0-160 run TM 17 TS 13 TMW 17 TSW 00 CGWSEL 02 CGADSUB 04 with no
+    # window enabled on any layer (W12SEL / W34SEL / WOBJSEL 00), so TMW masks nothing and the sub screen is the main
+    # screen less BG3: the bursts are added over the hall and the party. f17380.
+    'fire-adds-where-no-window-is-on': dict(leg='95_magus', at=600, frames=16780, own=True),
     # Leg 29 (the fight from f778): the ball's chosen victim fell; C1/8DE4's re-draw makes Marle the script's target too.
     'redrawn-victim-is-the-scripts-target': dict(leg='29_gate_home', at=0, frames=1800, own=True),
     # Leg 110 (the fight from f20536, run away): the run-off's end reloads no gauge -- seat 0's stays full (f21000).

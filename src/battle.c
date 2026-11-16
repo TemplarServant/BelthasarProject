@@ -18683,6 +18683,20 @@ void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, c
 // leg 137 (the summit's fight), action `$9877` 84: lines 65-153 run TM 17 TS 10 CGWSEL 02 CGADSUB 04 BGMODE 49 with
 // W34SEL 0F on op 8B's circle, and the cartridge shows BG3's purple disc over the party, each sprite added into it
 // (f4585-f4715); the port left such lines out of the compose and drew no disc (up to 6353 px a picture).
+// The sub screen is the main screen less BG3 (the Ice sword's crystal, battle_effect_orbit.md sec. 10): the same layers
+// on both (`TS & 1B` = `TM & 1B`, BG3 on the main one only), BG3's math alone (CGADSUB bits 0-1, 3-5 clear) adding the sub
+// screen -- and the two screens windowed alike. A layer's TMW / TSW bit masks it only where one of its windows is on
+// (ppu_getWindowState: W12SEL's enables for BG1 / BG2, W34SEL's for BG4, WOBJSEL's for OBJ; none -> never inside), so the
+// bits compared are those layers' alone. MEASURED on the rule's cartridge, playthrough leg 95 (Magus's fire, f17340-f17406):
+// lines 0-160 run TM 17 TS 13 TMW 17 TSW 00 CGWSEL 02 CGADSUB 04 with W12SEL / W34SEL / WOBJSEL all 00, and BG3's bursts
+// are added over the hall and the party; comparing the raw masks, the port left those lines out (up to 11171 px a
+// picture, 34 pictures).
+static int battleFxSubRest(int TM, int TS, int TMW, int TSW, int cgwsel, int cgadsub, const uint8_t* ws) {
+  const int won = ((ws[0] & 0x0A) ? 0x01 : 0) | ((ws[0] & 0xA0) ? 0x02 : 0) | ((ws[1] & 0xA0) ? 0x08 : 0)
+                | ((ws[2] & 0x0A) ? 0x10 : 0);                    // (THE LAYERS A WINDOW IS ON)
+  return (cgwsel & 0x02) && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B & won)
+         && !(cgadsub & 0x3B);
+}
 static int battleFxSubObjOnly(int TS, int TSW, int cgwsel, int cgadsub, const uint8_t* ws) {
   return (cgwsel & 0x02) && (TS & 0x1F) == 0x10 && !(cgadsub & 0x3B) && !((TSW & 0x10) && (ws[2] & 0x0A));
 }
@@ -18694,8 +18708,7 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
     const int TM = R->TM, TS = R->TS, TMW = R->TMW, TSW = R->TSW, cgwsel = R->cgwsel, cgadsub = R->cgadsub;
     const int fixR = R->fixR, fixG = R->fixG, fixB = R->fixB, hs3 = R->hs3, vs3 = R->vs3; const uint8_t* reg = R->reg;
     int bg3Main = (TM & 0x04) != 0, addSub = (cgwsel & 0x02) != 0;
-    int subRest = addSub && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B)
-                  && !(cgadsub & 0x3B);
+    int subRest = battleFxSubRest(TM, TS, TMW, TSW, cgwsel, cgadsub, ws);
     int subObj = battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws);   // the sub screen is the sprites alone (below)
     if (!(cgadsub & 0x3F) && !bg3Main) return;                     // no math, no BG3 on this line: the arena stands
     int sub3 = (TS & 0x04) != 0, win3M = (TMW & 0x04) != 0, win3S = (TSW & 0x04) != 0;
@@ -18856,8 +18869,7 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
              cgwsel, cgadsub, fixR, fixG, fixB, reg[0x26], reg[0x27], reg[0x28], reg[0x29], reg[0x09], hs3, vs3, reg[0x05],
              ws[0], ws[1], ws[2], ws[3], ws[4]);
     int bg3Main = (TM & 0x04) != 0, addSub = (cgwsel & 0x02) != 0;
-    int subRest = addSub && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B)
-                  && !(cgadsub & 0x3B);                            // the sub screen = the main screen less BG3 (above)
+    int subRest = battleFxSubRest(TM, TS, TMW, TSW, cgwsel, cgadsub, ws);   // the sub screen = the main screen less BG3
     // Whose line this is: the effect's own registers reach a line only through the shadow blocks the programs write:
     // channel 4's entry at $BE8D (D1/E7AF's TM TS TMW TSW) and channel 5's at $BE95 (CGWSEL CGADSUB COLDATA SETINI), or
     // for a per-line colour ramp the records a program's `80 00` / `80 10` writes at $BB05..$BC84 (four bytes a line,

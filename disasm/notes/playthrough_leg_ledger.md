@@ -387,3 +387,5 @@ carried on by mechanisms that quantise time:
   **What this says about the route:** it is ONE way through the game. Where the game branches on what the player does
   (a minigame won or lost, a choice in a box, an optional fight) only the branch the route took is exercised. Branch
   legs are the tool for the others; none but 47b exists yet.
+- **Leg 95, Magus's fire (f17340-f17406): fixed 2026-11-15.** The bursts were not added over the hall (up to 11171 px,
+  34 pictures): the effect's window masks compared raw where no window is on. 0 px now. battle_effect_orbit.md.

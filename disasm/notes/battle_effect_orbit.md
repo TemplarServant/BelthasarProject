@@ -438,3 +438,14 @@ main screen less BG3 (sec. 10), so the port drew no disc (up to 6353 px). battle
 case (CGADSUB on BG3 only, no OBJ window on the sub screen): a front pixel is marked 3 in gBattleFxFront and
 CtBattleFxFrontApply adds the sprite field.c drew there (objPal), or the fixed colour. Check
 field-picture-bg3-disc-adds-the-sprites-under-it-vs-cartridge.
+
+### The window masks count only where a window is on (2026-11-15)
+
+Sec. 10's shortcut -- a sub screen that is the main screen less BG3 -- asked for TSW == TMW on the four other layers.
+A TMW / TSW bit masks its layer only inside the layer's window, and a layer with no window enabled is never inside
+(ppu_getWindowState: W12SEL bits 1 / 3 for BG1, 5 / 7 for BG2; W34SEL 5 / 7 for BG4; WOBJSEL 1 / 3 for OBJ). MEASURED
+on the rule's cartridge, playthrough leg 95, Magus's fire (f17340-f17406): lines 0-160 are TM 17 TS 13 TMW 17 TSW 00
+CGWSEL 02 CGADSUB 04, W12SEL / W34SEL / WOBJSEL 00 -- the masks differ and mask nothing; BG3's bursts are added over
+the hall and the party. The port gave the shortcut up and left the lines unadded (up to 11171 px a picture, 34
+pictures). battle.c battleFxSubRest compares the masks of the layers a window is on. Check
+field-picture-fire-adds-where-no-window-is-on-vs-cartridge.

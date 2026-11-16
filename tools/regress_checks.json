@@ -53586,6 +53586,40 @@
       ]
     },
     {
+      "name": "field-picture-fire-adds-where-no-window-is-on-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fire-adds-where-no-window-is-on"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fire-adds-where-no-window-is-on leg 95 f600 +16780 frames of the leg's pad: 0 px differ at port +0"
+      ],
+      "pin": [
+        "^fieldpicture: fire-adds-where-no-window-is-on "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Magus's fire is added over the hall and the party, as on the cartridge: a layer's window mask counts only where one of its windows is on",
+      "notes": "A LAYER'S TMW / TSW BIT MASKS IT ONLY WHERE ONE OF ITS WINDOWS IS ENABLED (ppu_getWindowState: W12SEL for BG1 / BG2, W34SEL for BG4, WOBJSEL for OBJ; none enabled -> the pixel is never inside). The effect drawer's shortcut for a sub screen that is the main screen less BG3 (battle_effect_orbit.md sec. 10) compared the raw masks TMW / TSW and gave the shortcut up when they differed. MEASURED on the rule's cartridge, playthrough leg 95 (Magus's fire, f17340-f17406): lines 0-160 run TM 17 TS 13 TMW 17 TSW 00 CGWSEL 02 CGADSUB 04 with W12SEL / W34SEL / WOBJSEL all 00 -- no window on any layer, so the two screens are windowed alike and BG3's bursts are added over the hall and the party; the port left those lines out (6069 px of f17380, up to 11171 on the 34 pictures). battle.c battleFxSubRest compares the masks of the layers that have a window on. Played from the leg's f600, graded on f17380. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  return (cgwsel & 0x02) && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B & won)",
+          "replace": "  (void)won; return (cgwsel & 0x02) && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B)   /* MUT: the raw masks */",
+          "why": "TMW 17 against TSW 00 with no window enabled masks nothing on either screen"
+        }
+      ]
+    },
+    {
       "name": "field-picture-naming-portrait-of-the-epoch-vs-cartridge",
       "argv": [
         "python",

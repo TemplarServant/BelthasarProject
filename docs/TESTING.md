@@ -3487,3 +3487,8 @@ mutations between them. disasm/notes/sequence_table.md sec. 12, "The WIN".
 task or a hook it has no `case` for, silently; this lists every one the race's overlay code and scripts CAN install
 (the list routines' callers in $7E:3B48-$53BA, the scripts' `taskadd` / `hookadd`), played or not, and requires a case
 for each: 20 tasks, 8 hooks, 0 without. One mutation (the run-out's case removed).
+
+`field-picture-fire-adds-where-no-window-is-on-vs-cartridge`: playthrough leg 95, Magus's fire on f17380 (played from
+the leg's f600). The effect's lines run TMW 17 against TSW 00 with no window enabled on any layer, so neither mask
+hides anything and the sub screen is the main screen less BG3: the bursts are added over the hall and the party
+(6069 px before). `0 px`; one mutation (the raw masks compared). disasm/notes/battle_effect_orbit.md sec. 10.
