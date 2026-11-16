@@ -185,3 +185,20 @@ field-picture-overworld-followers-after-an-event-vs-cartridge.
 
 Not ROM, noticed on the way: obAnimRun increments the block's +3E on every tick (`OWOBJ_ANIMCTR`, kept for the old
 captured-atlas boat's frame picker); the cartridge leaves that byte alone (`$0E6E` 00 for the port's 01, 02, 03 ...).
+
+## 8. The frame the lead takes an entrance (2026-11-16)
+
+C2/35E5 is the handler's own store: `LDA $1B32 / BMI` (no entrance under the lead: on with the pad), then 35EA
+`SEP #20 / LDA #03 / STA $027C / BRA ->35B3`. The followers' blocks come after the lead's, and C2/3B1B reads `$027C`
+first: on the frame A takes the entrance they get the stand and the tick, no step.
+
+MEASURED on the rule's cartridge, playthrough leg 76 (world 1F3: the lead $0D30, the followers $0D70 / $0DB0, both in
+phase 3): `$027C` 01 -> 03 on f593; `$0D88` / `$0DC8` 02B4 / 02A4, 02B5 / 02A5, 02B6 / 02A6 on f590-f592 and 02B6 /
+02A6 from there; +28 81 -> 01 and the script `$0D7B` C3:E160 -> C3:E14C on f593. The port's visit only recorded the
+request and the main loop stored the 3 after the pass: 02B7 / 02A7, the walk's pose a frame longer (192 px on every
+picture of the fade). field.c owLeadSlotVisit stores it when the main loop will take the entrance (the record decodes
+to a location and the host's own debounce is over).
+
+Checks: leg-window-overworld-exit-stops-the-followers-vs-cartridge,
+field-picture-overworld-followers-stand-on-the-exit-frame-vs-cartridge. Not derived: the host's 20-frame debounce
+(`owEnterCd`) itself -- what the cartridge has in its place after a world load.

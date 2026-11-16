@@ -283,6 +283,16 @@ PICTURES = {
     # leaves the request counter `$CA24` alone, so a leftover there makes the first V-IRQ install preset 08 + `$CA22`.
     # Without the store the leftover base (29) installed preset 2A: the room's top 88 lines torn for the boot (5774 px).
     'fight-boot-installs-its-own-hdma-preset': dict(leg='51_security', at=570, frames=30, own=True, lag=-1),
+    # ...and the same fight's palettes. The field's staging copies the base page onto the live page the frame before the
+    # module's init (C0/0409, f584: the room's lights at their base colour on pictures f586 / f587 -- 304 px without it),
+    # and the boot's stager copies it again only when the song's upload is over (CC/E6EC, f622: pictures f624-f627, where
+    # the room's colour record had just written its 4701 -- 300 px with the copy made at the entry).
+    'fight-staging-puts-the-base-palette-back': dict(leg='51_security', at=570, frames=16, own=True, lag=-1),
+    'fight-boot-palettes-wait-for-the-upload': dict(leg='51_security', at=570, frames=55, own=True, lag=-1),
+    # Leg 56 begins inside the End of Time's back room (loc 1D1), whose master picks his sprite from the lead's level
+    # (object 10's fn0: `83 E0` up to level 9, `83 E1` to 19, ..). The state says `$1114` / `$1115` = 06 E1; a seed that
+    # kept the sprite its own run of fn0 chose -- on a fresh cartridge's levels -- drew E0 (505-623 px on every picture).
+    'seeded-object-keeps-its-sprite': dict(leg='56_medina_gate', at=0, frames=300, own=True, lag=-2),
     # Leg 61, Truce Canyon's fight (from f2387): until the fight's first compose is uploaded the OAM is the field's, and
     # so is each cell's OBJ priority -- object 11's cells read attribute 22 (priority 2) on f2387-f2447 and 32 from f2448.
     # The enemy's wing stays behind the foliage's priority tiles for the boot's 60 pictures (62 px a picture in front).

@@ -50917,7 +50917,7 @@
         "tools/rom_free_gate.py"
       ],
       "expect": [
-        "rom-free-gate: f11200 5601 thumbnails and 6029928 output samples identical with no dump; 0 pages of the empty image read (sha1 b4c216c3c99f)"
+        "rom-free-gate: f11200 5601 thumbnails and 6029928 output samples identical with no dump; 0 pages of the empty image read (sha1 347c5d9c1bd9)"
       ],
       "pin": [
         "^rom-free-gate: "
@@ -54166,6 +54166,284 @@
           "find": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0)) {   // (THE EVENT'S LAST FRAME IS THE WALK'S FIRST)",
           "replace": "    if (cls == 0x3404 && (ram[0x027E] != 0 || ram[0x0280] != 0 || ram[0x0281] != 0)) {   /* MUT: the walk a frame late */",
           "why": "C2/3449 dispatches on `$0280` and the phase; `$0281` only zeroes the phase (3419), and C2/34F8 falls into the input frame"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-overworld-exit-stops-the-followers-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "overworld-exit-stops-the-followers"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: overworld-exit-stops-the-followers leg 76 f560+45: 27 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: overworld-exit-stops-the-followers "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the overworld's followers stop on the frame the lead takes an entrance, as on the cartridge",
+      "notes": "THE EXIT'S STATE IS STORED IN THE LEAD'S SLOT. On the overworld, A held on an entrance is read on the lead's input frame (C2/3577 `BIT #0080` -> C2/35E5 `LDA $1B32 / BMI`) and the handler stores the main loop's state itself: 35EA `SEP #20 / LDA #03 / STA $027C / BRA ->35B3`. The lead's block comes before the followers' in the pass, and their handler's first test is that byte (C2/3B1B: `$027C` neither 0 nor 1 -> +28 &= $7F, the stand's script, the tick), so on that very frame they stop. The port recorded the request in the visit and stored the 3 after the pass: the followers took one more pixel in the walk's pose. MEASURED on the rule's cartridge, playthrough leg 76 (world 1F3; blocks $0D30 the lead, $0D70 / $0DB0 the followers): `$027C` 01 -> 03 on f593; the followers' Y `$0D88` / `$0DC8` 02B4, 02B5, 02B6 on f590-f592 and 02B6 from there on (the port: 02B7 / 02A7); their +28 `$0D98` / `$0DD8` 81 -> 01 and the script pointer `$0D7B` C3:E160 -> C3:E14C on f593 (the port: f594). field.c: the visit stores `$027C` when the main loop will take the entrance. THE WINDOW: leg 76 f560 + 45, `$027C`, the two followers' Y and their +28: 27 steps, 0 differing. RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        ram[0x027C] = 0x03; up = down = left = right = 0; } }   // 35EC LDA #03 / STA $027C (THE EXIT IS THE LEAD'S)",
+          "replace": "        (void)en; } }   /* MUT: the 3 is stored after the pass */",
+          "why": "C2/35EA LDA #03 / STA $027C is in the lead's input frame: the blocks after it read 3 in the same pass"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-overworld-followers-stand-on-the-exit-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "overworld-followers-stand-on-the-exit-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: overworld-followers-stand-on-the-exit-frame leg 76 +600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: overworld-followers-stand-on-the-exit-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the party stands as on the cartridge through the fade of an overworld entrance",
+      "notes": "THE EXIT'S STATE IS STORED IN THE LEAD'S SLOT. On the overworld, A held on an entrance is read on the lead's input frame (C2/3577 `BIT #0080` -> C2/35E5 `LDA $1B32 / BMI`) and the handler stores the main loop's state itself: 35EA `SEP #20 / LDA #03 / STA $027C / BRA ->35B3`. The lead's block comes before the followers' in the pass, and their handler's first test is that byte (C2/3B1B: `$027C` neither 0 nor 1 -> +28 &= $7F, the stand's script, the tick), so on that very frame they stop. The port recorded the request in the visit and stored the 3 after the pass: the followers took one more pixel in the walk's pose. MEASURED on the rule's cartridge, playthrough leg 76 (world 1F3; blocks $0D30 the lead, $0D70 / $0DB0 the followers): `$027C` 01 -> 03 on f593; the followers' Y `$0D88` / `$0DC8` 02B4, 02B5, 02B6 on f590-f592 and 02B6 from there on (the port: 02B7 / 02A7); their +28 `$0D98` / `$0DD8` 81 -> 01 and the script pointer `$0D7B` C3:E160 -> C3:E14C on f593 (the port: f594). field.c: the visit stores `$027C` when the main loop will take the entrance. THE PICTURE: leg 76 f600, inside the exit's fade, at the overworld's lag (`lag=-1`): 0 px (192 before, the followers a pixel on). f570-f611, every frame: 0 px. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        ram[0x027C] = 0x03; up = down = left = right = 0; } }   // 35EC LDA #03 / STA $027C (THE EXIT IS THE LEAD'S)",
+          "replace": "        (void)en; } }   /* MUT: the 3 is stored after the pass */",
+          "why": "C2/35EA LDA #03 / STA $027C is in the lead's input frame: the blocks after it read 3 in the same pass"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fight-boot-keeps-the-fields-priority-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fight-boot-keeps-the-fields-priority"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fight-boot-keeps-the-fields-priority leg 61 f2360 +40 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: fight-boot-keeps-the-fields-priority "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "through a fight's boot the sprites keep the OBJ priority the field gave them, as on the cartridge",
+      "notes": "THE BOOT'S PICTURES ARE THE FIELD'S OAM, PRIORITY AND ALL. Until the fight's first compose is uploaded the hardware OAM is the field's last (battle_sprite_zorder.md, 'The boot'): the port had its ORDER right (battleFieldOamOrder) and gave the cells the fight's priority -- `$99B5 + cmb`, CC/E3F9's copy of `$A5E3 = ($2989 & 10) | 20` (CF/FBAE) -- which reaches OAM only through the compose (CF/EB46 `AND #C1FF / ORA $36`). MEASURED on the rule's cartridge, playthrough leg 61 (Truce Canyon's fight, from f2387): OAM 44-51, field object 11's cells (tiles 040-04E), read attribute 22 (OBJ priority 2) on f2387-f2447; `$A5E3` and `$99B5..` take 30 on f2442; the compose's first store is on f2446 (CF:EB60) and on f2448 the same tiles sit at entries 4-11 with attribute 32. The enemy's wing is behind the foliage's priority tiles for the boot's 60 pictures and in front from f2448; the port drew it in front throughout (62 px a picture). field.c battleCmbObjPrio: inside the field-OAM window a combatant's priority is the pair its field object's last template took (move.c CtAnimShownPrio; the saved page's `$0C00,X` otherwise). The state is cut on f2360; graded on f2400 at the fight's lag (`lag=-1`). f2388-f2447, every frame: 0 px. NOT MEASURED: an object whose two halves carry different priorities through a boot (the port keeps one a combatant). Found by a triage subagent, confirmed here. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      return (p0 >> 4) & 3;                             // (THE BOOT KEEPS THE FIELD'S PRIORITY)",
+          "replace": "      (void)p0; return (mem[0x99B5 + cmb] >> 4) & 3;   /* MUT: the fight's priority from the first picture */",
+          "why": "the fight's priority reaches OAM through the compose alone; the boot shows the field's attributes"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fight-boot-installs-its-own-hdma-preset-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fight-boot-installs-its-own-hdma-preset"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fight-boot-installs-its-own-hdma-preset leg 51 f570 +30 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: fight-boot-installs-its-own-hdma-preset "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fight entered with a leftover HDMA request installs the boot's own preset, as on the cartridge",
+      "notes": "THE BOOT STORES ITS PRESET BASE. The fight module's init D1/F1DF ends `D1/F290 LDA #08 / STA $CA25` -- the base the V-IRQ's preset service adds to (D1/FE4C: `$CA21` against `$CA22`, else `LDA $CA24 / BEQ` out; D1/FE5E `LDA $CA25 / ADC $CA22 / ADC $CCEC / JSL CE:EE6E / STZ $CA24`) -- and does not clear the request counter `$CA24` (D1/F1F7 is `STZ $CA23`). The port took the init's other bytes and left `$CA25` to 'the band's own staging'. MEASURED on the rule's cartridge, playthrough leg 51 (the factory, the fight from f585): `$CA24` / `$CA25` read 3A / 29 before it, leftovers of the field's tilemap builders in `$7E:C800-$CFFF`; on f585 `$CA25` = 08 (D1:F295) and the service installs preset 08 + 01 = 09, the closed band's tables (`$C867` = 70 85 BC 64 85 BC 00). The port's service added the leftover: preset 29 + 01 = 2A, whose 'tables' are thirty bytes of something else (`$C867` = 35 7A AF 02 1E 31 23 ..) in each of the nine header tables -- the top 88 lines of the room torn on every picture of the boot, f589-f623 (5774 px each), until the band's open arm reinstalled them (CD/05D4, f627). It needs a non-zero leftover in `$CA24`, so most fights never showed it. The state is cut on f570; graded on f600 at the fight's lag (`lag=-1`). f586-f623: 0 px. Found by a triage subagent (its poke of `$CA25` = 08 gave the same pictures), confirmed here. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    m[0xCA25] = 0x08;                                               // (THE BOOT'S PRESET BASE)",
+          "replace": "    /* MUT: the preset base keeps the field's leftover */",
+          "why": "D1/F290 LDA #08 / STA $CA25"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-fight-boot-palette-copies-land-on-their-frames-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "fight-boot-palette-copies-land-on-their-frames"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: fight-boot-palette-copies-land-on-their-frames leg 51 f570+60: 15 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: fight-boot-palette-copies-land-on-their-frames "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "entering a fight the base palette page is copied onto the live page on the cartridge's two frames",
+      "notes": "TWO COPIES OF THE BASE PALETTE PAGE, EACH ON ITS FRAME. Entering a fight the cartridge copies `$7E:2000-$21FF` onto the live page `$2200` twice: the field's staging does it at the tail of C0/039B (C0/0409 `LDX #2000 / LDY #2200 / LDA #01FF / MVN $7E,$7E`, in C0/038F, the iteration that ends at C0/18A4), and the boot's stager does it again (C1/0023 `JSL CC/E2E4`: CC/E6B7-E6EC, then the weapon colours CC/E710-E753 and CC/ED87's `$235A` / `$237A`) -- but the boot reaches C1/0023 only after CF/FB8E's `JSL CD/0000` returns, that is after the song's upload inside the module's init. Between the two the fight's NMI keeps uploading the live page and FD/E39C keeps stepping the room's colour records on it. The port had ONE copy, CC/E6EC's, made in CtBattleBegin at the entry with every other palette store of the boot. MEASURED on the rule's cartridge, playthrough leg 51 (the factory; `--monitor 7E229E:2 --writer` from f570): op D8 on f581, `$229E` F106 on f582 (the record, FD:E475), B607 -- the base's -- on f584 by C0:0416, the module's init on f585; the record steps every four frames (B607, F106, 0C02, 4701, 0C02, F106, B607, F106, 0C02) and writes 4701 on f622, where the stager's copy puts B607 back; `$2010` 0000 630C C618 9C73, `$235A` 3C6B 343A D65A and `$237A` 9415 181E FF32 -- the field's -- through f621 and 0000 8314 514A FF7F / FF7F DF02 C90C / FF7F 2B7E 0310 from f622. The port: the boot's colours from the entry (OBJ rows 2 and 3's colours 13-15 under the field's sprites for the whole upload), the lights' entry not put back on f584 (304 px on pictures f586 / f587 once the entry's copy is gone; one picture, f585, with it) and the record's 4701 left for four pictures (f624-f627, 300 px each). battle.c: battleBootPalettes on battleBootResumeFrame (the arm - 4 under the rule: `$98CA` reads 1-4 on the frames between), the staging's copy on tick 1. Leg 51 f584-f640, every frame: 0 px. THE WINDOW: leg 51 f570 + 60, `$229E`, `$2010` x8, `$235A` x6, `$237A` x6: 15 steps, 0 differing. NOT IN IT: the boot's other WRAM, which the port still writes at the entry (`$999F` 00 from f583 for the cartridge's 80 to f621) -- CtBattleBegin is not split at the upload. RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->frames == 1) memcpy(h->mem + 0x2200, h->mem + 0x2000, 0x200);   // (THE STAGING'S PAGE)",
+          "replace": "  /* MUT: the staging makes no copy */",
+          "why": "C0/0409 LDX #2000 / LDY #2200 / LDA #01FF / MVN: the staging's copy, the frame before the module's init"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->frames == battleBootResumeFrame(h)) battleBootPalettes(h);",
+          "replace": "  if (h->frames == 1) battleBootPalettes(h);   /* MUT: the boot's palettes at the entry */",
+          "why": "C1/0023 JSL CC/E2E4 runs after CF/FB8E's JSL CD/0000 returns: after the song's upload"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fight-staging-puts-the-base-palette-back-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fight-staging-puts-the-base-palette-back"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fight-staging-puts-the-base-palette-back leg 51 f570 +16 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: fight-staging-puts-the-base-palette-back "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the room's animated colours are at their base on the fight's first pictures, as on the cartridge",
+      "notes": "TWO COPIES OF THE BASE PALETTE PAGE, EACH ON ITS FRAME. Entering a fight the cartridge copies `$7E:2000-$21FF` onto the live page `$2200` twice: the field's staging does it at the tail of C0/039B (C0/0409 `LDX #2000 / LDY #2200 / LDA #01FF / MVN $7E,$7E`, in C0/038F, the iteration that ends at C0/18A4), and the boot's stager does it again (C1/0023 `JSL CC/E2E4`: CC/E6B7-E6EC, then the weapon colours CC/E710-E753 and CC/ED87's `$235A` / `$237A`) -- but the boot reaches C1/0023 only after CF/FB8E's `JSL CD/0000` returns, that is after the song's upload inside the module's init. Between the two the fight's NMI keeps uploading the live page and FD/E39C keeps stepping the room's colour records on it. The port had ONE copy, CC/E6EC's, made in CtBattleBegin at the entry with every other palette store of the boot. MEASURED on the rule's cartridge, playthrough leg 51 (the factory; `--monitor 7E229E:2 --writer` from f570): op D8 on f581, `$229E` F106 on f582 (the record, FD:E475), B607 -- the base's -- on f584 by C0:0416, the module's init on f585; the record steps every four frames (B607, F106, 0C02, 4701, 0C02, F106, B607, F106, 0C02) and writes 4701 on f622, where the stager's copy puts B607 back; `$2010` 0000 630C C618 9C73, `$235A` 3C6B 343A D65A and `$237A` 9415 181E FF32 -- the field's -- through f621 and 0000 8314 514A FF7F / FF7F DF02 C90C / FF7F 2B7E 0310 from f622. The port: the boot's colours from the entry (OBJ rows 2 and 3's colours 13-15 under the field's sprites for the whole upload), the lights' entry not put back on f584 (304 px on pictures f586 / f587 once the entry's copy is gone; one picture, f585, with it) and the record's 4701 left for four pictures (f624-f627, 300 px each). battle.c: battleBootPalettes on battleBootResumeFrame (the arm - 4 under the rule: `$98CA` reads 1-4 on the frames between), the staging's copy on tick 1. Leg 51 f584-f640, every frame: 0 px. THE PICTURE: leg 51 f586 at the fight's lag (`lag=-1`), the first picture after the staging's copy: 0 px (304 without the copy). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->frames == 1) memcpy(h->mem + 0x2200, h->mem + 0x2000, 0x200);   // (THE STAGING'S PAGE)",
+          "replace": "  /* MUT: the staging makes no copy */",
+          "why": "C0/0409 LDX #2000 / LDY #2200 / LDA #01FF / MVN: the staging's copy, the frame before the module's init"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-fight-boot-palettes-wait-for-the-upload-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "fight-boot-palettes-wait-for-the-upload"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: fight-boot-palettes-wait-for-the-upload leg 51 f570 +55 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: fight-boot-palettes-wait-for-the-upload "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the boot's palette stores wait for the song's upload, as on the cartridge",
+      "notes": "TWO COPIES OF THE BASE PALETTE PAGE, EACH ON ITS FRAME. Entering a fight the cartridge copies `$7E:2000-$21FF` onto the live page `$2200` twice: the field's staging does it at the tail of C0/039B (C0/0409 `LDX #2000 / LDY #2200 / LDA #01FF / MVN $7E,$7E`, in C0/038F, the iteration that ends at C0/18A4), and the boot's stager does it again (C1/0023 `JSL CC/E2E4`: CC/E6B7-E6EC, then the weapon colours CC/E710-E753 and CC/ED87's `$235A` / `$237A`) -- but the boot reaches C1/0023 only after CF/FB8E's `JSL CD/0000` returns, that is after the song's upload inside the module's init. Between the two the fight's NMI keeps uploading the live page and FD/E39C keeps stepping the room's colour records on it. The port had ONE copy, CC/E6EC's, made in CtBattleBegin at the entry with every other palette store of the boot. MEASURED on the rule's cartridge, playthrough leg 51 (the factory; `--monitor 7E229E:2 --writer` from f570): op D8 on f581, `$229E` F106 on f582 (the record, FD:E475), B607 -- the base's -- on f584 by C0:0416, the module's init on f585; the record steps every four frames (B607, F106, 0C02, 4701, 0C02, F106, B607, F106, 0C02) and writes 4701 on f622, where the stager's copy puts B607 back; `$2010` 0000 630C C618 9C73, `$235A` 3C6B 343A D65A and `$237A` 9415 181E FF32 -- the field's -- through f621 and 0000 8314 514A FF7F / FF7F DF02 C90C / FF7F 2B7E 0310 from f622. The port: the boot's colours from the entry (OBJ rows 2 and 3's colours 13-15 under the field's sprites for the whole upload), the lights' entry not put back on f584 (304 px on pictures f586 / f587 once the entry's copy is gone; one picture, f585, with it) and the record's 4701 left for four pictures (f624-f627, 300 px each). battle.c: battleBootPalettes on battleBootResumeFrame (the arm - 4 under the rule: `$98CA` reads 1-4 on the frames between), the staging's copy on tick 1. Leg 51 f584-f640, every frame: 0 px. THE PICTURE: leg 51 f625 (`lag=-1`), inside the four pictures after the stager's copy: 0 px (300 with the boot's palettes written at the entry). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->frames == battleBootResumeFrame(h)) battleBootPalettes(h);",
+          "replace": "  if (h->frames == 1) battleBootPalettes(h);   /* MUT: the boot's palettes at the entry */",
+          "why": "C1/0023 JSL CC/E2E4 runs after CF/FB8E's JSL CD/0000 returns: after the song's upload"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-seeded-object-keeps-its-sprite-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "seeded-object-keeps-its-sprite"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: seeded-object-keeps-its-sprite leg 56 +300 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: seeded-object-keeps-its-sprite "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a scene seeded from a cartridge state draws each object with the sprite the state names",
+      "notes": "THE TEST SURFACE, NOT THE GAME: the WRAM seed (ct_vm.c CtSceneSeedFromWram, behind --loadwram) builds the scene by running every object's fn0 on a FRESH cartridge's `$7E` and then lays the state over it; the sprite an object's load op chose in that run stayed. A scene that picks a sprite from `$7E` -- loc 1D1's master, object 10: the lead's level through `$7E:2612 + $50 * id`, then `83 E0` (to level 9), `83 E1` (to 19), `83 E2` .. -- was drawn with the fresh cartridge's choice. The state itself names the sprite: every loader stores its id operand in `$1101,X` (C0/448A for op 0x81 with `$1100,X` = 3; C0/4564 for ops 0x82 / 0x83 through C0/4557, 4 and 5; C0/47F0 makes it 6 on the second operand's bit 7). The seed takes it from there. MEASURED: playthrough leg 56 begins in 1D1 with `$1114` / `$1115` = 06 E1 and Crono at level 10; the port drew sprite 480 (E0) for the cartridge's 481 -- 505-623 px on every picture to f947 -- while leg 55, where the port loads 1D1 itself, was exact. Graded on f300 (`lag=-2`). The game's own loads never went through this. Found by a triage subagent, confirmed here. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "      else if (ty == 5 || ty == 6) sc->actors[o].sprite = id + 256; }   // (THE SEED'S SPRITE)",
+          "replace": "      (void)id; }   /* MUT: an enemy keeps the prescan's sprite */",
+          "why": "C0/4564 STA $1101,X: the state's record of the id op 0x83 loaded"
         }
       ]
     },

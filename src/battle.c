@@ -15792,6 +15792,53 @@ static void battleShadowStage(uint8_t* m) {
   m[0xBE99] = m[0x2C6E]; m[0xBE9A] = m[0x2C6F]; m[0xBE93] = m[0x2C6C]; m[0xBE94] = m[0x2C6D];
   m[0xBE93] = 0xE0; m[0xC866] = 0xE0; m[0xBB00] = 0x0F;              // CD/0D1A-0D24
 }
+// The boot's palette writes, in ROM order. They are the stager's (C1/0023 `JSL CC/E2E4`: CC/E6B7-E753) and C1/002D's
+// `JSL CC/ED87` (CC/EF07-EF33), and the boot reaches C1/0023 only after CF/FB8E's `JSL CD/0000` returns -- that is, after
+// the song's upload (C0/1BAB's `JSL C7/0004`) inside the module's init. Through the upload the pages are the field's:
+// the fight's NMI keeps uploading the live page and FD/E39C keeps stepping the room's colour records on it.
+//   E6B7  $2010..$2017 := $FF:9C68..6F      E6C6  $2018..$201F := $FF:9C70..77   (OBJ-less row 0, colours 8..15)
+//   E6D5  $213A..$213F := $FF:9E0A..0F      (OBJ palette 1, colours 13..15)
+//   E6EC  LDX #01FF / LDA $2000,X / STA $2200,X / DEX / BPL -- the whole base page onto the live page
+// so a PC's battle row is the field's own row for that seat's slot (the loader's colours 1..12, and C2/8358's
+// weapon colours on the base page), and the live page gets the weapon colours again from the ROM below. The
+// palette is the seat's, not a per-character table.
+// MEASURED on the rule's cartridge, playthrough leg 51 (the factory's fight; the module's init on f585 -- `$CA25` -- the
+// band's seed `$CA1F` = 17 on f626): `$2010` 0000 630C C618 9C73, `$235A` 3C6B 343A D65A, `$237A` 9415 181E FF32 and
+// `$999F` 80 80 80 80 -- the field's -- through f621, and the boot's values (0000 8314 514A FF7F / FF7F DF02 C90C /
+// FF7F 2B7E 0310 / 47 19 FF 7F) from f622; the room's colour record steps `$229E` 0C02, F106, B607, F106, 0C02 every
+// four frames through the upload and writes 4701 on f622, where the copy puts the base's B607 back (0C02 again on
+// f626). The port made every one of these writes in CtBattleBegin, at the fight's entry: the record's 4701 stayed for four
+// pictures (300 px each, the room's lights), and OBJ rows 2 and 3 had the fight's colours 13-15 under the field's
+// sprites through the upload.
+static void battleBootPalettes(CtBattleHost* h) {
+  { uint8_t* s = h->mem;
+    if (gRom) {
+      for (int k = 0; k < 8; k++) if ((long)(0x3F9C68 + k) < gRomLen) s[0x2010 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C68 + k));
+      for (int k = 0; k < 8; k++) if ((long)(0x3F9C70 + k) < gRomLen) s[0x2018 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C70 + k));
+      for (int k = 0; k < 6; k++) if ((long)(ROM_BATTLE_OBJPAL1_TAIL + k) < gRomLen) s[0x213A + k] = CtRomByte(gRom, 0x400000L, (long)(ROM_BATTLE_OBJPAL1_TAIL + k));
+    }
+    for (int k = 0x1FF; k >= 0; k--) s[0x2200 + k] = s[0x2000 + k]; }
+  // CC/E710-E753: per seat, `LDA $1C48,Y` (Y = seat*5, the equipped weapon FD/AF04 staged) / `LDA $CD6CEC,X` /
+  // x6 / `LDA $D14B00,X / STA $23BA,Y` (Y = seat*32) for six bytes -- colours 13..15 of OBJ palette 5+seat, live page only.
+  if (gRom)
+    for (int seat = 0; seat < 3; seat++) {
+      uint8_t* s = h->mem;
+      long wi = 0x0D6CEC + s[0x1C48 + seat * 5];
+      if (wi >= gRomLen) continue;
+      long src = 0x114B00 + (long)CtRomByte(gRom, 0x400000L, (long)(wi)) * 6;
+      for (int k = 0; k < 6; k++) if (src + k < gRomLen) s[0x23BA + seat * 32 + k] = CtRomByte(gRom, 0x400000L, (long)(src + k));
+    }
+  // CC/EF07-EF33, in the boot's JSL CC/ED87 (C1/0023, after CC/E2E4 above): `LDA $D14D80,X / STA $999F,X` for 16 bytes --
+  // the damage digits' two 4-colour palettes, which ShowDamage's first visit (C1/5B03-5B1D) copies into OBJ rows 0 and 4
+  // -- then `$D138F2 -> $235A` and `$D138FA -> $237A`, six bytes each: colours 13-15 of OBJ palettes 2 and 3, live page
+  // only (they remain after the battle).
+  if (gRom && gRomLen > 0x114D90L) {
+    uint8_t* s = h->mem;
+    for (int x = 0; x < 16; x++) s[0x999F + x] = CtRomByte(gRom, 0x400000L, (long)(0x114D80 + x));   // CC/EF07-EF14
+    for (int x = 0; x < 6; x++) s[0x235A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138F2 + x));    // CC/EF16-EF23
+    for (int x = 0; x < 6; x++) s[0x237A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138FA + x));    // CC/EF25-EF32
+  }
+}
 // Boot head: stage the battle data (stageAll), then set up the ATB loop state.
 static void battleOamReset(const CtBattleHost* h);              // (below, with the combatants' OAM mirror)
 static uint8_t gArenaFillWords[12];                                // (battleScrollFill's, below)
@@ -15809,6 +15856,14 @@ void CtBattleBegin(CtBattleHost* h) {
     m[0xCD05] = 0; m[0xCD06] = 0xFF; m[0xCD1D] = 0; m[0xCD1E] = 0;
     m[0xCE16] = 0xFF; m[0xCE17] = 0xFF;                             // D1/F28A-F28D: the same `LDA #FF` -- $CE17 is the name
                                                                     //   box's shown id (CD/02A5's dedup, battleNameBoxPost)
+    // D1/F290 `LDA #08 / STA $CA25`: the preset base of the V-IRQ's service (D1/FE5E `LDA $CA25 / ADC $CA22 / ADC $CCEC /
+    // JSL CE:EE6E`), which runs whenever the request counter `$CA24` is not zero -- and the init leaves `$CA24` alone (D1/F1F7
+    // is `STZ $CA23`), so the field's leftover there is a request on the boot's first IRQ. MEASURED on the rule's cartridge,
+    // playthrough leg 51 (the fight from f585): `$CA24` / `$CA25` = 3A / 29 before it (the field's tilemap builders'),
+    // `$CA25` = 08 on f585 (D1:F295) and the service installs preset 09, the closed band's tables (`$C867` = 70 85 BC ..).
+    // Without the store the port installed preset 29 + 01 = 2A -- thirty bytes of something else as HDMA headers: the top 88
+    // lines of the room torn for the boot's 38 pictures (5774 px each).
+    m[0xCA25] = 0x08;                                               // (THE BOOT'S PRESET BASE)
     m[0xCFFF] = 0; m[0xCE12] = 0;                                   // D1/F295 STZ $CFFF, D1/F277 STZ $CE12 (the effect lock)
     m[0xCA32] = 0; m[0xCA92] = 0;                                   // D1/F2BB (program slot 0 idle), D1/F253
     m[0xCD46] = 0xFF;                                               // D1/F2A9 (the colour-math mask of program ops 93/9B/9D/A0)
@@ -16048,42 +16103,10 @@ void CtBattleBegin(CtBattleHost* h) {
   // $9888/$993C boot fill (battle_hurt_flash_sync.md sec. 1.1, sec. A4).
   // PCs: CC/E6F8 `LDA #0A / STA $9888 / STA $993C / INC A / INC A / STA $9889 / ... / STA $988A` -- three
   // unrolled stores, seat-indexed and unconditional, so 0x0A/0x0C/0x0E regardless of who occupies the seat.
-  // ...and around it, the boot's palettes (CC/E6B7-E753), in ROM order:
-  //   E6B7  $2010..$2017 := $FF:9C68..6F      E6C6  $2018..$201F := $FF:9C70..77   (OBJ-less row 0, colours 8..15)
-  //   E6D5  $213A..$213F := $FF:9E0A..0F      (OBJ palette 1, colours 13..15)
-  //   E6EC  LDX #01FF / LDA $2000,X / STA $2200,X / DEX / BPL -- the whole base page onto the live page
-  // so a PC's battle row is the field's own row for that seat's slot (the loader's colours 1..12, and C2/8358's
-  // weapon colours on the base page), and the live page gets the weapon colours again from the ROM below. The
-  // palette is the seat's, not a per-character table.
-  { uint8_t* s = h->mem;
-    if (gRom) {
-      for (int k = 0; k < 8; k++) if ((long)(0x3F9C68 + k) < gRomLen) s[0x2010 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C68 + k));
-      for (int k = 0; k < 8; k++) if ((long)(0x3F9C70 + k) < gRomLen) s[0x2018 + k] = CtRomByte(gRom, 0x400000L, (long)(0x3F9C70 + k));
-      for (int k = 0; k < 6; k++) if ((long)(ROM_BATTLE_OBJPAL1_TAIL + k) < gRomLen) s[0x213A + k] = CtRomByte(gRom, 0x400000L, (long)(ROM_BATTLE_OBJPAL1_TAIL + k));
-    }
-    for (int k = 0x1FF; k >= 0; k--) s[0x2200 + k] = s[0x2000 + k]; }
+  // ...and around it the boot's palettes (CC/E6B7-E753) and CC/ED87's (CC/EF07-EF33): battleBootPalettes, on the frame
+  // the boot's main thread is back from the song's upload -- not here.
   for (int i = 0; i < 3; i++) { BT_OBJPALDEF(h, i) = (uint8_t)(0x0A + 2 * i); BT_OBJPAL(h, i) = BT_OBJPALDEF(h, i);
                                 h->objPalCmp[i] = h->objPalShown[i] = BT_OBJPAL(h, i); }
-  // CC/E710-E753: per seat, `LDA $1C48,Y` (Y = seat*5, the equipped weapon FD/AF04 staged) / `LDA $CD6CEC,X` /
-  // x6 / `LDA $D14B00,X / STA $23BA,Y` (Y = seat*32) for six bytes -- colours 13..15 of OBJ palette 5+seat, live page only.
-  if (gRom)
-    for (int seat = 0; seat < 3; seat++) {
-      uint8_t* s = h->mem;
-      long wi = 0x0D6CEC + s[0x1C48 + seat * 5];
-      if (wi >= gRomLen) continue;
-      long src = 0x114B00 + (long)CtRomByte(gRom, 0x400000L, (long)(wi)) * 6;
-      for (int k = 0; k < 6; k++) if (src + k < gRomLen) s[0x23BA + seat * 32 + k] = CtRomByte(gRom, 0x400000L, (long)(src + k));
-    }
-  // CC/EF07-EF33, in the boot's JSL CC/ED87 (C1/0023, after CC/E2E4 above): `LDA $D14D80,X / STA $999F,X` for 16 bytes --
-  // the damage digits' two 4-colour palettes, which ShowDamage's first visit (C1/5B03-5B1D) copies into OBJ rows 0 and 4
-  // -- then `$D138F2 -> $235A` and `$D138FA -> $237A`, six bytes each: colours 13-15 of OBJ palettes 2 and 3, live page
-  // only (they remain after the battle).
-  if (gRom && gRomLen > 0x114D90L) {
-    uint8_t* s = h->mem;
-    for (int x = 0; x < 16; x++) s[0x999F + x] = CtRomByte(gRom, 0x400000L, (long)(0x114D80 + x));   // CC/EF07-EF14
-    for (int x = 0; x < 6; x++) s[0x235A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138F2 + x));    // CC/EF16-EF23
-    for (int x = 0; x < 6; x++) s[0x237A + x] = CtRomByte(gRom, 0x400000L, (long)(0x1138FA + x));    // CC/EF25-EF32
-  }
   // Enemies: CC/EA5B `LDX $80 / LDA $CCF939,X / TAX` (the block table = i*12 from $29BF, which is exactly
   // this port's ENEMY_BLOCK stride), CC/EA62 `LDA $29C5,X / BPL` (bit7 set => slot absent, CC/EC26),
   // CC/EA6A `LDA $80 / ADC #03 / TAY` (slot = i+3), CC/EAAB `LDA $29C7,X / ASL A / STA $9888,Y / STA $993C,Y`.
@@ -21433,6 +21456,15 @@ static int battleBootBandArm(const CtBattleHost* h) {
   if (battleRuleNmiOnHold()) return priced ? 2 + h->bootApuFrames + 3 + 1 : CT_BHUD_ARM_FRAME - 11;
   return priced ? 1 + h->bootApuFrames + 18 : CT_BHUD_ARM_FRAME;
 }
+// The frame the boot's main thread is back from the song's upload (CF/FB8E's `JSL CD/0000` returns) and runs on to its
+// next wait: the WRAM clears, C1/8000, the stager C1/0023 `JSL CC/E2E4`, C1/0299, C1/283D, CC/ED87. Under the rule it is
+// the frame after the upload's last, four before the band's arm (the arm's `2 + apu + 3 + 1`: the NMI's step machine
+// `$98CA` reads 1, 2, 3, 4 on the four frames between -- leg 51, f622-f625, the seed on f626). Without the rule the
+// eighteen setup passes are a frame each (sequence_table.md 11.10) and the stager's pass among them is CPU time: the
+// first of them stands for it there.
+static int battleBootResumeFrame(const CtBattleHost* h) {
+  return battleBootBandArm(h) - (battleRuleNmiOnHold() ? 4 : 18);
+}
 // ...for the picture: the frame the fight's NMI and its frame service begin on (`$7E` = 1, C1/0034's JSL CD/0003) -- the
 // band's seed and the compose's first store of the OAM mirror (CF:EB60). Before it the screen keeps the field's OAM.
 int CtBattleBootArmFrame(const CtBattleHost* h) { return h ? battleBootBandArm(h) : 0; }
@@ -21700,6 +21732,13 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     if (!sndStalled) h->schedWalk = battleIterFrameA(h, fxTd); // frame A: C1/109D's wait has returned
   }
   battleNmiHead(h);                                            // D1/E7AF + CD/08A4-08F1 (the effect layer's NMI head)
+  // C0/0409, the tail of the field's staging C0/039B (C0/038F, in C0/024C): `LDX #2000 / LDY #2200 / LDA #01FF / MVN
+  // $7E,$7E` -- the whole base page onto the live page, in the iteration that ends at C0/18A4 (tick 1 here), before its
+  // C0/00DE steps the colour records. MEASURED on the rule's cartridge, playthrough leg 51 (`--monitor 7E229E:2 --writer`
+  // from f570): op D8's `$0117` = 21 on f581, `$229E` F106 (the record's, FD:E475) on f582 and B607 -- the base's -- on
+  // f584 by C0:0416, the frame before the module's init (`$7C` = 00 on f585); the record's next write is f586. The port had
+  // no such copy: the boot's own, CC/E6EC (battleBootPalettes), stood in for it at the entry.
+  if (h->frames == 1) memcpy(h->mem + 0x2200, h->mem + 0x2000, 0x200);   // (THE STAGING'S PAGE)
   // The NMI's pad: C2/84D2's decoded held word of the auto-read, then CD/0340's edge latch into $EE/$EF (battlePadLatch).
   static int masha = -1, script = -1, absMode = -1;
   if (masha  < 0) { const char* m = getenv("CT_BATTLE_MASHA");  masha  = (m && *m) ? 1 : 0; }
@@ -21791,6 +21830,9 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   battleObjSlotPark(h);
   if (h->frames != 2) battleObjSlotFrame(h);                   // (tick 1: C0/00DE's FD/E39C; tick 2 runs none, battleNmiTail)
   battleNmiTail(h);                                            // D1/E7DE-E7EA: $7C++
+  // (THE STAGER'S PALETTES) The boot's main thread goes on from the song's upload after this frame's NMI -- the colour
+  // records above have stepped -- and its stager and CC/ED87 run before the next wait: battleBootPalettes.
+  if (h->frames == battleBootResumeFrame(h)) battleBootPalettes(h);
   // C1/003C-0042: `JSL CD/0012 / BNE ->003C / JMP C1/34DB`, and CD/0012 is `JMP CD/0534` = `LDA $CA1F / BEQ / LDA #01`:
   // the boot waits on the band's step count, which the last open step zeroes; $CA1E only clears on the animator's next
   // call (CD/05BC), a frame later.

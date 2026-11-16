@@ -4032,6 +4032,15 @@ void CtSceneSeedFromWram(CtScene* sc, const uint8_t* w) {
     // the draw-list gate (C0/A88F BMI), the rebuild (C0/B0F3) and the OAM drain (C0/CAD9). Taken from the
     // seed, not from the create-time prescan, which ran fn0 with whatever story flags the host passed.
     sc->actors[o].dead = (w[0x1100 + x] & 0x80) ? 1 : 0;
+    // The sprite's identity, likewise from the seed: every loader keeps its id operand in `$1101,X` -- C0/448A (op 0x81,
+    // `$1100,X` = 3), C0/4564 (ops 0x82 / 0x83 through C0/4557: 4, and 5 -- 6 when the second operand's bit 7 is set,
+    // C0/47F0). The prescan ran fn0 on a fresh cartridge's `$7E`, so a scene that picks its sprite from the party's
+    // levels took another arm: the End of Time's master (loc 1D1, object 10: `83 E0` up to level 9, `83 E1` to 19, ..)
+    // was drawn as E0 from a state that says `$1114` / `$1115` = 06 E1 (playthrough leg 56: 505-623 px on every picture).
+    { int ty = w[0x1100 + x], id = w[0x1101 + x];
+      if (ty == 3) sc->actors[o].sprite = id;
+      else if (ty == 4) sc->actors[o].sprite = id + 7;
+      else if (ty == 5 || ty == 6) sc->actors[o].sprite = id + 256; }   // (THE SEED'S SPRITE)
     sc->actors[o].solid = w[0x1B01 + x] & 1;        // $1B01,X bit 0 = solid: a loaded NPC blocks and touch-triggers
     // `draw` is $1A81, the script-visibility byte the ops write (C0/4CD5 #01 shown, 4CE0 #00 hidden, 4CE6 #80
     // removed, all into the tail C0/4CD9). $0F00 is a different quantity: C0/A810 derives it from $1A81 and

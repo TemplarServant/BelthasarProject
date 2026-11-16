@@ -455,5 +455,26 @@ carried on by mechanisms that quantise time:
   on every picture); not read further.
 - **Leg 68, the overworld's followers: FIXED (2026-11-16).** Not the seed: the walk an event hands back began a frame late
   in the port (the lead's init did not fall into its input frame) and the followers' init copied a lead that had not
-  stepped. f20-f320: 76 of 76 at 0 px. ow_party_followers.md sec. 7. Leg 76 f600 (192 px in the same box) is another
-  thing: its party is not in the blocks `$0DF0` / `$0E30` / `$0E70` there; not read.
+  stepped. f20-f320: 76 of 76 at 0 px. ow_party_followers.md sec. 7. Leg 76 f600 (192 px in the same box): FIXED the same day -- the exit's `$027C` = 3 is the lead's own store, so the
+  followers stand on that frame (ow_party_followers.md sec. 8); f570-f611 0 px.
+- **Legs 56 and 61 (2026-11-16, read by a triage subagent and confirmed).** 56 f300 / f600 / f900 (590-623 px): not the
+  game -- the WRAM seed kept the sprite its own run of fn0 chose on a fresh cartridge's levels (loc 1D1's master, `83 E0`
+  for the state's E1); the seed takes `$1101,X` now. 61 f2400 (62 px): a real one -- the fight's boot pictures are the
+  field's OAM with the field's OBJ priority; battle_sprite_zorder.md. f2388-f2447 0 px.
+- **Legs 51, 54 and 64 (2026-11-16, read by triage subagents; the fixes confirmed here).**
+  - 51 f600 (5774 px, the fight from f585): FIXED -- the boot never stored `$CA25` = 08 (D1/F290), so a leftover request
+    in `$CA24` installed HDMA preset 2A; f586-f623 0 px. FIXED the same day beside it: f624-f627 (300 px, the room's lights) and the
+    hand-over picture f585 (304 px) -- the base palette page is copied onto the live one twice, by the field's staging
+    (C0/0409, f584) and by the boot's stager after the song's upload (CC/E6EC, f622); the port made one copy, at the
+    entry. battle_boot.md, "The palette pages at the entry". f584-f640, every frame: 0 px.
+  - 54 f300 (1853 px): not the game -- the room's script-drawn tiles are in VRAM, which a WRAM seed does not carry (the
+    class of leg 53's loc 0EB above); played from leg 53's start the same frames are 0 px. 54 f600: the load's own frames
+    -- 0E6's load is 37 frames on the cartridge and 38 in the port (the ramp's first step f349 / f350), and with one idle
+    frame put in the port's pad at f349 every picture of f340-f740 is 0 px.
+  - 64 f600 / f900 / f1500 / f1800 (all in loc 08A): the load's own frames again, the other way -- the ramp's first step is
+    f412 on the cartridge and f411 in the port, and every room-clock cell runs a frame ahead from there while the pad's do
+    not; two parks of the main loop then leave the tile runner 3 runs behind and 35 ahead (it runs from the line-211 IRQ
+    on the parity `$0153` was left with). From one cartridge state cut after the load every picture is 0 px (f583-f640,
+    f725-f942, f1480-f1520, f1780-f1820). Seen there and not followed: `$1C2E` (object 23's `$1C00,X`) reads 03 on the
+    cartridge and 07 in the port from an A press on f726; the script pointer's mirror `$11AE` is rewritten at the
+    object's next visit after a song park (0940 for the cartridge's 0942, eight frames).

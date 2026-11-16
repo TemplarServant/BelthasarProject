@@ -3547,3 +3547,32 @@ load, from a poked cartridge state -- playthrough leg 11's f1560 with a brightne
 05) and X pressed inside the park. The fade's `$0119` holds 0A for the 42 frames to the return and steps again on the
 frame after; the press is not accumulated in `$0151`. Seven cells, 60 frames, 0 differing. One mutation.
 disasm/notes/song_load_freeze.md sec. 9.
+
+`leg-window-overworld-exit-stops-the-followers-vs-cartridge` and
+`field-picture-overworld-followers-stand-on-the-exit-frame-vs-cartridge`: A on an overworld entrance stores `$027C` = 3
+in the lead's own slot (C2/35EA), so the followers stand from that frame. Playthrough leg 76: `$027C`, the followers'
+Y and +28 over f560 + 45 (27 steps) and the picture on f600, inside the fade (`lag=-1`, 192 px before). One mutation,
+shared. disasm/notes/ow_party_followers.md sec. 8.
+
+`field-picture-fight-boot-keeps-the-fields-priority-vs-cartridge`: through a fight's boot the OAM is the field's, with
+the field's OBJ priority per cell; the fight's own (`$99B5 + cmb`) arrives with the first compose. Playthrough leg 61,
+f2400 (`lag=-1`): an enemy's wing behind the foliage (62 px in front before). disasm/notes/battle_sprite_zorder.md.
+
+`field-picture-seeded-object-keeps-its-sprite-vs-cartridge`: the test surface. A scene seeded from a cartridge state
+takes each object's sprite from the state (`$1100,X` / `$1101,X`, the loaders' own record), not from the seed's own run
+of the scripts on a fresh cartridge. Playthrough leg 56, f300 (`lag=-2`): loc 1D1's master is the level's (505-623 px
+before). One mutation each.
+
+`field-picture-fight-boot-installs-its-own-hdma-preset-vs-cartridge`: the fight's init stores the HDMA preset base
+`$CA25` = 08 (D1/F290) and leaves the request counter `$CA24`; a fight entered with a leftover request (the field's
+tilemap builders use those bytes) installs preset 09 on its first V-IRQ, not base-of-the-leftover. Playthrough leg 51,
+f600 (`lag=-1`): the room's top 88 lines (5774 px torn before). One mutation.
+
+`leg-window-fight-boot-palette-copies-land-on-their-frames-vs-cartridge`,
+`field-picture-fight-staging-puts-the-base-palette-back-vs-cartridge` and
+`field-picture-fight-boot-palettes-wait-for-the-upload-vs-cartridge`: entering a fight the base palette page is copied
+onto the live one twice -- the field's staging (C0/0409) the frame before the module's init, the boot's stager
+(CC/E6EC, with the boot's own colours) only after the song's upload -- and the room's colour records step in between.
+Playthrough leg 51: `$229E`, `$2010`, `$235A`, `$237A` over f570 + 60 (15 steps) and the pictures f586 and f625
+(`lag=-1`; 304 and 300 px before). Two mutations (no staging copy; the boot's palettes at the entry).
+disasm/notes/battle_boot.md, "The palette pages at the entry".

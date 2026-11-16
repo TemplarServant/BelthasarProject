@@ -168,3 +168,23 @@ malformed chain keeps the compose's sort (a port-side guard).
 
 Not modelled, not measured: an object of the field's list that is no combatant would stay on the cartridge's screen
 through the boot; the port draws none (no such fight read yet).
+
+## The boot: the field's PRIORITY too (2026-11-16)
+
+The section above gave the boot's pictures the field's OAM order. Their cells' OBJ priority is the field's as well: the
+fight's -- `$A5E3 = ($2989 & 10) | 20` (CF/FBAE), copied to `$99B5,X` / `$9F3B,X` for all eleven (CC/E3F9) -- gets into
+OAM only where the compose rewrites the attribute (CF/EB46 `LDA $0702,X / AND #C1FF / ORA $36 / STA $0702,X`), and the
+compose first runs on the band's arm frame.
+
+MEASURED on the rule's cartridge, playthrough leg 61 (Truce Canyon, the fight from f2387; frames of the leg):
+
+    f2377  the field's last store of the OAM mirror: entry 44 = 75 11 40 22 (object 11's first cell, priority 2)
+    f2389  CF:FB86 STZ $98CA          f2442  $98CA = 01, $A5E3 = 30 (CF:FBB8), $99B5.. = 30 x11 (CC:E402)
+    f2446  the compose's first store (CF:EB60): $0710 = 75 11 40 32; CE:F08D parks the field's cell ($07B1 = F0)
+    OAM on f2387 .. f2447: entries 44-51 tiles 040-04E with attribute 22; on f2448 entries 4-11, the same tiles, 32
+
+So for 60 pictures the upper enemy's wing is behind the foliage's priority tiles (OBJ 2 under BG1 / BG2 priority), and in
+front from f2448. The port drew it in front from the fight's first picture (62 px each). field.c battleCmbObjPrio: inside
+the field-OAM window a combatant's priority is the pair its field object's last template took (the saved page's
+`$0C00,X` where no template is on record). Check field-picture-fight-boot-keeps-the-fields-priority-vs-cartridge.
+Not measured: two halves of one object at different priorities through a boot.

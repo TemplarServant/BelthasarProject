@@ -82,6 +82,14 @@ WINDOWS = {
     # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
     'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
                            cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
+    # Leg 51's fight (the factory; op D8 on f581): the two copies of the base palette page onto the live one. The field's
+    # staging makes the first on f584 (C0/0409: `$229E` back to the base's B607, C0:0416), the boot's stager the second
+    # on f622 (CC/E6EC, with the boot's own colours: `$2010`, `$235A`, `$237A`); between them the room's colour record
+    # steps `$229E` every four frames, and writes its 4701 on f622 under the second copy. (Not in the cells: the boot's
+    # other WRAM -- the port makes its clears and stores at the entry, the cartridge after the upload; `$999F` reads
+    # 00 from f583 in the port and 80 to f621 on the cartridge.)
+    'fight-boot-palette-copies-land-on-their-frames': dict(leg='51_', start=570, frames=60,
+                                                             cells=[('7E229E', 2), ('7E2010', 8), ('7E235A', 6), ('7E237A', 6)]),
     # The overworld, world 1F3: A on an entrance. The lead's input frame stores `$027C` = 3 itself (C2/35EC), so the
     # followers -- later blocks of the same pass -- find it and stand (C2/3B1B): their Y stops on the frame before
     # (`$0D88` / `$0DC8` = 02B6 / 02A6 from f592) and their +28 loses the walk's bit on f593.

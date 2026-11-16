@@ -7213,6 +7213,26 @@ static int battleFieldOamOrder(const uint8_t* live, const uint8_t* mem, int* out
   }
   return n;
 }
+// ...and the cells' OBJ PRIORITY in those pictures is the field's too. The fight's own -- `$99B5 + cmb`, CC/E3F9's copy of
+// `$A5E3 = ($2989 & 10) | 20` (CF/FBAE) -- reaches OAM only through the compose (CF/EB46 `AND #C1FF / ORA $36`), so until
+// its first upload every cell keeps the attribute its field object's template gave it (C0/CD47..: `$0C00,X` / `$0C01,X`).
+// MEASURED on the rule's cartridge, playthrough leg 61 (Truce Canyon's fight from f2387): OAM 44-51, object 11's cells,
+// read attribute 22 (priority 2) on f2387-f2447 and the same tiles at entries 4-11 read 32 on f2448, the picture after
+// the compose's first store (CF:EB60, f2446); `$A5E3` / `$99B5..` take 30 on f2442. The enemy's wing stays behind the
+// foliage's priority tiles for the boot's 60 pictures; the port drew it in front (62 px a picture).
+// One priority a combatant: the pair's first byte. NOT MEASURED: an object whose two halves differ through a boot.
+static int battleCmbObjPrio(const uint8_t* mem, int cmb) {
+  if (g_bFieldOam && cmb >= 0 && cmb < 11) {
+    const uint8_t* live = g_bFieldOam; const uint8_t* sv = live + 0x12000 - 0x0920;   // the saved page ($7F:2000)
+    int X = cmb < 3 ? live[0x197 + cmb * 2] : live[0x1A3 + (cmb - 3)];                  // as battleFieldOamOrder's map
+    if (!(X & 0x81) && X / 2 < 64) {
+      uint8_t p0 = sv[0x0C00 + X], p1 = sv[0x0C01 + X];
+      CtAnimShownPrio(X / 2, &p0, &p1);                 // the pair its last template took, where one is on record
+      return (p0 >> 4) & 3;                             // (THE BOOT KEEPS THE FIELD'S PRIORITY)
+    }
+  }
+  return ((cmb < 11 ? mem[0x99B5 + cmb] : mem[0xA5E3]) >> 4) & 3;
+}
 // The list, front-first (index 0 = lowest OAM index = frontmost): CF/E83F's build and sort.
 static int battleObjOrder(const uint8_t* mem, const CtBattleHost* h, int* out) {
   if (g_bFieldOam) { int nf = battleFieldOamOrder(g_bFieldOam, mem, out); if (nf > 0) return nf; }   // (THE FIELD'S OAM)
@@ -9042,7 +9062,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     if (g_bObjPrioMask) memcpy(prevFb, fb, sizeof prevFb);
     g_motOwn = battleMotOwn(h, g_bDrawOnly);
     g_bObjSubPrio = (g_bObjPrioMask && mem)                // its cells' OBJ priority (below), for the screens' math
-                  ? (((g_bDrawOnly < 11 ? mem[0x99B5 + g_bDrawOnly] : mem[0xA5E3]) >> 4) & 3) : -1;
+                  ? battleCmbObjPrio(mem, g_bDrawOnly) : -1;
     g_bObjPalCur = battleCmbObjPal(mem, h, g_bDrawOnly);  // its cells' palette (an effect object's own: battleFxDrawOam)
     battleFxObjRender(fb, h, g_bDrawOnly, 0x40);     // CF/EDF7: the effect objects drawn after it (behind)
     battleGatoRender(fb, mem, h);                     // GATO idle bob/claw-swap or rear-up attack
@@ -9059,7 +9079,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
     // default ($A5E3 for all eleven) or what the anim-script ops C1/7555 / C1/7595 set for the role. Painted back to
     // front, the pixels this combatant changed are the ones its cells win (the lowest OAM index is in front).
     if (g_bObjPrioMask && mem) {
-      uint8_t pr = (uint8_t)(((g_bDrawOnly < 11 ? mem[0x99B5 + g_bDrawOnly] : mem[0xA5E3]) >> 4) & 3);
+      uint8_t pr = (uint8_t)battleCmbObjPrio(mem, g_bDrawOnly);
       for (int p = 0; p < CAMW * CAMH; p++)
         if (memcmp(prevFb + p * 3, fb + p * 3, 3)) g_bObjPrioMask[p] = pr;
     }
@@ -9629,6 +9649,8 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // walls become 0x80 cells). C0/039B-03A2 / C0/03A4-03AB: the window's origin is `($1D0A >> 1) & $1D1E` /
   // `($1D0E >> 1) & $1D1F` (8-bit), and C0/03AD-03D7 / C0/03DB-0407 copy 16 rows of 16 bytes with MVN from $7E:7000 /
   // $7E:7040 + (row << 8 | col), the row stepping +$100: the planes as the load and the scripted copies left them.
+  // (C0/0409, the same routine's tail -- the base palette page onto the live page -- is on the module's tick 1, where the
+  //  cartridge's staging iteration is: battle.c CtBattleTick.)
   { int nsol = 0;
     int col0 = (s[0x1D0A] >> 1) & s[0x1D1E], row0 = (s[0x1D0E] >> 1) & s[0x1D1F];
     for (int gr = 0; gr < 16; gr++)
@@ -9921,6 +9943,7 @@ typedef struct {
   int* eventModule; int* vehicleModule;   // the main loop's "the last visit was an event's / a vehicle's module"
   int hostRan;                        // the main loop ran the lead before the pass (no $3404 block: a replayed snapshot)
   int enterReq;                       // out: C2/35E5, the input frame read A held on an entrance
+  int enterOk;                        // in: the main loop will take an entrance this iteration (its debounce is over)
   int gate;                           // out: the visit read the pad (`$027C` = 1 in its slot)
 } OwLeadSlot;
 static OwLeadSlot g_owLead;
@@ -9968,6 +9991,14 @@ static void owLeadSlotVisit(void* ctx) {
     // step takes it (state 3's eighteen NMIs, `$0100` = 185 at f8804, C2:24AF). The port entered on A's first frame
     // only, which fell inside the step, and walked on: the third skyway was taken 800 frames later.
     if (aArm) L->enterReq = 1;
+    // ...and the store is the handler's own: `$027C` reads 3 from the lead's slot on, so the blocks after it in this pass --
+    // the followers, C2/3B1B `$027C` not 0 / 1 -> the stand and the tick -- take no step, and the lead idles (35F1 BRA
+    // ->35B3). MEASURED on the rule's cartridge, playthrough leg 76 (world 1F3, A on an entrance on f593): `$027C` 01 -> 03
+    // on f593, the followers' Y `$0D88` / `$0DC8` 02B6 / 02A6 from f592 on and their +28 01 with the stand's script
+    // (`$0D7B` = C3:E14C) on f593. The port stored the 3 after the pass: a pixel more and the walk's pose on that frame.
+    if (aArm && L->enterOk) { CtWorldEntry en;
+      if (CtWorldEntryDecode(ram, w->entryLatch, &en) && en.destLoc < 0x1F0) {
+        ram[0x027C] = 0x03; up = down = left = right = 0; } }   // 35EC LDA #03 / STA $027C (THE EXIT IS THE LEAD'S)
     if (f8 && !aArm && !(f8 & 0x0040)) {
       uint8_t to = ((f8 & 0x0001) && CtWramGlb(fieldWram())[0x0000] >= 0x49) ? 0x09   // 3584 / 3607 CMP #49
                  : (f8 & 0x0004) ? 0x06 : 0;                                          // 358E BIT #0004
@@ -13361,7 +13392,7 @@ int main(int argc, char** argv) {
       g_owLead.wd = &wd; g_owLead.eventModule = &owEventModule; g_owLead.vehicleModule = &owVehicleModule;
       if (!owResumeFrame) { g_owLead.up = wUp; g_owLead.down = wDown; g_owLead.left = wLeft; g_owLead.right = wRight; }
       g_owLead.fade = fade != 0; g_owLead.menuPhase = menuPhase != 0; g_owLead.exitWait = owExitWait != 0;
-      g_owLead.hostRan = 0; g_owLead.enterReq = 0; g_owLead.gate = 0;
+      g_owLead.hostRan = 0; g_owLead.enterReq = 0; g_owLead.gate = 0; g_owLead.enterOk = (owEnterCd == 0);
       if (fade || !owPad || menuPhase || owExitWait) { wUp = wDown = wLeft = wRight = 0; }   // frozen during a scene-transition
                                                   // fade, and under the menu's two fades: C2/356C
                                                   // `$027C != 1 -> JSR C2/0E1D / CLC / RTS` = anim only, no input.

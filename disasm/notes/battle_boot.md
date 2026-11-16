@@ -149,3 +149,46 @@ Measured on the 0AD fight (`--hookpc` + `--monitor 7E2C74:4`): C0/1BE6 at c4306,
 c4322, and $2C74 += 2 every frame from c4306 through c4322 (C0:2CD6), the ack's own frame included. The 0AD tail's
 `--cputrace` shows C0:0AFF, C0:2C41 and FD:E39C once in each of its seven frames; in the 07D fight $7C holds 9D from
 c7280 to the ack while the field's colour records at $0520 step every frame.
+
+## The palette pages at the entry: two copies, each on its frame (2026-11-16)
+
+Entering a fight the base page `$7E:2000-$21FF` is copied onto the live page `$2200` twice.
+
+1. THE FIELD'S STAGING. C0/038F = `JSR C0/039B / JSR C0/041A / JSR C0/04ED / BRL C0/066D`; C0/039B copies the two
+   collision windows (C0/03A4-0407) and ends `0409 LDX #2000 / LDY #2200 / LDA #01FF / PHB / MVN $7E,$7E / PLB / SEP #20 /
+   RTS`. It runs in the iteration that waits at C0/18A4 -- the module's tick 1 in the port's frames -- before that
+   iteration's C0/00DE (FD/C2C1, FD/E39C).
+2. THE BOOT'S STAGER. C1/0000 = `JML CF/FB65`: `STZ $9E / $9F / $A0 / $98CA`, `$EC`, `JSL CD/0000` (= `JSL D1/F1B0`, the
+   module's init -- and in it the song's upload), then the WRAM clears (`$2D00..$ACEB`, `$80..$EA`), `$A5E3`, `JML
+   C1/8000` .. C1/0023 `JSL CC/E2E4` (the stager: CC/E6B7 / E6C6 / E6D5 the base page's boot colours, CC/E6EC the copy,
+   CC/E710-E753 the weapon colours on the live page), C1/0027, C1/002A, C1/002D `JSL CC/ED87` (CC/EF07 `$999F`, `$235A`,
+   `$237A`). Everything from CF/FB92 on is AFTER the upload.
+
+MEASURED on the rule's cartridge, playthrough leg 51 (the factory; frames of the leg; `--monitor 7E229E:2,7E2298:2,
+7E0117:1 --writer` from the state cut on f570, and the cells of both sides):
+
+    f581  $0117 = 21 (C0:3AA8, op D8)        f582  $0117 = 01 (C0:177D); $229E = F106 (FD:E475, the colour record)
+    f584  $229E = B607, the base's (C0:0416: the staging's copy)
+    f585  $CA25 = 08 (D1:F295), $7C = 00: the module's init          f586  $7C = 01; the record's step (B607 again)
+    f590 F106, f594 0C02, f598 4701, f602 0C02, f606 F106, f610 B607, f614 F106, f618 0C02 -- every four frames
+    f622  the record writes 4701 and the stager's copy puts B607 back; $2010 = 0000 8314 514A FF7F (630C C618 9C73 before),
+          $235A = FF7F DF02 C90C (3C6B 343A D65A), $237A = FF7F 2B7E 0310 (9415 181E FF32), $999F = 47 19 FF 7F (80 x4);
+          $98CA = 01 .. 04 on f622-f625
+    f626  the band's seed ($CA1F = 17); $229E = 0C02 (the record)
+
+The port made ONE copy -- CC/E6EC's, in CtBattleBegin, with the boot's other palette stores -- at the entry (its f583):
+close to the staging's (a frame early: 304 px on picture f585), nothing on f622 (the record's 4701 on pictures
+f624-f627, 300 px each: the room's lights), and the boot's colours 13-15 of OBJ rows 2 and 3 under the field's sprites
+through the whole upload (not on screen in leg 51). battle.c: battleBootPalettes (the stager's and CC/ED87's stores) runs
+at the end of the tick `battleBootResumeFrame` -- the band's arm - 4 under the rule -- after that frame's colour
+records; the staging's copy is on tick 1, before them. Leg 51 f584-f640, every frame: 0 px.
+
+Checks: leg-window-fight-boot-palette-copies-land-on-their-frames-vs-cartridge,
+field-picture-fight-staging-puts-the-base-palette-back-vs-cartridge,
+field-picture-fight-boot-palettes-wait-for-the-upload-vs-cartridge.
+
+OPEN (data only, nothing on screen found): CtBattleBegin still makes the REST of the boot's work at the entry -- the
+WRAM clears and every store of CF/FB92-C1/0034 -- where the cartridge makes it after the upload (`$999F` 00 from f583
+in the port, 80 to f621 on the cartridge; `$7E` reads 01 on f603-f624 where the cartridge's is 00), and the staging itself
+(C0/024C) at the consumer's frame, one before the cartridge's (`$7C` = 00 on f583 for f585). Splitting the boot at the
+upload is the structural fix.
