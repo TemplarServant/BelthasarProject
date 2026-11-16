@@ -3943,3 +3943,14 @@ A0:12,80:24,A0:84,20:64,0:60,60:24,20:84,0:296,100:2,0:16,100:2,0:10,100:2,0:16,
 100:2,0:586,100:2,0:94,100:2,0:10,20:2,0:10,100:2,0:10,100:2,0:10,20:2,0:10,100:2,0:586,100:2,0:566,10:60,80:200,20:24
 80:20,10:70,100:2,0:180,50:60,10:24,50:96,0:60,10:240,0:1600,(100:2,0:90)*20,(100:2,0:100)*40,10:96,100:2,0:60,(100:2
 0:100)*44,100:2,0:106,100:2,0:592,(100:2,0:100)*20
+
+# ---------------------------------------------------------------------------------------------------------- branches
+# Other ways through a point of the route (tools/playthrough.py, "A BRANCH leg"): each starts from the named leg's end
+# state; nothing chains from them.
+
+## 47b_race_win -- [branch of 46_johnny] Johnny's race WON: as 47_race to the bike, then the race played -- Johnny holds
+# the player's lane, so Up (the camera's mask $B6) takes the bike off it 26 frames from the race's f2855 and one boost (B)
+# passes him before the line ($53 == 8 first: $0380 = 01); the win's run-out (the fanfare, the camera's sweep, 1158 frames)
+# and the reboot into 0E1, the far side of the road -- not back to 0DF; Johnny's line there, A, control back
+0:1,10:32,0:4,100:2,0:84,100:2,0:16,100:2,0:46,20:2,0:10,100:2,0:8,100:2,0:5,90:64,10:16,0:2,100:2
+0:2553,10:10,11:2,10:14,0:1674,100:2,0:76

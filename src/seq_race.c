@@ -101,6 +101,8 @@ static unsigned win4788(R* r) {
   return 0x4677;                                                      // 4857 LDX #4677 / JMP $39B1
 }
 
+static void raceTail48FD(R* r);
+
 unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
   R rr = { w, 0, io }, *r = &rr;
   wr(r, 0xBC, rd(r, 0xBC) + 1);                                       // 485D INC $BC -- the race clock
@@ -130,6 +132,14 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
   r->c = 1; wr(r, 0xF0, sbc(r, rd(r, 0x51), rd(r, 0x76)));
   wr(r, 0xF2, sbc(r, rd(r, 0x53), rd(r, 0x78)));
   if (!cmpn(r, rd(r, 0xF2), 0) && !cmpn(r, rd(r, 0xF0), 0x1000)) { wr(r, 0x63, rd(r, 0x63) + 1); wr(r, 0x88, rd(r, 0x88) + 1); }
+  raceTail48FD(r);
+  return 0x485D;                                                      // 4C3E RTS: the task stays
+}
+
+// $7E:48FD .. 4C3E -- the race step from the speeds on: what $485D falls into, and what the win's task $4677 jumps to
+// (`JMP $48FD` at 46AD / 4752). It opens on `LDA $4A / SEC / SBC`: no flag comes in.
+static void raceTail48FD(R* r) {
+  uint8_t* w = r->w;
   // 48FD the speeds: drag $80 a frame, then the engine
   { r->c = 1; unsigned a = sbc(r, rd(r, 0x4A), 0x80); if (neg(a)) a = 0; wr(r, 0x4A, a); }
   { r->c = 1; unsigned a = sbc(r, rd(r, 0x6F), 0x80); if (neg(a)) a = 0; wr(r, 0x6F, a); }
@@ -261,7 +271,96 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io) {
     r->c = 1; a = sbc(r, rd(r, 0x4E), rd(r, 0x67)); if (neg(a)) a = 0; wr(r, 0x4E, a); }
   { r->c = 0; unsigned a = adc(r, rd(r, 0x73), rd(r, 0x8A)); if (!cmpn(r, a, 0x7000)) a = 0x7000; wr(r, 0x73, a);
     r->c = 1; a = sbc(r, rd(r, 0x73), rd(r, 0x8C)); if (neg(a)) a = 0; wr(r, 0x73, a); }
-  return 0x485D;                                                      // 4C3E RTS: the task stays
+}                                                                     // 4C3E RTS
+
+// 46CB / 46E1 / 4711 -- a lane brought to its goal, $80 a frame: `LDA lane / CMP #goal / BEQ / BMI -> ADC #0080, else SBC
+// #0080 / AND #FF80 / STA lane` (the CMP's carry is the ADC's and the SBC's).
+static void lane46CB(R* r, unsigned a, unsigned goal) {
+  unsigned v = rd(r, a);
+  int n = cmpn(r, v, goal);
+  if ((v & 0xFFFF) == (goal & 0xFFFF)) return;
+  v = n ? adc(r, v, 0x0080) : sbc(r, v, 0x0080);
+  wr(r, a, v & 0xFF80);
+}
+
+// $7E:4677 -- the race step once the player has won (win4788 puts it in $485D's slot): the run-out.
+//   4677  A (`$06` bit 7), once (`$BE`): task $34E3, the fade that ENDs the stage
+//   468A  the HUD's marker hook $464D again once the camera's point passes $08:0400 (`$A2`, set by the win)
+//   46A4  `STZ $06`: the step's tail reads no pad -- no steering, no boost
+//   46A6  `$B0` == 1: `$98` = $8000 on the story's call (`$44`), so Johnny's engine stays on in the tail; then, by the
+//         operand's low nibble (`$0384` & $0F): the re-race (`FF 09`) brings both lanes to the goals win4788 left in the
+//         operands at $46CE / $46E4; the first race sets the lead `$88` at $1000 ahead and brings the player to $4000 --
+//         each only while no song's post is open (`$0388`, the fanfare's). `$B2` (the lead at the line, 8-bit) counts to
+//         0; then, `$88` set and the player on $4000: `$B0` = 2 and `$1444` + 1.
+//   46AD / 4752  `JMP $48FD`
+unsigned CtRaceTask4677(uint8_t* w, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  if (!rd(r, 0xBE) && (rd(r, 0x06) & 0x0080)) {                       // 4677 LDA $BE / BNE; 467B LDA $06 / BIT #0080 / BEQ
+    wr(r, 0xBE, rd(r, 0xBE) + 1);                                     // 4682 INC $BE
+    taskAdd(r, 0x34E3);                                               // 4684 LDX #34E3 / JSR $395E
+  }
+  if (rd(r, 0xA2) && rd(r, 0x9E) == 0x0008) {                         // 468A LDA $A2 / BEQ; 468E LDA $9E / CMP #0008 / BNE
+    r->c = 1; sbc(r, rd(r, 0x9C), 0x0400);                            // 4695 LDA $9C / SBC #0400 (the CMP's carry) / BCC
+    if (r->c) { wr(r, 0xA2, 0); vblAdd(r, 0x464D); }                  // 469C STZ $A2 / LDX #464D / JSR $3974
+  }
+  wr(r, 0x06, 0);                                                     // 46A4 STZ $06
+  if (rd(r, 0xB0) == 0x0001) {                                        // 46A6 LDA $B0 / CMP #0001 / BEQ
+    int tail = 0;                                                     //   (-> 46AD / 4752: straight to $48FD)
+    r->c = 1;
+    wr(r, 0x98, 0);                                                   // 46B0 STZ $98
+    if (rd(r, 0x44)) wr(r, 0x98, 0x8000);                             // 46B2 LDA $44 / BEQ / LDA #8000 / STA $98
+    if (rd(r, 0x0384) & 0x000F) {                                     // 46BB LDA $0384 / AND #000F / BEQ ->46F9
+      if (rd(r, 0x0388) & 0x00FF) tail = 1;                           // 46C3 LDA $0388 / AND #00FF / BNE ->46AD
+      else {
+        lane46CB(r, 0x4E, rd(r, 0x46CE));                             // 46CB (the operand win4788 may rewrite)
+        lane46CB(r, 0x73, rd(r, 0x46E4));                             // 46E1
+      }
+    } else {
+      wr(r, 0x63, 0);                                                 // 46F9 STZ $63
+      unsigned d = sbc(r, rd(r, 0x51), rd(r, 0x76));                  // 46FB LDA $51 / SBC $76 (46A8's carry: set)
+      if (!cmpn(r, d, 0x1000)) wr(r, 0x88, 0x0001);                   // 46FF CMP #1000 / BMI; 4704 LDA #0001 / STA $88
+      if (rd(r, 0x0388) & 0x00FF) tail = 1;                           // 4709 LDA $0388 / AND #00FF / BNE ->4752
+      else lane46CB(r, 0x4E, 0x4000);                                 // 4711 LDA $4E / CMP #4000 ...
+    }
+    if (!tail) {
+      uint8_t b = w[0xB2];                                            // 4727 SEP #20 / LDA $B2 / BEQ
+      if (b) { b = (b & 0x80) ? (uint8_t)(b + 1) : (uint8_t)(b - 1); w[0xB2] = b; }   // 472D BPL -> DEC A, else INC A / STA $B2
+      if (!rd(r, 0xB2) && rd(r, 0x88) && (rd(r, 0x4E) & 0xFFFE) == 0x4000) {   // 4735 REP #20 / LDA $B2 / BNE; 473B; 473F
+        wr(r, 0x65, 0); wr(r, 0x67, 0);                               // 4749 STZ $65 / STZ $67
+        wr(r, 0xB0, rd(r, 0xB0) + 1); wr(r, 0x1444, rd(r, 0x1444) + 1);   // 474D INC $B0 / INC $1444
+      }
+    }
+  }
+  raceTail48FD(r);                                                    // 46AD / 4752 JMP $48FD
+  return 0x4677;
+}
+
+// $7E:4755 -- the win's wait (win4788 puts it in $4339's slot, 8-bit): once the fanfare's post is done (`$0388` clear) and
+// the sound processor reports music tracks playing (`$2143` & $0F: the driver's status, audio_spc_driver.md), the frame
+// counter `$08` = 0, page A's script goes to $41A6 (the camera's run-out, to the END) and this slot becomes $416D.
+unsigned CtRaceTask4755(uint8_t* w, const CtRaceIo* io) {
+  R rr = { w, 0, io }, *r = &rr;
+  if (w[0x0388]) return 0x4755;                                       // 4757 LDA $0388 / BNE -> RTS
+  if (!io || !io->port) return 0x4755;                                //   (no sound processor: no status, as a script's F5)
+  if (!(io->port(io->ctx, 3) & 0x0F)) return 0x4755;                  // 475C LDA $2143 / AND #0F / BEQ -> RTS
+  w[0x08] = 0;                                                        // 4763 STZ $08
+  wr(r, 0x0A20, 0x41A6);                                              // 4765 LDX #41A6 / STX $0A20
+  return 0x416D;                                                      // 476B LDX #416D / JMP $39B1
+}
+
+// $7E:416D -- the win's camera: two frames in four (`LDA $08 / LSR A / LSR A / BCC`: bit 1 clear), page A's r0 (`$0A00`)
+// steps to $00A0, r6 (`$0A0C`) to $0038 and r2 (`$0A04`) to $0090, one each (`CMP / BEQ / BMI -> INC, else DEC`). The
+// script removes it at $41AB.
+void CtRaceTask416D(uint8_t* w) {
+  static const struct { unsigned a, goal; } g[3] = { { 0x0A00, 0x00A0 }, { 0x0A0C, 0x0038 }, { 0x0A04, 0x0090 } };
+  R rr = { w, 0, NULL }, *r = &rr;
+  if (rd(r, 0x08) & 0x0002) return;                                   // 416D LDA $08 / LSR A / LSR A / BCC, else RTS
+  for (int i = 0; i < 3; i++) {                                       // 4178 / 4187 / 4196
+    unsigned v = rd(r, g[i].a);
+    int n = cmpn(r, v, g[i].goal);
+    if (v == g[i].goal) continue;
+    wr(r, g[i].a, n ? v + 1 : v - 1);
+  }
 }
 
 // $7E:4339 -- the camera and the steering masks (D = $0A00, set by the task itself: `LDA #0A00 / TCD`).
@@ -340,6 +439,9 @@ void CtRaceTask42BD(uint8_t* w) {
 // ---- the race: entries 0 and 9, $7E:3B48 ----
 
 static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* io);
+// The frames a song's post is still inside C3/09A4's JSL C7/0004 (`$0388` set; the NMIs run on over it: CtSeqStageSongTick).
+// The win's fanfare (`$038A` = 1B, win4788) is the race's one post of this kind; $4677 and $4755 read `$0388`.
+static int s_songHold;
 static unsigned raceHook(uint8_t* w, unsigned slot, unsigned h, const CtRaceIo* io) { (void)slot; return CtRacePicHook(io->pic, w, h, io); }
 
 // The setup $7E:3B48's own master cycles, NMI off, by its arm: the story's from `--callrom 7E3B48` (CT_CALLROM_NONMI=1,
@@ -351,6 +453,7 @@ int CtRaceStageOpen(uint8_t* w, uint8_t operand, const CtRaceIo* io) {
   R rr = { w, 0, io }, *r = &rr;
   if (CtSeqStageBegin(w, operand, io) < 0) return -1;
   if ((operand & 0x1F) != 0 && (operand & 0x1F) != 9) return -1;      // entries 0 and 9: $7E:3B48
+  s_songHold = 0;
   // $7E:3B48 -- the race's setup, its logic
   if (operand & 0x0F) w[0x44]++;                                      // 3B48 LDA $0384 / AND #0F / BEQ / INC $44
   if (!(operand & 0x20)) {                                            // 3B51 BIT #20 / BNE / LDA #2C / JSR $375F: the song
@@ -409,6 +512,9 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
     case 0x4339: CtRaceTask4339(w); return t;
     case 0x44CE: return CtRaceTask44CE(w) ? t : 0;
     case 0x485D: return CtRaceStep485D(w, io);
+    case 0x4677: return CtRaceTask4677(w, io);                        // the win's: the run-out, the wait, the camera
+    case 0x4755: return CtRaceTask4755(w, io);
+    case 0x416D: CtRaceTask416D(w); return t;
     case 0x347A: case 0x3495: case 0x34E3: return CtSeqTaskFade(w, slot, t, io);   // the brightness (the overlay's own)
     case 0x424D: case 0x4283: return CtSeqTaskAbort(w, t, io);        // the attract's button
     case 0x3D72:                                                      // the attract's curtain: C3/01E4, then HDMA channel 0's
@@ -423,8 +529,10 @@ static unsigned raceTask(uint8_t* w, unsigned slot, unsigned t, const CtRaceIo* 
 
 int CtRaceStageFrame(uint8_t* w, uint16_t joy, const CtRaceIo* io) {
   int st = CtSeqStageNmiHooks(w, joy, io, (io && io->pic) ? raceHook : NULL, raceTask);
-  if (st != 2 && CtSeqStageSong(w, io) > 0) w[0x0388] = 0;           // (the race never changes $038A)
-  if (st != 2 && io && io->pic) CtRacePicThread(io->pic, w);         // $7E:3023 the main loop's pass
+  if (st != 2) s_songHold = CtSeqStageSongTick(w, io, s_songHold);    // the win's fanfare (`$038A` = 1B)
+  // $7E:3023 the main loop's pass -- but not under a song's post: C3/09A4's JSL sits in the NMI that interrupted the loop,
+  // which goes on only once that NMI returns (the win's fanfare: twenty frames with the bikes' frame requests unserved).
+  if (st != 2 && io && io->pic && !s_songHold) CtRacePicThread(io->pic, w);
   // The END is the main loop's: `3023 JSR $51D1 / 3026 LDA $00 / BEQ` reads `$00` only once the pass returns, and a pass
   // parked at 5211 (waiting on `$39` for the hook $5221) returns NMIs later; the NMIs run on meanwhile.
   if (st == 1 && io && io->pic && io->pic->thread) return 0;

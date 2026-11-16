@@ -15,6 +15,9 @@ LakeSnes serial order: B=1 Y=2 Sel=4 Start=8 Up=10 Down=20 Left=40 Right=80 A=10
 
 A leg starts where the one before it ended (the first at power-on, on an erased cartridge) and lasts exactly the frames its
 pad holds. `## name -- note [oracle-only]` opens one; `#` lines are comments; a line may repeat a group: `(100:2,0:38)*20`.
+A BRANCH leg (`[branch of <leg>]` in its note) is another way through a point of the route: it starts from the named
+leg's end state and nothing chains from it (47b_race_win wins Johnny's race where 47_race loses it). The branches come
+after the last leg of the chain; every command takes them by name like any leg, and `cmp all` grades them too.
 Every leg is written by playing it on the cartridge (`try`): the route is the cartridge's own play, under the rule
 (CT_ORACLE_LOGICAL=1). Its states are made from power-on by `play` (saves/playthrough/, local: they are the ROM's output and
 `play all` rebuilds them).
@@ -85,10 +88,22 @@ def route():
             legs.append(cur)
         elif cur is not None:
             cur['text'] += line
+    branch = False
     for lg in legs:
         lg['pad'] = expand(lg['text'])
         lg['frames'] = sum(n for _, n in lg['pad'])
+        m = re.search(r'\[branch of (\S+)\]', lg['note'])
+        lg['branch'] = m.group(1) if m else None
+        if lg['branch']:
+            branch = True
+        elif branch:
+            sys.exit('playthrough: %s comes after a branch leg -- the branches go after the last leg of the chain' % lg['name'])
     return legs
+
+
+def prev_of(legs, i):
+    """The leg whose end state leg i starts from: the one before it, or the one a branch leg names. -1 = power-on."""
+    return find(legs, legs[i]['branch']) if legs[i].get('branch') else i - 1
 
 
 def btnscript(pad):
@@ -119,7 +134,8 @@ def walkscript(pad, first=0):
 
 def last_key(legs, i):
     """The pad of the frame before leg i's first: the previous leg's last (0 for the first leg and after an idle end)."""
-    return legs[i - 1]['pad'][-1][0] if i > 0 and legs[i - 1]['pad'] else 0
+    j = prev_of(legs, i)
+    return legs[j]['pad'][-1][0] if j >= 0 and legs[j]['pad'] else 0
 
 
 def state_of(name):
@@ -127,7 +143,8 @@ def state_of(name):
 
 
 def start_of(legs, i):
-    return 'boot' if i == 0 else state_of(legs[i - 1]['name'])
+    j = prev_of(legs, i)
+    return 'boot' if j < 0 else state_of(legs[j]['name'])
 
 
 def _oracle_sha():
@@ -142,7 +159,8 @@ def _oracle_sha():
 def key_of(legs, i):
     """What leg i's end state is made of: every pad from power-on through it, and the oracle that played them."""
     h = hashlib.sha1()
-    for lg in legs[:i + 1]:
+    j = prev_of(legs, i)
+    for lg in legs[:j + 1] + [legs[i]]:
         h.update(btnscript(lg['pad']).encode() + b'|')
     # The oracle that played them: build/ct_oracle.exe (the oracle alone: main.c's modes, snes/*.c, the state loader), hashed
     # without its link identity (tools/ctlib/oracle_cache.py _exe_sha) -- a port fix rebuilds ct.exe but leaves these
@@ -152,8 +170,8 @@ def key_of(legs, i):
     # `play`, then the keys rewritten by hand) no longer matches, so the chain from power-on is always the route's.
     # 2026-10-30: leg 83 gained 120 frames after its state was played; 84 was played from the short one and legs 85-94
     # were authored on it, until a rebuild regenerated the chain and leg 86 no longer reached the Magic Cave.
-    if i > 0 and os.path.exists(state_of(legs[i - 1]['name'])):
-        with open(state_of(legs[i - 1]['name']), 'rb') as f:
+    if j >= 0 and os.path.exists(state_of(legs[j]['name'])):
+        with open(state_of(legs[j]['name']), 'rb') as f:
             h.update(hashlib.sha1(f.read()).digest())
     return h.hexdigest()
 

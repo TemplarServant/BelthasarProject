@@ -52,9 +52,12 @@
 typedef struct {
   uint8_t enabled, terminated, doTransfer, repCount, indirect, len;
   uint16_t tableAdr;
+  uint8_t bank;             // the table's bank ($43x4): $7F for the field's program, the stage's own for program 2
 } LdHdmaCh;
 typedef struct {
-  int prog;                 // 0: the per-engine mean (LD_BG); 1: the field's channels (FD/C1EE)
+  int prog;                 // 0: the per-engine mean (LD_BG); 1: the field's channels (FD/C1EE); 2: a $C3 stage's own
+                            //    (CtAudioSetRuleHdmaStage: `$420C`, and each channel's $43x0 and $43x2-$43x4 as its code set them)
+  uint8_t stEn, stDmap[8], stBank[8]; uint16_t stAdr[8];
   const uint8_t* wram;      // the host's 128 KB image ($7E at 0, $7F at 0x10000)
   int on;                   // $420C as the channels see it now: 1 = `$0128`'s channels, 0 = none
   int nmiOn;                // 1: an NMI taken inside C7 writes `$0128` (D1/F4E6's absolute STA $420C, DB = 0)
@@ -338,23 +341,30 @@ static uint16_t ldFdTable(const CtAudio* a, int setB, int i) {
   unsigned at = setB ? 0xC298 + 5 * (unsigned)i : 0xC26E + 5 * (unsigned)i;   // FD/C26D / C297 `LDX #tbl / STX $x2`
   return (uint16_t)(ldRomFD(a, at) | (ldRomFD(a, at + 1) << 8));
 }
-static uint8_t ldHd7F(const LdHdma* hd, unsigned adr) { return hd->wram ? hd->wram[0x10000 + (adr & 0xFFFF)] : 0; }
+// A table byte, by the channel's bank: the host's WRAM image ($7E / $7F). A table anywhere else reads 0 -- no stage has one.
+static uint8_t ldHdTbl(const LdHdma* hd, const LdHdmaCh* c, unsigned adr) {
+  if (!hd->wram) return 0;
+  if (c->bank == 0x7F) return hd->wram[0x10000 + (adr & 0xFFFF)];
+  if (c->bank == 0x7E) return hd->wram[adr & 0xFFFF];
+  return 0;
+}
 // Line 0, h 16 (snes.c: `vPos == 0` -> hdmaInitRequested): FD/C1EE's channels at the set `$0153 & 0F` names, `$0128`'s
 // enabled -- each loads its line count and, indirect, its address. 0 when none is enabled (dma_initHdma returns).
 static long ldHdmaInit(LdHdma* hd, const CtAudio* a) {
   long cost = 0; int any = 0;
-  uint8_t mask = hd->on ? (hd->wram ? hd->wram[0x0128] : 0) : 0;
+  uint8_t mask = hd->on ? (hd->prog == 2 ? hd->stEn : hd->wram ? hd->wram[0x0128] : 0) : 0;
   int setB = hd->wram ? (hd->wram[0x0153] & 0x0F) != 0 : 0;       // FD/C264 LDA $0153 / AND #0F / BEQ ->C26D (set A)
   for (int i = 0; i < 8; i++) {
     LdHdmaCh* c = &hd->ch[i];
     c->enabled = (mask >> i) & 1; c->terminated = 0; c->doTransfer = 0;
     if (!c->enabled) continue;
     any = 1;
-    uint8_t dmap = ldFdDmap(a, i);                                  // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
-    c->tableAdr = ldFdTable(a, setB, i);                            // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
+    uint8_t dmap = hd->prog == 2 ? hd->stDmap[i] : ldFdDmap(a, i);  // FD/C1F7 LDA #44 / STA $00 .. FD/C213 LDA #40 / STA $70
+    c->tableAdr = hd->prog == 2 ? hd->stAdr[i] : ldFdTable(a, setB, i);   // FD/C26D / C297 `LDX #tbl / STX $x2`, eight of each
+    c->bank = hd->prog == 2 ? hd->stBank[i] : 0x7F;                 // (the table bank: FD/C242 LDA #7F / STA $x4)
     c->indirect = (dmap & 0x40) != 0; c->len = LD_HDMA_LEN[dmap & 7];
     cost += 8;                                                      // the count byte
-    c->repCount = ldHd7F(hd, c->tableAdr++);                        // (the table bank: FD/C242 LDA #7F / STA $x4)
+    c->repCount = ldHdTbl(hd, c, c->tableAdr++);
     if (c->repCount == 0) c->terminated = 1;
     if (c->indirect) { cost += 16; c->tableAdr += 2; }              // the indirect address, two bytes
     c->doTransfer = 1;
@@ -380,7 +390,7 @@ static long ldHdmaLine(LdHdma* hd) {
     if (!c->enabled || c->terminated) continue;
     c->repCount--; c->doTransfer = (c->repCount & 0x80) != 0;
     cost += 8;
-    uint8_t next = ldHd7F(hd, c->tableAdr);
+    uint8_t next = ldHdTbl(hd, c, c->tableAdr);
     if ((c->repCount & 0x7F) == 0) {
       c->repCount = next; c->tableAdr++;
       if (c->indirect) {
@@ -2084,6 +2094,15 @@ void CtAudioSetRuleHdma(CtAudio* a, const uint8_t* wram128, int prog, int on, in
   memset(&a->hdma, 0, sizeof a->hdma);
   a->hdma.prog = wram128 ? prog : 0; a->hdma.wram = wram128; a->hdma.on = on; a->hdma.nmiOn = nmiOn;
   a->hdma.cutLine = (cutLine >= 0 && cutLine < LD_LINES_PER_FRAME) ? cutLine : -1;
+}
+void CtAudioSetRuleHdmaStage(CtAudio* a, const uint8_t* wram128, uint8_t hdmaen, const uint8_t dmap[8],
+                              const uint16_t adr[8], const uint8_t bank[8]) {
+  if (!a) return;
+  memset(&a->hdma, 0, sizeof a->hdma);
+  if (!wram128) return;
+  a->hdma.prog = 2; a->hdma.wram = wram128; a->hdma.on = 1; a->hdma.cutLine = -1;
+  a->hdma.stEn = hdmaen;
+  for (int i = 0; i < 8; i++) { a->hdma.stDmap[i] = dmap[i]; a->hdma.stAdr[i] = adr[i]; a->hdma.stBank[i] = bank[i]; }
 }
 void CtAudioSetRuleIrq(CtAudio* a, int line) { if (a) a->ruleIrqLine = (line >= 0 && line < LD_LINES_PER_FRAME) ? line : -1; }
 long CtAudioRulePadWait(void) { return LD_PAD_WAIT; }

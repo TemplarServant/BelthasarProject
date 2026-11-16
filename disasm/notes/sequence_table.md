@@ -2407,6 +2407,73 @@ NMI-off stretch): 73 black frames, the cartridge's; 0DF in the port's presented 
 The picture is native too (seq_picture.md sec. 4); it reads `FF 09`'s story-only patches where the overlay holds them (the
 immediates at `$4F74` and `$50DA`, the lists' bytes `$53A0`..), but no capture of an `FF 09` call grades them yet.
 
+**The WIN (2026-11-15; GitHub issue 10, "softlock after the Johnny race").** Nothing had played it: every drive of the
+checks and the route's leg 47 lose (an idle player is blocked -- Johnny takes the player's lane, `$73` -> `$4E`, and
+every catch-up is a bump from behind). The drive that wins on the rule's cartridge (branch leg 47b_race_win): Up (the
+mask `$B6` = 0800 at the start's camera) for 26 frames from the race's f2855 takes the bike a lane away, and one boost
+on f2865 passes him 105 frames before the line -- `$53` = 8 with `$78` = 7 on f2970.
+
+The finish $7E:4788 (already native) leaves three tasks the port did not have, so its stage ran nothing in their slots,
+page A stayed on `FD 07 40` and there was no END -- the softlock. Listed with `tools/wdis.py` off a WRAM image of the race:
+
+- **$7E:4677**, in the race step's slot (16-bit, D = 0): `LDA $BE / BNE`, `LDA $06 / BIT #0080 / BEQ`, else `INC $BE`
+  and task `$34E3` (A, once: the fade that ENDs the stage). 468A: with `$A2` set and `$9E` == 8, `LDA $9C / SBC #0400 /
+  BCC`, else `STZ $A2` and the hook `$464D` again. 46A4 `STZ $06` -- the tail reads no pad. 46A6: `$B0` != 1 -> `JMP
+  $48FD`. Else `STZ $98`, and `$98` = 8000 when `$44` (the story's re-race). By `$0384 & 0F`: the re-race (46C3) brings
+  `$4E` and `$73` to the operands at $46CE / $46E4 (2000 / 6000, which 4849 swaps when `$4E` >= `$73`), `$80` a frame
+  (`CMP / BEQ / BMI -> ADC #0080, else SBC #0080 / AND #FF80`); the first race (46F9) clears `$63`, sets `$88` = 1 once
+  `$51 - $76` >= $1000 and brings `$4E` to $4000 the same way -- each only while `$0388 & FF` is 0 (a song's post
+  open: straight to the tail). 4727: `$B2` (8-bit, the lead `$8E` at the line) one step toward 0; at 0, with `$88` set
+  and `$4E & FFFE` == $4000: `STZ $65 / STZ $67 / INC $B0 / INC $1444`. 4752 `JMP $48FD`: the race step's own tail (the
+  speeds onward -- with `$B0` != 0 it has no boost, no steering of Johnny's and no collision).
+- **$7E:4755**, in the steering's slot (8-bit): `LDA $0388 / BNE -> RTS`, `LDA $2143 / AND #0F / BEQ -> RTS` (the sound
+  driver's status: the music tracks playing, audio_spc_driver.md), then `STZ $08`, `$0A20` = $41A6 and `LDX #416D /
+  JMP $39B1`: the slot becomes the camera's task.
+- **$7E:416D**: `LDA $08 / LSR A / LSR A / BCC` (two frames in four), D = $0A00: r0 one step toward $00A0, r6 toward
+  $0038, r2 toward $0090.
+- **The script at $41A6** (tools/race_script_walk.py; the interpreter had every op): 320 frames, `taskdel 416D`, the
+  sweep (r5 += 2 with r2 / r0 - 1, then - 2; a wait of 112 frames; r6 / r2 / r0 + 1 in two beats), `taskadd 3495` (the fade), and
+  `end` at $4210.
+
+MEASURED on the rule's cartridge, branch leg 47b (frames of the leg): the win on f2971 (`$0380` = 01, `$0382` = 0012,
+`$B0` = 01, `$B2` = 1E, the list `.. 4755 4447 4677`), `$0388` = 01 from f2971 (C3:09C0) to f2990 and 00 on f2991
+(C3:09D8) -- the fanfare `10 1B`, its first store on line 230 and its last on line 236 twenty frames later --, f2992:
+`$08` = 00, `$0A20` = 41A6, the slot 416D and `$B2` counting; `$53` runs on to 0F (the player's top speeds are $7000
+on the first race, 4795); task 416D off the list on f3313, the fade's task on f4033, the END on f4129 and loc **0E1**
+on f4167 -- the far side of the road, not 0DF.
+
+What the port needed beyond the three tasks (seq_race.c CtRaceTask4677 / 4755 / 416D, the tail split off as
+raceTail48FD):
+- **the post's frames.** `$0388` is the stage's (C3/09A4, CtSeqStageSongTick): it stays set while the JSL is in C7, and
+  the host now reports those frames (field.c raceSndPostFrames: the NMIs the post crossed on its own sound processor).
+- **the post's HDMA.** The JSL is C7's real cycles under the rule, and the beam takes the stage's HDMA from them line
+  by line: the race's five channels (1 / 2: mode 3 indirect, a transfer every line; 3 / 4 / 5 holding, ended by line
+  87), not the field's six. On the field's mean (audio.c LD_BG) the post took 7,135,885 master cycles and returned on
+  line 216 of the nineteenth frame; with the stage's channels (audio.c program 2, CtAudioSetRuleHdmaStage, fed from the
+  stage picture's `$43x0` / `$43x2-4` and `$420C`) 7,214,846 and twenty NMIs, the cartridge's count. (It still returns
+  38 lines later than the cartridge's line 236: LD_HDMA_SYNC is the field's measured mean -- the CPU-timing class.)
+- **the main loop under the post.** The JSL sits in the NMI that interrupted `$7E:3023`'s loop, so the loop -- which
+  serves the bikes' frame requests (`$1402` / `$1410`, `$51D1`) -- stands until it returns: `$0A14`, `$1402` and `$1410`
+  do not move from f2971 to f2990. CtRaceStageFrame skips CtRacePicThread while the hold runs.
+
+With those the win is the cartridge's: every sampled picture from the line to the reboot at 0 px (f2955-f3065 and
+f4080-f4175 every frame, the rest every third), the eleven cells of the window frame for frame, 0E1 on the same frame.
+The scene in 0E1 then runs one frame early in the port (control back on f4573 against the cartridge's f4574; 0DF's
+after the lost race runs two late, f3243 against f3241, its pictures fitting two port frames on): the location's load
+clock, the class closed on 2026-10-13. Checks: playthrough-leg-47b-race-won, leg-window-race-win-run-out and three
+field-picture-race-win-* (docs/TESTING.md). A during the run-out (`$34E3`: the fade, then the END at once) was played on
+both sides and is not pinned: A on f3121, loc 0E1 on f3235 on the cartridge and in the port. Not played: the re-race
+`FF 09` (its lanes at 46C3 are transliterated, no capture grades them).
+
+**The census (tools/race_task_census.py, check race-overlay-tasks-all-native).** A task or a hook the native stage has
+no `case` for is skipped without a word, which is how the win stayed unported. The census reads the overlay as the
+cartridge holds it during the race and lists what the race can install, played or not -- the callers of `$395E` /
+`$3974` / `$39B1` / `$39E8` in $7E:3B48-$53BA and the scripts' `taskadd` / `hookadd` from every IP that code stores
+(3F14, 400A, 404D, 40C3, 415E, 4211, 41A6, and `$3F59`'s 3F6A / 3FAC) --: 20 tasks and 8 hooks, each with a case.
+The same scan over the whole overlay names tasks of the other entries; all are in their own sources except `$9897` /
+`$98AC` (with the calls `$996F` / `$9FA9`), which belong to the script at $93E3 -- the setup $7E:8E95 / $7E:8EA8 of
+entries 12 / 13, which no scene calls (sec. 2: scene 261's `FF 2D` is operand bytes).
+
 ---
 
 ## 13. THE ENDING (`FF 2A` / `FF 2B` / `FF 2E` / `FF 2F`, entries 10/11/14/15 = `$7E:8538`) -- stage 1 (2026-10-14)

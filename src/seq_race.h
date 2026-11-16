@@ -98,6 +98,12 @@ unsigned CtRaceStep485D(uint8_t* w, const CtRaceIo* io);
 
 // $7E:4339, the camera's angle (L/R on the story's call) and height (X/A), and the steering masks $00B6/$00B8.
 void CtRaceTask4339(uint8_t* w);
+// The win's three (win4788 swaps them in): $4677 the run-out's step (in $485D's slot; its tail is $485D's from $48FD),
+// $4755 the wait for the fanfare (in $4339's slot; returns $416D once the sound processor reports it playing) and $416D
+// the camera's glide. Each returns what its slot holds afterwards.
+unsigned CtRaceTask4677(uint8_t* w, const CtRaceIo* io);
+unsigned CtRaceTask4755(uint8_t* w, const CtRaceIo* io);
+void CtRaceTask416D(uint8_t* w);
 
 // One visit of a $C3 script task -- $7E:3749 (page $0A00) or $7E:3754 (page $0B00): C3/0AFF's interpreter over the page in
 // WRAM (IP at +$20, registers +$00..+$1E, the loop counters +$22.., the gosub return +$30, the op at +$F0). Runs to the

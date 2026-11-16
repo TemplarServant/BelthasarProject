@@ -5457,6 +5457,13 @@ static void raceSndApu(void* c, uint8_t pitch) {
   (void)c;
   if (g_fieldAudio) { CtAudioPortWrite(g_fieldAudio, 1, pitch); CtAudioPortWrite(g_fieldAudio, 0, 0x89); }
 }
+// The frames the stage's last song post (C3/09A4's JSL C7/0004) kept the CPU in the driver's handshake: the NMIs it crossed
+// on the host's own sound processor. `$0388` stays set through them (the race's win reads it: $7E:4677 / $7E:4755).
+static int raceSndPostFrames(void* c) {
+  (void)c; int fr = 0;
+  if (g_fieldAudio) CtAudioLastPostRaster(g_fieldAudio, &fr, NULL, NULL);
+  return fr;
+}
 // A script's `F5` (C3/0C2A) reads the SPC's output port 2 -- the song's marker -- off the host's own sound processor.
 static uint8_t raceSndPort(void* c, int n) {
   (void)c; uint8_t in[4], out[4];
@@ -5587,6 +5594,7 @@ static CtRaceIo raceIoFor(uint8_t* w) {
   io.ctx = w; io.post = raceSndPost; io.sfx = raceSndSfx; io.apu = raceSndApu; io.rom = rb; io.romLen = rl;
   io.field = fieldPpuField;
   if (g_fieldAudio) io.port = raceSndPort;                        // a script's `F5` waits on the song's marker
+  if (g_fieldAudio) io.postFrames = raceSndPostFrames;            // a song's post holds `$0388` for its frames
   return io;
 }
 // The sound driver still busy on its port 1 ($2141 != 0) -- what screen $07's song task polls before each post (C2/CBC1,
@@ -20251,7 +20259,14 @@ int main(int argc, char** argv) {
           uint16_t joy = 0;
           for (int b = 0; b < 12; b++) if (padSerial & (1u << b)) joy |= map[b];
           CtRaceIo rio = raceIoFor(CtWramSys(fieldWram())); rio.pic = &g_stagePic;
+          // A post this NMI makes meets the race's own HDMA on the beam (the win's fanfare crosses twenty frames of it).
+          if (g_ruleAudio && g_fieldAudio) {
+            uint8_t dm[8], bk[8]; uint16_t ad[8];
+            for (int c = 0; c < 8; c++) { dm[c] = g_stagePic.ch[c].dmap; ad[c] = g_stagePic.ch[c].aAdr; bk[c] = g_stagePic.ch[c].aBank; }
+            CtAudioSetRuleHdmaStage(g_fieldAudio, CtWramSys(fieldWram()), g_stagePic.hdmaen, dm, ad, bk);
+          }
           int st = CtRaceStageFrame(CtWramSys(fieldWram()), joy, &rio);
+          if (g_ruleAudio && g_fieldAudio) CtAudioSetRuleHdma(g_fieldAudio, NULL, 0, 0, 0, -1);   // (back to the mean)
           if (st) raceEnded = st;
           else CtSeqStagePicFrame(&g_stagePic, CtWramSys(fieldWram()), fb);
         }

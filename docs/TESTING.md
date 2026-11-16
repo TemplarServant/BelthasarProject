@@ -3471,3 +3471,19 @@ frame too). f2117: in the close of Marle's Revive she stands at her own seat wit
 the baked crossbow trajectory's pose at seat 1's anchor (837 px before). f3734: the enemy's hop in place, stepped by a
 script's op C4 / C5 in the main loop, is on the picture a frame after a service's hop would be (676 px before). `0 px`
 each; one mutation each.
+
+`playthrough-leg-47b-race-won-vs-cartridge`, `leg-window-race-win-run-out-vs-cartridge` and the three
+`field-picture-race-win-*-vs-cartridge`: Johnny's race WON (GitHub issue 10: the port's stage had none of the win's
+tasks and never ended). The route's leg 47 loses the race, so the win is a BRANCH leg (`[branch of 46_johnny]` in
+tools/playthrough/route.txt: it starts from that leg's end state and nothing chains from it; `cmp all` grades it and
+`playthrough-legs-vs-rule-cartridge` pins its line). The leg: the locations 0DF 10F 0E1, the control byte and the end
+picture. The window: twelve cells of the race from the bike to the frame before the END, 3527 steps, 0 differing --
+the result, the fanfare's twenty frames of `$0388`, the lane, the lead's countdown, the positions, the script and the
+camera. The pictures, each at the race's lag (`lag=-1`): f2985 the bikes standing under the fanfare's post, f2997 the
+run-out on the cartridge's frame (the post priced against the race's own HDMA), f3700 the camera's sweep. Seven
+mutations between them. disasm/notes/sequence_table.md sec. 12, "The WIN".
+
+`race-overlay-tasks-all-native` (tools/race_task_census.py): the census that closes the class. The native stage skips a
+task or a hook it has no `case` for, silently; this lists every one the race's overlay code and scripts CAN install
+(the list routines' callers in $7E:3B48-$53BA, the scripts' `taskadd` / `hookadd`), played or not, and requires a case
+for each: 20 tasks, 8 hooks, 0 without. One mutation (the run-out's case removed).

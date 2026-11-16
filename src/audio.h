@@ -83,6 +83,11 @@ void      CtAudioSetRuleIrq(CtAudio* a, int line);
 // `nmiOn` = an NMI met inside the JSL enables them (the battle's exit tail, D1/F4E6); `cutLine` = the V-IRQ line that
 // disables them (D1/FEB5: 211), -1 none. prog 0 = the per-engine mean (the default). Kept across JSLs until reset.
 void      CtAudioSetRuleHdma(CtAudio* a, const uint8_t* wram128, int prog, int on, int nmiOn, int cutLine);
+// ...and a $C3 stage's own channels (program 2), for the posts its NMI makes: `$420C` as the stage's NMI writes it and each
+// channel's $43x0 / $43x2-$43x3 / $43x4 as the stage's code set them, the tables read from the host's WRAM ($7E / $7F).
+// No V-IRQ cuts it and every NMI leaves it on. CtAudioSetRuleHdma(a, NULL, ..) puts the mean back.
+void      CtAudioSetRuleHdmaStage(CtAudio* a, const uint8_t* wram128, uint8_t hdmaen, const uint8_t dmap[8],
+                                  const uint16_t adr[8], const uint8_t bank[8]);
 long      CtAudioRulePadWait(void);
 long      CtAudioRuleLineAt(int line);                  // vblank -> line `line` of the next picture, master cycles
 // $7E:5AAA's `LDA $2143 / AND #$0F / BEQ`: the title setup's wait for the driver to answer, on the

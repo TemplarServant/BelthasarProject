@@ -82,6 +82,18 @@ WINDOWS = {
     # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
     'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
                            cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
+    # Johnny's race WON (the branch leg 47b). The player's finish (`$53` == 8 first: $7E:4788) puts the run-out's step
+    # $7E:4677 in the race step's slot and the wait $7E:4755 in the steering's, and asks for the fanfare (`$038A` = 1B).
+    # `$0388` stays set the twenty frames its post takes (C3/09A4's JSL, inside the NMI: f2971-f2990), the lane and `$B2`
+    # standing meanwhile; then `$08` = 0, page A at $41A6 and the camera's $416D (f2992), the player brought to the lane
+    # $4000, `$B2` 1E -> 0, `$B0` = 2, the script's sweep and the END (f4129). The cells: the result with its points, the
+    # post's flag, the frame counter `$08` ($7E:4755 clears it), the run-out's state, the player's lane, both positions,
+    # page A's IP and the camera's three registers.
+    # Not graded: the way in (10F's load and the stage's setup, to the race clock's first tick at f602).
+    'race-win-run-out': dict(leg='47b_', start=296, frames=3832, free=[(297, 601)],
+                             cells=[('7E0380', 4), ('7E0388', 1), ('7E0008', 1), ('7E00B0', 1), ('7E00B2', 1), ('7E004E', 2),
+                                    ('7E0051', 4), ('7E0076', 4), ('7E0A20', 2), ('7E0A00', 2), ('7E0A04', 2),
+                                    ('7E0A0C', 2)]),
     'fight-poses': dict(leg='119_', start=16200, frames=5900, free=[(16201, 16420), (21440, 21449)],
                         cells=[('7E968C', 3), ('7E9922', 3), ('7EA098', 1), ('7E96DB', 3)]),
     # The 2300 A.D. map, world 1F2: the Epoch sets down (`$0294` = F3, the BG3 visit skipped) with the lead's velocity

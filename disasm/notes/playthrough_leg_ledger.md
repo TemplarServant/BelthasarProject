@@ -378,3 +378,12 @@ carried on by mechanisms that quantise time:
   (a script's op C4 / C5: a picture early, three hops) and the close of Marle's actions (the baked crossbow pose at seat
   1's anchor, f2116-f2119 and three single pictures). f790-f6696, every frame at the fight's lag: 0 px. The last three
   (f6697-f6699, 25 px) are the exit's frame (timing).
+- **Leg 47 never won the race; the win softlocked the port (2026-11-15, GitHub issue 10).** The route crosses the race
+  with no input, so the player's finish ($7E:4788) and the three tasks it leaves ($4677, $4755, $416D) were never played:
+  the port had none of them and its stage had no END. Ported, and played by the BRANCH leg `47b_race_win` (from
+  46_johnny's state: Up off Johnny's lane, one boost before the line): SAME, the run-out's pictures 0 px, loc 0E1 on the
+  cartridge's frame. The scene in 0E1 after it is a frame early in the port (control back f4573 / f4574); 0DF's after
+  the lost race is two late (f3243 / f3241): the location's load clock (timing). sequence_table.md sec. 12, "The WIN".
+  **What this says about the route:** it is ONE way through the game. Where the game branches on what the player does
+  (a minigame won or lost, a choice in a box, an optional fight) only the branch the route took is exercised. Branch
+  legs are the tool for the others; none but 47b exists yet.

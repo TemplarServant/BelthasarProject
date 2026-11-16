@@ -275,6 +275,14 @@ PICTURES = {
     # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
     # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
     'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
+    # Johnny's race WON (the branch leg 47b; the race's picture is the port's P+1, so `lag`). f2985: inside the fanfare's
+    # post (f2971-f2990) the main loop stands under the NMI that made it, so the bikes keep the frames they had -- Johnny's
+    # is not redrawn rearing (298 px of this frame). f2997: the run-out begins on the cartridge's frame -- the post took its
+    # twenty frames against the race's own HDMA, not the field's mean (18855 px: the whole road a frame early). f3700: the
+    # script's camera sweep ($41A6..) over what the camera's task $416D left.
+    'race-win-bikes-stand-under-the-fanfare': dict(leg='47b_race_win', at=0, frames=2985, own=True, lag=-1),
+    'race-win-run-out-on-the-cartridges-frame': dict(leg='47b_race_win', at=0, frames=2997, own=True, lag=-1),
+    'race-win-camera-sweep': dict(leg='47b_race_win', at=0, frames=3700, own=True, lag=-1),
     # ...and the A that closes it (f26096) sets `$0129` = 0D, the ramp from the box machine's next frame (f26098).
     'chest-box-closes-from-the-next-frame': dict(leg='93_ozzie_way', at=0, frames=26100, own=True),
     # Leg 17 (the queen's room): the route's `100:2,100:2` is A held four frames, one press on the cartridge; the port's

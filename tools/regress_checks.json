@@ -44302,6 +44302,38 @@
       "notes": "Roadmap G1a item 1, the race's native port, stage 1 complete (sequence_table.md sec. 12). The cartridge runs the user's Lab 32 capture under the rule; the port runs ct.exe --racestage from the cartridge's WRAM at the hand-off, frame k = the cartridge's k + shift (the setup's NMI-off frames, found on the race clock's first tick), the pad read one frame after it is held. The picture is stage 2."
     },
     {
+      "name": "race-overlay-tasks-all-native",
+      "argv": [
+        "python",
+        "tools/race_task_census.py"
+      ],
+      "env": {},
+      "expect": [
+        "racecensus: 20 tasks and 8 hooks the race's code and scripts install, 0 without a native case"
+      ],
+      "pin": [
+        "^racecensus: "
+      ],
+      "tier": "quick",
+      "timeout_s": 60,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/race_re/race_user.state",
+        "tools/race_task_census.py",
+        "tools/race_script_walk.py"
+      ],
+      "note_pass": "every task and vblank hook the race's overlay code and scripts can install has a case in the native stage",
+      "notes": "THE CLASS OF GitHub ISSUE 10, CLOSED BY CENSUS. The native stage runs a task or a hook only if a `case` names its address; one it does not know is skipped silently -- so the win's $7E:4677 / $7E:4755 / $7E:416D sat on the list unrun and the stage never ended, and no check saw it because no drive won the race. This lists what the race CAN install, played or not: from the overlay as the cartridge holds it during the race (played from the recipe state saves/race_re/race_user.state), every `LDX #addr` + `JSR $395E` / `JSR $3974` / `JMP $39B1` / `JMP $39E8` in the race's code ($7E:3B48-$53BA) and every `taskadd` / `hookadd` of the scripts reachable from the IPs that code stores into `$0A20` / `$0B20` and from `$3F59`'s table; each address must be a `case 0x....` of src/seq_race.c, src/seq_racepic.c or src/seq_stage.c. 20 tasks, 8 hooks, 0 without (3 before the win was ported). It grades that a case EXISTS, not what it does -- the race-* checks and the branch leg 47b do that. A new count is a change of the scan or of the overlay image: read the list (`-v`) before re-pinning.",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "    case 0x4677: return CtRaceTask4677(w, io);                        // the win's: the run-out, the wait, the camera",
+          "replace": "    /* MUT: the run-out's step is no task of the stage */",
+          "why": "the finish installs $7E:4677 (4857 `LDX #4677 / JMP $39B1`): without a case the stage skips it"
+        }
+      ]
+    },
+    {
       "name": "race-story-plays-through-in-the-port",
       "argv": [
         "build/Belthasar.exe",
@@ -51097,7 +51129,8 @@
         "playthrough: 135_death_peak_0f6 SAME -- locs 0F6 | story D4 | party 010605 | gold 45684 | hp 646 (1) | ctrl 3 | end picture 0 px at port -2",
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit DIFFERENT -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 48467 px at port +0",
-        "playthrough: 101/137 legs SAME"
+        "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
+        "playthrough: 102/138 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -51127,7 +51160,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 646 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 647 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
@@ -54449,6 +54482,192 @@
           "find": "        if (B[2] == 0) {\n          B[2] = 1;                                                        // 34FC INC $0002,X",
           "replace": "        if (0) {   /* MUT: no init in the lead's slot */\n          B[2] = 1;",
           "why": "C2/34F8 is the block's own first visit, in the pass that spawned it: without it the lead has no pose and the arrival cell's `TSB $0282 #03` never comes -- the scanner starts no event"
+        }
+      ]
+    },
+    {
+      "name": "playthrough-leg-47b-race-won-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/playthrough.py",
+        "cmp",
+        "47b_race_win"
+      ],
+      "env": {
+        "PT_TMP": "build/_playthrough_leg47b"
+      },
+      "expect": [
+        "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0"
+      ],
+      "pin": [
+        "^playthrough: 47b_race_win "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Johnny's race won plays through in the port as on the cartridge: the run-out, the END, the reboot into 0E1 (the far side of the road) and his line there",
+      "notes": "JOHNNY'S RACE WON (GitHub issue 10: after the first race the game did not go on -- music and animation running, no button doing anything). The player's finish (`$53` == 8 first: $7E:4788, ported with the race step) swaps three tasks in that the port did not have: $7E:4677 in the race step's slot (the run-out: the pad cleared, the player brought to the lane $4000 and the lead `$B2` counted down while no song's post is open, then the step's own tail from $48FD), $7E:4755 in the steering's (it waits for the fanfare's post to end, `$0388`, and for the sound processor to report music tracks playing, `$2143` & $0F; then `$08` = 0, page A's script at $41A6 and itself $416D), and $7E:416D (the camera's glide to r0 = $A0, r6 = $38, r2 = $90). Unported, the native stage's list kept two tasks nothing ran: the script stayed on its `FD 07 40` and the stage never reached its END. The route's leg 47 crosses the race with no input and loses it, so nothing played the win. The branch leg 47b_race_win (tools/playthrough.py, `[branch of 46_johnny]`) plays the race with the pad that wins it on the cartridge -- Johnny holds the player's lane, so Up takes the bike off it for 26 frames and one boost passes him before the line -- and goes on through the win's 1158 frames to the reboot: loc 0E1, not 0DF, and Johnny's line there. Graded like every leg: the locations, the story, the party, the control byte, the end picture. RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "    case 0x4755: return CtRaceTask4755(w, io);",
+          "replace": "    /* MUT: the win's wait is no task of the stage */",
+          "why": "without $7E:4755 page A never leaves its wait at $4007 and the stage has no END: the softlock"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-race-win-run-out-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "race-win-run-out"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: race-win-run-out leg 47b f296+3832: 3527 steps compared, 0 differing",
+        "free:  cartridge f297-f601: both come back on 00000000 00 CA 00 00 0060 00000000 00000000 0740 6000 5000 3800, the port +0 frame(s)"
+      ],
+      "pin": [
+        "^legwindow: race-win-run-out ",
+        "^  free:  cartridge f297-f601"
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the won race's run-out is the cartridge's frame for frame: the result, the fanfare's twenty frames, the lane, the lead's countdown, the positions, the script and the camera to the END",
+      "notes": "JOHNNY'S RACE WON (GitHub issue 10: after the first race the game did not go on -- music and animation running, no button doing anything). The player's finish (`$53` == 8 first: $7E:4788, ported with the race step) swaps three tasks in that the port did not have: $7E:4677 in the race step's slot (the run-out: the pad cleared, the player brought to the lane $4000 and the lead `$B2` counted down while no song's post is open, then the step's own tail from $48FD), $7E:4755 in the steering's (it waits for the fanfare's post to end, `$0388`, and for the sound processor to report music tracks playing, `$2143` & $0F; then `$08` = 0, page A's script at $41A6 and itself $416D), and $7E:416D (the camera's glide to r0 = $A0, r6 = $38, r2 = $90). Unported, the native stage's list kept two tasks nothing ran: the script stayed on its `FD 07 40` and the stage never reached its END. The route's leg 47 crosses the race with no input and loses it, so nothing played the win. THE WINDOW: branch leg 47b from f296 (the A at the bike) to the frame before the END, 3527 steps of twelve cells -- the result and its points (`$0380`-`$0383`), the post's flag `$0388` and the frame counter `$08` ($7E:4755's `STZ $08`), the flag (set f2971, clear f2991: the twenty frames C3/09A4's JSL C7/0004 takes inside the NMI, on the port's own sound processor against the race's own HDMA channels -- the field's mean gave nineteen), `$B0` / `$B2`, the player's lane `$4E`, both positions, page A's IP and the camera's r0 / r2 / r6. The way in (10F's load, the stage's setup) is free; the race itself and everything after the line is graded. RE-PIN only with the cartridge's values in hand.",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "      else lane46CB(r, 0x4E, 0x4000);                                 // 4711 LDA $4E / CMP #4000 ...",
+          "replace": "      else (void)0; /* MUT: the player keeps the lane it won on */",
+          "why": "4711-4725 bring `$4E` to $4000, and 473F ends the run-out only there"
+        },
+        {
+          "file": "src/seq_race.c",
+          "find": "  w[0x08] = 0;                                                        // 4763 STZ $08",
+          "replace": "  /* MUT: the frame counter runs on */",
+          "why": "4763 `STZ $08`: the camera's task $416D steps on the counter's bit 1"
+        },
+        {
+          "file": "src/field.c",
+          "find": "            CtAudioSetRuleHdmaStage(g_fieldAudio, CtWramSys(fieldWram()), g_stagePic.hdmaen, dm, ad, bk);",
+          "replace": "            (void)dm; (void)ad; (void)bk; /* MUT: the post meets the field's mean HDMA */",
+          "why": "the fanfare's post crosses twenty frames of the race's five channels; priced on the field's mean it returns a frame early and `$0388` clears on f2990"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-race-win-bikes-stand-under-the-fanfare-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "race-win-bikes-stand-under-the-fanfare"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: race-win-bikes-stand-under-the-fanfare leg 47b +2985 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: race-win-bikes-stand-under-the-fanfare "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "under the fanfare's post the bikes keep the frames they had, as on the cartridge: the main loop stands beneath the NMI that made the post",
+      "notes": "THE STAGE'S MAIN LOOP DOES NOT RUN UNDER A SONG'S POST: C3/09A4's `JSL C7/0004` is inside the NMI (C3/08B3) that interrupted `$7E:3023`'s loop; the NMIs that follow come in over it and run the whole stage, but the loop -- which decompresses the bikes' requested frames (`$1402` / `$1410` = 1 -> 2, `$51D1`) -- goes on only when the post returns. MEASURED on the rule's cartridge (branch leg 47b, the win's fanfare): `$0A14`, `$1402` and `$1410` stand from f2971 to f2990, and `$1410` is served on f2991. The port ran the loop's pass every frame: Johnny's bike redrawn rearing through the fanfare (298 px on f2983). Graded on f2985 at the race's lag (the race's picture is the port's P + 1). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "  if (st != 2 && io && io->pic && !s_songHold) CtRacePicThread(io->pic, w);",
+          "replace": "  if (st != 2 && io && io->pic) CtRacePicThread(io->pic, w);   /* MUT: the loop runs under the post */",
+          "why": "the loop is beneath the NMI that holds the post's JSL"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-race-win-run-out-on-the-cartridges-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "race-win-run-out-on-the-cartridges-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: race-win-run-out-on-the-cartridges-frame leg 47b +2997 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: race-win-run-out-on-the-cartridges-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the won race's run-out begins on the cartridge's frame: the fanfare's post takes its twenty frames against the race's own HDMA",
+      "notes": "A POST A STAGE'S NMI MAKES MEETS THE STAGE'S OWN HDMA ON THE BEAM. The win's fanfare (`10 1B`, C3/09A4 from the NMI) is C7's real cycles across twenty frames; what the beam takes from them each line is the race's five channels (1 and 2: mode 3, indirect, a transfer every line; 3-5 holding and ending by line 87), not the field's six. MEASURED on the rule's cartridge: the post's first store on line 230 of f2971's vblank, its last on line 236 twenty frames later, `$0388` clear on f2991. The port priced it on the field's mean (audio.c LD_BG): 7,135,885 master cycles, nineteen NMIs, the return on line 216 -- nine lines short of the twentieth vblank -- and the whole run-out a frame early (18855 px on f2997, the road). With the stage's channels (audio.c program 2, CtAudioSetRuleHdmaStage, from the stage picture's $43x0 / $43x2-4 and `$420C`): twenty. Graded on f2997 at the race's lag. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "            CtAudioSetRuleHdmaStage(g_fieldAudio, CtWramSys(fieldWram()), g_stagePic.hdmaen, dm, ad, bk);",
+          "replace": "            (void)dm; (void)ad; (void)bk; /* MUT: the post meets the field's mean HDMA */",
+          "why": "nineteen frames instead of twenty: the run-out a frame early"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-race-win-camera-sweep-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "race-win-camera-sweep"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: race-win-camera-sweep leg 47b +3700 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: race-win-camera-sweep "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the won race's camera sweep is the cartridge's picture: the script from $41A6 over what the camera's task $416D left",
+      "notes": "THE WIN'S CAMERA: $7E:416D (two frames in four of `$08`, which $7E:4755 cleared) steps page A's r0 to $A0, r6 to $38 and r2 to $90; the script at $41A6 waits 320 frames, removes it and sweeps (r5 + 2, r2 / r0 - 1, - 2, then + 1 with r6) to the fade and the END at $4210 -- relative steps, so the picture at any later frame holds what the glide reached. Graded on branch leg 47b's f3700 at the race's lag. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/seq_race.c",
+          "find": "    case 0x416D: CtRaceTask416D(w); return t;",
+          "replace": "    case 0x416D: return t;   /* MUT: the camera's glide does not run */",
+          "why": "the sweep starts from the camera $416D left"
         }
       ]
     }
