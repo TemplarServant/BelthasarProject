@@ -1026,3 +1026,34 @@ port: 10 px). field.c's actor loop takes the pair the template took (move.c CtAn
 with the frame of sec. 17). Checks field-picture-sprite-keeps-its-templates-priority-vs-cartridge and
 field-picture-walker-keeps-its-templates-priority-vs-cartridge. Not done: the LEAD, which the host draws apart from
 the actors' loop with the live pair (its template is the host's own).
+
+## 19. The draw gate on the screen, and whose byte `$0F01,X` is (2026-11-16)
+
+Sec. 7's law -- `C0/B309`: `JSR C0/B701 / BCC -> draw / RTS`, and B701's `(n & 7F) < T` with bit 7 clear is SEC -- was
+ported as bookkeeping (CtAnimDrawPass) and never reached the picture: field.c's actor loop drew every object in the
+draw list. Two things followed.
+
+**A latched object was on the screen before the cartridge shows it.** C0/A88D's rising edge zeroes the counter (A8FD)
+and writes the sentinel (A902), so a latched object has no carry until the drain stages its template. The port drew it
+at once, with the frame of the old host ticker (animTickActor, the model of before the drain was ported). MEASURED on
+the rule's cartridge, leg 63 (Zenan Bridge, loc 087), objects 21-23:
+
+    f1543  latch: $0F2A / $0F2C / $0F2E = 80, $0F2B / $0F2D / $0F2F = FF, $1B2A / $1B2C / $1B2E = 00
+    f1544  objects 21, 22: $0F01,X = 13, $1B00,X = 80        f1545  object 23 the same
+    pictures: none on f1545, two on f1546, three on f1547    (the port: three on f1545)
+
+So after the tick's draw pass, bit 7 of `$1B00,X` is "on the screen": the instantiate arm stores 80 and the reposition
+arm needs it. field.c draws classes 0-2 on that bit (class 3 has its own draw, C0/C73A, and keeps frame 0: sec. 12).
+It is the proper form of what `$0F01,X == FF -> not drawn` tried in October: FF alone is not the rule (an object
+re-latched by nothing, or a class 3, reads FF and is on the screen), the counter is.
+
+**The host wrote over the drain's byte.** With `$0F01,X` = FF the loop fell to the ticker and stored its frame "so the
+battle staging reads the live pose". But the byte is the drain's: its commit compares against it (CC04 / CF24 / D54C --
+a frame equal to the one the host had written would not commit, so nothing was staged), and the battle's staging copies
+it as it stands (C0/05E4: FF for a hidden enemy, battle_entry.md). MEASURED, leg 34, the prison (loc 048): `$0F1B` /
+`$0F1D` read FF from the room's load on f15135 to the fight; the port had 15. Under the frame legs the host writes
+nothing there now.
+
+Checks: field-picture-latched-object-waits-for-its-template-vs-cartridge, field-picture-staged-objects-show-one-by-one-
+vs-cartridge (the state cut on f1530; `lag=-2`; one mutation, shared). Not done: the LEAD and the widescreen's side
+sprites, which the host draws apart from this loop.

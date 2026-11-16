@@ -665,6 +665,7 @@ static void palClaim(Mem* m, int objX, int slot) {
   palUpload(m, objX, attr);
 }
 
+static int palAllocScan(Mem* m, int objX, int lo, int end);
 // C0/7170: the gate, the dispatch, and the two passes. Returns 1 if a slot was assigned.
 static int palAlloc7170(Mem* m, int obj) {
   if (r8(m, 0x7E0154) & 0x80) return 0;                          // 7170-7172: script owns the table
@@ -689,6 +690,10 @@ static int palAlloc7170(Mem* m, int obj) {
     palUpload(m, objX, attr);                                    // 71B7 keeps $1400[me] as source
     return 1;
   }
+  return palAllocScan(m, objX, lo, end);
+}
+// The scan itself, C0/721C (slots 0-4) and C0/72B4 (slots 1-3): the share pass, then the claim pass.
+static int palAllocScan(Mem* m, int objX, int lo, int end) {
   for (int s = lo; s < end; s++) {                               // pass 1 share (72B6 / 721E).
     int own = r8(m, 0x7E0B80u + (uint32_t)s);                    //   Does not skip self: a re-entry
     if (own & 0x80) continue;                                    //   self-shares, as in the ROM.
@@ -6919,6 +6924,11 @@ int CtSceneActorMoveAnim(const CtScene* sc, int i) {
   if (i < 0 || i >= sc->nobj) return 0;
   return sc->actors[i].moveAnim;
 }
+// C0/72B4 called by itself -- no `$0154` gate, no class dispatch: the battle staging's call for a HIDDEN enemy (C0/05EB
+// `LDA $1A81,Y / BPL ->05F9 / STY $6D / PHX / PHY / JSR C0/72B4`), whose object never took a palette; `$0F81,Y` is read
+// right after it for the staged record's palette byte.
+int CtScenePalAlloc72B4(CtScene* sc, int obj) { return sc ? palAllocScan(sc->mem, obj * 2, 1, 4) : 0; }
+
 int CtSceneActorPrio(const CtScene* sc, int i) {
   // Op 0x8E byte (C0/4C74): bit 7 = auto (position-based, from the foot tile props); else fixed OAM
   // priorities: bits 4-5 = upper half, bits 0-1 = lower half (0-1 = behind all of BG1, invisible in rooms,

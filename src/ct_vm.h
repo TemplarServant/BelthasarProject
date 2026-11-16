@@ -406,6 +406,9 @@ int  CtSceneBright(const CtScene* sc);             // op 0xF0 screen fade level 
 void CtSceneSyncBright(CtScene* sc);               // re-read it from $0119 (after the host's C0/2848 INC)
 int  CtSceneActorMoveAnim(const CtScene* sc, int i);   // op 0x87 move-animation override (0 = walk)
 int  CtSceneActorPrio(const CtScene* sc, int i);   // the op 0x8E priority byte $0F80,X (0x80 = auto)
+// C0/72B4 by itself (slots 1-3: share, else claim, with the palette's upload): the battle staging's call for a hidden
+// enemy (C0/05EB-05F8). Returns 1 if a slot was assigned.
+int  CtScenePalAlloc72B4(CtScene* sc, int obj);
 int  CtSceneActorPalRot(const CtScene* sc, int obj, int* start, int* span, int* phase); // op 0x88 palette rotation
 int  CtSceneActorPalBlob(const CtScene* sc, int obj, int* start, uint16_t* bgr);  // op 0x88 blob palette overwrite; returns count
 int CtSceneActorAtB0(const CtScene* sc, int i);   // obj i's last op was 0xB0 (C0/3002 -> C0/9E84 for the lead)

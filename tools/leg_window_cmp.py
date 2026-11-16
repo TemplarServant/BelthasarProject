@@ -82,6 +82,13 @@ WINDOWS = {
     # The cells: her published pose, her HP, the action's freeze. Not graded: the fight's boot.
     'doomed-pc-pose': dict(leg='29_', start=700, frames=1000, free=[(701, 940)],
                            cells=[('7E9908', 1), ('7E5EB0', 2), ('7EA013', 1)]),
+    # The prison's fight, loc 048: the staging's records of the two HIDDEN enemies, slots 2 and 3 (`$29D7`, `$29E3`, 12
+    # bytes each; C0/0557). +2 / +3 are the on-screen pixel C0/AB45 last stored (`$0A00,Y` / `$0A80,Y` & 0F: 8 / 3 and
+    # 8 / F for two objects on the same spot), +4 the drain's frame byte `$0F01,Y` -- FF, nothing was ever staged for a
+    # hidden object -- and +8 the palette C0/72B4 gave it (`$0F81,Y` >> 1 = 01). The fight opens a frame apart on the
+    # two sides (the fight's lag), so the span before the staged frame is free: the step compared is the records'.
+    'hidden-enemy-staged-record': dict(leg='34_', start=15400, frames=90, free=[(15401, 15475)],
+                                       cells=[('7E29D7', 8), ('7E29DF', 4), ('7E29E3', 8), ('7E29EB', 4)]),
     # Leene's Bell, loc 1B7: Marle (object 3) walks to the stall, `96 19 07`. On the target's tile the op runs the snap
     # C0/305D each visit -- it publishes its own velocity (`$1906` / `$1986`: 00 1F the walk's, 10 10 from f1185, 00 10 from
     # f1193) -- and the selector C0/5614 on it: 10 + 10 is the run (`$1686` = 06, phase 1 then 2; `$0F07` 21, 9A), 00 + 10

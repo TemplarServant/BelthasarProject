@@ -3510,3 +3510,20 @@ template took; a pair the mover changed since shows from the object's next templ
 stays in front of the arch the scroll brings over his head (81 px before). Leg 21 f1500: a follower's feet stay hidden
 four pictures after she left the tile that hid them (10 px). `lag=-2` each; one mutation, shared.
 disasm/notes/anim_drain_cad9.md sec. 18.
+
+The prison's fight (playthrough leg 34, loc 048, two guards and two hidden ones their action 7D calls in), five checks
+from one cartridge state cut 75 frames before it (`at=15400`, `lag=-1`):
+`field-picture-enemy-off-the-alive-list-stays-on-the-screen-vs-cartridge` (f15945: the caster is out of `$AF02` for
+its action and stays on the screen), `field-picture-script-hide-reaches-the-screen-a-picture-later-vs-cartridge`
+(f15963: the script's `29` shows three pictures on), `field-picture-called-enemy-in-sight-from-op-5d-vs-cartridge`
+(f15968: op 5D clears `$9FF7` bit 7), `field-picture-hidden-enemy-dissolves-in-its-own-palette-vs-cartridge` (f16790:
+the staging allocates a hidden enemy's palette, C0/72B4) and `leg-window-hidden-enemy-staged-record-vs-cartridge` (the
+two hidden enemies' 12-byte records `$29D7` / `$29E3`: the stored on-screen pixel, the drain's FF, the palette). One
+mutation each, two on the window. disasm/notes/battle_entry.md, battle_asc_ops_orbit_shake_offsets.md sec. 9.
+
+`field-picture-latched-object-waits-for-its-template-vs-cartridge` and
+`field-picture-staged-objects-show-one-by-one-vs-cartridge`: the draw gate. An object the camera's window latches is
+drawn from its first staged template (C0/B701's carry: `$1B00,X` bit 7 after the draw pass), not from the latch.
+Playthrough leg 63, Zenan Bridge, the state cut on f1530: three objects latched on f1543, two staged on f1544, the third
+on f1545 -- the pictures of f1545 (none of them; the port showed three, 1100 px) and f1546 (two; 383 px). `lag=-2`; one
+mutation, shared. disasm/notes/anim_drain_cad9.md sec. 19.

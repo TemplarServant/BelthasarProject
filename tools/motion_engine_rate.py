@@ -25,7 +25,8 @@ def run(frames, engine):
     if not engine:
         env["CT_MOTENGINE"] = "0"
     out = subprocess.run([EXE, "--assets", "ct_assets.dat", "--scene", "433", "--frames", str(frames), "--selftest"],
-                         cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900).stdout
+                         cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=900).stdout   # (the trace is stdout's;
+    # merged, a stderr warning lands inside a buffered trace line and the record is lost)
     return out.decode("utf-8", "replace")
 
 

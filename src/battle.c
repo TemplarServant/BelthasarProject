@@ -13737,9 +13737,13 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           else if (t == 4) { int cs[11], nc = battleAscCmbs(h, t, cs);                                     //   list's
             for (int i = 0; i < nc; i++) h->mem[0x9FF7 + cs[i]] = (uint8_t)((h->mem[0x9FF7 + cs[i]] & 0x80) | v); }
           break; }
-        case 0x5E: {                                                 // $9FF7 bit 7 (C1/5D12 -> C1/5CF3): hidden and out
-          if (t < 4) { int c = h->ascRole[t];                        //   of the target lists and body collisions; tracks
-            if (c >= 0 && c < 11) h->mem[0x9FF7 + c] = (uint8_t)((h->mem[0x9FF7 + c] & 0x7F) | 0x80); }   // 0-3 only
+        // `5E` / `5D`: $9FF7 bit 7 set / cleared -- hidden and out of the target lists and body collisions, and back.
+        // C1/5D12 `LDA #80 / STA $8E / BRA 5CF3`, C1/5CF1 `STZ $8E`; 5CF3: `$9FF7,X = ($9FF7,X & 7F) | $8E` for the track's
+        // combatant, tracks 0-3 only (`CMP #08 / BCS`, `CMP #04 / BCS`), then `LDA #01 / JMP C1/75BB`: the frame is spent.
+        // (E.g. action 7D's summoned guard, CD/D235 `1B 00 / 06 00 / 06 03 / 5D / 2A`: in sight from the 5D.)
+        case 0x5D: case 0x5E: {
+          if (t < 4) { int c = h->ascRole[t];
+            if (c >= 0 && c < 11) h->mem[0x9FF7 + c] = (uint8_t)((h->mem[0x9FF7 + c] & 0x7F) | (op == 0x5E ? 0x80 : 0x00)); }   // (BIT 7, BOTH WAYS)
           break; }
         case 0x2B: {                                                 // both draw offsets to 0 (C1/587D)
           int cs[11], nc = battleAscCmbs(h, t, cs);
@@ -21348,6 +21352,7 @@ static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JS
 static uint8_t gOamPrePub[0x26]; static int gOamPreAscOn; static int gOamPreAscPose[11]; static int gOamPreF = -1;
 static uint8_t gOamPreShadow[11]; static CtFxPopup gOamPrePopups[CT_BATTLE_FX_POOL]; static uint8_t gOamPreX[11], gOamPreY[11];
 static int gOamPreLadder[3];
+static uint8_t gOamPreHid[11];
 static const CtBattleHost* gOamPreOwner;
 static void battleOamPosesBefore(const CtBattleHost* h) {
   if (gOamPreOwner == h && gOamPreF == h->frames) return;          // (the frame's first caller: the state its main thread found)
@@ -21358,6 +21363,7 @@ static void battleOamPosesBefore(const CtBattleHost* h) {
   memcpy(gOamPrePopups, h->popups, sizeof gOamPrePopups);
   memcpy(gOamPreX, h->mem + 0x1D0C, 11); memcpy(gOamPreY, h->mem + 0x1D23, 11); gOamPosScript = 0;
   gOamHopScript = 0;                                               // (its pre-step values: taken at the op)
+  memcpy(gOamPreHid, h->mem + 0x9FF7, sizeof gOamPreHid);          // $9FF7: the hidden flags (below)
   for (int c = 0; c < 3; c++) gOamPreLadder[c] = h->pcLadderPose[c];   // (the ladder's own copy of what it published)
   gOamPreF = h->frames;
 }
@@ -21387,6 +21393,12 @@ static void battleOamPosesKeep(const CtBattleHost* h) {
   // frame, a picture early (294-676 px on the step's picture, ten of them a hop).
   for (int c = 0; c < 11; c++)
     if (gOamHopScript & (1 << c)) { gOamCmpHost.ascHopY[c] = gOamPreHop[c]; gOamCmpMem[0xA4AF + c] = (uint8_t)gOamPreHop[c]; }   // (THE SCRIPT'S HOP)
+  // ...and the hidden flag `$9FF7,X` the compose reads (CF/EA8F): its writers are the main loop's -- a script's ops 29 /
+  // 2A / 5E / 5D (C1/5844, C1/5879, C1/5D12, C1/5CF1), the AI's reveal -- so a flag of row r is on picture r + 3 like a pose. MEASURED
+  // on the rule's cartridge, playthrough leg 34 (the prison's fight, slot 1's action 7D: `29 / 20 05 / 2A / 20 05 ..`):
+  // `$9FFB` 01 on row f15961 on both sides and the enemy still on the cartridge's picture f15963; the port's mirror hid
+  // it a picture early, and every blink after it (595 px on one picture in four).
+  memcpy(gOamCmpMem + 0x9FF7, gOamPreHid, sizeof gOamPreHid);      // (THE SCRIPT'S HIDE)
 }
 static void battleOamComposeIfNone(CtBattleHost* h) {
   if (h && h->mem && !h->composeHeld && !(gOamOwner == h && gOamCmpF == h->frames)) { battleOamCompose(h); battleOamPosesKeep(h); }

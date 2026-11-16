@@ -301,3 +301,39 @@ and t10 `25 01` both end at f1001, the frame their `24 03` released.
    `--peek` frame was compared for these ops in this pass.
 8. Effect-object mode 6 (CF/F39F with a slot index writing combatant arrays) is reachable only if `$A878 = 6`; no op in this
    group sets it.
+
+## 9. Op 5D, the other half of 5E -- and when a hide reaches the screen (2026-11-16)
+
+```
+C1/5CF1  STZ $8E                      op 5D
+C1/5CF3  LDA $A010 / CMP #08 / BCS ->5D0D / CMP #04 / BCS ->5D0D
+C1/5CFE  TAX / LDA $A014,X / TAX
+C1/5D03  LDA $9FF7,X / AND #7F / ORA $8E / STA $9FF7,X
+C1/5D0D  LDA #01 / JMP C1/75BB        the frame is spent
+C1/5D12  LDA #80 / STA $8E / BRA ->5CF3      op 5E
+```
+
+5D clears the bit 5E sets: the combatant is back in sight, in the target lists and in the body collisions. The port had
+5E alone -- 5D advanced and wrote nothing. MEASURED on the rule's cartridge (playthrough leg 34, the prison's fight,
+action 7D, the guards' call): track 3 (CD/D235 `1B 00 / 06 00 / 06 03 / 5D / 2A / 72 15 / 20 05 ...`) is the called
+guard's (`$A017` = 05); its cursor `$5DC9` reads D237 on f15958, D239 on f15962, D23B on f15964, D23C on f15965 --
+where `$9FFC` goes 80 -> 00 -- and D23D on f15966, the `2A` finding the byte clear. In the port the cursors were the
+cartridge's frame for frame and `$9FFC` cleared with the `2A`: the guard a picture late (577 px on f15968, and on
+f16537 for the second call).
+
+**The picture's latency.** The script pass is the main loop's, after the frame's cells were composed, so a write to
+`$9FF7,X` is first read by the NEXT compose. Track 0 of the same action (CD/D208, the caster's blink: `72 15 / 06 03 /
+29 / 20 05 / 72 15 / 2A / 20 05 ...`): `29` on f15961 (`$9FFB` = 01), the caster gone from the picture of f15964
+(there on f15963); `5D` on f15965, the called guard on the picture of f15968; `2A` on f15969, the caster back on
+f15972. Three pictures each. The port's compose read the flag the script had just written (a picture early on every
+blink): battle.c keeps the flags of the frame's start for the compose copy (gOamPreHid, battleOamPosesBefore /
+battleOamPosesKeep).
+
+**Off the alive list is not off the screen.** While its action runs the caster is out of `$AF02` (FF) -- the list the
+target builders and the command pass read -- and stands where it stood: the compose draws by presence (`$96F5,X`). The
+port's enemy pass skipped every slot whose `$AF02` byte was FF unless it was a fallen body (595 px on the action's 25
+frames); it skips one only while its dissolve runs.
+
+Checks: field-picture-called-enemy-in-sight-from-op-5d, field-picture-script-hide-reaches-the-screen-a-picture-later,
+field-picture-enemy-off-the-alive-list-stays-on-the-screen (all -vs-cartridge). With these and the staging's (battle_
+entry.md), every picture of that fight, f15480-f16840, is the cartridge's: 1361 of 1361 at 0 px.

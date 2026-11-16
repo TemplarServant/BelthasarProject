@@ -420,3 +420,15 @@ carried on by mechanisms that quantise time:
   equal, so records 0-5 take the other parity and their accumulators (`$05B0`: 2448, 24F4, 25A0) step on f1794 / f1797 /
   f1801 for the cartridge's f1795 / f1799 / f1803. One call's difference at the load -- the class of legs 58 and 90
   (the load's own frames). Not proven here from one state; the count is what was measured.
+- **Leg 34, the prison's fight: FIXED (2026-11-16).** The audit's f16800 sample (148 px) and four more things the fight
+  showed once it was read frame by frame: a hidden enemy's palette at the staging (C0/05F4 `JSR C0/72B4`), its stored
+  on-screen pixel and the drain's FF in the record, an enemy off the alive list still drawn, the script's hide a picture
+  later, and op 5D (never ported: the called guard a picture late). f15480-f16840, every frame: 1361 of 1361 at 0 px.
+  battle_entry.md, battle_asc_ops_orbit_shake_offsets.md sec. 9.
+- **The draw gate (2026-11-16): an object is drawn from its first staged template.** Found through leg 34's hidden
+  enemies (the host wrote its ticker's frame over the drain's `$0F01,X` = FF) and measured on leg 63's bridge (objects
+  latched on f1543 are on the picture of f1546 / f1547, not f1545). field.c draws on `$1B00,X` bit 7 and writes nothing
+  to `$0F01,X` under the legs. anim_drain_cad9.md sec. 19. Leg 63 itself: by f1543 the port's script
+  runs two frames behind the cartridge (the latch above: f1545 for f1543), and the party stands 2-3 px further west
+  and a walk frame apart (`$0F21` 08 for 09; HYPOTHESIS: the script stops the pad's walk two frames later): 734 px in the party's box on every picture of f1500-f2030 at every lag, 0 px
+  from a state cut on f1530. Where the two frames come from was not traced (the room loads on f504; the load's own frames are the class of legs 58 and 90).

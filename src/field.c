@@ -8386,8 +8386,13 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     // turns it into `slot = op2 - 3`, C0/0557-056E), so every other id or slot falls through to this id-driven ROM chain
     // (E4:F600 + id*0x10 -> the E3 record -> the CT-LZ sheet -> E4:0000 + rec[+2]*24).
     if (id == 0x92 && slot == 3) continue;                       // battleGatoRender owns slot 3 only
-    if (mem[0xAF02 + slot] == 0xFF && !h->deadStanding[slot] && !h->deadNoCmd[slot]) continue;   // dead -> vanish (alive-list FF;
-                                                                                                   //   not a demo's: no death command)
+    // A corpse is the dissolve's (battleDissolveRender, from the kill to CF/FE7B's `STZ $96F5,X`). Anything else that is
+    // PRESENT is drawn, on the alive list or off it: the compose's gate is the presence byte alone (FE845 `LDA $96E9,Y /
+    // BEQ`, the sorted walk's), and `$AF02` is the target lists'. MEASURED on the rule's cartridge, playthrough leg 34 (the
+    // prison's fight, ids 3E 3E 3F 3F): slot 1 leaves the list on f15935 (`$AF03` = FF, `$96F9` still 01), runs action 7D
+    // from f15937 and is on every picture to f15962; the port dropped it with the list (595 px, 25 pictures). A corpse
+    // that stands (the fight's last kill) or died with no death command has no dissolve and is drawn here as before.
+    if (mem[0xAF02 + slot] == 0xFF && h->dissolveActive[slot]) continue;   // (OFF THE LIST, STILL THERE)
     // The pose on screen is the published one, $9907+cmb (C1/1C66). Its writers are the idle-tick cursor walk (battle.c
     // battleIdleWalk: C1/3407-3489, one enemy group per dispatch, the dwell timer $9694 decremented once per visit,
     // cursor $969C, the window rows $97D9/$9799 rebuilt at the $5E0D->$974A commit) and the boot publish (C1/34BA, $A4DC
@@ -9518,8 +9523,6 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   uint8_t list[13]; int nl = fieldEnemyList0617(vm, list);
   int oTX = ((s[0x1D0A] | (s[0x1D0B] << 8)) >> 1) & 0xFF;   // (the staging below reads the same origin and scroll)
   int oTY = ((s[0x1D0E] | (s[0x1D0F] << 8)) >> 1) & 0xFF;
-  int camPx = (s[0x1D0A] | (s[0x1D0B] << 8)) * 8;    // the same scroll in pixels ($1D0A = 8px units)
-  int camPy = (s[0x1D0E] | (s[0x1D0F] << 8)) * 8;    //   -> the $0A00/$0A80 on-screen fine nibbles
   int nobj = CtSceneActorCount(vm);
   memcpy(s + 0x19D, list, (size_t)nl); s[0x19D + nl] = 0x80;
   if (nl == 0) {
@@ -9580,9 +9583,9 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
     uint8_t* r = s + 0x29BF + slot * 12;
     r[0] = (uint8_t)((ax >> 4) - oTX);
     r[1] = (uint8_t)((ay >> 4) - oTY);
-    r[2] = (uint8_t)((ax - camPx) & 15);
-    r[3] = (uint8_t)((ay - camPy) & 15);
-    r[4] = ((s[0x1201 + X] & 7) >= 3) ? 0 : s[0x0F01 + X];   // prio, forced 0 if ($1201&7)>=3
+    r[2] = (uint8_t)(s[0x0A00 + X] & 15);            // 0589 `LDA $0A00,Y / AND #0F`: the on-screen pixel C0/AB45 left --
+    r[3] = (uint8_t)(s[0x0A80 + X] & 15);            // 059C `LDA $0A80,Y`: a hidden object's is its last one (THE STORED PIXEL)
+    r[4] = ((s[0x1201 + X] & 3) >= 3) ? 0 : s[0x0F01 + X];   // 05D8-05E7: `$D9 = $1201,Y & 03`; class 3 -> 0, else `$0F01,Y`
     r[5] = s[0x1101 + X];                            // +5 enemy id
     r[6] = 0;                                        // +6 = 0 (valid)
     r[7] = (uint8_t)((s[0x1201 + X] & 3) | (mode == 6 ? 0x40 : 0) | (s[0x1A81 + X] & 0x80));
@@ -9591,10 +9594,12 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
     // the fight (C0/07ED); the fixtures stage only mode-5 enemies, so this reaches the keep arm.
     { const char* m6 = getenv("CT_STAGE_MODE6");
       if (m6 && (strtol(m6, NULL, 16) & (1 << slot))) r[7] |= 0x40; }
+    // C0/05EB-05F8: a hidden enemy ($1A81,Y bit 7) takes its palette here -- `STY $6D / JSR C0/72B4`, the scan of slots
+    // 1-3 (share, else claim) with the 48-byte upload -- and C0/05F9 reads the `$0F81,Y` it left.
+    if (s[0x1A81 + X] & 0x80) { s[0x016D] = (uint8_t)X; CtScenePalAlloc72B4(vm, o); }   // (THE HIDDEN ENEMY'S PALETTE)
     r[8] = (uint8_t)(s[0x0F81 + X] >> 1);            // +8..+11 tail (synthesis 1.6)
     r[9] = s[0x1280 + X]; r[10] = s[0x1281 + X]; r[11] = s[0x1200 + X];
     s[0x1A3 + slot] = (uint8_t)X;                    // back-map
-    // Not ported: a $1A81-bit7 (hidden) enemy also runs `STY $6D / JSR C0/72B4` (gfx release).
   }
   memcpy(g_stagedRecs, s + 0x29B0, sizeof g_stagedRecs);   // the records as the staging left them (--battletest)
   if (getenv("CT_STAGE_LISTDBG")) {                  // the two ROM arrays the fill produces, verbatim
@@ -19066,8 +19071,16 @@ int main(int argc, char** argv) {
       // Y = $C0, E1CF). The camera-window latch C0/A88D later writes its $FF sentinel to $0F01,X (A902) without
       // re-staging, so the cartridge keeps drawing frame 0 under that $FF (e.g. the Dragon Tank's body, loc 01C).
       if (CtSceneFrameLegsOn() && i != pObj && (CtSceneMem7E(f.vm)[0x1201 + i * 2] & 3) == 3) { actorAf[i] = 0; continue; }
+      // THE DRAW GATE. The draw pass draws an object on C0/B701's carry alone (C0/B309 `JSR C0/B701 / BCC -> draw / RTS`):
+      // with n = `$1B00,X` and T = the class's arity, `(n & 7F) < T` with bit 7 clear is SEC -- nothing staged since the
+      // latch C0/A88D zeroed the counter (A8FD) -- and every drawing arm leaves bit 7 set (the instantiate arm stores 80,
+      // the reposition arm needs it). So after the tick's draw pass (move.c CtAnimDrawPass) bit 7 is "on the screen".
+      // `$0F01,X` is the drain's own byte (its $FF is the latch's "no frame yet", which the commit's equality guard
+      // CC04 / CF24 / D54C reads, and the battle's staging C0/05E4 copies): the host writes nothing there.
+      if (CtSceneFrameLegsOn() && i != pObj && !(CtSceneMem7E(f.vm)[0x1B00 + i * 2] & 0x80)) { actorAf[i] = -1; continue; }   // (THE DRAW GATE)
       if (CtSceneFrameLegsOn() && i != pObj) {
         uint8_t f01 = CtSceneMem7E(f.vm)[0x0F01 + i * 2];
+        if (f01 == 0xFF && CtAnimShownFrame(i) != 0xFF) { actorAf[i] = CtAnimShownFrame(i); continue; }   // the template on the screen
         if (f01 != 0xFF) {
           // A sprite staged over several drain visits shows its new frame when the LAST one writes the template and
           // queues the tiles, not at the commit: class 1 commits `$0F01,X` in pass 1 (C0/D28A, `$1B00,X` -> 1) and
@@ -19091,12 +19104,13 @@ int main(int argc, char** argv) {
       // $0F01,X mirror: the ROM's render pipeline writes each object's current OAM assembly frame
       // to $0F01,X every frame; the battle staging (C0/0557 +4 'prio') reads it. Maintain it in the
       // $7E image so the consumer reads the live pose as the ROM does.
-      if (i != pObj) CtSceneMem7E(f.vm)[0x0F01 + i * 2] = (uint8_t)actorAf[i];
+      if (i != pObj && !CtSceneFrameLegsOn()) CtSceneMem7E(f.vm)[0x0F01 + i * 2] = (uint8_t)actorAf[i];   // (NOT UNDER THE LEGS)
     }
     for (int i = 0; i < nact && n < 78; i++) {
       if (dbg.noNpc) break;                              // probe: hide all NPC sprites
       if (dbg.hideObj && i == atoi(dbg.hideObj)) continue;  // probe: hide one obj
       if (i == pObj) continue;                           // the lead PC = the host's player (drawn separately at
+      if (actorAf[i] < 0) continue;                      // the draw gate's SEC (above): not on the screen
       int pl, sp, ax, ay, fa;                            // px/py; drawing it here too would show it twice)
       CtSceneActor(f.vm, i, &pl, &sp, &ax, &ay, &fa);
       int pv = CtSceneActorPrio(f.vm, i);                // 0x8E fixed prio 0/1 on both halves:
@@ -19222,7 +19236,7 @@ int main(int argc, char** argv) {
         int am, ai, ail, alp, ast, agen = CtSceneActorAnim(f.vm, o, &am, &ai, &ail, &alp, &ast);
         uint32_t al = 0; const uint8_t* an = CtAssetGet(&assets, CT_ASSET_SPRITEANIM, (uint32_t)sp, &al);
         int af = an ? animTickActor(&sidePlay[o], an, al, am, ai, ail, alp, ast, agen, CtSceneActorMoving(f.vm, o), 0,
-                                    CtSceneActorMoveAnim(f.vm, o), fa, NULL) : actorAf[o];        g_motOwn = CtMotSprite(mot, o, ax, ay);
+                                    CtSceneActorMoveAnim(f.vm, o), fa, NULL) : (actorAf[o] < 0 ? 0 : actorAf[o]);        g_motOwn = CtMotSprite(mot, o, ax, ay);
         drawSprite(&assets, fb, sidx, spal, sp, af, sx, sy, front, tf, bf, 0, 0, 0, 0, 0, NULL, 0, NULL, NULL, NULL);
         sideShown[o] = 1;
       }

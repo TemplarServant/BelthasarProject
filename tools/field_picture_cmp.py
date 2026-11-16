@@ -279,6 +279,25 @@ PICTURES = {
     # ...and the enemy's hop in place (action 36, op C4 / C5 stepping `$A4AF` in the main loop, C1/6FCC): each step is on
     # the picture a frame after a service's hop would be (row + 3). f3734: the first step's row + 2 -- still on the ground.
     'script-hop-reaches-the-mirror-a-frame-later': dict(leg='29_gate_home', at=0, frames=3734, own=True, lag=-1),
+    # Leg 63, Zenan Bridge (loc 087): three objects (21-23) come into the camera's window as the party walks west. The
+    # latch C0/A88D takes them on f1543 (`$0F00,X` = 80, `$0F01,X` = FF, `$1B00,X` = 0), the drain stages two on f1544
+    # and the third on f1545 (`$0F01,X` = 13, `$1B00,X` = 80 from the draw pass), and the picture shows none on f1545,
+    # two on f1546, three on f1547: the draw pass draws on C0/B701's carry, which a latched object with nothing staged
+    # does not have. (The port drew a latched object at once, with its own ticker's frame: 1100 px a picture early.)
+    'latched-object-waits-for-its-template': dict(leg='63_zombor', at=1530, frames=15, own=True, lag=-2),
+    'staged-objects-show-one-by-one': dict(leg='63_zombor', at=1530, frames=16, own=True, lag=-2),
+    # Leg 34, the prison's fight (loc 048, enemies 3E 3E 3F 3F): two guards on the floor and two HIDDEN ones (`$1A81,X`
+    # bit 7) that action 7D calls in -- its caster blinks (track 0, CD/D208: `29` / `2A` every six frames), the called
+    # one jumps to the caster's place and comes into sight (track 3, CD/D235: `1B 00 / 06 00 / 06 03 / 5D / 2A`). The
+    # state is cut 75 frames before the fight (f15400); the fight's pictures are the port's a frame on (`lag=-1`).
+    #   f15945: the caster is off the alive list `$AF02` while its action runs and stays on the screen (595 px).
+    #   f15963: the script's `29` reached `$9FFB` on f15961; the picture hides the caster from f15964 (574 px a frame early).
+    #   f15968: the called guard is in sight from op `5D` (bit 7 of `$9FFC` cleared on f15965), a frame before the `2A`.
+    #   f16790: a called guard dissolves in the palette the staging allocated for it (C0/05F0 `JSR C0/72B4`; 506 px).
+    'enemy-off-the-alive-list-stays-on-the-screen': dict(leg='34_to_bridge', at=15400, frames=545, own=True, lag=-1),
+    'script-hide-reaches-the-screen-a-picture-later': dict(leg='34_to_bridge', at=15400, frames=563, own=True, lag=-1),
+    'called-enemy-in-sight-from-op-5d': dict(leg='34_to_bridge', at=15400, frames=568, own=True, lag=-1),
+    'hidden-enemy-dissolves-in-its-own-palette': dict(leg='34_to_bridge', at=15400, frames=1390, own=True, lag=-1),
     # A sprite's pieces keep the priority their template took (`$0C00,X` / `$0C01,X` ORed into each record's attribute, C0/CD47..):
     # the pair the mover changes since is on the screen from the object's next template. Leg 32 f7504 (the castle's cell
     # block): the guard stands with his template's priority 3 while the pair reads 20 20, and the camera's scroll brings the

@@ -50,3 +50,43 @@ All in scratchpad, each with .raw fb + .wram/.vram/.oam beside it: gato_t0.state
 - staged enemy record bytes +8..+11 (e.g. GATO `01 00 80 7f`, written by the C0/05F9 tail) not decoded
 - the exact caller/frame-position of the C0/1770 poll inside the field frame tick was not traced (it sits after OAM-tail writes $09B4-$09B8)
 - PC-stage byte order at $29B0 (Marle's record 0b 06 00 0f 02 vs D9 target (0B,08)) not field-by-field verified against C0/041A entry (only the 0430+ core was disassembled)
+
+## The staging's enemy record, read off the listing again -- and the HIDDEN enemies (2026-11-16)
+
+`C0/0557`, once per list entry (`$9D..$A2`), X = 12 * slot (the slot from `$0D00,Y`: 0560-056E):
+
+```
+057C  $29BF,X = $1801,Y - $F0          +0  tile X against the arena's ($F0 = $1D0A >> 1)
+0589  $29C1,X = $0A00,Y & 0F           +2  the ON-SCREEN pixel's low nibble
+0592  $29C0,X = $1881,Y - $F1          +1
+059C  $29C2,X = $0A80,Y & 0F           +3
+05A5  $29C4,X = $1101,Y / $29C5,X = 0  +5 id, +6 valid
+05B2  $1100,Y == 6 ? ($1201,Y & 03) | 40 : ($1201,Y & 03)   -> $EE, and $D9 = $1201,Y & 03
+05CD  $29C6,X = ($1A81,Y & 80) | $EE   +7
+05D8  ($D9 & 07) >= 3 ? 00 : $0F01,Y   -> $29C3,X   +4
+05EB  $1A81,Y bit 7:  STY $6D / JSR C0/72B4          the HIDDEN enemy's palette
+05F9  $29C7,X = $0F81,Y >> 1           +8
+0601  $29CA,X = $1200,Y / $29C9,X = $1281,Y / $29C8,X = $1280,Y
+```
+
+Three reads the port had wrong, all three on a HIDDEN enemy (`$1A81,X` bit 7: a field object the fight's script calls
+in later). Measured on the rule's cartridge, playthrough leg 34, the prison's fight (loc 048, 3E 3E 3F 3F), f15476 --
+objects $1A and $1C, both at X $0D80 / Y $24FF, slots 2 and 3:
+
+    $29D7: 05 07 08 03 FF 3F 00 80 01 00 80 7F
+    $29E3: 05 07 08 0F FF 3F 00 80 01 00 80 7F
+
+- **+2 / +3 are `$0A00,Y` / `$0A80,Y`, not the world position.** C0/AB45 stores the pair for an object it positions; a
+  hidden object keeps the last one it had (`$0A1A` / `$0A9A` = 58 / D3, `$0A1C` / `$0A9C` = A8 / BF since the room's
+  load), so two objects on one spot stage 8 / 3 and 8 / F. The port took `(world - camera) & 15`: F for both, and the
+  battle's `$1D28` (CC/EA90: +1 * 16 + +3) read 7F for the cartridge's 73.
+- **+4 is the drain's byte as it stands: FF.** The latch's `no frame yet` (C0/A902; the room's load writes it too) stays
+  on an object nothing is ever staged for. The port's host ticker wrote its own frame over that FF (15) -- see
+  anim_drain_cad9.md sec. 19. The class test is on `$1201,Y & 03` (`$D9`), not `& 07`.
+- **+8 needs C0/72B4 first.** A hidden object was never latched, so the latch's allocator (A905 `JSR C0/7170`) never
+  ran for it and `$0F81,Y` is 0; the fill calls the scan of slots 1-3 itself (share a slot that holds the same palette,
+  else claim one and upload its 48 bytes) and stores what it left: 01. The port staged 00 and the called guards were
+  drawn in the wrong colours where the battle reads the record (506 px over their dissolve, f16760-f16830).
+
+Checks: leg-window-hidden-enemy-staged-record-vs-cartridge, field-picture-hidden-enemy-dissolves-in-its-own-palette-
+vs-cartridge. Not measured: a class-3 enemy with `$1201,Y` bit 2 set (the `& 03` against the port's old `& 07`).
