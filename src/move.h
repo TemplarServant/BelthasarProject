@@ -345,6 +345,10 @@ int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1);
 int CtFieldOamTag(int entry, int* obj, int* frame, int* piece);
 // C0/E12A: a 24-piece sprite's staging (frame 0's chips, their DMA to VRAM word $0400, the live records). move.c.
 void CtObjStageBig(uint8_t* r, const uint8_t* rom, int romLen, int idx);
+// C0/CB0A: the live records of the object's current $0F01 (the battle epilogue's tail). move.c.
+void CtObjRebuildLive(uint8_t* r, const uint8_t* rom, int romLen, int idx);
+// A MODEL: the chips a fight leaves in a class-0 object's VRAM slot (its $0F01 pose), into the VRAM image. move.c.
+void CtObjFightPoseTiles(uint8_t* r, const uint8_t* rom, int romLen, int idx);
 // C0/571A-58AA: the location load's per-object default fill, written through the $2180 WRAM port. Thirteen arrays get
 // their initial value per object; $1000,X = 4 clears the op-0x0B pause bit the activate guard C0/5AD1 refuses on.
 // `body16` is the script's 32-byte-per-object fn-pointer table ($7F:2001), used only for the $1180,X fn0 seed; NULL

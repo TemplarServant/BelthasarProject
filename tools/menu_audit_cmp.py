@@ -32,7 +32,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ctlib import fb  # noqa: E402
+from ctlib import fb, lake  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
@@ -469,6 +469,7 @@ def run_port(d, outdir, thumbs, shots=(), dump_at=None, name=None):
                CT_SHOTS_THUMBS=thumbs, CT_SHOTS_THUMBS_EVERY='1', CT_HOLDBTN=','.join(hold),
                CT_SRAM=os.path.join(outdir, '_p.srm'), CT_SRAM_FRESH='1')
     env.update(PORT_ENV.get(name, {}))
+    env.update(lake.seed_vram_env(os.path.join(ROOT, d[0]), os.path.join(outdir, '_seed.vram')))   # (the OAM renderer)
     if shots:
         env.update(CT_SHOTS=os.path.join(outdir, '_p'), CT_SHOTS_AT=','.join(str(f) for f in shots))
     if dump_at is not None:                             # the engine's WRAM at that frame (--ram)

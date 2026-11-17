@@ -4919,17 +4919,25 @@ int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1) {
   return 1;
 }
 
+// `dst` = where the record set goes, at its +2: $7F:4802 + $1700,X for the drain's template (CD47..), $7F:4BC2 for the
+// live records C0/CB0A's arms rebuild (CDF0..); `track` = whether the port's "shown template" trackers follow it.
+static void ctAnimTemplateTo(uint8_t* r, const uint8_t* rom, int romLen, int idx, int rec, int recBank, int pieces,
+                             int recOff, int e8Test, int jumpAt, int dst, int track);
 static void ctAnimTemplate(uint8_t* r, const uint8_t* rom, int romLen, int idx,
                            int rec, int recBank, int pieces, int recOff, int e8Test, int jumpAt) {
-  if (idx >= 0 && idx < 0x80 && !(idx & 1)) g_ctAnimShown[idx >> 1] = r[0x0F01 + idx];   // (THE TEMPLATE'S FRAME)
+  ctAnimTemplateTo(r, rom, romLen, idx, rec, recBank, pieces, recOff, e8Test, jumpAt, 0x4802, 1);
+}
+static void ctAnimTemplateTo(uint8_t* r, const uint8_t* rom, int romLen, int idx, int rec, int recBank, int pieces,
+                             int recOff, int e8Test, int jumpAt, int dst, int track) {
+  if (track && idx >= 0 && idx < 0x80 && !(idx & 1)) g_ctAnimShown[idx >> 1] = r[0x0F01 + idx];   // (THE TEMPLATE'S FRAME)
   int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);   // CCB8 8-bit LDX / CCBA 16-bit LDA / CCBF TAX
   int y16 = r[0x016D] | (r[0x016E] << 8);                // CD2C LDY $6D, Y 16-bit (REP #10 at CCBD)
-  if (idx >= 0 && idx < 0x80 && !(idx & 1)) {            // (THE TEMPLATE'S PRIORITY)
+  if (track && idx >= 0 && idx < 0x80 && !(idx & 1)) {   // (THE TEMPLATE'S PRIORITY)
     g_ctAnimShownPrio[idx >> 1][0] = r[0x0C00 + y16]; g_ctAnimShownPrio[idx >> 1][1] = r[0x0C01 + y16]; g_ctAnimShownOk[idx >> 1] = 1; }
   int tile = r[0x0D00 + y16] & 0xFF;                     // CD2E, an 8-bit load
   int attr = (r[0x0F81 + y16] | r[0x0D01 + y16]) & 0xFF; // CD47-CD4D -> $D9
   for (int e = 0; e < pieces; e++) {
-    int p = (0x4802 + base + e * 8) & 0xFFFF;
+    int p = (dst + base + e * 8) & 0xFFFF;
     int xd = romRead24(r, rom, romLen, recBank, rec + recOff + e * 2);     // CCC5 LDA [$D3],Y
     int yd = romRead24(r, rom, romLen, recBank, rec + recOff + 1 + e * 2); // CCD8
     r[0x10000 + p]     = (uint8_t)xd;                                     // +2
@@ -5689,6 +5697,45 @@ static void ctVramDma(const uint8_t* r, uint8_t* vram, int vmaddr, int src, int 
     else     { vram[(w * 2 + 1) & 0xFFFF] = b; hi = 0;    // $2119
                w = w + 1; }
   }
+}
+
+// C0/CB0A, the drain's twin, reached only by the two BRLs that end the battle epilogue (C0/086E, C0/0902;
+// anim_drain_cad9.md sec. 2): the drain's four gates (CB0C-CB1C: `$1100,X` BPL, `$1A81,X` neither 0 nor negative,
+// `$0F00,X`), then by class CDC8 / D124 / DD28 -- the object's record set for its CURRENT `$0F01,X` (the record at
+// `$1380,X + frame * $28 / $50 / $78`, bank `$1300,X`) written straight into the LIVE buffer `$7F:4BC0 + $1700,X`, and
+// `$1B00,X = $80`; class 3 `CLC / RTS` (CB2F). It selects no frame, allocates nothing, uploads nothing. The port's
+// epilogue stamped `$1B00` only (its asset drawer draws `$0F01` itself); the OAM mirror the draw pass copies these
+// records into needs them. `$6D` is the caller's (C0/0868 / C0/08FC STY $6D).
+void CtObjRebuildLive(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
+  if ((r[0x1100 + idx] & 0x80) || !r[0x1A81 + idx] || (r[0x1A81 + idx] & 0x80) || !r[0x0F00 + idx]) return;
+  int cls = r[0x1201 + idx] & 3;
+  if (cls == 3) return;
+  static const int STRIDE[3] = { 0x28, 0x50, 0x78 }, PIECES[3] = { 4, 8, 12 }, OFF[3] = { 0x20, 0x40, 0x60 };
+  int rec = ((r[0x1380 + idx] | (r[0x1381 + idx] << 8)) + r[0x0F01 + idx] * STRIDE[cls]) & 0xFFFF, bk = r[0x1300 + idx];
+  r[0x016D] = (uint8_t)idx; r[0x016E] = 0;
+  ctAnimTemplateTo(r, rom, romLen, idx, rec, bk, PIECES[cls], OFF[cls], cls == 0,
+                   cls == 2 ? (((r[0x0D00 + idx] & 0xFF) == 0x68) ? 4 : 8) : -1, 0x4BC2, 0);
+  r[0x1B00 + idx] = 0x80;                                          // CEEE / D283 / DF28
+}
+
+// A MODEL, not a ROM routine: the OBJ tiles a fight leaves in an object's VRAM slot. The battle's animator uploads each
+// combatant's pose into the slot the field gave it, and the field draws from there after the return (C0/CB0A uploads
+// nothing; the drain only on its next commit), so after the fight the slot holds the chips of the last pose -- the
+// `$9907` the epilogue copies into `$0F01,X` (C0/0837 / C0/08CB). The port's fight draws from the sprite sheets and
+// writes no VRAM, so the epilogue puts those chips there: the class-0 tile half's blit and its two $0100-byte uploads
+// (CC17-CC76, CC78-CCB4, C0/B1B2), into the VRAM image only -- the WRAM staging is left as it was. Classes 1 and 2 are
+// not modelled. Graded by tools/field_objdata_cmp.py on the field right after a fight.
+void CtObjFightPoseTiles(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
+  if ((r[0x1201 + idx] & 3) != 0) return;
+  int a = r[0x0D80 + idx] | (r[0x0D81 + idx] << 8);
+  uint8_t save[0x200], chips[0x200];
+  for (int i = 0; i < 0x200; i++) save[i] = r[0x10000 + ((a + i) & 0xFFFF)];
+  static const CtBlitSeg SEG = { 0x000, 0x00, 16, 0 };
+  ctAnimBlit(r, rom, romLen, idx, ctAnimRec(r, idx, 0x28), r[0x1300 + idx], &SEG);
+  for (int i = 0; i < 0x200; i++) { chips[i] = r[0x10000 + ((a + i) & 0xFFFF)]; r[0x10000 + ((a + i) & 0xFFFF)] = save[i]; }
+  int dstA = ((r[0x0D00 + idx] | (r[0x0D01 + idx] << 8)) & 0x01FF) << 4;
+  vmVramDma(dstA, chips, 0x100);
+  vmVramDma((dstA + 0x100) & 0x7FFF, chips + 0x100, 0x100);
 }
 
 // C0/E12A, a 24-piece sprite's (class 3) staging, called by the enemy loader (C0/47E5) and the reload chain (C0/0212):

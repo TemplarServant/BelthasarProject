@@ -4627,7 +4627,7 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
   int nplot = 0;
   static uint8_t keep[128][16];                            // per entry and sprite row: the slivers drawn (bit per 8 px)
   memset(keep, 0, sizeof keep);
-  for (int p = 0; p < 224; p++) {
+  for (int p = 1; p <= 224; p++) {                        // the PPU's lines 1-224 = the picture's rows 0-223
     int found[32], nf = 0;
     for (int e = 0; e < 128; e++) {                        // range: the first 32 in range, index 0 up
       int y = oam[e * 4 + 1], hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3, size = (hi & 2) ? 16 : 8;
@@ -4666,10 +4666,10 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
     if (hi & 1) x -= 256;                                  // the high table's bit 0: X bit 8
     int t9 = name | ((attr & 1) << 8), any = 0;
     for (int r = 0; r < size; r++) {
-      int line = (y + 1 + r) & 0xFF;                       // the PPU shows an entry from the line after its Y
+      int line = (y + 1 + r) & 0xFF;                       // the PPU shows an entry from the line after its Y (row line - 1)
       for (int c = 0; c < size; c++) {
         int v = 0, sx = x + c;
-        if (line < 224 && sx >= 0 && sx < 256 && (keep[e][r] >> (c >> 3) & 1)) {
+        if (line >= 1 && line <= 224 && sx >= 0 && sx < 256 && (keep[e][r] >> (c >> 3) & 1)) {
           int rr = (attr & 0x80) ? size - 1 - r : r, cc = (attr & 0x40) ? size - 1 - c : c;   // V / H flip
           int tile = (t9 & 0x100) | ((((t9 >> 4) + (rr >> 3)) & 0x0F) << 4) | (((t9 & 0x0F) + (cc >> 3)) & 0x0F);
           int w = tile * 16 + (rr & 7), b = 7 - (cc & 7);
@@ -4696,7 +4696,9 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
     } else g_motOwn = CtMotSprite(mot, 0x10000 + e, x, y);
     g_bObjPalCur = (attr >> 1) & 7;                        // its palette (the colour window's math)
     int box[4] = { 0, 0, size - 1, size - 1 }, pr = (attr >> 4) & 3;
-    nplot += spritePixels(fb, idx, box, pal, NULL, pr, pr, viewX + x, viewY + y + 1, front, winClip, NULL, sten);
+    // An entry whose Y is 224 or more shows only its rows that wrap past line 255 onto the top: it stands at Y - 256.
+    nplot += spritePixels(fb, idx, box, pal, NULL, pr, pr, viewX + x, viewY + (y >= 224 ? y - 256 : y) + 1, front, winClip,
+                          NULL, sten);
     g_bObjPalCur = -1;
   }
   return nplot;
@@ -5156,6 +5158,56 @@ static void fieldLockInit(const char* statePath) {
 // CT_AUDIO_SEEDSTATE=<lake .state>: the SPC half of the lockstep alone. A run from a WRAM image carries no SPC (main, the
 // audio bring-up); under the rule a harness whose image IS a state's WRAM hands the port that state's own SPC, DSP and
 // ARAM here, without running the oracle beside it. Loads the state into a scratch oracle and returns it (its ->apu).
+// TEST SURFACE (opt-in): CT_SEED_VRAM=<a cartridge's .vram, 64 KB, or the oracle state (CTLS) the WRAM image was cut
+// from> -- the seed's VRAM, which a WRAM image does not carry, into the field's VRAM image: the tiles the sprites drawn
+// from OAM (CT_OAMRENDER=1) take, so it is read only while that renderer is on. A state's VRAM is its payload's 0x10000
+// bytes at 131537 (69 + the WRAM + the CPU's and the DMA's blocks; tools/ctlib/lake.py VRAM_OFF, byte-equal to the
+// oracle's --peek .vram). No word is marked known (g_ringKnown), so the BG's picture is unchanged. --loadwram and
+// --battletest (the two WRAM seeds) call it.
+static void fieldSeedVramFromEnv(const char* tag) {
+  const char* vp = fieldOamRenderOn() ? getenv("CT_SEED_VRAM") : NULL;
+  FILE* vf = vp && *vp ? fopen(vp, "rb") : NULL;
+  if (!vf) return;
+  static uint8_t vb[0x10000];
+  size_t n = fread(vb, 1, sizeof vb, vf); fclose(vf);
+  if (n >= 4 && !memcmp(vb, "CTLS", 4)) {
+    uint8_t* pl = NULL; int pn = 0; n = 0;
+    if (CtLakeStateLoadPath(vp, &pl, &pn, NULL) == 0 && pn >= 131537 + 0x10000) { memcpy(vb, pl + 131537, 0x10000); n = 0x10000; }
+    free(pl);
+  }
+  for (size_t k = 0; k + 1 < n; k += 2) g_fieldVram[k / 2] = (uint16_t)(vb[k] | (vb[k + 1] << 8));
+  fprintf(stderr, "[%s] VRAM seeded from %s (%u bytes)\n", tag, vp, (unsigned)n);
+}
+
+// The F5/F9 snapshot (CtSceneSaveState's CTFS file) and the field's VRAM image: a tail after the WRAM image -- "VRAM",
+// its length (u32 LE, 0x10000), the 0x8000 words LE. A WRAM image carries no VRAM, and the sprites drawn from OAM
+// (CT_OAMRENDER=1) take their tiles from it, so a state brings it back; a state without the tail (older) loads as before,
+// the VRAM image left as it is.
+static int fieldStateSave(CtScene* vm, const char* path, const double plr[4]) {
+  int ok = CtSceneSaveState(vm, path, plr);
+  if (!ok) return 0;
+  FILE* f = fopen(path, "ab");
+  if (!f) return 0;
+  static uint8_t vb[0x10000];
+  for (int k = 0; k < 0x8000; k++) { vb[2 * k] = (uint8_t)g_fieldVram[k]; vb[2 * k + 1] = (uint8_t)(g_fieldVram[k] >> 8); }
+  const uint8_t hdr[8] = { 'V', 'R', 'A', 'M', 0x00, 0x00, 0x01, 0x00 };
+  ok = fwrite(hdr, 1, 8, f) == 8 && fwrite(vb, 1, sizeof vb, f) == sizeof vb;
+  fclose(f);
+  return ok;
+}
+static int fieldStateLoad(CtScene* vm, const char* path, double plr[4]) {
+  int r = CtSceneLoadState(vm, path, plr);
+  if (r <= 0) return r;
+  FILE* f = fopen(path, "rb");
+  if (!f) return r;
+  static uint8_t vb[0x10000]; uint8_t hdr[8];
+  if (fseek(f, -(long)(8 + sizeof vb), SEEK_END) == 0 && fread(hdr, 1, 8, f) == 8 && !memcmp(hdr, "VRAM", 4)
+      && (hdr[4] | (hdr[5] << 8) | (hdr[6] << 16) | ((uint32_t)hdr[7] << 24)) == sizeof vb && fread(vb, 1, sizeof vb, f) == sizeof vb)
+    for (int k = 0; k < 0x8000; k++) g_fieldVram[k] = (uint16_t)(vb[2 * k] | (vb[2 * k + 1] << 8));
+  fclose(f);
+  return r;
+}
+
 static Snes* fieldSeedStateLoad(const char* statePath) {
   long rl = 0; const uint8_t* rb = CtBattleDumpRom(&rl);   // the dump: the state's SPC runs the ROM's driver
   if (!rb || rl <= 0) { fprintf(stderr, "[seedstate] no ROM image -- ignored\n"); return NULL; }
@@ -9379,17 +9431,17 @@ static uint8_t g_stagedRecs[0x70];
 //   STZ $1601,Y                 the anim timer restarts
 //   STY $6D / JSR C0/A9CD       LINK (the caller unlinked it with C0/A98A under the old $0A80)
 //   BRL C0/CB0A                 the drain's twin: its gates, then CDC8 / D124 / DD28 rebuild the OAM records of this $0F01
-//                               into $7F4BC0 + $1700,X and stamp $1B00,X = $80 (anim_drain_cad9.md; the port composes
-//                               the sprite from $0F01 itself and keeps no records, so the stamp is what is left)
+//                               into $7F4BC0 + $1700,X and stamp $1B00,X = $80 (anim_drain_cad9.md; move.c CtObjRebuildLive)
 static void fieldEpilogueFrame(uint8_t* s, int X, const uint8_t* r) {
   s[0x0F01 + X] = r[4];
   s[0x0A00 + X] = (uint8_t)((r[0] << 4) | r[2]);
   s[0x0A80 + X] = (uint8_t)((r[1] << 4) | r[3]);
   s[0x1601 + X] = 0;
   CtObjListLink(s, X);
-  if (!(s[0x1100 + X] & 0x80) && s[0x1A81 + X] && !(s[0x1A81 + X] & 0x80) && s[0x0F00 + X] &&
-      (s[0x1201 + X] & 3) != 3)                              // CB0C-CB2F: the four gates, class 3 -> CLC / RTS
-    s[0x1B00 + X] = 0x80;                                    // `LDA #80 / STA $1B00,X` at CEEE / D283 / DF28 (E123)
+  // BRL C0/CB0A: its four gates, then the live records of this $0F01 and `$1B00,X = $80` (move.c CtObjRebuildLive) --
+  // what the OAM mirror shows of the object until the drain commits another frame.
+  { long rl = 0; const uint8_t* rom = CtRomImage(&rl); CtObjRebuildLive(s, rom, (int)rl, X);
+    CtObjFightPoseTiles(s, rom, (int)rl, X); }   // (a MODEL: the fight's last upload into the slot -- move.c)
 }
 // C0/080D-0836 / C0/08A1-08C8: the corpse's or the PC's field words straight from its battle record (`$1801,Y = rel +
 // $F0`, `$1881,Y = rel + $F1`, `$1800,Y = fine << 4`, `$1880,Y = fine << 4`): the object stands where the fight left it
@@ -9479,6 +9531,15 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
       fieldEpilogueWords(s, X, px, py);                       // C0/08A1-08C8's words
       fieldEpilogueFrame(s, X, r);                            // C0/08CB-0902
     }
+    // C0/0304-0311 (`LDX #0900 / STX $7D`, `#0770 / $7F`, `#08A0 / $7B`): the draw pass's three stale marks set to their
+    // groups' ends, so the pass hides every entry the fight left in the OAM mirror; and C0/072B `JSR C0/B271`, the pass
+    // itself, after the two epilogues (C0/0715 = 0723 JSR C0/076B / 0726 JSR C0/0871 / 072B JSR C0/B271): the mirror is the
+    // field's again from the return's first frame, the objects on the frames the epilogue gave them. MEASURED on the rule's
+    // cartridge, the attract after its 07D fight (the oracle's f5087): the mirror's default group holds the field's Hench
+    // and party (tiles 40-4E, attribute 24); the port's still held the fight's own (tiles C0-CE, attribute 30) until its main
+    // loop's first pass. (THE RETURN'S DRAW PASS)
+    s[0x017B] = 0xA0; s[0x017C] = 0x08; s[0x017D] = 0x00; s[0x017E] = 0x09; s[0x017F] = 0x70; s[0x0180] = 0x07;
+    if (CtSceneFrameLegsOn()) CtAnimDrawPass(s, NULL);
     // (the regroup CALL, C0/0330 -> C0/5B1F, is fieldBattleResume's -- it follows the C0/595C run there)
   }
   // ---- C0/0283 outcome dispatch on $7F01EC ----
@@ -11324,13 +11385,7 @@ int main(int argc, char** argv) {
         // ...and its BG: the maps as its WRAM holds them (an open door is a bumped cell there, C0/0D4C) and the frame each
         // animated record shows (the seed's VRAM is not in the image); the colours follow the live page every frame.
         fieldMapFromWram(&f, CtSceneMem7E(f.vm), "loadwram");
-        // TEST SURFACE (opt-in): CT_SEED_VRAM=<a cartridge's .vram, 64 KB> -- the seed's VRAM, which a WRAM image does not
-        // carry, into the field's VRAM image: what tools that compare the OBJ tiles (or will draw from them) need at a leg's
-        // start. No word is marked known (g_ringKnown), so the BG's picture is unchanged.
-        { const char* vp = getenv("CT_SEED_VRAM"); FILE* vf = vp ? fopen(vp, "rb") : NULL;
-          if (vf) { static uint8_t vb[0x10000]; size_t n = fread(vb, 1, sizeof vb, vf); fclose(vf);
-            for (size_t k = 0; k + 1 < n; k += 2) g_fieldVram[k / 2] = (uint16_t)(vb[k] | (vb[k + 1] << 8));
-            fprintf(stderr, "[loadwram] VRAM seeded from %s (%u bytes)\n", vp, (unsigned)n); } }
+        fieldSeedVramFromEnv("loadwram");
         free(wram);
       } else fprintf(stderr, "[loadwram] FAILED to find RAM block in %s\n", loadWramPath);
       free(fb);
@@ -11345,6 +11400,7 @@ int main(int argc, char** argv) {
     py = (btWram[0x1880 + btLead * 2] | (btWram[0x1881 + btLead * 2] << 8)) / 16.0;
     camSeeded = 1;                                     // camera from the WRAM $1D page seed (mid-seek preserved)
     fprintf(stderr, "[battletest] seeded VM from %s, lead obj%d at (%.0f,%.0f)\n", btWramPath, btLead, px, py);
+    fieldSeedVramFromEnv("battletest");
     fieldWindowFromRom(CtSceneMem7E(f.vm));              // the seed is a loaded location: its window is $2991's (the
                                                         //   load's own C0/7084 pass read the WRAM the seed replaced)
     // The arena is the field's BG as the IRQ last left it: a battle keeps the tile machine's records, its step tables
@@ -11359,7 +11415,7 @@ int main(int argc, char** argv) {
   }
   int stateRestored = 0;                                 // (a restored snapshot already carries C0/B0E6's bytes)
   if (loadStatePath && f.vm) {                           // --loadstate: restore a debug F5 snapshot at startup
-    double plr[4]; int r = CtSceneLoadState(f.vm, loadStatePath, plr);   // (scene already loaded, pointers match)
+    double plr[4]; int r = fieldStateLoad(f.vm, loadStatePath, plr);   // (scene already loaded, pointers match)
     stateRestored = r > 0;
     if (r == 2) { px = plr[0]; py = plr[1]; pz = (int)plr[2]; pfac = (int)plr[3];   // full restore (incl. Z plane)
       fprintf(stderr, "[loadstate] restored %s, lead at (%.0f,%.0f)\n", loadStatePath, px, py); }
@@ -11644,6 +11700,13 @@ int main(int argc, char** argv) {
   int wramSeeded = (loadWramPath || btWram || loadStatePath) ? 1 : 0;
   Snes* seedSpc = g_lockOracle;
   if (!seedSpc && wramSeeded && CtAudioRuleOn()) { const char* sp = getenv("CT_AUDIO_SEEDSTATE"); if (sp && *sp) seedSpc = fieldSeedStateLoad(sp); }
+  // TEST SURFACE, the OAM renderer's (CT_OAMRENDER=1, stage 2): a WRAM seed carries no VRAM, and the OAM pass draws its
+  // sprites' tiles from it. The state the harness names for the SPC holds the PPU's: its VRAM into the field's image,
+  // unless the harness gave one itself (CT_SEED_VRAM). No word is marked known (the BG's picture is unchanged).
+  if (seedSpc && wramSeeded && fieldOamRenderOn() && !getenv("CT_SEED_VRAM") && seedSpc->ppu) {
+    memcpy(g_fieldVram, seedSpc->ppu->vram, sizeof g_fieldVram);
+    fprintf(stderr, "[seedstate] VRAM from the state (the OAM renderer)\n");
+  }
   int ruleSpc = CtAudioRuleOn() && !getenv("CT_NOAUDIO") && (!wramSeeded || seedSpc);
   int ruleSeeded = ruleSpc && wramSeeded && seedSpc;           // the SPC is the lockstep oracle's / the state's
   // The power-on (--boot from cold, under the rule): the machine starts at the reset, not at scene 0 lit. The SPC
@@ -13049,7 +13112,7 @@ int main(int argc, char** argv) {
           if (buf[0] == 'S') {
             char sp[48] = { 0 }; double plr[4] = { px, py, (double)pz, (double)pfac };
             if (sscanf(buf + 1, "%47s", sp) == 1 && f.vm) {
-              int ok = CtSceneSaveState(f.vm, sp, plr);
+              int ok = fieldStateSave(f.vm, sp, plr);
               if (ok && g_fieldAudio) { char na[64]; snprintf(na, sizeof na, "%s.apu", sp); CtAudioSaveState(g_fieldAudio, na); }
               fprintf(stderr, "[walkpipe] f%d snapshot %s: %s\n", frameNo, sp, ok ? "ok" : "FAIL");
             }
@@ -13355,8 +13418,8 @@ int main(int argc, char** argv) {
         double plr[4] = { px, py, (double)pz, (double)pfac };
         int n = fieldDebugNextCapture();
         char np[64]; snprintf(np, sizeof np, "ct_debug_%03d.state", n);
-        int ok = CtSceneSaveState(f.vm, np, plr);
-        CtSceneSaveState(f.vm, "ct_debug.state", plr);                  // the latest, for F9
+        int ok = fieldStateSave(f.vm, np, plr);
+        fieldStateSave(f.vm, "ct_debug.state", plr);                  // the latest, for F9
         if (ok) { fieldDebugLogCapture(n, "scene", frameNo, CtSceneMem7E(f.vm), px, py); hostDebugPictures(n); }
         if (ok && g_fieldAudio) {                                       // ...and the SPC of the same moment (F9's music)
           char na[72]; snprintf(na, sizeof na, "%s.apu", np);
@@ -13385,7 +13448,7 @@ int main(int argc, char** argv) {
         pendStateLoc = -1;
       }
       if (f9Now) {
-        double plr[4]; int r = CtSceneLoadState(f.vm, "ct_debug.state", plr);
+        double plr[4]; int r = fieldStateLoad(f.vm, "ct_debug.state", plr);
         if (r) fieldMapFromWram(&f, CtSceneMem7E(f.vm), "F9");
         // The sound processor goes back with the WRAM: the restored WRAM holds the CPU's side of the APU protocol (the
         // token it echoes, the song it believes is loaded), so against an SPC that kept running every later handshake
@@ -14261,7 +14324,7 @@ int main(int argc, char** argv) {
       const char* sp = dbg.saveState; if (!sp) sp = "ct_debug.state";                        // save the live scene at
       double plr[4] = { px, py, (double)pz, (double)pfac };                                  // frame N (lets you settle
       fprintf(stderr, "[savestate] frame %d -> %s: %s\n", frameNo, sp,                       // a scene then snapshot it)
-              CtSceneSaveState(f.vm, sp, plr) ? "ok" : "FAIL");
+              fieldStateSave(f.vm, sp, plr) ? "ok" : "FAIL");
     }
 
     // CT_STATEROUNDTRIP=<frame>: save, poison the live image, load it back, and report whether the 128 KB came back,
@@ -14272,10 +14335,10 @@ int main(int argc, char** argv) {
       uint8_t* w7 = CtWramSys(fieldWram());
       double plr[4] = { px, py, (double)pz, (double)pfac }, plr2[4] = { 0, 0, 0, 0 };
       uint32_t f0 = ctFnv32(w7, 0x20000);
-      int saved = CtSceneSaveState(f.vm, sp, plr);
+      int saved = fieldStateSave(f.vm, sp, plr);
       for (int i = 0; i < 0x20000; i += 977) w7[i] ^= 0x5A;      // a coprime stride: every page poisoned
       uint32_t fp = ctFnv32(w7, 0x20000);
-      int loaded = CtSceneLoadState(f.vm, sp, plr2);
+      int loaded = fieldStateLoad(f.vm, sp, plr2);
       uint32_t f1 = ctFnv32(w7, 0x20000);
       printf("stateroundtrip: f%d save=%s poisoned=%s load=%d image=%s player=(%g,%g)\n",
              frameNo, saved ? "ok" : "FAIL", fp != f0 ? "yes" : "NO", loaded,

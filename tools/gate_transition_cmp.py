@@ -32,6 +32,8 @@ import os, re, struct, subprocess, sys
 
 sys.path = [p for p in sys.path if os.path.abspath(p or '.') != os.path.dirname(os.path.abspath(__file__))]
 import numpy as np
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from ctlib import lake  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = 'saves/field_re/scene8_gate_c2200.state'
@@ -66,6 +68,7 @@ def main():
                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', TB_AUTOADV='1',
                CT_SHOTS_THUMBS=pt, CT_SHOTS_THUMBS_EVERY='1', CT_FIELD_MEMMON='0100:2')
+    env.update(lake.seed_vram_env(os.path.abspath(STATE), os.path.join(OUT, '_seed.vram')))   # (the OAM renderer)
     log = subprocess.run([os.path.abspath('build/Belthasar.exe'), '--assets', 'ct_assets.dat', '--scene', '8', '--loadwram',
                           SEED, '--selftest', os.path.join(OUT, 'p.raw'), '--frames', str(N)],
                          env=env, capture_output=True, text=True, errors='replace').stdout

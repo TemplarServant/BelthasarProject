@@ -111,8 +111,11 @@ def build(e):
                 '--loadwram', lw, '--selftest', '--frames', str(at + 2)]
         if e.get('walkscript'):
             args += ['--walkscript', e['walkscript']]
+        # the seed's VRAM from the state the WRAM came from (a WRAM image carries none): the state's tail keeps the field's
+        # VRAM image, which the sprites drawn from OAM read (CT_SEED_VRAM is read only while that renderer is on)
         p = subprocess.run(args, cwd=ROOT, env=dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy',
-                                                     CT_NOPACE='1', CT_SAVESTATE_AT=str(at), CT_SAVESTATE=out),
+                                                     CT_NOPACE='1', CT_SAVESTATE_AT=str(at), CT_SAVESTATE=out,
+                                                     CT_OAMRENDER='1', CT_SEED_VRAM=state),
                            capture_output=True, text=True, errors='replace')
         if not os.path.exists(out) or open(out, 'rb').read(4) != b'CTFS':
             raise SystemExit('fixtures: %s: Belthasar wrote no CTFS state\n%s' % (e['path'], p.stderr[-800:]))

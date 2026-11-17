@@ -465,3 +465,49 @@ differ, not read.
 47D7 STA $1700,X = slot * 32), which the port never wrote -- the enemies kept 0000, the lead's base, and one of them took
 the lead's place in the mirror. Fixed (ct_vm.c loadMonMirror); legs 57 f1500-f1560 and 45 f90-f160 exact on every
 frame; leg 86 f181-f300 exact but for its load frames f261-f264 (the port's C0/286C runs at the fade-in's first frame).
+
+## Stage 2: the field drawn from the OAM mirror (2026-11-17)
+
+field.c fieldOamDraw, behind CT_OAMRENDER=1 (off by default). Entries 127..0 of `$7E:0700-$091F`, their tiles from the
+VRAM image plus the upload queue the same NMI sends with the mirror (the port flushes that queue at its next tick's
+head), the colours from CGRAM row 8 + the attribute's palette; every pixel through spritePixels, drawSprite's own rules
+(the BG priorities, the window, the sub screen, the front mask, the frames-between tags). Each entry's tag names the
+object for the frames between and the window clip. Picture row p is the PPU's line p + 1 and shows sprite row p - Y.
+
+What it needed beyond stage 1, each measured:
+
+- THE PER-LINE LIMITS (snes/ppu.c ppu_evaluateSprites, the oracle's): per line the first 32 entries in range from
+  index 0, then at most 34 slivers fetched from the last kept entry back -- the lowest indices lose theirs first. Leg 12
+  line 51: 18 entries, 36 slivers; entry 6's two dropped (the 2 px of f2101 / f2102 the asset drawer never matched).
+- AN ENTRY WITH Y >= 224 shows only the rows that wrap past line 255 onto the top: it stands at Y - 256. (Leg 122
+  f61500 + 24: a figure cut at the top edge, 102 px before.)
+- C0/E12A, a class-3 sprite's staging (move.c CtObjStageBig, from the enemy loader): frame 0's 96 chips to $7F:3800,
+  their DMA to VRAM word $0400, the 24 live records. The attract's Dragon Tank tail: 723 px -> 0.
+- C0/CB0A, the drain's twin at the end of the battle epilogue (move.c CtObjRebuildLive): the live records of the
+  object's current `$0F01` into `$7F:4BC0 + $1700,X`, `$1B00,X = $80`. The port stamped `$1B00` only.
+- THE FIGHT'S LAST POSE IN THE SLOT -- a MODEL (move.c CtObjFightPoseTiles): the battle's animator uploads each
+  combatant's pose into the slot the field gave it, and the field draws from there after the return (C0/CB0A uploads
+  nothing), so the slot holds the chips of the last pose, the `$9907` the epilogue copies to `$0F01`. The port's fight
+  writes no VRAM: the epilogue puts those chips (the class-0 blit, two $0100-byte uploads) into the VRAM image only.
+  MEASURED: leg 26 after its first fight, f4690-f4693, the tiles in use 807 bytes apart before, exact after (from f4694
+  the port's drain is a frame early: the known offset of that fight's exit). Classes 1 and 2 are not modelled.
+- C0/0715's DRAW PASS on the return: C0/0304 sets the three stale marks to their groups' ends ($017B = 08A0, $017D =
+  0900, $017F = 0770) and C0/0715 runs the two epilogues and `072B JSR C0/B271`, so the mirror is the field's again from
+  the return's first frame, the fight's entries hidden. The port's mirror kept the fight's table (tiles C0-CE,
+  attribute 30) until its main loop's first pass. The attract after its 07D fight (port f7154 / the oracle's f5087): the
+  visible entries and the tiles in use exact after.
+
+Test surface with the switch on: a WRAM image carries no VRAM, and the OAM path takes its tiles from VRAM, so every
+WRAM-seeded run needs the seed's VRAM too. playthrough.py, frame_region_cmp.py and leg_window_cmp.py pass it
+(CT_SEED_VRAM = the peek's `.vram`); a run with CT_AUDIO_SEEDSTATE takes it from that state (field.c, "[seedstate] VRAM
+from the state"); menu_audit_cmp, nmi_cgram_cmp, e5_copy_cmp, gate_transition_cmp and tutorial_cmp through
+`ctlib.lake.seed_vram_env` (the CTLS payload's VRAM, at 131537: byte-equal to the oracle's `--peek .vram` on two states).
+With it the 10 seeded checks that failed with the switch on pass. The demo (17 attract windows): identical on both paths.
+CT_SEED_VRAM also takes the oracle state itself (CTLS: its VRAM at the payload's 131537) and is read only while the
+renderer is on (field.c fieldSeedVramFromEnv, for --loadwram and --battletest): a check seeded from a recipe's WRAM image
+gets its tiles from the recipe's state of the same frame (fields 5 and 439: the picture equal on both paths with it, 773
+and 652 px apart without). The port's own F5/F9 state (CTFS) ends with the field's VRAM image (fieldStateSave: "VRAM",
+u32 0x10000, the words), and a load takes it back when it is there; a CTFS fixture is made with the recipe state's VRAM
+(tools/fixtures.py, kind ctfs). The attract's Epoch jump from such a state: the motion check's line equal on both paths.
+Not yet: the render hashes pinned to the asset drawer (`--selftest` fnv32 lines; the two scene-5 ones are now identical
+on both paths), the sequences' own OAM (the ending's), classes 1 and 2 after a fight.

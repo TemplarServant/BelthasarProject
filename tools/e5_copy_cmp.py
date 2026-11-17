@@ -33,6 +33,9 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ctlib import lake  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
@@ -73,6 +76,7 @@ def port_run(d, thumbs):
                CT_FIELD_MEMMON=','.join('%04X:%X' % (a, n) for a, n in BYTES))   # (its lengths are hex)
     if thumbs:
         env.update(CT_SHOTS_THUMBS=thumbs, CT_SHOTS_THUMBS_EVERY='1')
+    env.update(lake.seed_vram_env(os.path.join(ROOT, d['state']), os.path.join(OUT, '_seed.vram')))   # (the OAM renderer)
     argv = [FIELD, '--assets', 'ct_assets.dat', '--scene', '2', '--loadwram', d['seed'], '--selftest',
             os.path.join(OUT, '_end.raw'), '--frames', str(d['last'] + 1)]
     if d['walk']:

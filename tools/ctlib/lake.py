@@ -34,6 +34,11 @@ WRAM_SIZE = 0x20000
 CPU_OFF = WRAM_OFF + WRAM_SIZE
 CPU_SIZE = 29
 MIN_PAYLOAD = CPU_OFF + CPU_SIZE
+# the PPU's VRAM (0x8000 words, little-endian), 396 bytes after the WRAM block (the CPU's and the DMA's blocks, then the
+# PPU's, which opens with it): measured -- byte-equal to the oracle's --peek .vram on the attract's rule state and on
+# saves/battle_re/party3_field.state (2026-11-17)
+VRAM_OFF = 131537
+VRAM_SIZE = 0x10000
 
 CTLS_MAGIC = b"CTLS"
 CTLS_VERSION = 1
@@ -139,6 +144,28 @@ def wram(path):
     if len(w) != WRAM_SIZE:
         raise ValueError("state too small for WRAM @69+0x20000: %s" % path)
     return w
+
+
+def vram(path):
+    """The PPU's 64KB VRAM (word w at byte 2*w)."""
+    payload, _ = read_payload(path)
+    v = payload[VRAM_OFF:VRAM_OFF + VRAM_SIZE]
+    if len(v) != VRAM_SIZE:
+        raise ValueError("state too small for VRAM @%d+0x10000: %s" % (VRAM_OFF, path))
+    return v
+
+
+def seed_vram_env(state_path, out_path):
+    """The env a Belthasar run seeded from a state's WRAM (--loadwram) needs for the state's VRAM as well: a WRAM image
+    carries no VRAM, and the field's sprites drawn from OAM + VRAM (CT_OAMRENDER=1) take their tiles from it.
+    {CT_SEED_VRAM: out_path} with the state's VRAM written there while the OAM renderer is on; {} otherwise (the asset
+    drawer draws the objects from the assets, and the run stays as it was)."""
+    if os.environ.get("CT_OAMRENDER") != "1":
+        return {}
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as fh:
+        fh.write(vram(state_path))
+    return {"CT_SEED_VRAM": out_path}
 
 
 def cpu(path):

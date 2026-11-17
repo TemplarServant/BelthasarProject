@@ -25,6 +25,19 @@ import subprocess
 import sys
 
 
+def visible(oam, e):
+    """Whether OAM entry e of a 544-byte image reaches the 256 x 224 picture."""
+    x, y = oam[e * 4], oam[e * 4 + 1]
+    hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3
+    size = 16 if hi & 2 else 8
+    x |= (hi & 1) << 8
+    return (y < 224 or y + size > 256) and (x < 256 or x + size > 512)
+
+
+def entry(oam, e):
+    return bytes(oam[e * 4:e * 4 + 4]) + bytes([(oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3])
+
+
 def used_words(oam):
     """The VRAM word addresses of the 8x8 tiles the visible entries of a 544-byte OAM image use (OBSEL 00)."""
     out = set()
@@ -114,7 +127,7 @@ def main():
     subprocess.run([P.CT, '--peek', state, os.path.join(WORK, 'c_end.raw'), '--frames', str(rel(f1) + 2),
                     '--btnscript', P.btnscript(pad) or '0:0'], cwd=ROOT, env=envc, capture_output=True)
     pp.wait()
-    oam_ok = vr_ok = all_ok = n = 0
+    oam_ok = vr_ok = all_ok = vis_ok = n = 0
     first_oam = first_vr = None
     for f in frames:
         cw = os.path.join(WORK, 'c_f%d.raw.wram' % rel(f)); cv = os.path.join(WORK, 'c_f%d.raw.vram' % rel(f))
@@ -126,6 +139,9 @@ def main():
         c, p = open(cw, 'rb').read(), open(pw, 'rb').read()
         od = [a for a in range(0x0700, 0x0920) if c[a] != p[a]]
         cvb, pvb = open(cv, 'rb').read(), open(pv, 'rb').read()
+        co, po = c[0x0700:0x0920], p[0x0700:0x0920]
+        if all(entry(co, e) == entry(po, e) for e in range(128) if visible(co, e) or visible(po, e)):
+            vis_ok += 1
         allv = [a for a in range(vlo * 2, (vhi + 1) * 2) if cvb[a] != pvb[a]]
         vd = sorted(2 * wa + k for wa in used_words(c[0x0700:0x0920]) for k in (0, 1) if cvb[2 * wa + k] != pvb[2 * wa + k])
         if not allv:
@@ -150,7 +166,8 @@ def main():
         tail += '; first OBJ tile difference f%d at word %04X' % (first_vr[0], first_vr[1][0] // 2)
     print('objdata: %s f%d-f%d%s: OAM %d of %d frames equal, OBJ tiles in use %d of %d frames equal%s' % (
         lg['name'].split('_')[0], f0, f1, (' from f%d' % at) if at else '', oam_ok, n, vr_ok, n, tail))
-    print('objdata: (the whole OBJ area %04X-%04X: %d of %d frames equal)' % (vlo, vhi, all_ok, n))
+    print('objdata: (the visible entries: %d of %d frames equal; the whole OBJ area %04X-%04X: %d of %d frames equal)' % (
+        vis_ok, n, vlo, vhi, all_ok, n))
 
 
 if __name__ == '__main__':

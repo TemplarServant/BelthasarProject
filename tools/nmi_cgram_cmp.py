@@ -26,6 +26,9 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ctlib import lake  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
@@ -89,6 +92,7 @@ def main():
     # The port: the NMIs its trace says a tilemap took, and its picture.
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_XFERTRACE='1',
                CT_SHOTS_THUMBS=tp, CT_SHOTS_THUMBS_EVERY='1')
+    env.update(lake.seed_vram_env(os.path.join(ROOT, STATE), os.path.join(OUT, '_seed.vram')))   # (the OAM renderer)
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '236', '--loadwram', SEED, '--selftest',
                         os.path.join(OUT, '_end.raw'), '--frames', str(LAST + 1), '--walkscript', WALK],
                        cwd=ROOT, env=env, capture_output=True, text=True, errors='replace')

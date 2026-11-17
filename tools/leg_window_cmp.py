@@ -286,6 +286,8 @@ def port_timeline(state, prev, pad, cells, work):
                CT_SHOTS=os.path.join(work, 'p'), CT_SHOTS_AT=str(frames), CT_SHOTS_EXIT='1')
     if P.seed_in_load_fade(state, w):
         env['CT_SEED_LOADFADE'] = '1'                    # (a window cut inside C0/2848's ramp: the port goes on with it)
+    if os.environ.get('CT_OAMRENDER') == '1':           # (the OAM renderer, stage 2: the cut state's VRAM; test surface)
+        env['CT_SEED_VRAM'] = raw + '.vram'
     r = subprocess.run([P.FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', port_keys(prev, pad)], cwd=ROOT, env=env, capture_output=True, text=True,
                        errors='replace')
