@@ -523,10 +523,27 @@ camera past the map's edge) read past the buffer -- an access violation at f9251
 Lavos the same. It reads as the BG draws now (fieldBaseAt's wrap); both checks pass with the switch on, the ending's
 whole picture the cartridge's.
 
-The suite with the switch on (lab, 2026-11-17, before the fixes above): 1084 pass, 10 fail -- of those the ending, the
-Day of Lavos, the menu shell, the chest and the forest glide are fixed since. Left: the two checks that print the asset
-drawer's own counters (`[iris]` and `[pcprio]`: field-scene8-gate-portal-draws-inside-window,
-field-gate-lead-pc-obeys-its-priority-byte -- to be replaced by pictures against the cartridge before the default
-flips), battle-picture-seq-gato-won, rom-free-no-dump-gate (the demo's picture hash: the two paths differ only at port
-f4211-f4217, the bridge after its fight, now exact, and f9833-f9843, loc 087's last frames -- the OBJ tiles 184-398 words
-from the cartridge's for ten frames, open) and the playthrough legs (being read).
+THE FIGHT'S ENTRY SHIPS THE UPLOAD QUEUE (2026-11-17, found by the switch on the attract's 087 fight; a data fix on
+both paths). C0/024C runs `JSR C0/0617`, `JSR C0/038F` (whose C0/EC60 frame waits the port does not port) and
+`JSR C0/0918` (the object page `$0920-$1DFF` to `$7F:2000`). The field NMI those waits wait on ships the OBJ upload queue
+the last drain filled (C0/EB8C `JSR C0/B1B2`, `B201 STZ $A0`), so the saved page holds `$09A0 = 0`. MEASURED on the
+cartridge (087, f7201-f7202): the drain appends `[0200<-7F:3800 | 0300<-7F:3900]` (C0/CCAC), the NMI's B203 zeroes the
+queue, C0/0927's MVN saves `$7F:2080 = 00`. The port saved 01 and C0/0905 put it back on the return: the next tick's
+flush uploaded the pre-fight pose (`$7F:3800`) over the fight's last one -- Lucca, 11 frames, 575 px with the switch on;
+with it off the same stale upload reached the VRAM image only. field.c runs the flush before its C0/0918 copy now: the
+087 box 256/256 on both paths, and the whole demo differs between the two paths only at f4217 (the bridge's
+pre-existing event, where the OAM path is the nearer).
+
+THE WIDESCREEN'S SIDES (a mod): the ROM latches objects two tiles past the window and emits their pieces with a 9-bit X
+(screen x 270 = X 14 + bit 8, -242 to the PPU), and fieldOamDraw drew only the 256 view, so an object across the
+view's edge lost its outer part (scene 5 at f600: 1191 px of the sides). In a picture wider than 256 a piece left of
+the left side is the right side's (X + 512) and the side columns draw outside the per-line evaluation; scenes 5, 5 at
+its left edge, 6 and 112: the 16:9 picture equal on both paths, sides included. The vanilla 256 picture is untouched.
+
+The suite with the switch on (lab, 2026-11-17, before the fixes above): 1084 pass, 10 fail -- the ending, the Day of
+Lavos, the menu shell, the chest, the forest glide and GATO's won sequence are fixed since; the two checks that print
+the sheet drawer's own counters (`[iris]` / `[pcprio]`: field-scene8-gate-portal-draws-inside-window,
+field-gate-lead-pc-obeys-its-priority-byte) run it explicitly (CT_OAMRENDER=0) -- the OAM path's window and priority at
+the Telepod are graded by the transition and arrival checks against the cartridge; rom-free-no-dump-gate pins the
+demo's picture hash, which changes at the flip (f4217); the playthrough legs with the switch on: every leg read so far
+equals its pin.

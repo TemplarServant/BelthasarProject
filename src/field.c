@@ -4664,16 +4664,24 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
       for (int k = 0; k + 1 < len; k += 2)                 // the source bank is $7F (C0/B1C9)
         vr[(dst + k / 2) & 0x7FFF] = (uint16_t)(m7[0x10000 + ((src + k) & 0xFFFF)] | (m7[0x10000 + ((src + k + 1) & 0xFFFF)] << 8));
     }
+  // THE WIDESCREEN (a mod; the vanilla picture is 256 wide and none of this applies): the sides show what the ROM put
+  // just outside the view -- it latches objects two tiles past the window's edges (C0/A88D) and emits their pieces with
+  // a 9-bit X, so a piece at screen x 270 is stored as X 14 + bit 8, which the PPU reads as -242. In a wide picture a
+  // piece that lands left of the left side is the right side's (X + 512), and the side columns draw outside the PPU's
+  // per-line evaluation (the SNES never shows them, so they spend none of its limits).
+  const int sideL = viewX, sideR = g_fw - viewX - CAMW, wide = g_fw > CAMW;
   for (int e = 127; e >= 0; e--) {
     int x = oam[e * 4], y = oam[e * 4 + 1], name = oam[e * 4 + 2], attr = oam[e * 4 + 3];
     int hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3, size = (hi & 2) ? 16 : 8;
     if (hi & 1) x -= 256;                                  // the high table's bit 0: X bit 8
+    if (wide && x + size <= -sideL && x + 512 < CAMW + sideR) x += 512;   // (the mod: the right side's piece)
     int t9 = name | ((attr & 1) << 8), any = 0;
     for (int r = 0; r < size; r++) {
       int line = (y + 1 + r) & 0xFF;                       // the PPU shows an entry from the line after its Y (row line - 1)
       for (int c = 0; c < size; c++) {
         int v = 0, sx = x + c;
-        if (line >= 1 && line <= 224 && sx >= 0 && sx < 256 && (keep[e][r] >> (c >> 3) & 1)) {
+        int inView = sx >= 0 && sx < 256, inSide = wide && !inView && sx >= -sideL && sx < CAMW + sideR;
+        if (line >= 1 && line <= 224 && ((inView && (keep[e][r] >> (c >> 3) & 1)) || inSide)) {
           int rr = (attr & 0x80) ? size - 1 - r : r, cc = (attr & 0x40) ? size - 1 - c : c;   // V / H flip
           int tile = (t9 & 0x100) | ((((t9 >> 4) + (rr >> 3)) & 0x0F) << 4) | (((t9 & 0x0F) + (cc >> 3)) & 0x0F);
           int w = tile * 16 + (rr & 7), b = 7 - (cc & 7);
@@ -9913,6 +9921,12 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // The battle's NMI reads the copy at $7F:2000: D1/E7E3 `JSL CD/0C89` -> C0/0002 -> C0/2C41 (battle.c
   // battleFieldScrollTick) keeps the field's layer scroll running under the fight from the copied $1D35/$1D37-$1D40/
   // $1D8B-$1D92.
+  // ...and before it, C0/038F's C0/EC60 frame waits (not ported above): the field NMI they wait on ships the OBJ upload
+  // queue the last drain filled (C0/EB8C JSR C0/B1B2, `B201 STZ $A0`), so the page C0/0918 saves holds `$09A0 = 0` and
+  // C0/0905 puts back no stale upload on the return. MEASURED (the attract's 087 fight, cartridge f7201-f7202): the drain
+  // appends `[0200<-7F:3800 | 0300<-7F:3900]`, the NMI's B203 zeroes the queue, then C0/0927's MVN saves `$7F:2080 = 00`;
+  // the port saved 01 and its return uploaded the pre-fight pose over the fight's last one (Lucca, 11 frames, 575 px).
+  if (CtSceneFrameLegsOn()) CtAnimUploadFlush(s, NULL);
   memcpy(s + 0x12000, s + 0x0920, 0x14E0); g_battleObjSaved = 1; g_battleEndFeetOn = 0;
   // ---- JSL C1/0000 (C0/18A7): the battle module ----
   // The module starts from its own init on every fight (its work state cleared -- CtBattleBegin's clears stand in for

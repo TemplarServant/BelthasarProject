@@ -3604,7 +3604,18 @@ Playthrough leg 65, f37630 from the state cut on f36900 (`lag=-1`; 131 px opaque
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).
 The gate of drawing the field's sprites from OAM + VRAM (stage 1). Mutations: the draw pass's stage-2 copy, C0/B262 on
-a load, the object loader's sheet in the `$7F` heap. disasm/notes/oam.md "Stage 1 of the OAM renderer".
+a load, the object loader's sheet in the `$7F` heap. disasm/notes/oam.md "Stage 1 of the OAM renderer". The tool runs
+its port with CT_OAMRENDER=1 (Belthasar reads the seed's CT_SEED_VRAM only then; the switch changes no data).
+
+`attract-087-fight-return-shows-the-fights-last-pose-vs-oracle`: the attract's 087 fight returns with Lucca in the
+fight's last pose, the field's sprites drawn from OAM + VRAM (CT_OAMRENDER=1): three frames of her box against the
+cartridge's (port = cartridge + 2066). It pins the fight's entry shipping the OBJ upload queue before C0/0918 saves the
+object page (the field NMI of C0/038F's frame waits, C0/B1B2) -- without it C0/0905 restored a stale upload and the
+pre-fight pose went up on the return (13 / 256 px for 11 frames). One mutation. disasm/notes/oam.md.
+
+WRAM-seeded checks with the OAM renderer: a WRAM image carries no VRAM, so every check seeded from one whose recipe (or
+capture) also has the same frame's oracle state passes it as CT_SEED_VRAM (Belthasar reads a `.vram` or a CTLS state's
+VRAM, only with the switch on); the tools that seed through Python do it with `ctlib.lake.seed_vram_env`.
 
 `leg-window-enemy-slot-store-is-a-word-vs-cartridge`: the enemy loader's OBJ slot store `$0D00,X` is 16-bit (C0/47C6),
 so `$0D01,X` -- the attribute half of every piece -- loses the last room's value. Playthrough leg 45, `$0D24-$0D27`
