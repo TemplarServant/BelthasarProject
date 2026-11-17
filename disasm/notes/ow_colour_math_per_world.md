@@ -129,3 +129,16 @@ backdrop) and, when CGWSEL bit 1 is clear, applies ppu_handlePixel's fixed-colou
 colour on the layers CGADSUB enables, halve when bit 6 is set (always, with the fixed operand), clamp in 5 bits; clip/prevent
 modes 0 and 3 are evaluated, 1 and 2 need the colour window, which is not built, and are named on stderr. The sub-screen cases
 keep their graded code. Check attract-world7-colour-math-vs-oracle: 55279/57344 identical (median 80.6 -> 3.8).
+
+## The registers are the last pass's (2026-11-17)
+
+The NMI's register block (C2/0240-02AD: the window shadows `$36-$40`, TM/TS/TMW/TSW `$41-$44`, CGWSEL `$45`, CGADSUB `$46`, the
+fixed colour `$47-$49`) runs BEFORE the frame's object pass (C2/0333 `JSR C2/051D`), so a world script's op 0x13 (C2/12B8, the
+store at C2:12C8) that writes one of them in pass N shows on picture N + 1 -- the same one-pass lag the camera, the OAM, the
+palette and the mosaic already took from the NMI's latch (field.c `owZp` / `g_owZpShow`, the direct page copied where the port's
+NMI pushes). MEASURED, the attract's 1999 A.D. explosion (loc 1F7): C2:12C8 sets `$46` = 3F and `$47-$49` = 1F in the pass of
+cartridge f2920 (`$0400` = 29) and puts back 8F / 10 in f2924's; the cartridge is white on f2921-f2924. The port's world
+compositors (worldComposeAt, owComposeSub, owWindow1Pass, owColorWin, and the frames between's owRasterNative) read these from the
+live WRAM and turned white a frame early (f2920: 56901 px) and dark a frame early (f2924: 56590 px). They read them through
+`owZp` now (owColorWin takes both: the shadows from the latch, the HDMA tables from the live WRAM, which the channels read during
+the frame). Check attract-1f7-flash-is-pushed-by-the-next-nmi-vs-oracle (f2918-f2925: every frame 57344 / 57344).

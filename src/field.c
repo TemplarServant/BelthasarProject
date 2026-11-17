@@ -1549,12 +1549,14 @@ static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line,
 }
 // The colour window on line y, column x of the view: WOBJSEL $3A bit 5 window 1 (bit 4 inverts), bit 7 window 2 (bit 6), WOBJLOG
 // $40 bits 2-3 the join of both (0 OR, 1 AND, 2 XOR, 3 XNOR); window 1's edges owWin1Line's, window 2's the pushed $3D / $3E.
-static int owColorWin(const uint8_t* wr, uint8_t en, uint8_t wh0, uint8_t wh1, int y, int x) {
-  const int sel = wr[0x3A], lg = (wr[0x40] >> 2) & 3, e1 = sel & 0x20, e2 = sel & 0x80;
+static inline const uint8_t* owZp(const uint8_t* wr);     // (below: the direct page as the NMI pushed it)
+// `wr` = the WRAM (the HDMA tables the channels read during the frame), `zp` = the direct page the NMI pushed (owZp).
+static int owColorWin(const uint8_t* wr, const uint8_t* zp, uint8_t en, uint8_t wh0, uint8_t wh1, int y, int x) {
+  const int sel = zp[0x3A], lg = (zp[0x40] >> 2) & 3, e1 = sel & 0x20, e2 = sel & 0x80;
   if (!e1 && !e2) return 0;
   int in1 = 0, in2 = 0;
   if (e1) { int l = wh0, r = wh1; owWin1Line(wr, en, wh0, wh1, y + 1, &l, &r); in1 = (x >= l && x <= r) ^ ((sel & 0x10) != 0); }
-  if (e2) { int l = wr[0x3D], r = wr[0x3E]; uint16_t v;
+  if (e2) { int l = zp[0x3D], r = zp[0x3E]; uint16_t v;
             if ((en & 0x04) && owHdmaWordAt(wr, (uint8_t)(en & 0x04), 0x28, y, &v)) { l = v & 0xFF; r = v >> 8; }   // ($C6:E470's)
             in2 = (x >= l && x <= r) ^ ((sel & 0x40) != 0); }
   if (!e2) return in1;
@@ -1562,7 +1564,7 @@ static int owColorWin(const uint8_t* wr, uint8_t en, uint8_t wh0, uint8_t wh1, i
   return lg == 0 ? (in1 | in2) : lg == 1 ? (in1 & in2) : lg == 2 ? (in1 ^ in2) : !(in1 ^ in2);
 }
 static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int X0) {
-  const uint8_t* wram = w->wram;
+  const uint8_t* wram = w->wram, *zp = owZp(w->wram);              // (the NMI's shadows: the last pass's)
   int l = 0, r = 0;
   uint8_t en = 0, wh0 = 0, wh1 = 0; CtWorldNmiLatch(&en, &wh0, &wh1);   // HDMAEN / WH0 / WH1 as the NMI pushed them
   { static int tr = -1; if (tr < 0) tr = getenv("CT_OWWINTRACE") ? 1 : 0;   // CT_OWWINTRACE=1: the pass's inputs, every frame
@@ -1571,14 +1573,14 @@ static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int 
              wram ? wram[0x38] : 0, wram ? wram[0x39] : 0, wram ? wram[0x3A] : 0, wram ? wram[0x43] : 0, wram ? wram[0x4A] : 0, on ? l1 : -1, on ? r1 : -1,
              wram ? wram[0x8A44] : 0, wram ? wram[0x8A43] : 0); } }
   if (!wram || !owWin1Line(wram, en, wh0, wh1, 1, &l, &r)) return;
-  const int w12 = wram[0x0038], w34 = wram[0x0039], wobj = wram[0x003A], tmw = wram[0x0043];
+  const int w12 = zp[0x0038], w34 = zp[0x0039], wobj = zp[0x003A], tmw = zp[0x0043];
   const int mBg1 = (w12 & 0x02) && (tmw & 0x01), mBg2 = (w12 & 0x20) && (tmw & 0x02);
   const int mBg3 = (w34 & 0x02) && (tmw & 0x04), mObj = (wobj & 0x02) && (tmw & 0x10);
   if (!(mBg1 || mBg2 || mBg3 || mObj)) return;
   { static int said = 0;
     if (!(mBg1 && mBg2 && mObj && !mBg3) && !said) { said = 1;
       fprintf(stderr, "owwindow: W12SEL=%02X W34SEL=%02X WOBJSEL=%02X TMW=%02X -- not the measured 1F/13 set; drawn as BG3-over-backdrop\n", w12, w34, wobj, tmw); } }
-  const int cgadsub = wram[0x0046], cgwsel = wram[0x0045];
+  const int cgadsub = zp[0x0046], cgwsel = zp[0x0045];
   const int mathBg3 = (cgadsub & 0x04) != 0, mathHalf = (cgadsub & 0x40) != 0, mathSub = (cgadsub & 0x80) != 0;
   const int mathFix = !(cgwsel & 0x02);
   const CtWorldCam* cs = w->haveShow ? &w->camShow : &w->cam;
@@ -1587,7 +1589,7 @@ static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int 
     if (g_owWide && l <= 0 && r < 8) continue;
     // The widescreen: a window over the backdrop (nothing inside it but CGRAM 0, as the flyover's) is recorded and drawn
     // across the whole width at the assembly, scaled as the field's curtain is; neither pass draws it.
-    if (g_owWide && !(w->haveBg3 && (wram[0x0041] & 0x04) && !mBg3)) {
+    if (g_owWide && !(w->haveBg3 && (zp[0x0041] & 0x04) && !mBg3)) {
       g_wipeOn[y] = 1; g_wipeL[y] = (int16_t)l; g_wipeR[y] = (int16_t)r; memcpy(g_wipeBd, w->pal[0], 3);
       continue;
     }
@@ -1597,7 +1599,7 @@ static void owWindow1Pass(World* w, uint8_t* fb, const uint8_t* sub, int W, int 
     for (int x = l; x <= r; x++) {
       if (g_mot && x + X0 >= 0 && x + X0 < W) g_mot->own[y * W + x + X0] = CT_MOT_FIXED;   // (a window: screen-fixed)
       int pr = 0, pb3 = 0; uint8_t v3 = 0;
-      if (!mBg3 && w->haveBg3 && (wram[0x0041] & 0x04)) v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + x, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
+      if (!mBg3 && w->haveBg3 && (zp[0x0041] & 0x04)) v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + x, cs->bg3v + y + OW_BG_VLINE, &pr, &pb3);
       if (v3) {
         for (int ch = 0; ch < 3; ch++) {
           int m5 = w->pal[pb3 + v3][ch] >> 3, o5 = m5;
@@ -1651,10 +1653,10 @@ static inline int owMosaicSize(const uint8_t* wr) { return wr ? (owZp(wr)[0x1F] 
 static inline int owMosaicOn(const uint8_t* wr, int bg) { return wr && (owZp(wr)[0x1F] & (1 << bg)) && (owZp(wr)[0x1F] >> 4); }
 static inline int owMosaicX(int x, int X0, int n) { int s = x - X0; return x - ((s % n) + n) % n; }
 static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorldCam* cs, uint8_t hdmaEn, int W, int X0) {
-  const uint8_t* wr = w->wram;
+  const uint8_t* wr = w->wram, *zp = wr ? owZp(wr) : NULL;          // (the NMI's shadows: the last pass's)
   const int mz = owMosaicSize(wr);
-  const int tsub = wr ? wr[0x0042] : 0x13;
-  const int fix[3] = { wr ? (wr[0x0048] & 0x1F) : 0, wr ? (wr[0x0049] & 0x1F) : 0, wr ? (wr[0x0047] & 0x1F) : 0 };   // R, G, B
+  const int tsub = zp ? zp[0x0042] : 0x13;
+  const int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0, zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   for (int y = 0; y < CAMH; y++) {
     uint16_t h2 = cs->bg2h, v2 = cs->bg2v, v1 = cs->bg1v, hv;
@@ -1867,19 +1869,24 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   // The colour math is per world: the CGADSUB shadow $0046, pushed to $2131 every frame (C2/0296 `LDA $46 / STA $2131`)
   // and set by each world's load script (op 0x13 at $7F:0405): world 0 (1000 A.D.) 0x44 = BG3, half; world 1 (600 A.D.)
   // 0x04 = BG3, full add; worlds 2/7 0x3F. It travels with the world snapshot (blob fmt 5).
-  const int cgadsub  = w->wram ? w->wram[0x0046] : 0x44;
+  // Every register below comes from the shadows as the NMI pushed them, before this frame's pass (C2/0240-02AD, then
+  // C2/0333 JSR C2/051D): a world script's op 0x13 that writes them in pass N shows on picture N + 1. MEASURED, the
+  // attract's 1999 A.D. flash (loc 1F7): C2:12C8 sets `$46` = 3F / `$47-$49` = 1F in the pass of cartridge f2920 and the
+  // picture turns white on f2921-f2924; read live, the port was white a frame early (f2920) and dark a frame early.
+  const uint8_t* zp = w->wram ? owZp(w->wram) : NULL;
+  const int cgadsub  = zp ? zp[0x0046] : 0x44;
   const int mathBg3  = (cgadsub & 0x04) != 0;           // $2131 bit2 = colour math on BG3
   const int mathHalf = (cgadsub & 0x40) != 0;           // bit6 = halve the result
   const int mathSub  = (cgadsub & 0x80) != 0;           // bit7 = subtract instead of add
   // ...and the main-screen layers: the same NMI block's `LDA $41 / STA $212C` (C2/027D). World scripts change it (the
   // attract's world-5 flyover turns BG3 off with $0041 = $13, C2:1290).
-  const int tmain    = w->wram ? w->wram[0x0041] : 0x17;
+  const int tmain    = zp ? zp[0x0041] : 0x17;
   // ...and the operand. The same NMI block writes CGWSEL from $45 and the fixed colour from $47/$49/$48 (C2/029B `LDA $47 /
   // ORA #80 / STA $2132` = blue, `$49 | 40` = green, `$48 | 20` = red). CGWSEL bit 1 set = the sub screen (world 0's
   // `$45 = 02`), clear = the fixed colour (1999 A.D.: `$45 = 00`, `$46 = 8F` subtracts `$47-$49 = 10 10 10` from BG1-BG4;
   // the OBJ fires take no math). That arm is snes/ppu.c ppu_handlePixel's, applied after the painters below from the
   // layer each pixel ended on.
-  const int cgwsel   = w->wram ? w->wram[0x0045] : 0x02;
+  const int cgwsel   = zp ? zp[0x0045] : 0x02;
   const int mathFix  = !(cgwsel & 0x02);
   static uint8_t mlayer[CAMH * OW_WMAX];                   // ppu.c's mainLayer: 0-3 BG, 4 OBJ pal 4-7, 6 OBJ pal 0-3, 5 backdrop
   // Per-pixel foreground colour index (BG1/BG2 priority-1 tiles): -1 = none. In mode 1 with BG3 priority the
@@ -1893,7 +1900,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   const CtWorldCam* cs = w->haveShow ? &w->camShow : &w->cam;   // the NMI's latch (see the World struct)
   const int showX = w->haveShow ? w->posShowX : w->mv.posX, showY = w->haveShow ? w->posShowY : w->mv.posY;
   uint8_t hdmaEn = 0, hwh0, hwh1; CtWorldNmiLatch(&hdmaEn, &hwh0, &hwh1);
-  const int subOwn = w->wram && ((w->wram[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub
+  const int subOwn = zp && ((zp[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub
   const int mz = owMosaicSize(w->wram), mo3 = owMosaicOn(w->wram, 2);
   if (subOwn) owComposeSub(w, stm, cs, hdmaEn, W, X0);
   for (int y = 0; y < CAMH; y++) {
@@ -1969,8 +1976,8 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
                  // whole map): an uncovered pixel lit brighter than its neighbours read as an outline round each sprite
                  if (mathFix) {
                    const int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-                   const int fx[3] = { w->wram ? (w->wram[0x0048] & 0x1F) : 0, w->wram ? (w->wram[0x0049] & 0x1F) : 0,
-                                       w->wram ? (w->wram[0x0047] & 0x1F) : 0 };
+                   const int fx[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0,
+                                       zp ? (zp[0x0047] & 0x1F) : 0 };
                    for (int i = 0; i < W * CAMH; i++) {
                      uint8_t* d = owBgOnly + (size_t)i * 3; int L = mlayer[i];
                      if (clip == 3) d[0] = d[1] = d[2] = 0;
@@ -2136,13 +2143,13 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   // an empty window 1, so no math applies anywhere and its clouds stay grey.
   if (mathFix) {
     const int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-    const int fix[3] = { w->wram ? (w->wram[0x0048] & 0x1F) : 0, w->wram ? (w->wram[0x0049] & 0x1F) : 0,
-                         w->wram ? (w->wram[0x0047] & 0x1F) : 0 };   // R, G, B
+    const int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0,
+                         zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
     for (int y = 0; y < CAMH; y++) {
       uint8_t* dst = fb + (size_t)y * W * 3;
       for (int x = 0; x < W; x++) {
         int L = mlayer[y * W + x];
-        int inWin = (clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && w->wram ? owColorWin(w->wram, hdmaEn, hwh0, hwh1, y, x - X0) : 0;
+        int inWin = (clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && w->wram ? owColorWin(w->wram, owZp(w->wram), hdmaEn, hwh0, hwh1, y, x - X0) : 0;
         if (clip == 3 || (clip == 1 && !inWin) || (clip == 2 && inWin)) { dst[x * 3] = dst[x * 3 + 1] = dst[x * 3 + 2] = 0; }
         if (L >= 6 || !(cgadsub & (1 << L)) || prevent == 3 || (prevent == 1 && !inWin) || (prevent == 2 && inWin)) continue;
         for (int ch = 0; ch < 3; ch++) {
@@ -2196,11 +2203,11 @@ static int owRasterNative(const CtMotFrame* cur, const CtMotFrame* prev, const u
   const long c3x = FLK(camXt + o3x) + (long)(cs->bg3h - cs->bg1h - cur->o3x) * k;
   const long c3y = FLK(camYt + o3y) + (long)(cs->bg3v - cs->bg1v - cur->o3y) * k;
   // the registers, as worldComposeAt reads them
-  const uint8_t* wr = w->wram;
-  const int cgadsub = wr[0x0046], tmain = wr[0x0041], cgwsel = wr[0x0045];
+  const uint8_t* wr = w->wram, *rz = owZp(w->wram);
+  const int cgadsub = rz[0x0046], tmain = rz[0x0041], cgwsel = rz[0x0045];
   const int mathBg3 = (cgadsub & 0x04) != 0, mathHalf = (cgadsub & 0x40) != 0, mathSub = (cgadsub & 0x80) != 0;
   const int mathFix = !(cgwsel & 0x02), clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-  const int fix[3] = { wr[0x0048] & 0x1F, wr[0x0049] & 0x1F, wr[0x0047] & 0x1F };
+  const int fix[3] = { rz[0x0048] & 0x1F, rz[0x0049] & 0x1F, rz[0x0047] & 0x1F };
   const int bg3On = w->haveBg3 && (tmain & 0x04);
   // each object's shift at t (its place at t against where this frame drew it), in 1/k pixels: its own step floored as the
   // camera's, less the camera's

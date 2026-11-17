@@ -3613,6 +3613,11 @@ cartridge's (port = cartridge + 2066). It pins the fight's entry shipping the OB
 object page (the field NMI of C0/038F's frame waits, C0/B1B2) -- without it C0/0905 restored a stale upload and the
 pre-fight pose went up on the return (13 / 256 px for 11 frames). One mutation. disasm/notes/oam.md.
 
+`attract-1f7-flash-is-pushed-by-the-next-nmi-vs-oracle`: the attract's 1999 A.D. explosion flash (loc 1F7) turns the screen
+white and back on the cartridge's frames (f2920 / f2924 against port f4987 / f4991): the world compositors read CGADSUB, the
+fixed colour, TM/TS and the window shadows from the NMI's latch (`owZp`), one pass behind the script that writes them. One
+mutation. disasm/notes/ow_colour_math_per_world.md "The registers are the last pass's".
+
 WRAM-seeded checks with the OAM renderer: a WRAM image carries no VRAM, so every check seeded from one whose recipe (or
 capture) also has the same frame's oracle state passes it as CT_SEED_VRAM (Belthasar reads a `.vram` or a CTLS state's
 VRAM, only with the switch on); the tools that seed through Python do it with `ctlib.lake.seed_vram_env`.

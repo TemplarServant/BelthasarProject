@@ -41290,6 +41290,65 @@
       ]
     },
     {
+      "name": "attract-1f7-flash-is-pushed-by-the-next-nmi-vs-oracle",
+      "tier": "full",
+      "argv": [
+        "python",
+        "tools/frame_region_cmp.py",
+        "saves/attract_cena_inicial_rule.state",
+        "2920",
+        "4987",
+        "0",
+        "0",
+        "256",
+        "224",
+        "saves/attract_cena_inicial_rule.state",
+        "2924",
+        "4991",
+        "0",
+        "0",
+        "256",
+        "224",
+        "--",
+        "--assets",
+        "ct_assets.dat",
+        "--scene",
+        "433"
+      ],
+      "env": {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_NOPACE": "1",
+        "CT_AUDIO_LOCKSTEP": "1",
+        "CT_ORACLE_LOGICAL": "1",
+        "CT_ORACLE_VIRTUAL_BEAM": "1"
+      },
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/attract_cena_inicial_rule.state",
+        "tools/frame_region_cmp.py"
+      ],
+      "expect": [
+        "frame-region-cmp: port f4987 vs oracle f2920 box (0,0)-(256,224) -> 57344 / 57344 identical",
+        "frame-region-cmp: port f4991 vs oracle f2924 box (0,0)-(256,224) -> 57344 / 57344 identical"
+      ],
+      "pin": [
+        "^frame-region-cmp: port f49(87|91) vs oracle f29(20|24) box \\(0,0\\)-\\(256,224\\) "
+      ],
+      "timeout_s": 900,
+      "note_pass": "the attract's 1999 A.D. flash (loc 1F7) turns the screen white and back on the cartridge's frames: the world's colour registers come from the shadows the NMI pushed",
+      "notes": "THE WORLD'S REGISTERS ARE THE LAST PASS'S (2026-11-17). The world NMI pushes the direct-page shadows $36-$49 -- windows, TM/TS/TMW, CGWSEL $45, CGADSUB $46, the fixed colour $47-$49 (C2/0240-02AD) -- before the frame's object pass (C2/0333 JSR C2/051D), so a script's op 0x13 (C2/12B8, the store at C2:12C8) that writes them in pass N shows on picture N + 1. Measured: the explosion's flash writes $46 = 3F / $47-$49 = 1F in the pass of cartridge f2920 and $46 = 8F / $47-$49 = 10 in f2924's; the cartridge is white on f2921-f2924. The port's world compositors read the live WRAM and were white a frame early (f2920: 56901 px) and dark a frame early (f2924: 56590 px); they read the NMI latch (owZp) now, as the camera, OAM, palette and mosaic already did. Pairs at the visit's alignment (port = cartridge + 2067). Found by the attract audit's triage. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  const uint8_t* zp = w->wram ? owZp(w->wram) : NULL;\n  const int cgadsub  = zp ? zp[0x0046] : 0x44;",
+          "replace": "  const uint8_t* zp = w->wram;  /* MUT */\n  const int cgadsub  = zp ? zp[0x0046] : 0x44;",
+          "why": "the compositor reads the live direct page: the flash lands a frame early on both edges"
+        }
+      ]
+    },
+    {
       "name": "attract-07d-hench-keep-the-frog-squash-pose-vs-oracle",
       "tier": "full",
       "argv": [
@@ -51344,7 +51403,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 648 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 649 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
