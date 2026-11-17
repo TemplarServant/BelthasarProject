@@ -33,7 +33,8 @@ def main():
         # the cartridge's display of frame F = the dump after F + 2 frames, every frame from one run (PEEK_SHOTS)
         got = peekshots.shots('saves/battle_re/party3_field.state', obtn, [f + 2 for f in frames],
                               env=dict(os.environ, CT_ORACLE_LOGICAL='1'), prefix=os.path.join(ROOT, 'build', '_mresume_o_' + tag))
-        M.port_frames('saves/battle_re/party3_field.lakewram', 130, pwalk, frames, 'rs' + tag)
+        M.port_frames('saves/battle_re/party3_field.lakewram', 130, pwalk, frames, 'rs' + tag,
+                      state='saves/battle_re/party3_field.state')
         worst = 0
         for f in frames:
             ow, oh, ob = fb.load(got[f + 2])

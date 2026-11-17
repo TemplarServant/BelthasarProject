@@ -490,7 +490,10 @@ What it needed beyond stage 1, each measured:
   nothing), so the slot holds the chips of the last pose, the `$9907` the epilogue copies to `$0F01`. The port's fight
   writes no VRAM: the epilogue puts those chips (the class-0 blit, two $0100-byte uploads) into the VRAM image only.
   MEASURED: leg 26 after its first fight, f4690-f4693, the tiles in use 807 bytes apart before, exact after (from f4694
-  the port's drain is a frame early: the known offset of that fight's exit). Classes 1 and 2 are not modelled.
+  the port's drain is a frame early: the known offset of that fight's exit). Classes 1 and 2 the same way, with their
+  own drain's staging of the frame (class 1: CF21's 32-tile run and CFA8's upload; class 2: phases 0-2 by its `$0D00`
+  geometry, D848 / DB07). MEASURED: the attract's bridge (loc 0AD) after its fight, port f4213-f4214 against the
+  cartridge's f2148 -- obj 12, class 1, frame 04, slot 080: the tiles in use 195 words apart before, exact after.
 - C0/0715's DRAW PASS on the return: C0/0304 sets the three stale marks to their groups' ends ($017B = 08A0, $017D =
   0900, $017F = 0770) and C0/0715 runs the two epilogues and `072B JSR C0/B271`, so the mirror is the field's again from
   the return's first frame, the fight's entries hidden. The port's mirror kept the fight's table (tiles C0-CE,
@@ -509,5 +512,21 @@ gets its tiles from the recipe's state of the same frame (fields 5 and 439: the 
 and 652 px apart without). The port's own F5/F9 state (CTFS) ends with the field's VRAM image (fieldStateSave: "VRAM",
 u32 0x10000, the words), and a load takes it back when it is there; a CTFS fixture is made with the recipe state's VRAM
 (tools/fixtures.py, kind ctfs). The attract's Epoch jump from such a state: the motion check's line equal on both paths.
-Not yet: the render hashes pinned to the asset drawer (`--selftest` fnv32 lines; the two scene-5 ones are now identical
-on both paths), the sequences' own OAM (the ending's), classes 1 and 2 after a fight.
+The 67 checks seeded from a WRAM image whose recipe (or capture) also has the same frame's state pass it as CT_SEED_VRAM
+(inert with the switch off), and two states were added by recipe for the two that had none (chest_loc315_below,
+forest_seek_pre). menu_shell_cmp / menu_resume_cmp give their port the state's VRAM too; field_objdata_cmp runs its port
+with the switch on (it reads CT_SEED_VRAM, and the switch changes no data).
+
+A CRASH the OAM path found (2026-11-17): spritePixels' stencil (a priority 0/1 pixel losing to BG1/BG2 shows the map's
+pixel) read the map buffer at camera + pixel without the map's wrap, and the ending's stars over loc 05A (FF 2E, the
+camera past the map's edge) read past the buffer -- an access violation at f9251 of the ending's drive; the Day of
+Lavos the same. It reads as the BG draws now (fieldBaseAt's wrap); both checks pass with the switch on, the ending's
+whole picture the cartridge's.
+
+The suite with the switch on (lab, 2026-11-17, before the fixes above): 1084 pass, 10 fail -- of those the ending, the
+Day of Lavos, the menu shell, the chest and the forest glide are fixed since. Left: the two checks that print the asset
+drawer's own counters (`[iris]` and `[pcprio]`: field-scene8-gate-portal-draws-inside-window,
+field-gate-lead-pc-obeys-its-priority-byte -- to be replaced by pictures against the cartridge before the default
+flips), battle-picture-seq-gato-won, rom-free-no-dump-gate (the demo's picture hash: the two paths differ only at port
+f4211-f4217, the bridge after its fight, now exact, and f9833-f9843, loc 087's last frames -- the OBJ tiles 184-398 words
+from the cartridge's for ten frames, open) and the playthrough legs (being read).

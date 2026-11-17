@@ -5723,19 +5723,42 @@ void CtObjRebuildLive(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
 // nothing; the drain only on its next commit), so after the fight the slot holds the chips of the last pose -- the
 // `$9907` the epilogue copies into `$0F01,X` (C0/0837 / C0/08CB). The port's fight draws from the sprite sheets and
 // writes no VRAM, so the epilogue puts those chips there: the class-0 tile half's blit and its two $0100-byte uploads
-// (CC17-CC76, CC78-CCB4, C0/B1B2), into the VRAM image only -- the WRAM staging is left as it was. Classes 1 and 2 are
-// not modelled. Graded by tools/field_objdata_cmp.py on the field right after a fight.
+// (CC17-CC76, CC78-CCB4, C0/B1B2), into the VRAM image only -- the WRAM staging is left as it was. Classes 1 and 2 the
+// same way, with their own drain's staging of the frame (every pass's runs: class 1 CF21's mode-3 run of 32 tiles,
+// class 2 phases 0-2 by its $0D00 geometry) and its upload (CFA8; D848 / DB07). Graded by tools/field_objdata_cmp.py on
+// the field right after a fight (class 0: leg 26; class 1: the attract's bridge, loc 0AD, after its fight).
 void CtObjFightPoseTiles(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
-  if ((r[0x1201 + idx] & 3) != 0) return;
-  int a = r[0x0D80 + idx] | (r[0x0D81 + idx] << 8);
-  uint8_t save[0x200], chips[0x200];
-  for (int i = 0; i < 0x200; i++) save[i] = r[0x10000 + ((a + i) & 0xFFFF)];
-  static const CtBlitSeg SEG = { 0x000, 0x00, 16, 0 };
-  ctAnimBlit(r, rom, romLen, idx, ctAnimRec(r, idx, 0x28), r[0x1300 + idx], &SEG);
-  for (int i = 0; i < 0x200; i++) { chips[i] = r[0x10000 + ((a + i) & 0xFFFF)]; r[0x10000 + ((a + i) & 0xFFFF)] = save[i]; }
+  int cls = r[0x1201 + idx] & 3;
+  if (cls == 3) return;
+  static const int STRIDE[3] = { 0x28, 0x50, 0x78 }, SPAN[3] = { 0x200, 0x400, 0x600 };
+  int a = r[0x0D80 + idx] | (r[0x0D81 + idx] << 8), span = SPAN[cls];
+  int v68 = ((r[0x0D00 + idx] & 0xFF) == 0x68);
+  static uint8_t save[0x600], chips[0x600];
+  for (int i = 0; i < span; i++) save[i] = r[0x10000 + ((a + i) & 0xFFFF)];
+  int rec = ctAnimRec(r, idx, STRIDE[cls]), bk = r[0x1300 + idx];
+  //                                            dOff   wOff  n  word
+  static const CtBlitSeg C0S[1]  = { { 0x000, 0x00, 16, 0 } };                                          // CC17
+  static const CtBlitSeg C1S[1]  = { { 0x000, 0x00, 32, 0 } };                                          // CF6B
+  static const CtBlitSeg C2A[5]  = { { 0x000, 0x00, 8, 0 }, { 0x200, 0x10, 8, 1 },                      // D546 / D5C4
+                                     { 0x100, 0x20, 8, 0 }, { 0x300, 0x30, 8, 1 },                      // D68F / D6F4
+                                     { 0x400, 0x40, 16, 0 } };                                          // D7E7
+  static const CtBlitSeg C2B[5]  = { { 0x000, 0x00, 16, 0 },                                            // D608
+                                     { 0x200, 0x20, 8, 0 }, { 0x400, 0x30, 8, 1 },                      // D73C / D7A1
+                                     { 0x300, 0x40, 8, 0 }, { 0x500, 0x50, 8, 1 } };                    // DA6B / DACE
+  const CtBlitSeg* segs = cls == 0 ? C0S : cls == 1 ? C1S : v68 ? C2B : C2A;
+  int nseg = cls == 2 ? 5 : 1;
+  for (int k = 0; k < nseg; k++) ctAnimBlit(r, rom, romLen, idx, rec, bk, &segs[k]);
+  for (int i = 0; i < span; i++) { chips[i] = r[0x10000 + ((a + i) & 0xFFFF)]; r[0x10000 + ((a + i) & 0xFFFF)] = save[i]; }
+  // the upload, as ctAnimAppend queues it: A = lenA bytes from the arena to the slot, B = lenB bytes from the arena +
+  // srcBOff to the slot + dstBOff (words)
+  int dstBOff, srcBOff, lenA, lenB;
+  if (cls == 0)      { dstBOff = 0x100; srcBOff = 0x100; lenA = 0x100; lenB = 0x100; }             // CC78
+  else if (cls == 1) { dstBOff = 0x100; srcBOff = 0x200; lenA = 0x200; lenB = 0x200; }             // CFA8
+  else if (v68)      { dstBOff = 0x100; srcBOff = 0x100; lenA = 0x100; lenB = 0x500; }             // DB07
+  else               { dstBOff = 0x300; srcBOff = 0x500; lenA = 0x500; lenB = 0x100; }             // D848
   int dstA = ((r[0x0D00 + idx] | (r[0x0D01 + idx] << 8)) & 0x01FF) << 4;
-  vmVramDma(dstA, chips, 0x100);
-  vmVramDma((dstA + 0x100) & 0x7FFF, chips + 0x100, 0x100);
+  vmVramDma(dstA, chips, lenA);
+  vmVramDma((dstA + dstBOff) & 0x7FFF, chips + srcBOff, lenB);
 }
 
 // C0/E12A, a 24-piece sprite's (class 3) staging, called by the enemy loader (C0/47E5) and the reload chain (C0/0212):

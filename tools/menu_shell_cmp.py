@@ -26,7 +26,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ctlib import fb, peekshots  # noqa: E402
+from ctlib import fb, lake, peekshots  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIELD = os.path.join(ROOT, 'build', 'Belthasar.exe')
@@ -74,9 +74,12 @@ def oracle_frames(state, script, frames, tag):
     return out
 
 
-def port_frames(seed, scene, walk, frames, tag):
+def port_frames(seed, scene, walk, frames, tag, state=None):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS=os.path.join(ROOT, 'build', '_mshell_p_%s' % tag), CT_SHOTS_AT=','.join(str(f) for f in frames))
+    # the seed's VRAM, which its WRAM image does not carry (the sprites drawn from OAM take their tiles from it)
+    if state:
+        env.update(lake.seed_vram_env(os.path.join(ROOT, state), os.path.join(ROOT, 'build', '_mshell_seed_%s.vram' % tag)))
     last = max(frames) + 2
     subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(scene), '--loadwram', seed, '--selftest',
                     os.path.join(ROOT, 'build', '_mshell.raw'), '--frames', str(last), '--walkscript', walk],
@@ -88,7 +91,7 @@ def main():
     for name, ostate, seed, scene, obtn, pwalk, (a, b), fref, mref, sw, rtl in DRIVES:
         frames = sorted(set(list(range(a, b + 1)) + [fref, mref]))
         ol = oracle_frames(ostate, obtn, frames, name)
-        pl = port_frames(seed, scene, pwalk, frames, name)
+        pl = port_frames(seed, scene, pwalk, frames, name, state=ostate)
         bad = []
         for f in range(a, b + 1):
             menu = f >= sw and (rtl is None or f < rtl)

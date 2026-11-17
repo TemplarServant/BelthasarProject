@@ -295,6 +295,13 @@
       "doc": "fx_forest_holdleft after 3 frames still, 30 of Left and 20 still (the capture's own drive is the last 50; the 3 put the field objects' 4-frame counters $1001/$1003 on the capture's phase, from which the port's pre-battle camera glide arms)."
     },
     {
+      "path": "saves/battle_re/forest_seek_pre.state",
+      "recipe": "fx_forest_holdleft",
+      "pad": "0:3,40:30,0:20",
+      "kind": "state",
+      "doc": "the same frame's oracle state: its VRAM seeds the field's beside the WRAM image (CT_SEED_VRAM, the sprites drawn from OAM)"
+    },
+    {
       "path": "saves/battle_re/forest_pre.raw.wram",
       "recipe": "fx_forest_pre",
       "kind": "wram",

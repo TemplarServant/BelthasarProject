@@ -62,6 +62,8 @@
      "doc": "the Tent of Horrors: 96 silver points poked ($7F021A = 60, as the reference was made), 40 points, the mimic game won -- each round Bekkler's pose $7F0220 answered with its button (0 R, 1 L, 2 A, 3 Y) on the first frame the press registers -- up to the frame obj0 reaches 038A (f3300; the reference reached it at f3109 with its own press timing)"},
     {"path": "saves/field_re/chest_loc315_below.lakewram", "recipe": "fxf_chest_loc315", "kind": "lakewram",
      "doc": "loc 13B (storyline 10), Crono below the MegaElixir chest"},
+    {"path": "saves/field_re/chest_loc315_below.state", "recipe": "fxf_chest_loc315", "kind": "state",
+     "doc": "the same frame's oracle state: its VRAM seeds the field's beside the WRAM image (CT_SEED_VRAM, the sprites drawn from OAM)"},
     {"path": "saves/field_re/loc13B_teleport_lake.state", "recipe": "fxf_loc13B_teleport", "kind": "state",
      "doc": "loc 13B with the three-member party (storyline 15), loaded by the ROM's own loader"},
     {"path": "saves/field_re/loc13B_teleport.lakewram", "recipe": "fxf_loc13B_teleport", "kind": "lakewram",

@@ -4459,7 +4459,7 @@ static uint8_t* fieldReadLakeWram(const char* path) {
 
 // Where a prio-0/1 OBJ pixel loses to BG1/BG2, the map is what belongs there -- this is the source
 // to put back (the composed scene image plus the camera, so a sprite pixel maps to its map pixel).
-typedef struct { const uint8_t* base; int W, camX, camY, cw, ch; } CtStencilSrc;
+typedef struct { const uint8_t* base; int W, H, camX, camY, cw, ch; } CtStencilSrc;   // (W x H: the map, which wraps)
 
 // The PPU's rules for one sprite's opaque pixels, shared by the asset drawer (drawSprite) and the OAM pass
 // (fieldOamDraw): `idx` (stride CT_SPR_W) inside `box` the colour indices, `pal` the 16 colours (RGB), `half` per pixel
@@ -4488,8 +4488,12 @@ static int spritePixels(uint8_t* fb, const uint8_t* idx, const int* box, const u
       // loc 07B) have their lower unit hidden behind the chair. Where the window took BG1/BG2 away it shows.
       if (p < 2 && sten && !win) {
         if (px >= 0 && px < sten->cw && py >= 0 && py < sten->ch) {   // BG1/BG2 are on screen here and win
-          memcpy(fb + ((size_t)py * g_fw + px) * 3,
-                 sten->base + ((size_t)(sten->camY + py) * sten->W + (sten->camX + px)) * 3, 3);
+          // (the map's pixel as the BG draws it: the map wraps, fieldBaseAt -- a camera past the map's edge, the ending's
+          //  stars over loc 05A, read past the buffer before)
+          int mx = (sten->camX + px) % sten->W, my = (sten->camY + py) % sten->H;
+          if (mx < 0) mx += sten->W;
+          if (my < 0) my += sten->H;
+          memcpy(fb + ((size_t)py * g_fw + px) * 3, sten->base + ((size_t)my * sten->W + mx) * 3, 3);
           if (front) front[(size_t)py * g_fw + px] = 0;
           CtMotTag(g_mot, px, py, g_motOwn);                         // (the map's pixel, the occluder's: it covers)
           CtMotSpriteHole(g_mot, px, py, g_motOwn);
@@ -19751,7 +19755,7 @@ int main(int argc, char** argv) {
         // not taken BG1/BG2 off it. pOccl is the trace's "both halves".
         int pPv = (f.vm && CtSceneActorCount(f.vm) > 1) ? CtSceneActorPrio(f.vm, pObj) : 0x80;
         int pOccl = tp < 2 && bp < 2;
-        CtStencilSrc pStenSrc = { f.base, f.W, camx, camy, cw, ch };
+        CtStencilSrc pStenSrc = { f.base, f.W, f.H, camx, camy, cw, ch };
         const uint8_t* pShadow = NULL;                     // the lead's OBJ palette slot row ($0F81,X >> 1)
         if (f.vm && pObj >= 0) { const uint8_t* m7e = CtSceneMem7E(f.vm);
           pShadow = g_fieldCgram + 0x100 + ((m7e[0x0F81 + pObj * 2] >> 1) & 7) * 32; }   // (the uploaded rows, C0/712E)
@@ -19820,7 +19824,7 @@ int main(int argc, char** argv) {
         g_bObjPalCur = (CtSceneMem7E(f.vm)[0x0F81 + o * 2] >> 1) & 7;   // its OAM palette (the colour window's math)
         // A whole-object occluder (sten[i]) was already stencilled above and draws only inside the window here; any
         // other object may still carry a priority-0/1 unit, which drawSprite stencils itself from the same map.
-        CtStencilSrc aStenSrc = { f.base, f.W, camx, camy, cw, ch };
+        CtStencilSrc aStenSrc = { f.base, f.W, f.H, camx, camy, cw, ch };
         g_motOwn = CtMotSprite(mot, o, ax, ay);
         int np = drawSprite(&assets, fb, sidx, spal, sp, actorAf[o], ax - camx, ay - camy, front, tp, bp,
                    rot ? rstart : 0, rot ? rspan : 0, rphase, bstart, bn, bbgr,
@@ -19832,7 +19836,7 @@ int main(int argc, char** argv) {
     }
     g_drawSpriteOff = 0;
     if (oamPass) {                                       // (stage 2) the OAM mirror, over the same BG and masks
-      CtStencilSrc oStenSrc = { f.base, f.W, camx, camy, cw, ch };
+      CtStencilSrc oStenSrc = { f.base, f.W, f.H, camx, camy, cw, ch };
       fieldOamDraw(f.vm, fb, front, wideW > CAMW ? wideX : 0, fillHold - 1, winOn, &oStenSrc, mot);
     }
 

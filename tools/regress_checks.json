@@ -2227,11 +2227,13 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_CHESTDBG": "1"
+        "CT_CHESTDBG": "1",
+        "CT_SEED_VRAM": "saves/field_re/chest_loc315_below.state"
       },
       "inputs": [
         "ct_assets.dat",
-        "saves/field_re/chest_loc315_below.lakewram"
+        "saves/field_re/chest_loc315_below.lakewram",
+        "saves/field_re/chest_loc315_below.state"
       ],
       "expect": [
         "chest: loc 315 tile(2,7) idx 191 payload 00C5 -> result 0 item 197 gold 0 msg 'Got 1 MegaElixir!'",
@@ -7646,12 +7648,14 @@
         "CT_FIELDSHOT_AT": "34",
         "CT_FIELDSHOT": "build/forest_seek_glide.raw",
         "CT_NOPACE": "1",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/battle_re/forest_seek_pre.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/battle_re/forest_seek_pre.raw.wram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/forest_seek_pre.state"
       ],
       "expect": [
         "fieldshot: f34 camx=0 camy=512 fnv=B448E335"
@@ -51270,7 +51274,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 647 check(s) read 239 state file(s): 228 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 647 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"

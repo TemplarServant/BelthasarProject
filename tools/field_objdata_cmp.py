@@ -14,7 +14,8 @@ leg), and on every frame f0..f1 the tool compares
 The cartridge's dumps are --peek's PEEK_SHOTS_SIDECARS (.wram / .vram after frame f); the port's are Belthasar's
 CT_DUMPLIST (.wram / .vram on its frame f + K, K = --off, default -1: the port's dump is a tick on, as
 build/_pt77/scratch_tools/s28_wramdiff.py found). The port's VRAM image starts as the cartridge's (CT_SEED_VRAM: a WRAM
-seed carries none). Prints
+seed carries none; Belthasar reads it only with the OAM renderer on, so the port runs with CT_OAMRENDER=1 -- it draws
+the sprites from OAM and changes no data). Prints
 
     objdata: <leg> f<f0>-f<f1>[ from f<N>]: OAM <n> of <m> frames equal, OBJ tiles <n> of <m> frames equal[; first ...]
 
@@ -109,7 +110,7 @@ def main():
     pfr = [rel(f) + off for f in frames]
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
                CT_AUDIO_SEEDSTATE=state, CT_WS_BATTLE_LEAD='1', CT_SRAM_FRESH='1', CT_SRAM=os.path.join(WORK, 'port.srm'),
-               CT_SEED_VRAM=seed + '.vram', CT_DUMPLIST=os.path.join(WORK, 'p'),
+               CT_SEED_VRAM=seed + '.vram', CT_OAMRENDER='1', CT_DUMPLIST=os.path.join(WORK, 'p'),
                CT_DUMPLIST_AT='%d-%d' % (min(pfr), max(pfr)),
                CT_SHOTS=os.path.join(WORK, 'shot'), CT_SHOTS_AT=str(max(pfr) + 2), CT_SHOTS_EXIT='1')
     if P.seed_in_load_fade(state, w):
