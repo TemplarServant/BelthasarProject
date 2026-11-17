@@ -123,6 +123,7 @@ void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* page, int* bg2x, in
 // The scene-entry OBJ palette sweep (C0/2881 -> C0/B0E6). Call it on a fresh scene entry after the lead is
 // placed and the camera is set; its box is not the per-frame one.
 void CtScenePalSweepEntry(CtScene* sc);
+void CtSceneOamHideLow(CtScene* sc);   // C0/B262: OAM entries 0-3 off the screen (C0/286C, a load's and the menu's pass)
 void CtSceneMenuReloadObjects(CtScene* sc);   // the menu reload's C0/286C object legs: 7155 / E935 / B204 / A7E9 / B0E6
 void CtSceneCameraPx(const CtScene* sc, int* camx, int* camy);
 void CtSceneCameraPxOf(const uint8_t* page, int* camx, int* camy);   // the same, from a copy of the object page (a battle)

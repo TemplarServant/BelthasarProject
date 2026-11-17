@@ -1431,3 +1431,6 @@ the ordered intra-frame trace reports, beside `--pcwatch`'s PCs.
 | `VMDIFF_ANIMDBG` | `--vmdiff`: `<obj>` prints that object's per-frame animation mirror state. | src/main.c |
 | `VMDIFF_CENSUS` | `--vmdiff`: lists the unmodelled bytes behind the `[wmask]` line's `unmodelled` count. | src/main.c |
 | `VMDIFF_SETTLE` | `--vmdiff`: frames the oracle runs before the seed (default 1, the frame boundary; 0 seeds mid-frame). | src/main.c |
+| `CT_DUMPLIST` / `CT_DUMPLIST_AT` | Belthasar: `<prefix>` and `<n,n,a-b,...>` -- on every listed field frame the scene's 128 KB WRAM and the field's VRAM image (`<prefix>_f<n>.wram` / `.vram`), in one run. tools/field_objdata_cmp.py reads them beside the oracle's `PEEK_SHOTS_SIDECARS`. | src/field.c -- Belthasar |
+| `CT_SEED_VRAM` | Belthasar, with `--loadwram`: `<a cartridge's .vram>` (64 KB) into the field's VRAM image at the seed -- a WRAM seed carries no VRAM. Test surface only; no word is marked known, the BG's picture is unchanged. | src/field.c -- Belthasar |
+| `CT_VRAMSINKTRACE` | Belthasar: `<lo>-<hi>` (hex words) -- one `vramsink:` line on stderr per DMA into the field's VRAM image that touches the range (frame, address, bytes, first two bytes). | src/field.c -- Belthasar |

@@ -340,6 +340,9 @@ void CtObjSceneInit(uint8_t* ram, int nobj);
 uint8_t CtAnimShownFrame(int obj);
 // ...and the priority pair (`$0C00,X`, `$0C01,X`) that template's pieces took; 0 if none was written since the init.
 int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1);
+// The field's OAM mirror entry `entry` (0-127) as the last draw pass wrote it: the object, its template's frame and the
+// piece. 0 = not written by an object this pass (hidden, or another writer's). move.c ctOamStage2Copy.
+int CtFieldOamTag(int entry, int* obj, int* frame, int* piece);
 // C0/571A-58AA: the location load's per-object default fill, written through the $2180 WRAM port. Thirteen arrays get
 // their initial value per object; $1000,X = 4 clears the op-0x0B pause bit the activate guard C0/5AD1 refuses on.
 // `body16` is the script's 32-byte-per-object fn-pointer table ($7F:2001), used only for the $1180,X fn0 seed; NULL

@@ -5667,6 +5667,10 @@ static uint8_t g_fieldCgram[0x200];   // (defined below with its story: what C0/
 static int g_bg3Plane = 0;
 static void fieldVramSink(int word, const uint8_t* src, int bytes) {
   if (getenv("CT_CAPTIONTRACE")) printf("caption: f%d DMA VRAM $%04X <- %d bytes\n", g_sndTraceFrame, word & 0xFFFF, bytes);
+  { static int vlo = -2, vhi = 0; if (vlo == -2) { const char* e = getenv("CT_VRAMSINKTRACE"); vlo = -1;   // probe: lo-hi (hex words)
+      if (e && sscanf(e, "%x-%x", &vlo, &vhi) != 2) vlo = -1; }
+    if (vlo >= 0 && (word & 0x7FFF) <= vhi && (word & 0x7FFF) + bytes / 2 > vlo)
+      fprintf(stderr, "vramsink: f%d VRAM $%04X <- %d bytes (%02X %02X ..)\n", g_sndTraceFrame, word & 0x7FFF, bytes, src[0], src[1]); }
   for (int i = 0; i < bytes / 2; i++) {
     int a = (word + i) & 0x7FFF;
     g_fieldVram[a] = (uint16_t)(src[2 * i] | (src[2 * i + 1] << 8));
@@ -11205,6 +11209,13 @@ int main(int argc, char** argv) {
         // ...and its BG: the maps as its WRAM holds them (an open door is a bumped cell there, C0/0D4C) and the frame each
         // animated record shows (the seed's VRAM is not in the image); the colours follow the live page every frame.
         fieldMapFromWram(&f, CtSceneMem7E(f.vm), "loadwram");
+        // TEST SURFACE (opt-in): CT_SEED_VRAM=<a cartridge's .vram, 64 KB> -- the seed's VRAM, which a WRAM image does not
+        // carry, into the field's VRAM image: what tools that compare the OBJ tiles (or will draw from them) need at a leg's
+        // start. No word is marked known (g_ringKnown), so the BG's picture is unchanged.
+        { const char* vp = getenv("CT_SEED_VRAM"); FILE* vf = vp ? fopen(vp, "rb") : NULL;
+          if (vf) { static uint8_t vb[0x10000]; size_t n = fread(vb, 1, sizeof vb, vf); fclose(vf);
+            for (size_t k = 0; k + 1 < n; k += 2) g_fieldVram[k / 2] = (uint16_t)(vb[k] | (vb[k + 1] << 8));
+            fprintf(stderr, "[loadwram] VRAM seeded from %s (%u bytes)\n", vp, (unsigned)n); } }
         free(wram);
       } else fprintf(stderr, "[loadwram] FAILED to find RAM block in %s\n", loadWramPath);
       free(fb);
@@ -12641,7 +12652,7 @@ int main(int argc, char** argv) {
         else { fade = 2; fadeBri = 0; loadFadeEntry = 1; loadRamp = 1; loadFadeF0 = frameNo; }
       }
     } else if (fade == 2) {                             // fading in
-      if (entrySweepPend && f.vm) { CtScenePalSweepEntry(f.vm); entrySweepPend = 0; }   // C0/2848 JSR C0/286C -> C0/B0E6
+      if (entrySweepPend && f.vm) { CtScenePalSweepEntry(f.vm); CtSceneOamHideLow(f.vm); entrySweepPend = 0; }   // C0/2848 JSR C0/286C -> C0/B0E6, B262
       // C0/2848, the load's own ramp, is a loop inside the loader, not a state of the main loop. C0/0094 calls it
       // once, between the location load and the first C0/0097 frame:
       //     2848 JSR C0/286C / BNE ->2866        ; one pipeline frame; $011E != 0 skips the whole ramp
@@ -18189,6 +18200,23 @@ int main(int argc, char** argv) {
     }
     // (needs CT_DUMPWRAM=<path> too: the flat 128 KB image, $7E then the whole of bank $7F. fopen(NULL) aborts the
     //  MSVC CRT with no output, so the path is required.)
+    // probe: CT_DUMPLIST=<prefix> with CT_DUMPLIST_AT=<n,n,a-b,...> -- on each listed frame, the scene's 128 KB WRAM and the
+    // field's VRAM image (<prefix>_f<n>.wram / .vram), in one run: tools/field_objdata_cmp.py reads them beside the oracle's
+    // PEEK_SHOTS_SIDECARS dumps (the OAM mirror $0700-$091F and the OBJ tiles, frame by frame).
+    if (f.vm && getenv("CT_DUMPLIST") && getenv("CT_DUMPLIST_AT")) {
+      static int dlN = -1; static int dlA[512], dlB[512];
+      if (dlN < 0) { dlN = 0; const char* s = getenv("CT_DUMPLIST_AT");
+        while (*s && dlN < 512) { char* e; long x = strtol(s, &e, 10), y = x; if (e == s) break;
+          if (*e == '-') { const char* s2 = e + 1; y = strtol(s2, &e, 10); }
+          dlA[dlN] = (int)x; dlB[dlN] = (int)y; dlN++; s = (*e == ',') ? e + 1 : e; if (!*e) break; } }
+      for (int k = 0; k < dlN; k++)
+        if (frameNo >= dlA[k] && frameNo <= dlB[k]) {
+          char pth[600]; snprintf(pth, sizeof pth, "%s_f%d.wram", getenv("CT_DUMPLIST"), frameNo);
+          FILE* df = fopen(pth, "wb"); if (df) { fwrite(CtSceneMem7E(f.vm), 1, 0x20000, df); fclose(df); }
+          snprintf(pth, sizeof pth, "%s_f%d.vram", getenv("CT_DUMPLIST"), frameNo);
+          df = fopen(pth, "wb"); if (df) { fwrite(g_fieldVram, 2, 0x8000, df); fclose(df); }
+          break;
+        } }
     // probe: CT_DUMPVRAM=<path> with CT_DUMPWRAM_AT -- the field's VRAM image (64 KB, word-ordered as the PPU's) that frame
     if (getenv("CT_DUMPVRAM") && getenv("CT_DUMPWRAM_AT") && frameNo == fieldDumpAt(frameNo)) {
       FILE* vf = fopen(getenv("CT_DUMPVRAM"), "wb"); if (vf) { fwrite(g_fieldVram, 2, 0x8000, vf); fclose(vf); } }

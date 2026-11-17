@@ -572,8 +572,8 @@ static const uint8_t* mvTables(void);                // fwd: [0x400]=F700 facing
 //   $1101,X = enemy id (C0/4564)          $1200,X = 0x7F constant (C0/4579; gfx bank)
 //   $1201,X = header size byte (C0/476A)  $0C00/$0C01,X = 0x20 (C0/4571, word 0x2020)
 //   $1B01,X = 1 solid marker (C0/46EF)    $1100,X = operand2 bit7 ? 6 : 5 (C0/47EC-47F4)
-//   $0D00,X = ((slot&0xFE)<<4)|((slot&1)<<3), slot = (operand2&0x7F)+1 (C0/47AC-47C6), the byte
-//             C0/0557's screen-Y slot formula reads.
+//   $0D00,X = ((slot&0xFE)<<4)|((slot&1)<<3), slot = (operand2&0x7F)+1 (C0/47AC-47C6), a 16-bit store; the low
+//             byte is what C0/0557's screen-Y slot formula reads.
 // All three consume a 5-byte sprite header [gfx, assembly, palette, anim, size]: op 0x81 -> $E4:F000 + id*5,
 // op 0x82 -> $E4:F000 + (id+7)*5, op 0x83 -> the field enemy record $E4:F600 + id*10, bytes 0-4. From it:
 //   $1380/$1381,X + $1300,X = asmPtrTable[byte1], addr16 + bank (C0/470C-4715)
@@ -780,6 +780,14 @@ static void loadGfxMirror(Mem* m, int obj, const uint8_t* hdr, int directGfx) {
                                                        // job measures it ($0306 -> $71 += size). The ROM
                                                        // caps this heap at 32 KB (C0/46CA/4833).
     size_t sz = ct_lz_decompress(gRomImg, scratch, src);
+    // ...and the sheet itself, where the JSL writes it (`$0303` = the cursor, `$0305` = 7F): the drain's blit reads the
+    // object's chips from `$1200,X` : `$1280,X` (C0/E687 for bank $7F), so a heap left empty hands the OBJ upload queue
+    // zeros or another room's bytes. MEASURED on the rule's cartridge, playthrough leg 63 (loc 087 after the overworld):
+    // `$7F:8020-E9BF` holds the room's sheets on the cartridge and was all zero in the port; the chips the drain staged
+    // at `$7F:3800` and the tiles C0/B1B2 uploaded from them (VRAM words 1400-17FF) differed accordingly
+    // (tools/field_objdata_cmp.py). The ROM's heap ends at $FFFF (C0/46CA: past it the machine halts). (THE SHEET IN THE HEAP)
+    { uint8_t* heap = (uint8_t*)m + 0x10000;
+      for (size_t i = 0; i < sz && cur + i <= 0xFFFFu; i++) heap[cur + i] = scratch[i]; }
     // ...and its ROM cycles (C0/46BB / C0/4825, `$0305 = 7F`): a location load's black window also covers
     // every sprite sheet its object pass decompresses.
     g_ctLzSpriteCycles += ct_lz_rom_cycles(gRomImg, (size_t)gRomImgLen, (size_t)src, 1);
@@ -1023,7 +1031,17 @@ static void loadMonMirror(Mem* m, int obj, uint8_t id, uint8_t op2) {
   w8(m, X + 0x1600, 0x01);                            // 457E (op 0x83 enters that arm at C0/4557)
   w8(m, X + 0x1680, 0x00);                            // 4583
   w8(m, X + 0x1681, 0x00);                            // 4588
-  w8(m, X + 0x0D00, (uint8_t)(((slot & 0xFE) << 4) | ((slot & 1) << 3)));
+  // 47AD REP #20 .. 47C6 STA $0D00,X: a WORD -- `$0D01,X` is the attribute half the template ORs into every piece (C0/CD47
+  // `$0F81,Y | $0D01,Y`): the name table bit and the flips. MEASURED on the rule's cartridge, playthrough leg 45 (loc 0D9,
+  // objects 18 and 19 after the load on f50): `$0D25` / `$0D27` read 00 on the cartridge; the port stored the low byte
+  // only and kept the last room's 80 / 7E -- object 18 drawn upside down in the OAM mirror (attribute B2 for 32,
+  // tools/field_objdata_cmp.py). (THE SLOT IS A WORD)
+  w16(m, X + 0x0D00, (uint16_t)(((slot & 0xFE) << 4) | ((slot & 1) << 3)));
+  // 47C2 STX $D9 (the slot) .. 47CB LDA $D9 / AND #00FF / ASL x5 / 47D7 STA $1700,X: the OBJ template base, slot * 32 -- where
+  // the drain writes the object's piece records ($7F:4802 + $1700,X) and the draw pass emits them from. MEASURED on the
+  // rule's cartridge, playthrough leg 57 f1500: objects 9-11 (slots 4, 6, 7) at 0080 / 00C0 / 00E0; the port left 0000,
+  // the lead's own base, so an NPC's template took the lead's place in the OAM mirror (entries 36-39, f1500 on). (THE TEMPLATE BASE)
+  w16(m, X + 0x1700, (uint16_t)((slot & 0xFF) << 5));
   if (gRomImg && gRomImgLen >= 0x250000) w8(m, 0x7E01E3, CtRomByte(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10));   // C0/476F-4773 `LDA $E4F600,X / STA $E3` (before the F8 test)
   if (gRomImg && gRomImgLen >= 0x250000)
     loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10, 10), id >= 0xF8);   // C0/477A: F8+ ROM-direct
@@ -2613,6 +2631,16 @@ static void palSweepB0E6(CtScene* sc) {
   if (legsOn()) CtAnimDrawPass(m->s, NULL);                      // B124 BRL C0/B271
 }
 void CtScenePalSweepEntry(CtScene* sc) { if (sc) palSweepB0E6(sc); }
+// C0/B262, in C0/286C after the sweep (289B JSR C0/B262): `LDA #E0 / STA $0701 / $0705 / $0709 / $070D` -- OAM entries 0-3
+// off the screen. The field's draw pass never writes them (its group cursors start at $0710 / $0770 / $08A0); the
+// overworld's (C2/0DD3) and a fight's do. MEASURED on the rule's cartridge, playthrough leg 63 (`--monitor 7E0701:1
+// --writer`): the overworld writes `$0701` from f74 (5F / 5E); the location load into loc 087 hides it on f586 (C0:B267);
+// the port left the overworld's entry 0 in its mirror (tools/field_objdata_cmp.py: f700 on). (THE LOAD HIDES ENTRIES 0-3)
+void CtSceneOamHideLow(CtScene* sc) {
+  if (!sc) return;
+  uint8_t* r = sc->mem->s;
+  r[0x0701] = r[0x0705] = r[0x0709] = r[0x070D] = 0xE0;
+}
 // The menu's reload runs C0/286C whole. Its object legs after the camera (C0/0A50) and the OBJ slots (C0/6F79, the
 // host's fieldPassObjSlots) are `2875 JSR C0/7155` (the eight palette owners $0B80-0B87 := 80), `2878 JSR C0/E935` (the
 // arena owners $0BC0-0BC7), `287B JSR C0/B204` (the draw-list page $0E00-0EFF := 80), `287E JSR C0/A7E9` (one (00, FF)
@@ -2624,6 +2652,7 @@ void CtSceneMenuReloadObjects(CtScene* sc) {
   memset(r + 0x0B80, 0x80, 8);                                   // C0/7155
   CtObjSceneInit(r, sc->nobj);                                   // C0/6F79 (again: the host's) / E935 / B204 / A7E9
   palSweepB0E6(sc);                                              // C0/B0E6
+  CtSceneOamHideLow(sc);                                         // C0/289B JSR C0/B262
 }
 
 static int ctWipeOp(CtScene* sc, int sub);

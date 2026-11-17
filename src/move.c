@@ -5290,6 +5290,40 @@ int gCtDrawSkipped;   // objects the B701 gate refused (SEC) on the last pass --
 int gCtDrawRunaway;
 int gCtDrawClsMask;   // bitmask of the sprite classes that reached the draw list, i.e. the classes whose OAM bytes
                       // a lockstep check can compare
+// C0/B309's stage 2, the copy (oam.md "C0/B309's stage 2 is a copy"): for an object the B701 gate accepted, its records
+// at $7F:4BC0 + $1700,X go to the OAM mirror at the group's main cursor through the WRAM port -- B36E `LDA $7F4BC0,X` (the
+// placed X), B374 `LDA $7F4BC1,X` (the clamped Y), B37A `LDA $7F4BC6,X` (the tile), B380 `LDA $7F4BC7,X` (the attribute),
+// 4 / 8 / 12 / 24 pieces by class (B369 / B42D / B510 / B625) -- and one high byte a group of four to the high cursor
+// (B341 $7F:4F00,X; B3FB + $4F01; B4D4 + $4B40; B5CB + $4B41 / $4F80 / $4F81). The same bytes src/oam.c's model writes
+// (`--checkoam`, `--sweepstage2`), but in the walk that releases: an object B701 refuses emits nothing and the next one
+// takes its cursor, which the model's second walk could not see. Each main entry written is tagged with the object, the
+// frame its template holds and the piece (CtFieldOamTag): what a renderer that draws the mirror needs to hand a piece to
+// a mod (the frames between, other art) as the object it belongs to.
+static int16_t g_ctOamTagObj[128]; static uint8_t g_ctOamTagFrame[128], g_ctOamTagPiece[128];
+int CtFieldOamTag(int entry, int* obj, int* frame, int* piece) {
+  if (entry < 0 || entry >= 128 || g_ctOamTagObj[entry] < 0) return 0;
+  if (obj) *obj = g_ctOamTagObj[entry];
+  if (frame) *frame = g_ctOamTagFrame[entry];
+  if (piece) *piece = g_ctOamTagPiece[entry];
+  return 1;
+}
+static void ctOamStage2Copy(uint8_t* r, int obj, int cls, int ent, int mc, int hc) {
+  static const int HIDST[4][6] = { { 0x4F00 },
+                                   { 0x4F00, 0x4F01 },
+                                   { 0x4F00, 0x4F01, 0x4B40 },
+                                   { 0x4F00, 0x4F01, 0x4B40, 0x4B41, 0x4F80, 0x4F81 } };
+  int base = r[0x1700 + obj] | (r[0x1701 + obj] << 8);
+  for (int e = 0; e < 4 * ent; e++) {
+    int o = 0x10000 + ((0x4BC0 + base + e * 8) & 0xFFFF), m = (mc + e * 4) & 0xFFFF;
+    r[m] = r[o]; r[(m + 1) & 0xFFFF] = r[o + 1]; r[(m + 2) & 0xFFFF] = r[o + 6]; r[(m + 3) & 0xFFFF] = r[o + 7];
+    int k = (m - 0x0700) >> 2;
+    if (m >= 0x0700 && m < 0x0900 && k < 128) {
+      g_ctOamTagObj[k] = (int16_t)(obj >> 1); g_ctOamTagPiece[k] = (uint8_t)e;
+      g_ctOamTagFrame[k] = (obj >> 1) < 64 && g_ctAnimShown[obj >> 1] != 0xFF ? g_ctAnimShown[obj >> 1] : r[0x0F01 + obj];
+    }
+  }
+  for (int g = 0; g < ent; g++) r[(hc + g) & 0xFFFF] = r[0x10000 + ((HIDST[cls][g] + obj) & 0xFFFF)];
+}
 int CtAnimDrawPass(uint8_t* r, int* unresolved) {
   int drawn = 0, unres = 0; gCtDrawSkipped = 0; gCtDrawClsMask = 0;
   r[0x0189] = 0x01; r[0x018A] = 0x09;                      // B271 LDX #0901 / B274 STX $89
@@ -5329,9 +5363,11 @@ int CtAnimDrawPass(uint8_t* r, int* unresolved) {
         int cls = r[0x1201 + obj] & 3;
         int ent = ENT[cls];                                     // OAM entries this object emits
         gCtDrawClsMask |= 1 << cls;                             // the coverage denominator, see above
-        int h = (r[hi] | (r[hi + 1] << 8)) + ent;               // B34B/B40A+B40F/B4E8+B4ED+B4F2 INX
+        int hc = r[hi] | (r[hi + 1] << 8), mc = r[mn] | (r[mn + 1] << 8);
+        ctOamStage2Copy(r, obj, cls, ent, mc, hc);              // (THE OAM MIRROR) the copy, in the same walk
+        int h = hc + ent;                                       // B34B/B40A+B40F/B4E8+B4ED+B4F2 INX
         r[hi] = (uint8_t)h; r[hi + 1] = (uint8_t)(h >> 8);
-        int m = ((r[mn] | (r[mn + 1] << 8)) + 0x10 * ent) & 0xFFFF;   // B35D / B421 / B4F9-family
+        int m = (mc + 0x10 * ent) & 0xFFFF;                     // B35D / B421 / B4F9-family
         r[mn] = (uint8_t)m; r[mn + 1] = (uint8_t)(m >> 8);
         drawn++;
       }
@@ -5350,7 +5386,10 @@ int CtAnimDrawPass(uint8_t* r, int* unresolved) {
     for (int g = 0; g < 3; g++) {
       int x = r[CUR[g]] | (r[CUR[g] + 1] << 8);
       int mk = r[MARK[g]] | (r[MARK[g] + 1] << 8);
-      for (; x < mk && x < LIM[g]; x += 4) r[(0x0001 + x) & 0xFFFF] = 0xE0;   // B2C8-B2D6
+      for (; x < mk && x < LIM[g]; x += 4) {                  // B2C8-B2D6
+        r[(0x0001 + x) & 0xFFFF] = 0xE0;
+        if (x >= 0x0700 && x < 0x0900) g_ctOamTagObj[(x - 0x0700) >> 2] = -1;   // (a hidden entry is no one's)
+      }
       x = r[CUR[g]] | (r[CUR[g] + 1] << 8);                 // B2D8 LDX $DB (re-read: the loop used a copy)
       r[MARK[g]] = (uint8_t)x; r[MARK[g] + 1] = (uint8_t)(x >> 8);            // B2DA STX $7B
     } }
@@ -5678,6 +5717,7 @@ int CtAnimUploadFlush(uint8_t* r, uint8_t* vram) {
 void CtObjSceneInit(uint8_t* r, int nobj) {
   int k;
   for (k = 0; k < 64; k++) { g_ctAnimShown[k] = 0xFF; g_ctAnimShownOk[k] = 0; }   // (no template yet: CtAnimShownFrame / Prio)
+  for (k = 0; k < 128; k++) g_ctOamTagObj[k] = -1;   // (no OAM entry is anyone's yet: CtFieldOamTag)
   for (k = 0; k < 0x1E; k++) r[0x0B88 + k] = 0x80;   // C0/6F79: 30 OBJ slots, all free
   for (k = 0; k < 8;    k++) r[0x0BC0 + k] = 0x80;   // C0/E935: the arena owner table -- eight bytes
                                                      //   cleared, though C0/E952 hands out only four

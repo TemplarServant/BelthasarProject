@@ -90,6 +90,10 @@ WINDOWS = {
     # 00 from f583 in the port and 80 to f621 on the cartridge.)
     'fight-boot-palette-copies-land-on-their-frames': dict(leg='51_', start=570, frames=60,
                                                              cells=[('7E229E', 2), ('7E2010', 8), ('7E235A', 6), ('7E237A', 6)]),
+    # Leg 45, the load into loc 0D9 (f49-f50): the enemy loader's slot store is a word (C0/47AD REP #20 .. 47C6 STA $0D00,X),
+    # so objects 18 and 19's attribute halves `$0D25` / `$0D27` lose the last room's 80 / 7E (on the cartridge's f81, inside
+    # the load's black frames; the port runs the loaders at the commit, f50: those frames are a free span).
+    'enemy-slot-store-is-a-word': dict(leg='45_', start=40, frames=100, free=[(41, 79)], cells=[('7E0D24', 4)]),
     # The overworld, world 1F3: A on an entrance. The lead's input frame stores `$027C` = 3 itself (C2/35EC), so the
     # followers -- later blocks of the same pass -- find it and stand (C2/3B1B): their Y stops on the frame before
     # (`$0D88` / `$0DC8` = 02B6 / 02A6 from f592) and their +28 loses the walk's bit on f593.

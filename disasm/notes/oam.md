@@ -421,3 +421,47 @@ Two of the four quadrant arms swap $01F6/$01F7 through the accumulator's B half 
 one octant of the table. On the -Y / +X path $01F7 is written twice (|dY| at ABCE, then dX at ABE8). The scale
 selector `BIT #$40` is an immediate BIT, which sets only Z. `TAX` moves the full 16-bit index (the callers leave X
 16-bit); every arm caps it at $3FF, inside the 1 KB table at $C0:F300. `ct.exe --sweepaba2` checks the routine.
+
+## Stage 1 of the OAM renderer: the sprite data in production (2026-11-17)
+
+The user's decision (2026-11-17): draw the field's sprites from OAM + VRAM + CGRAM, in stages, with each OAM entry
+tagged with the object, frame and piece it comes from so the mods (the frames between, the widescreen, other art) keep
+an object to work with. Stage 1 builds the data in production and grades it against the cartridge; the drawer does not
+change yet.
+
+- **The OAM mirror.** C0/B309's stage-2 copy now runs inside CtAnimDrawPass's walk, on the CLC arm of the B701 gate
+  (move.c ctOamStage2Copy): the records at `$7F:4BC0 + $1700,X` to the group's main cursor (X, the clamped Y, the
+  tile, the attribute; 4 / 8 / 12 / 24 pieces), one high byte a group of four from `$7F:4F00,X` (+ `$4F01`, `$4B40`,
+  ...). A refused object emits nothing and the next takes its cursor -- the defect of CtBuildFieldOAM's second walk
+  ("C0/B309's stage 2 is a copy" above) does not exist here. CtFieldOamTag(entry): object, the template's frame,
+  piece; -1 for an entry the stale-tail loop hid.
+- **C0/B262** (C0/286C's `289B JSR C0/B262`): `LDA #E0 / STA $0701 / $0705 / $0709 / $070D`, entries 0-3 off the
+  screen on a location load and the menu's reload (ct_vm.c CtSceneOamHideLow). The draw pass never writes them; the
+  overworld (C2/0DD3) and a fight do.
+- **The OBJ tiles** were already uploaded into the field's VRAM image (move.c ctVramDma -> g_ctVramSink), but from
+  chips the drain's blit staged out of an EMPTY sprite heap: ct_vm.c loadGfxMirror decompressed each sheet only to
+  measure it. It writes the sheet at `$7F:$71` now (C0/466B's `JSL C3:0002`, `$0305` = 7F).
+
+The grade: tools/field_objdata_cmp.py (both sides' WRAM and VRAM dumped on every frame of a window: the oracle's
+PEEK_SHOTS_SIDECARS, Belthasar's new CT_DUMPLIST / CT_DUMPLIST_AT; the port's VRAM image seeded from the cartridge's at
+the leg's start, CT_SEED_VRAM, test surface only). WRAM and VRAM compare on the same frame with the port's dump a tick
+on (`--off -1`); at `--off 0` every window differs. MEASURED, exact on every frame: leg 12 f2080-f2110 (the sparkles
+whose picture still differs by 2 px: the data is the cartridge's, the drawer is not), leg 11 f3250-f3340, leg 26
+f7210-f7290 (from f7200), leg 127 f390-f440 (from f380), leg 63 f594-f605 (after a load). OPEN: leg 63's object bob
+a frame apart every 14-15 frames (`$07F1`), and its load frames f584-f589 (black). Checks: field-objdata-*.
+
+Stage 2 (not started): a field OBJ renderer drawing these entries with the PPU's rules (priority, the per-line limit,
+the colour math), each piece carrying its tag; the widescreen's side objects keep their own path (field.c "The
+widescreen's own objects").
+
+Found by the checker on its first wider run (2026-11-17): leg 45 f90 on, entries 32-35 with the vertical flip set in
+the port -- op 0x83's slot store `$0D00,X` is a word (C0/47AD REP #20 .. 47C6), the port stored a byte and kept the last
+room's `$0D01,X` (80). Fixed, check leg-window-enemy-slot-store-is-a-word. Still open in that window: entries 36-39, one
+object on another frame (tiles 08-0E in a column on the cartridge, 40-46 in a square in the port). Other windows read:
+legs 17 (f300, f1500), 21, 29, 57 (f300), 105, 113 exact on every frame; 57 f1500 entry 36 and 86 f300 entry 32 + tiles
+differ, not read.
+
+...and leg 57 f1500 (and leg 45's entries 36-39): the enemy loader also stores the template base (C0/47C2 STX $D9 ..
+47D7 STA $1700,X = slot * 32), which the port never wrote -- the enemies kept 0000, the lead's base, and one of them took
+the lead's place in the mirror. Fixed (ct_vm.c loadMonMirror); legs 57 f1500-f1560 and 45 f90-f160 exact on every
+frame; leg 86 f181-f300 exact but for its load frames f261-f264 (the port's C0/286C runs at the fade-in's first frame).

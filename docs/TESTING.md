@@ -3599,3 +3599,17 @@ wing's clouds (4013 px a line on before). One mutation. disasm/notes/song_load_f
 `field-picture-target-hand-under-the-mist-vs-cartridge`: the battle target hand (attr 32, OBJ priority 3) takes part in
 the screens' colour math like every battle sprite: under Denadoro's BG3 mist (half-add) it is BG3 plus the hand, halved.
 Playthrough leg 65, f37630 from the state cut on f36900 (`lag=-1`; 131 px opaque before). One mutation.
+
+`field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
+frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
+(f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).
+The gate of drawing the field's sprites from OAM + VRAM (stage 1). Mutations: the draw pass's stage-2 copy, C0/B262 on
+a load, the object loader's sheet in the `$7F` heap. disasm/notes/oam.md "Stage 1 of the OAM renderer".
+
+`leg-window-enemy-slot-store-is-a-word-vs-cartridge`: the enemy loader's OBJ slot store `$0D00,X` is 16-bit (C0/47C6),
+so `$0D01,X` -- the attribute half of every piece -- loses the last room's value. Playthrough leg 45, `$0D24-$0D27`
+across the load into loc 0D9 (its black frames a free span). One mutation. Found by field_objdata_cmp.py.
+
+`field-objdata-enemy-template-base-vs-cartridge` and `field-objdata-enemy-attribute-half-vs-cartridge`: the enemy
+loader (op 0x83, C0/47AC-47D7) stores the slot's tile base as a word and the template base `$1700,X` = slot * 32.
+Playthrough leg 57 f1500-f1560 and leg 45 f90-f160, the OAM mirror and the tiles in use on every frame.
