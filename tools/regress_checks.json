@@ -1826,7 +1826,8 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "CT_FIELDLOCK": "saves/forest_exit.state",
-        "CT_PROJECT": "all"
+        "CT_PROJECT": "all",
+        "CT_SEED_VRAM": "saves/forest_exit.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -1874,7 +1875,8 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_FIELDLOCK": "saves/field_re/scene7_talk_obj13.state",
         "CT_PROJECT": "box",
-        "CT_TBTRACE": "1"
+        "CT_TBTRACE": "1",
+        "CT_SEED_VRAM": "saves/field_re/scene7_talk_obj13.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -2005,11 +2007,13 @@
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/ow_w0.state"
       },
       "inputs": [
         "ct_assets.dat",
-        "saves/field_re/ow_w0.lakewram"
+        "saves/field_re/ow_w0.lakewram",
+        "saves/ow_w0.state"
       ],
       "expect": [
         "selftest-ow-anim: lead block 0D70, visible pose flips: f38=E222 f46=E204 f54=E227 f62=E204 f68=E222 f76=E204 f84=E227 f92=E204"
@@ -2060,7 +2064,8 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
-        "CT_FIELD_MEMMON": "0129:1,10214:2,1882:2"
+        "CT_FIELD_MEMMON": "0129:1,10214:2,1882:2",
+        "CT_SEED_VRAM": "saves/field_re/scene468_stairs_to_120.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -2115,11 +2120,13 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_RUN": "1"
+        "CT_RUN": "1",
+        "CT_SEED_VRAM": "saves/field_re/scene468_stairs_to_120.state"
       },
       "inputs": [
         "ct_assets.dat",
-        "saves/field_re/scene468_stairs_to_120.lakewram"
+        "saves/field_re/scene468_stairs_to_120.lakewram",
+        "saves/field_re/scene468_stairs_to_120.state"
       ],
       "expect": [
         "changeloc: scene 468 -> 468 at f19 tile(8,25) fac3 style0",
@@ -2164,12 +2171,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_RUN": "1",
-        "CT_EXITDBG": "1"
+        "CT_EXITDBG": "1",
+        "CT_SEED_VRAM": "saves/field_re/scene468_stairs_to_120.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/field_re/scene468_stairs_to_120.lakewram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/scene468_stairs_to_120.state"
       ],
       "expect": [
         "exitcommit: f19 $0100=01D4 $0105=01D4 $0107=0A $0108=27 $0109=02",
@@ -6540,12 +6549,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_BATTLE_TRACE": "1",
-        "CT_BATTLE_RNGTRACE": "1"
+        "CT_BATTLE_RNGTRACE": "1",
+        "CT_SEED_VRAM": "saves/field_re/m81_nuns_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_nuns_lake.lakewram"
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state"
       ],
       "expect": [
         "battlerng idx=DF raw=FC count=100 base=0 -> 52",
@@ -6702,7 +6713,8 @@
         "CT_FIELD_MEMMON": "9604:5,AD8E:4,AE93:1",
         "CT_SHOTS": "build/_flametoss",
         "CT_SHOTS_AT": "960",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/m81_nuns_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -6746,7 +6758,8 @@
         "CT_SRAM_FRESH": "1",
         "CT_SHOTS": "build/_savept",
         "CT_SHOTS_AT": "300",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/savept084_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -6792,7 +6805,8 @@
         "CT_FIELD_MEMMON": "2400:1,2500:1,2603:2,2607:2,26A3:2,26A7:2,2743:2,2747:2,101CF:1",
         "CT_SHOTS": "build/_shelter",
         "CT_SHOTS_AT": "1000",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/savept084_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -6849,7 +6863,8 @@
         "CT_AUDIO_SEEDSTATE": "saves/field_re/fall_stairs083_lake.state",
         "CT_SHOTS": "build/_fallstairs",
         "CT_SHOTS_AT": "200",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/fall_stairs083_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -6909,7 +6924,8 @@
         "CT_AUDIO_SEEDSTATE": "saves/field_re/magus_scene_lake.state",
         "CT_SHOTS": "build/_xstrike",
         "CT_SHOTS_AT": "1000",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/magus_scene_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -7022,7 +7038,8 @@
         "CT_FIELD_MEMMON": "0129:1,0127:1,0126:1,0117:1",
         "CT_SHOTS": "build/_cultbox",
         "CT_SHOTS_AT": "147",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/magus_scene_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -7170,12 +7187,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_HOLDBTN": "01@1804:1,01@1820:1,01@1836:1,01@1852:1,01@1868:1,01@1884:1,01@1900:1,01@1916:1,01@1932:1,01@1948:1,01@1964:1,01@1980:1,01@1996:1,01@2012:1,01@2028:1,01@2044:1,01@2060:1,01@2076:1,01@2092:1,01@2108:1,01@2124:1,01@2140:1,01@2156:1,01@2172:1,01@2188:1,01@2204:1,01@2220:1,01@2236:1,01@2252:1,01@2268:1,01@2284:1,01@2300:1,01@2316:1,01@2332:1,01@2348:1,01@2364:1,01@2380:1,01@2396:1,01@2412:1,01@2428:1,01@2444:1,01@2460:1,01@2476:1,01@2492:1,01@2508:1,01@2524:1,01@2540:1,01@2556:1,01@2572:1,01@2588:1",
-        "CT_DOORLIST": "1"
+        "CT_DOORLIST": "1",
+        "CT_SEED_VRAM": "saves/field_re/m81_naga_after_fight_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_naga_after_fight.lakewram"
+        "saves/field_re/m81_naga_after_fight.lakewram",
+        "saves/field_re/m81_naga_after_fight_lake.state"
       ],
       "expect": [
         "doorlist: f3634 C0/28C0 tile 070D list 070D",
@@ -7211,12 +7230,14 @@
         "CT_NOPACE": "1",
         "CT_BATTLE_TRACE": "1",
         "CT_BATTLE_MASHA": "1",
-        "CT_BATTLE_DEBUGEND": "6000"
+        "CT_BATTLE_DEBUGEND": "6000",
+        "CT_SEED_VRAM": "saves/field_re/m81_nuns_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_nuns_lake.lakewram"
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state"
       ],
       "expect": [
         "battle-status tgt1 cat1 mask20 roll=83 acc=50 imm=00 landed=0 blocked=0 +0x1E=00",
@@ -7574,12 +7595,14 @@
         "CT_NOPACE": "1",
         "CT_BATTLE_PRIOTRACE": "1",
         "CT_BATTLESHOT_FIELD_AT": "79",
-        "CT_BATTLESHOT_FIELD": "build/_naga_prio.raw"
+        "CT_BATTLESHOT_FIELD": "build/_naga_prio.raw",
+        "CT_SEED_VRAM": "saves/field_re/m81_nuns_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/field_re/m81_nuns_lake.lakewram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/field_re/m81_nuns_lake.state"
       ],
       "expect": [
         "battleprio f79 $A5E3=30 cells over priority tiles: 549 in front (OBJ 3), 0 covered",
@@ -8938,12 +8961,14 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_HOLDBTN": "80@44:4,80@201:4,80@360:4"
+        "CT_HOLDBTN": "80@44:4,80@201:4,80@360:4",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s5_bell_marle.lakewram"
+        "saves/field_re/s5_bell_marle.lakewram",
+        "saves/field_re/s5_bell_marle.state"
       ],
       "expect": [
         "selftest-party: ring=76/67/46 fol1=obj2(121,591)f3"
@@ -8984,12 +9009,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_DRAWDBG": "1",
-        "CT_HOLDBTN": "80@44:4,80@201:4"
+        "CT_HOLDBTN": "80@44:4,80@201:4",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s5_bell_marle.lakewram"
+        "saves/field_re/s5_bell_marle.lakewram",
+        "saves/field_re/s5_bell_marle.state"
       ],
       "expect": [
         "[draw f200] obj26 spr=63 af=0 at(88,559) foot(5,34) prio=33 mode=04 topF=1 botF=1 layer=1 solid=1 rot=0/0/0 blob=0@0",
@@ -9159,12 +9186,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
-        "CT_HOLDBTN": "80@44:4,80@201:4,80@360:4"
+        "CT_HOLDBTN": "80@44:4,80@201:4,80@360:4",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s5_bell_marle.lakewram"
+        "saves/field_re/s5_bell_marle.lakewram",
+        "saves/field_re/s5_bell_marle.state"
       ],
       "expect": [
         "selftest: scene 5 naming=-1 name='' [flags], 6 NPCs, player (88,591) cam(0,448) f0 topF=1 botF=1, textbox=0 idx=26 choice=0 sel=0 page=0/1 reveal=48 fgpx=148235 fgskip=134 -> 256x224 fnv32=A42756B2",
@@ -9204,12 +9233,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_FIELDSHOT": "build/_m81nuns240.raw",
-        "CT_FIELDSHOT_AT": "240"
+        "CT_FIELDSHOT_AT": "240",
+        "CT_SEED_VRAM": "saves/field_re/m81_nuns_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_nuns_lake.lakewram"
+        "saves/field_re/m81_nuns_lake.lakewram",
+        "saves/field_re/m81_nuns_lake.state"
       ],
       "expect": [
         "fieldshot: f240 camx=0 camy=18 fnv=C4465839"
@@ -9253,12 +9284,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_FIELDSHOT": "build/_m81frog120.raw",
-        "CT_FIELDSHOT_AT": "120"
+        "CT_FIELDSHOT_AT": "120",
+        "CT_SEED_VRAM": "saves/field_re/m81_frog.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_frog_lake.lakewram"
+        "saves/field_re/m81_frog_lake.lakewram",
+        "saves/field_re/m81_frog.state"
       ],
       "expect": [
         "fieldshot: f120 camx=0 camy=64 fnv=9092725B"
@@ -9296,12 +9329,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_FIELDSHOT": "build/_m81frogpre70.raw",
-        "CT_FIELDSHOT_AT": "70"
+        "CT_FIELDSHOT_AT": "70",
+        "CT_SEED_VRAM": "saves/field_re/m81_frog_pre_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/m81_frog_pre_lake.lakewram"
+        "saves/field_re/m81_frog_pre_lake.lakewram",
+        "saves/field_re/m81_frog_pre_lake.state"
       ],
       "expect": [
         "fieldshot: f70 camx=0 camy=64 fnv=60689D49"
@@ -10898,12 +10933,14 @@
         "CT_BATTLE_MASHA": "1",
         "CT_RETURN_PROBE_AT": "120",
         "CT_NOPACE": "1",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/battle_re/party3_field.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/battle_re/party3_field.lakewram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/party3_field.state"
       ],
       "expect": [
         "returnprobe: f2240 explore=1 placed=4 placed_enemies=0 fieldfnv=3F375781"
@@ -13114,12 +13151,14 @@
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
-        "CT_VMTRACE": "32"
+        "CT_VMTRACE": "32",
+        "CT_SEED_VRAM": "saves/battle_re/party3_field.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/battle_re/party3_field.lakewram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/battle_re/party3_field.state"
       ],
       "expect": [
         "[vm f31] obj32 063A: A0 1F 2B",
@@ -15339,11 +15378,13 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_DUMPOBJROW": "1",
-        "CT_DUMPOBJROW_AT": "20"
+        "CT_DUMPOBJROW_AT": "20",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
-        "saves/field_re/s5_bell_marle.lakewram"
+        "saves/field_re/s5_bell_marle.lakewram",
+        "saves/field_re/s5_bell_marle.state"
       ],
       "expect": [
         "[objrow@f20] [objrow 1] 0F80=800A 1100=0000 1180=0594 1200=D200 1280=C072 1300=DC 1380=B027 1400=0000 1480=2801 1500=0030 1580=00A8 0D00=08 0C00=2020 1C80=00 1A81=01 1B01=01 1000=0101 1080=8080 1C00=07"
@@ -15520,12 +15561,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_DUMPOBJROW": "3",
-        "CT_DUMPOBJROW_AT": "300"
+        "CT_DUMPOBJROW_AT": "300",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_choice_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_choice.lakewram"
+        "saves/field_re/s439_marle_choice.lakewram",
+        "saves/field_re/s439_marle_choice_lake.state"
       ],
       "expect": [
         "[objrow@f300] [objrow 3] 0F80=8004 1100=0301 1180=05BD 1200=D400 1280=0000 1300=DC 1380=D89A 1400=1800 1480=F800 1500=A034 1580=28A9 0D00=68 0C00=2020 1C80=03 1A81=01 1B01=01 1000=0404 1080=8080 1C00=01"
@@ -15566,7 +15609,8 @@
         "CT_FIELDLOCK": "saves/forest_exit.state",
         "CT_PROJECT": "all",
         "CT_AUDIO_FORCE": "1",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/forest_exit.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -15651,12 +15695,14 @@
         "wait:10; d:80; wait:100"
       ],
       "env": {
-        "SDL_VIDEODRIVER": "dummy"
+        "SDL_VIDEODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/forest_exit.state"
       },
       "inputs": [
         "ct_assets.dat",
         "saves/forest_exit.lakewram",
-        "Chrono_Trigger_USA_SNES.sfc"
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/forest_exit.state"
       ],
       "expect": [
         "overworld entry: scene 19 -> world 0 at (280,280) ngIntro=0",
@@ -17277,12 +17323,14 @@
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/ow_w0.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/ow_w0.lakewram"
+        "saves/field_re/ow_w0.lakewram",
+        "saves/ow_w0.state"
       ],
       "expect": [
         "selftest-ow-placard: era=$75 x=0 w=44 px=577"
@@ -17320,12 +17368,14 @@
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/ow_w0.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/ow_w0.lakewram"
+        "saves/field_re/ow_w0.lakewram",
+        "saves/ow_w0.state"
       ],
       "expect": [
         "selftest-ow-placard-gate: start=show flips: f51=hide f234=show showAt$1BF7=$78",
@@ -20080,7 +20130,8 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_PROJECT": "box",
-        "CT_FIELDLOCK": "saves/field_re/tent_keeper_lake.state"
+        "CT_FIELDLOCK": "saves/field_re/tent_keeper_lake.state",
+        "CT_SEED_VRAM": "saves/field_re/tent_keeper_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -22438,7 +22489,8 @@
         "CT_AUDIO_SEEDSTATE": "saves/field_re/shop90_lake.state",
         "CT_SHOTS": "build/_shoptrade",
         "CT_SHOTS_AT": "300",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/field_re/shop90_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -22488,12 +22540,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_SHOPTRACE": "1",
-        "CT_MENUSFX": "1"
+        "CT_MENUSFX": "1",
+        "CT_SEED_VRAM": "saves/field_re/shop90_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/shop90.lakewram"
+        "saves/field_re/shop90.lakewram",
+        "saves/field_re/shop90_lake.state"
       ],
       "expect": [
         "shop: f12 op C8 90 -> shop 10 (mode 2, screen $0C)",
@@ -23418,11 +23472,13 @@
         "u:12; wait:48"
       ],
       "env": {
-        "SDL_VIDEODRIVER": "dummy"
+        "SDL_VIDEODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/predoor_f2f_s5.state"
       },
       "inputs": [
         "saves/field_re/predoor_f2f_s5.lakewram",
-        "ct_assets.dat"
+        "ct_assets.dat",
+        "saves/predoor_f2f_s5.state"
       ],
       "expect": [
         "changeloc: scene 5 -> 439 at f16 tile(24,20) fac0 style0",
@@ -23468,12 +23524,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_FOLDBG": "1",
-        "CT_DRAWDBG": "1"
+        "CT_DRAWDBG": "1",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s5_bell_marle.lakewram"
+        "saves/field_re/s5_bell_marle.lakewram",
+        "saves/field_re/s5_bell_marle.state"
       ],
       "expect": [
         "[fol] f10 obj2 m1 cur=22 head=39 gap=18 adv=1 v=(00,10) pre=(00,10) shape=00 1600=01 1680=01 1681=01 1601=02 0138=00",
@@ -23524,12 +23582,14 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_FOLDBG": "1"
+        "CT_FOLDBG": "1",
+        "CT_SEED_VRAM": "saves/battle_re/party3_field.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/battle_re/party3_field.lakewram"
+        "saves/battle_re/party3_field.lakewram",
+        "saves/battle_re/party3_field.state"
       ],
       "expect": [
         "[fol] f25 obj3 m1 cur=70 head=07 gap=18 adv=1 v=(F0,00) pre=(F0,00) shape=00 1600=02 1680=01 1681=00 1601=00 0138=00",
@@ -23579,12 +23639,14 @@
       ],
       "env": {
         "SDL_VIDEODRIVER": "dummy",
-        "SDL_AUDIODRIVER": "dummy"
+        "SDL_AUDIODRIVER": "dummy",
+        "CT_SEED_VRAM": "saves/ow_w0.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/ow_w0.lakewram"
+        "saves/field_re/ow_w0.lakewram",
+        "saves/ow_w0.state"
       ],
       "expect": [
         "selftest-ow-anim: lead block 0D70, visible pose flips: f107=E240 f115=E23B f123=E240 f131=E23B f139=E240 f171=E23B f179=E240 f187=E23B"
@@ -23630,12 +23692,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_FOLDBG": "1",
-        "CT_POSALL": "1"
+        "CT_POSALL": "1",
+        "CT_SEED_VRAM": "saves/predoor_f2f_s5.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/predoor_f2f_s5.lakewram"
+        "saves/field_re/predoor_f2f_s5.lakewram",
+        "saves/predoor_f2f_s5.state"
       ],
       "expect": [
         "[folload] obj3 <- lead $1802: pos=(392.00,335.94) fac=00 (ring cleared)",
@@ -23739,12 +23803,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
-        "CT_TBOPDBG": "1"
+        "CT_TBOPDBG": "1",
+        "CT_SEED_VRAM": "saves/field_re/s434_decision_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s434_decision.lakewram"
+        "saves/field_re/s434_decision.lakewram",
+        "saves/field_re/s434_decision_lake.state"
       ],
       "expect": [
         "[tbop] f99 obj11 @0554 op=BB str=63 $0129=00 latch=00 -> REQUEST",
@@ -23792,12 +23858,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
-        "CT_TBOPDBG": "1"
+        "CT_TBOPDBG": "1",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_choice_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_choice.lakewram"
+        "saves/field_re/s439_marle_choice.lakewram",
+        "saves/field_re/s439_marle_choice_lake.state"
       ],
       "expect": [
         "[tbop] f5 obj3 @01B0 op=C0 str=41 $0129=00 latch=00 $0162=00 $0163=80 $0164=00 $0165=00 $0166=00 $0215=00 -> REQUEST",
@@ -23897,12 +23965,14 @@
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
         "CT_TBOPDBG": "1",
-        "CT_AUDIO_SEEDSTATE": "saves/field_re/s439_marle_choice_lake.state"
+        "CT_AUDIO_SEEDSTATE": "saves/field_re/s439_marle_choice_lake.state",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_choice_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_choice.lakewram"
+        "saves/field_re/s439_marle_choice.lakewram",
+        "saves/field_re/s439_marle_choice_lake.state"
       ],
       "expect": [
         "[tbop] f213 obj3 @01BD op=C0 str=43 $0129=00 latch=00 $0162=00 $0163=80 $0164=01 $0165=02 $0166=01 $0215=00 -> REQUEST",
@@ -23951,12 +24021,14 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_NOPACE": "1"
+        "CT_NOPACE": "1",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_choice_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_choice.lakewram"
+        "saves/field_re/s439_marle_choice.lakewram",
+        "saves/field_re/s439_marle_choice_lake.state"
       ],
       "expect": [
         "selftest: scene 439 naming=-1 name='' [flags], 4 NPCs, player (428,234) cam(301,97) f2 topF=0 botF=0, textbox=0 idx=43 choice=1 sel=0 page=1/2 reveal=71 fgpx=119904 fgskip=0 -> 256x224 fnv32=16125238"
@@ -23995,12 +24067,14 @@
       "env": {
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
-        "CT_NOPACE": "1"
+        "CT_NOPACE": "1",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_choice_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_choice.lakewram"
+        "saves/field_re/s439_marle_choice.lakewram",
+        "saves/field_re/s439_marle_choice_lake.state"
       ],
       "expect": [
         "selftest: scene 439 naming=-1 name='' [flags], 4 NPCs, player (428,234) cam(301,97) f2 topF=0 botF=0, textbox=0 idx=43 choice=1 sel=0 page=1/2 reveal=71 fgpx=119868 fgskip=0 -> 256x224 fnv32=A57A05B9"
@@ -24127,12 +24201,14 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_DRAWDBG": "1",
-        "CT_POSALL": "1"
+        "CT_POSALL": "1",
+        "CT_SEED_VRAM": "saves/field_re/s439_marle_join_lake.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/s439_marle_join.lakewram"
+        "saves/field_re/s439_marle_join.lakewram",
+        "saves/field_re/s439_marle_join_lake.state"
       ],
       "expect": [
         "[draw f0] obj3 spr=1 af=3 at(416,237) foot(26,14) prio=80 mode=03 topF=0 botF=0 layer=1 solid=1 rot=0/0/0 blob=0@0",
@@ -28407,7 +28483,8 @@
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_pre_ff2b.state",
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:4001"
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:4001",
+        "CT_SEED_VRAM": "saves/ending_re/ending_pre_ff2b.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -28461,7 +28538,8 @@
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/ending_re/ending_pre_ff2b.state",
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:12802"
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:12802",
+        "CT_SEED_VRAM": "saves/ending_re/ending_pre_ff2b.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -28924,7 +29002,8 @@
         "CT_ORACLE_LOGICAL": "1",
         "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:205",
         "CT_AUDIO_LOCKSTEP": "1",
-        "CT_AUDIO_SEEDSTATE": "saves/blackbird_re/ff23_story_f18.state"
+        "CT_AUDIO_SEEDSTATE": "saves/blackbird_re/ff23_story_f18.state",
+        "CT_SEED_VRAM": "saves/blackbird_re/ff23_story_f18.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -29065,7 +29144,8 @@
         "CT_POKEWRAM_AT": "1700",
         "CT_WS_BATTLE_LEAD": "1",
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:252"
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:252",
+        "CT_SEED_VRAM": "saves/tyranno_re/tele301_req.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -29196,7 +29276,8 @@
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/lavos_re/tele476_aa77.state",
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:312"
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:312",
+        "CT_SEED_VRAM": "saves/lavos_re/tele476_aa77.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -29321,7 +29402,8 @@
         "CT_AUDIO_LOCKSTEP": "1",
         "CT_AUDIO_SEEDSTATE": "saves/lavos_re/cockpit_1b0_f1700.state",
         "CT_ORACLE_LOGICAL": "1",
-        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:441"
+        "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:441",
+        "CT_SEED_VRAM": "saves/lavos_re/cockpit_1b0_f1700.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -29529,7 +29611,8 @@
         "CT_NOPACE": "1",
         "CT_FIELDLOCK": "saves/field_re/s5_bell_marle.state",
         "CT_PROJECT": "pad",
-        "CT_HOLDBTN": "80@44:4,80@201:4"
+        "CT_HOLDBTN": "80@44:4,80@201:4",
+        "CT_SEED_VRAM": "saves/field_re/s5_bell_marle.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -36625,12 +36708,14 @@
         "CT_BATTLE_MEMMON": "CA1E:2,A6D9:3,0B80:1A",
         "CT_SHOTS": "build/_fwaa",
         "CT_SHOTS_AT": "500",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/battle_re/forest_wait_ambush_active.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/battle_re/forest_wait_ambush_active.lakewram"
+        "saves/battle_re/forest_wait_ambush_active.lakewram",
+        "saves/battle_re/forest_wait_ambush_active.state"
       ],
       "expect": [
         "memmon f1 rel=-1  CA1E=0000*  A6D9=FFFFFF*  0B80=F400FC00FD00FC03FD03FC00FD00FC03FD00FC00FD00FC03F400*",
@@ -36687,12 +36772,14 @@
         "CT_FIELD_MEMMON": "0117:2,29B0:0F,29BF:60,019D:0D,0102:03",
         "CT_SHOTS": "build/_fwas",
         "CT_SHOTS_AT": "283",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/battle_re/forest_wait_ambush_active.state"
       },
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/battle_re/forest_wait_ambush_active.lakewram"
+        "saves/battle_re/forest_wait_ambush_active.lakewram",
+        "saves/battle_re/forest_wait_ambush_active.state"
       ],
       "expect": [
         "fmemmon f229 loc=013  0117=2100*  29B0=0A0400076D07090F0063080A0F00FF  29BF=0703080F015E00000140C07F0505080F015E00000140C07F0A07080F015E00000140C07F00000000FFFFFF400300F67F00000000FFFFFF4001C0C47F00000000FFFFFF000000000000000000FFFFFF400200807F00000000FFFFFF0000000000  019D=2E2C2A8022802A2C2EFFFFFFFF  0102=0A2601",
@@ -44355,7 +44442,8 @@
         "CT_LOCTRACE": "1",
         "CT_SHOTS": "build/_race_story",
         "CT_SHOTS_AT": "3100",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/race_re/race_user.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -44415,7 +44503,8 @@
         "CT_ORACLE_LOGICAL": "1",
         "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:370",
         "CT_AUDIO_LOCKSTEP": "1",
-        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
+        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state",
+        "CT_SEED_VRAM": "saves/race_re/race_user.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -44475,7 +44564,8 @@
         "CT_ORACLE_LOGICAL": "1",
         "FRAME_CMP_ORACLE_ARGS": "--btnscript 0:30,100:2,0:2730",
         "CT_AUDIO_LOCKSTEP": "1",
-        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state"
+        "CT_AUDIO_SEEDSTATE": "saves/race_re/race_user.state",
+        "CT_SEED_VRAM": "saves/race_re/race_user.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -44666,7 +44756,8 @@
         "CT_LOCTRACE": "1",
         "CT_SHOTS_AT": "2700",
         "CT_SHOTS_EXIT": "1",
-        "CT_SHOTS": "build/_ff07_chain"
+        "CT_SHOTS": "build/_ff07_chain",
+        "CT_SEED_VRAM": "saves/lavos_re/tele476_aa77.state"
       },
       "expect": [
         "sequence: entry 7 (the Day of Lavos) opening at f1573 -- 5728360 + 49152 + 2534972 cycles = 24 black frame(s)",
@@ -44769,7 +44860,8 @@
         "CT_LOCTRACE": "1",
         "CT_SHOTS_AT": "4800",
         "CT_SHOTS_EXIT": "1",
-        "CT_SHOTS": "build/_ff26_chain"
+        "CT_SHOTS": "build/_ff26_chain",
+        "CT_SEED_VRAM": "saves/lavos_re/cockpit_1b0_f1700.state"
       },
       "expect": [
         "sequence: entry 6 (the Epoch into Lavos) opening at f1072 -- 5728360 + 49152 + 5216178 cycles = 32 black frame(s)",
@@ -45451,7 +45543,8 @@
         "CT_LOCTRACE": "1",
         "CT_SHOTS": "build/_ending_story",
         "CT_SHOTS_AT": "7000",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/ending_re/ending_pre_ff2b.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -45646,7 +45739,8 @@
         "CT_FIELD_MEMMON": "0100:2,011F:1",
         "CT_SHOTS": "build/_ending_chain",
         "CT_SHOTS_AT": "44800",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/ending_re/ending_052_f1745.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -45772,7 +45866,8 @@
         "CT_FIELD_MEMMON": "0100:2",
         "CT_SHOTS": "build/_ff23_story",
         "CT_SHOTS_AT": "1200",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/blackbird_re/ff23_story_f18.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -45844,7 +45939,8 @@
         "CT_WS_BATTLE_LEAD": "1",
         "CT_SHOTS": "build/_ff24_chain",
         "CT_SHOTS_AT": "9000",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/tyranno_re/tele301_req.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -45910,7 +46006,8 @@
         "CT_BATTLE_TRACE": "1",
         "CT_SHOTS": "build/_azala_ring",
         "CT_SHOTS_AT": "4200",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/tyranno_re/tele301_req.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -46946,12 +47043,14 @@
         "CT_FIELD_MEMMON": "0100:2,0104:1,0D98:1",
         "CT_SHOTS": "build/_porre_exit",
         "CT_SHOTS_AT": "200",
-        "CT_SHOTS_EXIT": "1"
+        "CT_SHOTS_EXIT": "1",
+        "CT_SEED_VRAM": "saves/ferry_re/porre_office_at_counter.state"
       },
       "inputs": [
         "Chrono_Trigger_USA_SNES.sfc",
         "ct_assets.dat",
-        "saves/ferry_re/porre_office_at_counter.lakewram"
+        "saves/ferry_re/porre_office_at_counter.lakewram",
+        "saves/ferry_re/porre_office_at_counter.state"
       ],
       "expect": [
         "fmemmon f127 loc=1F0  0100=F001*  0104=03*  0D98=00",
@@ -48412,7 +48511,10 @@
           "why": "C0/CD4F's per-unit choice dropped: the lower units take the top byte's priority 2 and show over the chairs"
         }
       ],
-      "notes": "USER REPORT 2026-10-09 (\"erro de prioridade dos soldados\", the port's F5 capture build/ct_debug_022.state, loc 07B, lead (194,272)): the two soldiers seated with their backs to the camera at the right-hand table (obj17/obj18, `82 2B / 8B 0D|0F 10 / 8E 12 / 0F`) drew their whole bodies over the chairs. THE ROM: op 0x8E's fixed arm (C0/4CB7-4CC8) gives `12` -> $0C00 = (12 << 4) & 30 = 20 (OBJ priority 2) and $0C01 = 12 & 30 = 10 (OBJ priority 1). The anim drain ORs one of the two into each unit's attr (class 0: C0/CD4F `LDA $7F4804,X / CMP #E8 / BCC` -> $0C00 for an offset below E8, $0C01 for -24..-1; classes 1/2 by index, units 0-3 the top; class 3 a fixed `LDA #22`, C0/E4D1), and in mode 1 an OBJ priority-1 pixel loses to BG1/BG2 at either priority. ORACLE (this fixture: `ct.exe --teleport 123 12 16 1` from saves/field_re/m81_frog_lake.state with the capture's $7F:0000 page, 300 frames): OAM #36-43 = obj18/obj17, units at y 111 attr 21 (priority 2) and y 127 attr 11 (priority 1); the frame shows only their helmets over the chair backs. The port drew priority 0/1 only for a WHOLE object (both nibbles < 2, the occluder list) and split the halves by a pixel row 16 above the anchor: 388 px differ (main 1b28fed), 0 now. disasm/notes/field_obj_unit_priority.md."
+      "notes": "USER REPORT 2026-10-09 (\"erro de prioridade dos soldados\", the port's F5 capture build/ct_debug_022.state, loc 07B, lead (194,272)): the two soldiers seated with their backs to the camera at the right-hand table (obj17/obj18, `82 2B / 8B 0D|0F 10 / 8E 12 / 0F`) drew their whole bodies over the chairs. THE ROM: op 0x8E's fixed arm (C0/4CB7-4CC8) gives `12` -> $0C00 = (12 << 4) & 30 = 20 (OBJ priority 2) and $0C01 = 12 & 30 = 10 (OBJ priority 1). The anim drain ORs one of the two into each unit's attr (class 0: C0/CD4F `LDA $7F4804,X / CMP #E8 / BCC` -> $0C00 for an offset below E8, $0C01 for -24..-1; classes 1/2 by index, units 0-3 the top; class 3 a fixed `LDA #22`, C0/E4D1), and in mode 1 an OBJ priority-1 pixel loses to BG1/BG2 at either priority. ORACLE (this fixture: `ct.exe --teleport 123 12 16 1` from saves/field_re/m81_frog_lake.state with the capture's $7F:0000 page, 300 frames): OAM #36-43 = obj18/obj17, units at y 111 attr 21 (priority 2) and y 127 attr 11 (priority 1); the frame shows only their helmets over the chair backs. The port drew priority 0/1 only for a WHOLE object (both nibbles < 2, the occluder list) and split the halves by a pixel row 16 above the anchor: 388 px differ (main 1b28fed), 0 now. disasm/notes/field_obj_unit_priority.md.",
+      "env": {
+        "CT_SEED_VRAM": "saves/field_re/loc07B_soldiers_seated.state"
+      }
     },
     {
       "name": "menu-equip-list-draws-no-count-vs-oracle",
@@ -48544,7 +48646,8 @@
         "CT_PROJECT": "box",
         "CT_TBTRACE": "1",
         "CT_TBSIDE": "1",
-        "CT_HOLDBTN": "04@40:1,04@60:1"
+        "CT_HOLDBTN": "04@40:1,04@60:1",
+        "CT_SEED_VRAM": "saves/field_re/scene7_talk_obj13.state"
       },
       "inputs": [
         "ct_assets.dat",
@@ -50679,7 +50782,8 @@
         "SDL_VIDEODRIVER": "dummy",
         "SDL_AUDIODRIVER": "dummy",
         "CT_NOPACE": "1",
-        "CT_FIELD_MEMMON": "0158:2,01F8:1,1682:1"
+        "CT_FIELD_MEMMON": "0158:2,01F8:1,1682:1",
+        "CT_SEED_VRAM": "saves/field_re/scene468_stairs_to_120.state"
       },
       "expect": [
         "fmemmon f561 loc=1D4  0158=0083*  01F8=27*  1682=00",
@@ -50695,7 +50799,8 @@
       "inputs": [
         "ct_assets.dat",
         "Chrono_Trigger_USA_SNES.sfc",
-        "saves/field_re/scene468_stairs_to_120.lakewram"
+        "saves/field_re/scene468_stairs_to_120.lakewram",
+        "saves/field_re/scene468_stairs_to_120.state"
       ],
       "note_pass": "the lead's idle counter $0158 counts the field's frames (C0/EC60) and the ROM's idle chain rolls the blink from it -- at 2FF and every 128 frames after, $01F8 and the blink anim 21 on the cartridge's frames",
       "mutations": [

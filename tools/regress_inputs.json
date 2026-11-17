@@ -5331,6 +5331,18 @@
       "sha256": "7a0611b9488d8729b26afe7615df07edab3a897e60ff537a958f5f93fca5c4f3",
       "size": 6827,
       "present_when_recorded": true
+    },
+    {
+      "path": "saves/ferry_re/porre_office_at_counter.state",
+      "used_by": [
+        "ow-lead-faces-the-exit-arrival-byte-porre-office"
+      ],
+      "kind": "oracle_state",
+      "regenerable": true,
+      "how": "tools/fixtures (python tools/fixtures.py make saves/ferry_re/porre_office_at_counter.state): the oracle state the same frame's WRAM image was cut from; its VRAM seeds the field's (CT_SEED_VRAM) for the sprites drawn from OAM.",
+      "sha256": "b8a15afcc905bc954192a9235f37874bacb80e812e6867c8c106353c199b06da",
+      "size": 273125,
+      "present_when_recorded": true
     }
   ]
 }
