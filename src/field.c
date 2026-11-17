@@ -4608,8 +4608,8 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
 // tile t at word t * 16) and the OBJ palettes in CGRAM (g_fieldCgram, row 8 + the attribute's bits 1-3) -- instead of the
 // sprite sheets' frames. Entries go from 127 to 0 (a lower index is in front); each pixel then meets the BG by its
 // entry's priority (bits 4-5) through spritePixels, as drawSprite's do. Each entry's tag (move.c CtFieldOamTag) names
-// the object, so the frames between keep their object (CtMotSprite) and the window clip its object's rule. Off by
-// default until its pictures are the cartridge's wherever the asset drawer's are.
+// the object, so the frames between keep their object (CtMotSprite) and the window clip its object's rule. On by
+// default (2026-11-17); CT_OAMRENDER=0 draws from the sprite sheets instead.
 // THE PER-LINE LIMITS (the PPU's sprite evaluation, snes/ppu.c ppu_evaluateSprites, the oracle's): on each line the
 // first 32 entries in range from index 0 are kept (range over: the rest are not drawn there), and their 8-pixel slivers
 // are fetched from the LAST kept entry back to the first, each entry's left to right, at most 34 -- so on a crowded
@@ -4620,7 +4620,9 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
 static uint16_t g_fieldVram[0x8000];   // (defined below with the VRAM sink: the field's VRAM image)
 static int fieldOamRenderOn(void) {
   static int on = -1;
-  if (on < 0) { const char* e = getenv("CT_OAMRENDER"); on = (e && *e == '1') ? 1 : 0; }
+  // ON by default since 2026-11-17 (the user's stages: the default flips once the pictures are the cartridge's wherever
+  // the sheet drawer's were -- the suite, the 140 playthrough legs and the demo); CT_OAMRENDER=0 = the sheet drawer.
+  if (on < 0) { const char* e = getenv("CT_OAMRENDER"); on = (e && *e == '0') ? 0 : 1; }
   return on;
 }
 static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int viewY, int winOn,

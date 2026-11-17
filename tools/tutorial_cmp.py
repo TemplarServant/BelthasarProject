@@ -102,7 +102,7 @@ def port(lw, k, phase):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS=os.path.join(OUT, 'p'), CT_SHOTS_AT=str(k), CT_SHOTS_EXIT='1',
                CT_DUMPWRAM=os.path.join(OUT, 'p%d.wram' % k), CT_DUMPWRAM_AT=str(k))
-    if os.environ.get('CT_OAMRENDER') == '1':   # the seed's VRAM (ctlib.lake.seed_vram_env): the peek's, beside its WRAM
+    if os.environ.get('CT_OAMRENDER', '1') != '0':   # the seed's VRAM (ctlib.lake.seed_vram_env): the peek's, beside its WRAM
         env['CT_SEED_VRAM'] = lw[:-len('.lakewram')] + '.raw.vram'
     subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', '254', '--loadwram', lw,
                     '--walkscript', walk(k + 4, phase)], cwd=ROOT, env=env, capture_output=True)

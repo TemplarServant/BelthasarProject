@@ -468,7 +468,10 @@ frame; leg 86 f181-f300 exact but for its load frames f261-f264 (the port's C0/2
 
 ## Stage 2: the field drawn from the OAM mirror (2026-11-17)
 
-field.c fieldOamDraw, behind CT_OAMRENDER=1 (off by default). Entries 127..0 of `$7E:0700-$091F`, their tiles from the
+field.c fieldOamDraw -- THE DEFAULT since 2026-11-17 (CT_OAMRENDER=0 draws from the sprite sheets instead). The flip
+came when, with it on, the whole suite passed (1094 of 1095, the one an input count), the 140 playthrough legs equalled
+their pins, and the demo differed from the sheet drawer's picture only at f4217, where it is the nearer to the
+cartridge. Entries 127..0 of `$7E:0700-$091F`, their tiles from the
 VRAM image plus the upload queue the same NMI sends with the mirror (the port flushes that queue at its next tick's
 head), the colours from CGRAM row 8 + the attribute's palette; every pixel through spritePixels, drawSprite's own rules
 (the BG priorities, the window, the sub screen, the front mask, the frames-between tags). Each entry's tag names the

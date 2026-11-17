@@ -155,12 +155,18 @@ def vram(path):
     return v
 
 
+def oam_render_on():
+    """Belthasar draws the field's sprites from OAM + VRAM unless CT_OAMRENDER=0 (the default since 2026-11-17)."""
+    return os.environ.get("CT_OAMRENDER", "1") != "0"
+
+
 def seed_vram_env(state_path, out_path):
     """The env a Belthasar run seeded from a state's WRAM (--loadwram) needs for the state's VRAM as well: a WRAM image
-    carries no VRAM, and the field's sprites drawn from OAM + VRAM (CT_OAMRENDER=1) take their tiles from it.
+    carries no VRAM, and the field's sprites drawn from OAM + VRAM (the default; CT_OAMRENDER=0 = the sheets) take
+    their tiles from it.
     {CT_SEED_VRAM: out_path} with the state's VRAM written there while the OAM renderer is on; {} otherwise (the asset
     drawer draws the objects from the assets, and the run stays as it was)."""
-    if os.environ.get("CT_OAMRENDER") != "1":
+    if not oam_render_on():
         return {}
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "wb") as fh:

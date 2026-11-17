@@ -51344,7 +51344,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 647 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 648 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
