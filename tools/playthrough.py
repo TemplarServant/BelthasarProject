@@ -469,6 +469,8 @@ def port_timeline(start, pad, first=0):
                CT_SRAM_FRESH='1', CT_SRAM=os.path.join(TMP, 'port.srm'))
     if seed_in_load_fade(start, w):
         env['CT_SEED_LOADFADE'] = '1'                    # (a leg cut inside C0/2848's ramp: the port goes on with it)
+    if os.environ.get('CT_OAMRENDER') == '1':          # (the OAM renderer, stage 2: the seed's OBJ tiles, which a WRAM
+        env['CT_SEED_VRAM'] = os.path.join(TMP, 'seed.raw.vram')   #  image does not carry; test surface only)
     r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
                         '--walkscript', walkscript(pad, first) if first else walkscript(pad)], cwd=ROOT, env=env,
                        capture_output=True, text=True,

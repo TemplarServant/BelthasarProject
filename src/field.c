@@ -4461,6 +4461,73 @@ static uint8_t* fieldReadLakeWram(const char* path) {
 // to put back (the composed scene image plus the camera, so a sprite pixel maps to its map pixel).
 typedef struct { const uint8_t* base; int W, camX, camY, cw, ch; } CtStencilSrc;
 
+// The PPU's rules for one sprite's opaque pixels, shared by the asset drawer (drawSprite) and the OAM pass
+// (fieldOamDraw): `idx` (stride CT_SPR_W) inside `box` the colour indices, `pal` the 16 colours (RGB), `half` per pixel
+// the unit (0 top -> topPrio, 1 bottom -> botPrio, 2 a fixed priority 2; NULL: every pixel topPrio); pixel (x, y) lands
+// on the frame at (ox + x, oy + y). Returns the pixels it put on screen.
+static int spritePixels(uint8_t* fb, const uint8_t* idx, const int* box, const uint8_t* pal, const uint8_t* half,
+                        int topPrio, int botPrio, int ox, int oy, uint8_t* front, int winClip, uint8_t* allMask,
+                        const CtStencilSrc* sten) {
+  int nplot = 0;
+  for (int y = box[1]; y <= box[3]; y++)
+    for (int x = box[0]; x <= box[2]; x++) {
+      uint8_t v = idx[y * CT_SPR_W + x];
+      if (!v) continue;
+      // SNES OBJs render 1 scanline below their OAM Y value, so the anchor (sy) maps to OAM Y = sy-CT_SPR_OY and the
+      // sprite is drawn 1px lower (+1): in loc 002 Crono's tiles at OAM Y 95/111/127 render at 96/112/128.
+      int px = ox + x, py = oy + y;
+      // The pixel's OBJ priority is its unit's: the anim drain ORs $0C00,X or $0C01,X into each unit's attr by the
+      // unit's Y offset (class 0, C0/CD4F `CMP #E8`) or its index (classes 1/2), and class 3 takes a fixed 2
+      // (CtComposeSpriteHalves).
+      int hs = half ? half[y * CT_SPR_W + x] : 0;
+      int p = hs == 0 ? topPrio : hs == 1 ? botPrio : 2;
+      int win = bgWinAt(px, py);                           // the ROM's window 1 took BG1/BG2 off this pixel
+      // Priority 0/1 loses to BG1/BG2 at either priority (the field's slots, mode 1 with BG3's priority bit -- BGMODE
+      // 09, C0/EA7D: BG3.1, OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0, OBJ1, BG3.0, OBJ0; BG3.1 is the foreground pass's),
+      // per unit: the 600 A.D. castle's seated soldiers (`8E 12`, $0C00 = 20 / $0C01 = 10,
+      // loc 07B) have their lower unit hidden behind the chair. Where the window took BG1/BG2 away it shows.
+      if (p < 2 && sten && !win) {
+        if (px >= 0 && px < sten->cw && py >= 0 && py < sten->ch) {   // BG1/BG2 are on screen here and win
+          memcpy(fb + ((size_t)py * g_fw + px) * 3,
+                 sten->base + ((size_t)(sten->camY + py) * sten->W + (sten->camX + px)) * 3, 3);
+          if (front) front[(size_t)py * g_fw + px] = 0;
+          CtMotTag(g_mot, px, py, g_motOwn);                         // (the map's pixel, the occluder's: it covers)
+          CtMotSpriteHole(g_mot, px, py, g_motOwn);
+        }
+        continue;
+      }
+      if (winClip && !win) continue;                       // clip-only (no stencil): just not drawn here
+      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH) g_objSubDone[(size_t)py * g_fw + px] = 0;
+      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH && p < g_objSubMask[(size_t)py * g_fw + px] &&
+          p >= g_objSubTop[(size_t)py * g_fw + px]) {
+        const uint8_t* m = g_objSubRgb + ((size_t)py * g_fw + px) * 3;
+        g_objSubDone[(size_t)py * g_fw + px] = 1;
+        if (g_objSubBoth) g_objSubMixed++;
+        uint8_t c[3];
+        for (int k = 0; k < 3; k++) {                       // ppu_handlePixel: main5 +/- sub5, halved, clamped
+          int d = m[k] >> 3, sv = pal[v * 3 + k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;
+          if (g_objSubHalf) r5 >>= 1;
+          if (r5 < 0) r5 = 0; if (r5 > 31) r5 = 31;
+          c[k] = (uint8_t)((r5 << 3) | (r5 >> 2));
+        }
+        plot(fb, px, py, c[0], c[1], c[2]);
+      } else
+      plot(fb, px, py, pal[v * 3], pal[v * 3 + 1], pal[v * 3 + 2]);
+      if (px >= 0 && px < g_fw && py >= 0 && py < CAMH) {
+        nplot++;
+        // The pixel that wins OBJ-vs-OBJ carries its priority against the BG: a priority-2 unit drawn over an
+        // earlier priority-3 one goes behind the foreground again (the mask is per pixel, not a latch).
+        if (front) {
+          front[py * g_fw + px] = (uint8_t)(p == 3);
+          if (g_mot && p == 3) { g_mot->own[py * g_fw + px] |= CT_MOT_FRONT;
+                       if (g_mot->nspx && g_mot->spx[g_mot->nspx - 1].x == px && g_mot->spx[g_mot->nspx - 1].y == py)
+                         g_mot->spx[g_mot->nspx - 1].own |= CT_MOT_FRONT; } }
+        if (allMask) allMask[py * g_fw + px] = 1;        // every opaque pixel (for stencil exclusion)
+      }
+    }
+  return nplot;
+}
+static int g_drawSpriteOff;   // the OAM pass draws this frame: drawSprite keeps its callers and plots nothing
 // Returns the number of pixels it put on screen -- CT_ACTDBG's occluder census reads it, so a
 // window-clipped draw that silently plots nothing shows up as a number and not only as a picture.
 // `sten` makes the sprite an occluder: a pixel the window did not take from BG1/BG2 is restored
@@ -4471,7 +4538,7 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
                        uint8_t* front, int topPrio, int botPrio, int rotStart, int rotSpan, int rotPhase,
                        int blobStart, int blobN, const uint16_t* blobBGR, int winClip, uint8_t* allMask,
                        const uint8_t* shadowRow, const CtStencilSrc* sten) {
-  if (spr < 0) return 0;
+  if (spr < 0 || g_drawSpriteOff) return 0;
   uint32_t sl = 0;
   const uint8_t* sb = CtAssetGet(a, CT_ASSET_SPRITE, (uint32_t)spr, &sl);
   int box[4];                                       // the opaque pixels' bounds: the loop below walks only them
@@ -4527,63 +4594,111 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
     for (int i = 0; i < rotCnt; i++)
       memcpy(pal + (size_t)(rotStart + i) * 3, orig + (size_t)((i + ph) % rotCnt) * 3, 3);
   }
+  return spritePixels(fb, idx, box, pal, half, topPrio, botPrio, sx - CT_SPR_OX, sy - CT_SPR_OY + 1, front, winClip,
+                      allMask, sten);
+}
+
+// STAGE 2 of the OAM renderer (the user's decision, 2026-11-17; disasm/notes/oam.md): CT_OAMRENDER=1 draws the field's
+// sprites from what the PPU draws them from -- the OAM mirror the draw pass builds ($7E:0700-$091F, move.c
+// ctOamStage2Copy), the OBJ tiles in the VRAM image (g_fieldVram; OBSEL 00: 8 / 16 pixel sprites, names from word 0,
+// tile t at word t * 16) and the OBJ palettes in CGRAM (g_fieldCgram, row 8 + the attribute's bits 1-3) -- instead of the
+// sprite sheets' frames. Entries go from 127 to 0 (a lower index is in front); each pixel then meets the BG by its
+// entry's priority (bits 4-5) through spritePixels, as drawSprite's do. Each entry's tag (move.c CtFieldOamTag) names
+// the object, so the frames between keep their object (CtMotSprite) and the window clip its object's rule. Off by
+// default until its pictures are the cartridge's wherever the asset drawer's are.
+// THE PER-LINE LIMITS (the PPU's sprite evaluation, snes/ppu.c ppu_evaluateSprites, the oracle's): on each line the
+// first 32 entries in range from index 0 are kept (range over: the rest are not drawn there), and their 8-pixel slivers
+// are fetched from the LAST kept entry back to the first, each entry's left to right, at most 34 -- so on a crowded
+// line the lowest-index sprites lose their slivers first. MEASURED on the rule's cartridge, playthrough leg 12 (the
+// Gate's room, the five sparkles): line 51 holds 18 entries and 36 slivers on f2100-f2101; entry 6's two are dropped
+// and the sprite under it shows (the cartridge's OBJ layer alone: 212184 at (126,51) on f2101, EFE742 at (133,51) on
+// f2102) -- 2 px the asset drawer and this pass drew from entry 6 before the limit.
+static uint16_t g_fieldVram[0x8000];   // (defined below with the VRAM sink: the field's VRAM image)
+static int fieldOamRenderOn(void) {
+  static int on = -1;
+  if (on < 0) { const char* e = getenv("CT_OAMRENDER"); on = (e && *e == '1') ? 1 : 0; }
+  return on;
+}
+static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int viewY, int winOn,
+                        const CtStencilSrc* sten, CtMotFrame* mot) {
+  const uint8_t* m7 = CtSceneMem7E(vm);
+  const uint8_t* oam = m7 + 0x0700;
+  static uint8_t idx[CT_SPR_W * CT_SPR_H];
   int nplot = 0;
-  for (int y = box[1]; y <= box[3]; y++)
-    for (int x = box[0]; x <= box[2]; x++) {
-      uint8_t v = idx[y * CT_SPR_W + x];
-      if (!v) continue;
-      // SNES OBJs render 1 scanline below their OAM Y value, so the anchor (sy) maps to OAM Y = sy-CT_SPR_OY and the
-      // sprite is drawn 1px lower (+1): in loc 002 Crono's tiles at OAM Y 95/111/127 render at 96/112/128.
-      int px = sx - CT_SPR_OX + x, py = sy - CT_SPR_OY + y + 1;
-      // The pixel's OBJ priority is its unit's: the anim drain ORs $0C00,X or $0C01,X into each unit's attr by the
-      // unit's Y offset (class 0, C0/CD4F `CMP #E8`) or its index (classes 1/2), and class 3 takes a fixed 2
-      // (CtComposeSpriteHalves).
-      int hs = half[y * CT_SPR_W + x];
-      int p = hs == 0 ? topPrio : hs == 1 ? botPrio : 2;
-      int win = bgWinAt(px, py);                           // the ROM's window 1 took BG1/BG2 off this pixel
-      // Priority 0/1 loses to BG1/BG2 at either priority (the field's slots, mode 1 with BG3's priority bit -- BGMODE
-      // 09, C0/EA7D: BG3.1, OBJ3, BG1.1, BG2.1, OBJ2, BG1.0, BG2.0, OBJ1, BG3.0, OBJ0; BG3.1 is the foreground pass's),
-      // per unit: the 600 A.D. castle's seated soldiers (`8E 12`, $0C00 = 20 / $0C01 = 10,
-      // loc 07B) have their lower unit hidden behind the chair. Where the window took BG1/BG2 away it shows.
-      if (p < 2 && sten && !win) {
-        if (px >= 0 && px < sten->cw && py >= 0 && py < sten->ch) {   // BG1/BG2 are on screen here and win
-          memcpy(fb + ((size_t)py * g_fw + px) * 3,
-                 sten->base + ((size_t)(sten->camY + py) * sten->W + (sten->camX + px)) * 3, 3);
-          if (front) front[(size_t)py * g_fw + px] = 0;
-          CtMotTag(g_mot, px, py, g_motOwn);                         // (the map's pixel, the occluder's: it covers)
-          CtMotSpriteHole(g_mot, px, py, g_motOwn);
+  static uint8_t keep[128][16];                            // per entry and sprite row: the slivers drawn (bit per 8 px)
+  memset(keep, 0, sizeof keep);
+  for (int p = 0; p < 224; p++) {
+    int found[32], nf = 0;
+    for (int e = 0; e < 128; e++) {                        // range: the first 32 in range, index 0 up
+      int y = oam[e * 4 + 1], hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3, size = (hi & 2) ? 16 : 8;
+      int x = oam[e * 4] | ((hi & 1) << 8); if (x > 255) x -= 512;
+      int row = (p - (y + 1)) & 0xFF;
+      if (row >= size || x <= -size) continue;
+      if (nf == 32) break;                                 // range over
+      found[nf++] = e;
+    }
+    int tiles = 0;
+    for (int k = nf - 1; k >= 0 && tiles <= 34; k--) {     // time: the slivers, last found first, at most 34
+      int e = found[k], y = oam[e * 4 + 1], hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3, size = (hi & 2) ? 16 : 8;
+      int x = oam[e * 4] | ((hi & 1) << 8); if (x > 255) x -= 512;
+      int row = (p - (y + 1)) & 0xFF;
+      for (int col = 0; col < size; col += 8)
+        if (col + x > -8 && col + x < 256) { if (++tiles > 34) break; keep[e][row] |= (uint8_t)(1 << (col >> 3)); }
+    }
+  }
+  // The VRAM the NMI shows this mirror with: the NMI that ships the mirror (C0/EB8C -> C0/B1B2) first sends the upload
+  // queue this iteration's drain filled ($0940-$09A0), which the port flushes at its next tick's head -- so the tiles
+  // the new entries name are the image plus the queue, a copy, the image itself untouched.
+  static uint16_t vr[0x8000];
+  memcpy(vr, g_fieldVram, sizeof vr);
+  for (int q = 0; q < 0x80 && m7[0x09A0 + q]; q += 2)
+    for (int ab = 0; ab < 2; ab++) {
+      int dst = m7[0x0950 + ab * 0x20 + q] | (m7[0x0951 + ab * 0x20 + q] << 8);
+      int src = m7[0x0940 + ab * 0x20 + q] | (m7[0x0941 + ab * 0x20 + q] << 8);
+      int len = m7[0x0980 + ab * 0x10 + q] | (m7[0x0981 + ab * 0x10 + q] << 8);
+      if (!len) len = 0x10000;
+      for (int k = 0; k + 1 < len; k += 2)                 // the source bank is $7F (C0/B1C9)
+        vr[(dst + k / 2) & 0x7FFF] = (uint16_t)(m7[0x10000 + ((src + k) & 0xFFFF)] | (m7[0x10000 + ((src + k + 1) & 0xFFFF)] << 8));
+    }
+  for (int e = 127; e >= 0; e--) {
+    int x = oam[e * 4], y = oam[e * 4 + 1], name = oam[e * 4 + 2], attr = oam[e * 4 + 3];
+    int hi = (oam[0x200 + (e >> 2)] >> ((e & 3) * 2)) & 3, size = (hi & 2) ? 16 : 8;
+    if (hi & 1) x -= 256;                                  // the high table's bit 0: X bit 8
+    int t9 = name | ((attr & 1) << 8), any = 0;
+    for (int r = 0; r < size; r++) {
+      int line = (y + 1 + r) & 0xFF;                       // the PPU shows an entry from the line after its Y
+      for (int c = 0; c < size; c++) {
+        int v = 0, sx = x + c;
+        if (line < 224 && sx >= 0 && sx < 256 && (keep[e][r] >> (c >> 3) & 1)) {
+          int rr = (attr & 0x80) ? size - 1 - r : r, cc = (attr & 0x40) ? size - 1 - c : c;   // V / H flip
+          int tile = (t9 & 0x100) | ((((t9 >> 4) + (rr >> 3)) & 0x0F) << 4) | (((t9 & 0x0F) + (cc >> 3)) & 0x0F);
+          int w = tile * 16 + (rr & 7), b = 7 - (cc & 7);
+          uint16_t p01 = vr[w & 0x7FFF], p23 = vr[(w + 8) & 0x7FFF];
+          v = ((p01 >> b) & 1) | (((p01 >> (8 + b)) & 1) << 1) | (((p23 >> b) & 1) << 2) | (((p23 >> (8 + b)) & 1) << 3);
         }
-        continue;
-      }
-      if (winClip && !win) continue;                       // clip-only (no stencil): just not drawn here
-      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH) g_objSubDone[(size_t)py * g_fw + px] = 0;
-      if (g_objSubOn && px >= 0 && px < g_fw && py >= 0 && py < CAMH && p < g_objSubMask[(size_t)py * g_fw + px] &&
-          p >= g_objSubTop[(size_t)py * g_fw + px]) {
-        const uint8_t* m = g_objSubRgb + ((size_t)py * g_fw + px) * 3;
-        g_objSubDone[(size_t)py * g_fw + px] = 1;
-        if (g_objSubBoth) g_objSubMixed++;
-        uint8_t c[3];
-        for (int k = 0; k < 3; k++) {                       // ppu_handlePixel: main5 +/- sub5, halved, clamped
-          int d = m[k] >> 3, sv = pal[v * 3 + k] >> 3, r5 = g_objSubSub ? d - sv : d + sv;
-          if (g_objSubHalf) r5 >>= 1;
-          if (r5 < 0) r5 = 0; if (r5 > 31) r5 = 31;
-          c[k] = (uint8_t)((r5 << 3) | (r5 >> 2));
-        }
-        plot(fb, px, py, c[0], c[1], c[2]);
-      } else
-      plot(fb, px, py, pal[v * 3], pal[v * 3 + 1], pal[v * 3 + 2]);
-      if (px >= 0 && px < g_fw && py >= 0 && py < CAMH) {
-        nplot++;
-        // The pixel that wins OBJ-vs-OBJ carries its priority against the BG: a priority-2 unit drawn over an
-        // earlier priority-3 one goes behind the foreground again (the mask is per pixel, not a latch).
-        if (front) {
-          front[py * g_fw + px] = (uint8_t)(p == 3);
-          if (g_mot && p == 3) { g_mot->own[py * g_fw + px] |= CT_MOT_FRONT;
-                       if (g_mot->nspx && g_mot->spx[g_mot->nspx - 1].x == px && g_mot->spx[g_mot->nspx - 1].y == py)
-                         g_mot->spx[g_mot->nspx - 1].own |= CT_MOT_FRONT; } }
-        if (allMask) allMask[py * g_fw + px] = 1;        // every opaque pixel (for stencil exclusion)
+        idx[r * CT_SPR_W + c] = (uint8_t)v; any |= v;
       }
     }
+    if (!any) continue;
+    uint8_t pal[16 * 3];
+    const uint8_t* row = g_fieldCgram + 0x100 + ((attr >> 1) & 7) * 32;
+    for (int k = 0; k < 16; k++) {
+      uint16_t w = (uint16_t)(row[k * 2] | (row[k * 2 + 1] << 8));
+      int r5 = w & 0x1F, g5 = (w >> 5) & 0x1F, b5 = (w >> 10) & 0x1F;
+      pal[k * 3] = (uint8_t)((r5 << 3) | (r5 >> 2)); pal[k * 3 + 1] = (uint8_t)((g5 << 3) | (g5 >> 2));
+      pal[k * 3 + 2] = (uint8_t)((b5 << 3) | (b5 >> 2));
+    }
+    int obj = -1, winClip = 0;
+    if (CtFieldOamTag(e, &obj, NULL, NULL) && obj >= 0 && obj < CtSceneActorCount(vm)) {
+      int pl, sp, ax, ay, fa; CtSceneActor(vm, obj, &pl, &sp, &ax, &ay, &fa);
+      g_motOwn = CtMotSprite(mot, obj, ax, ay);
+      winClip = winOn && CtSceneActorColorGated(vm, obj) ? winOn : 0;
+    } else g_motOwn = CtMotSprite(mot, 0x10000 + e, x, y);
+    g_bObjPalCur = (attr >> 1) & 7;                        // its palette (the colour window's math)
+    int box[4] = { 0, 0, size - 1, size - 1 }, pr = (attr >> 4) & 3;
+    nplot += spritePixels(fb, idx, box, pal, NULL, pr, pr, viewX + x, viewY + y + 1, front, winClip, NULL, sten);
+    g_bObjPalCur = -1;
+  }
   return nplot;
 }
 
@@ -19389,8 +19504,13 @@ int main(int argc, char** argv) {
         }
         pLoc = loc; pFr = frameNo; pBr = br;
       } }
+    // (stage 2: with CT_OAMRENDER=1 the loop below keeps every side effect -- the lead's animation, the "finished"
+    //  reports -- and plots nothing; fieldOamDraw draws the OAM mirror after it.)
+    const int oamPass = fieldOamRenderOn() && f.vm && !battleCompose && CtSceneFrameLegsOn();
+    g_drawSpriteOff = oamPass;
     for (int i = 0; !battleCompose && i < n; i++) {
-      if (sten[i]) {                                     // a $0F80 prio-0/1 occluder, cutting at its
+      if (sten[i] && oamPass) { if (!winOn) continue; }
+      else if (sten[i]) {                                // a $0F80 prio-0/1 occluder, cutting at its
         // own turn in the OAM order: its low index wins the overlap against everything painted
         // before it, and its priority 0/1 then loses to the opaque room BG, so the net effect is a
         // stencil back to the map (sleeping Crono's body under the blanket). Sprites drawn after it
@@ -19646,6 +19766,11 @@ int main(int argc, char** argv) {
         g_bObjPalCur = -1;
         if (sten[i]) occlDrawn += np;
       }
+    }
+    g_drawSpriteOff = 0;
+    if (oamPass) {                                       // (stage 2) the OAM mirror, over the same BG and masks
+      CtStencilSrc oStenSrc = { f.base, f.W, camx, camy, cw, ch };
+      fieldOamDraw(f.vm, fb, front, wideW > CAMW ? wideX : 0, fillHold - 1, winOn, &oStenSrc, mot);
     }
 
     // foreground: BG1/BG2 priority-1 tiles draw over the sprites (the player walks behind

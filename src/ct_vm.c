@@ -1045,6 +1045,9 @@ static void loadMonMirror(Mem* m, int obj, uint8_t id, uint8_t op2) {
   if (gRomImg && gRomImgLen >= 0x250000) w8(m, 0x7E01E3, CtRomByte(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10));   // C0/476F-4773 `LDA $E4F600,X / STA $E3` (before the F8 test)
   if (gRomImg && gRomImgLen >= 0x250000)
     loadGfxMirror(m, obj, CtRomPtr(gRomImg, gRomImgLen, 0x24F600 + (long)id * 10, 10), id >= 0xF8);   // C0/477A: F8+ ROM-direct
+  // 47DC LDA $1201,X / AND #03 / CMP #03 / BCC: a 24-piece sprite is staged on the spot -- 47E5 STX $AE / JSR C0/E12A (frame
+  // 0's chips, their DMA to VRAM word $0400, the live records; move.c CtObjStageBig). (THE BIG SPRITE'S STAGING)
+  if (gRomImg && (r8(m, X + 0x1201) & 3) == 3) CtObjStageBig(m->s, gRomImg, (int)gRomImgLen, obj * 2);
 }
 
 // op 0xA8 face toward object[op/2] (ROM C0/55A0) / 0xA9 face toward PC[op]'s object (C0/5605):

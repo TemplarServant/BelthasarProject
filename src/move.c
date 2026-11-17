@@ -5691,6 +5691,35 @@ static void ctVramDma(const uint8_t* r, uint8_t* vram, int vmaddr, int src, int 
   }
 }
 
+// C0/E12A, a 24-piece sprite's (class 3) staging, called by the enemy loader (C0/47E5) and the reload chain (C0/0212):
+//   E12A-E13A  $CF = $1200,X (the sheet's bank), $CD = $1280,X, $D2 = 7F
+//   E13E-E14C  $0D80,X = $D0 = $3800; $0F01,X = 0 (frame 0, the one it stages: the drain never takes this class)
+//   E14F-E194  $D3 = $1380,X / $D5 = $1300,X (frame 0's record); the 0x60 tile words [$D3],Y (Y = 0..BE) through the WRAM
+//              port from $7F:3800, each by C0/E687 or C0/E534 on bit 14 -- the drain's own blit
+//   E196-E1C0  DMA: VMAIN 80, $7F:3800 x $0C00 bytes to VRAM word $0400 (tiles 40-9F)
+//   E1C3-E52F  the live records at $7F:4BC0 + $1700,X: piece k's +2 / +3 X offset (sign-extended) and +4 Y offset from
+//              [$D3],Y at Y = $C0 + 2k / + 1; +6 the tile 40 + 2k (rows of eight: 40-4E, 60-6E, 80-8E); +7 attribute 22
+// The port's loader stopped at this JSR (the sweep traps; the asset drawer drew the class from the sheets). MEASURED: the
+// attract's Dragon Tank (loc 01C, op 0x83 with record byte 4 = $23) -- with the OAM renderer its tail was not the
+// cartridge's (723 px, tools/frame_region_cmp.py's attract-01c) until its tiles reached the VRAM image.
+void CtObjStageBig(uint8_t* r, const uint8_t* rom, int romLen, int idx) {
+  r[0x0D80 + idx] = 0x00; r[0x0D81 + idx] = 0x38;                // E140-E143
+  r[0x0F01 + idx] = 0x00;                                         // E14A-E14C
+  int rec = r[0x1380 + idx] | (r[0x1381 + idx] << 8), recBank = r[0x1300 + idx];
+  CtBlitSeg seg = { 0, 0, 0x60, 0 };
+  ctAnimBlit(r, rom, romLen, idx, rec, recBank, &seg);           // E16E-E194
+  ctVramDma(r, NULL, 0x0400, 0x3800, 0x0C00);                     // E196-E1C0
+  int base = r[0x1700 + idx] | (r[0x1701 + idx] << 8);
+  for (int k = 0; k < 24; k++) {
+    int o = 0x10000 + ((0x4BC0 + base + k * 8) & 0xFFFF);
+    int xd = romRead24(r, rom, romLen, recBank, rec + 0xC0 + k * 2), yd = romRead24(r, rom, romLen, recBank, rec + 0xC1 + k * 2);
+    r[o + 2] = (uint8_t)xd; r[o + 3] = (uint8_t)((xd & 0x80) ? 0xFF : 0x00);   // E1D2-E1E0
+    r[o + 4] = (uint8_t)yd;                                                       // E1E5-E1E7
+    r[o + 6] = (uint8_t)(0x40 + (k >> 3) * 0x20 + (k & 7) * 2);                 // E441-E4CD
+    r[o + 7] = 0x22;                                                              // E4D1-E52F
+  }
+}
+
 int CtAnimUploadFlush(uint8_t* r, uint8_t* vram) {
   int n = 0, x;
   // The ROM has no bound here (B1FD INX INX / BRA ->B1D1) and trusts ctAnimAppend's terminator; 0x80 bytes = 64

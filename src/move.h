@@ -343,6 +343,8 @@ int CtAnimShownPrio(int obj, uint8_t* p0, uint8_t* p1);
 // The field's OAM mirror entry `entry` (0-127) as the last draw pass wrote it: the object, its template's frame and the
 // piece. 0 = not written by an object this pass (hidden, or another writer's). move.c ctOamStage2Copy.
 int CtFieldOamTag(int entry, int* obj, int* frame, int* piece);
+// C0/E12A: a 24-piece sprite's staging (frame 0's chips, their DMA to VRAM word $0400, the live records). move.c.
+void CtObjStageBig(uint8_t* r, const uint8_t* rom, int romLen, int idx);
 // C0/571A-58AA: the location load's per-object default fill, written through the $2180 WRAM port. Thirteen arrays get
 // their initial value per object; $1000,X = 4 clears the op-0x0B pause bit the activate guard C0/5AD1 refuses on.
 // `body16` is the script's 32-byte-per-object fn-pointer table ($7F:2001), used only for the $1180,X fn0 seed; NULL

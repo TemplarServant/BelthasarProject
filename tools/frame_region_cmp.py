@@ -37,6 +37,14 @@ def main():
     pfs = sorted({pf for _, _, pf, _ in specs})               # CT_SHOTS_EXIT stops after the last listed frame
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1',
                CT_SHOTS=tmp, CT_SHOTS_AT=','.join(map(str, pfs)), CT_SHOTS_EXIT='1')
+    # The OAM renderer (CT_OAMRENDER=1, stage 2 of drawing the field's sprites from OAM + VRAM): a port started from a
+    # WRAM seed (--loadwram) has no VRAM, so it takes the first spec's state's (test surface only; the switch is off by
+    # default and nothing else changes).
+    if os.environ.get('CT_OAMRENDER') == '1' and '--loadwram' in args and specs[0][0].endswith('.state'):
+        sv = tmp + '_seedv.raw'
+        subprocess.run([CT, '--peek', specs[0][0], sv, '--btnscript', '0:0'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(sv + '.vram'):
+            env['CT_SEED_VRAM'] = sv + '.vram'
     subprocess.run([FIELD] + args, env=env,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     shots = {}
