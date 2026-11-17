@@ -289,6 +289,25 @@ PICTURES = {
     # the room's colour record had just written its 4701 -- 300 px with the copy made at the entry).
     'fight-staging-puts-the-base-palette-back': dict(leg='51_security', at=570, frames=16, own=True, lag=-1),
     'fight-boot-palettes-wait-for-the-upload': dict(leg='51_security', at=570, frames=55, own=True, lag=-1),
+    # A door's block and a chest's lid are written to VRAM by the IRQ (C0/ED24, C0/EFD1), which does its map jobs only on a
+    # frame whose `$0153` bit 0 is clear: the handler's frame or the one after. Leg 26, the door before loc 0C6 (the latch
+    # on f7245, the metatiles on f7246 with the bit set, VRAM on f7247): still shut on picture f7248 (568 px with the block
+    # released in the handler). Leg 93's chest (`Got 1 Dark Mail!`): the lid on picture f26048 (146 px).
+    'door-opens-on-the-irqs-frame': dict(leg='26_yakra', at=7200, frames=48, own=True, lag=-2),
+    'chest-lid-opens-on-the-irqs-frame': dict(leg='93_ozzie_way', at=0, frames=26048, own=True, lag=-2),
+    # ...and the lead walking up into that door: the step commit's priority pair (`$0C02` / `$0C03` = 20 20, C0/9D62) is
+    # on the screen only from his next template -- his pieces keep priority 3, in front of the door frame's priority
+    # tiles, on pictures f7272-f7275 (23 px each with the pair read live).
+    'lead-keeps-his-templates-priority': dict(leg='26_yakra', at=7200, frames=72, own=True, lag=-2),
+    # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
+    # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
+    # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live
+    # (4013 px on every picture of the park).
+    'park-shows-the-published-scroll': dict(leg='127_winged_epoch_179', at=700, frames=30, own=True, lag=-2),
+    # Leg 127, the Blackbird's wing (loc 16B): the Golem Boss is placed with its OBJ palette row zeroed by a colour record
+    # (FD:E699, the fade-in's first state: `$2340-$235F` all 00 on f410-f412) -- a black sprite on the black circle until
+    # the record's first step on f413. A row of zeros is the row: the drawer must not put the sheet's own colours back.
+    'object-with-a-zeroed-palette-row-is-black': dict(leg='127_winged_epoch_179', at=380, frames=33, own=True, lag=-2),
     # Leg 56 begins inside the End of Time's back room (loc 1D1), whose master picks his sprite from the lead's level
     # (object 10's fn0: `83 E0` up to level 9, `83 E1` to 19, ..). The state says `$1114` / `$1115` = 06 E1; a seed that
     # kept the sprite its own run of fn0 chose -- on a fresh cartridge's levels -- drew E0 (505-623 px on every picture).

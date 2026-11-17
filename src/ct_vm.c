@@ -592,9 +592,11 @@ static const uint8_t* gRomImg; static long gRomImgLen;
 void CtSceneSetRomImage(const uint8_t* rom, long len) { gRomImg = rom; gRomImgLen = len; }
 // `JSL FD/C2C1`, the field's HDMA table builder (src/hdma_table.c, disasm/notes/field_hdma_tables.md): writes one
 // of the two table sets from the WRAM and flips $0153 bit 0. With no ROM image only the flip is done.
+static int gHdmaBuilt;                                  // the tables in $7F are a builder's (CtScenePubCounter)
 void CtHdmaTableBuild(uint8_t* wram128) {
   if (!wram128) return;
   if (!gRomImg || CtHdmaBuildNative(wram128, gRomImg, gRomImgLen) != 0) wram128[0x0153] ^= 0x01;
+  else gHdmaBuilt = 1;
 }
 // ---- Frame legs switch (disasm/notes/frame_wiring.md) ----
 // C0/A810's four per-object legs (C98A / A98A / AB45 / A9CD), the A88D edges' setup and teardown, C0/CA76's
@@ -4657,8 +4659,34 @@ void CtSceneLayerOffsets(const CtScene* sc, int* bg2x, int* bg2y, int* bg3x, int
 }
 // The same read of a page kept elsewhere: during a battle the field's $0920-$1DFF is C0/0918's copy at $7F:2000
 // (`page` = that copy - $0920, so page[$1D8B] is $7F:346B), which C0/2C41 keeps scrolling.
+// THE PUBLISHED COUNTERS. The screen's BG2 / BG3 scroll is HDMA channels 2 and 3, whose one-entry tables point at four
+// words a set -- BG2 $7F:1510 (set A) / $7F:1514 (set B), BG3 $7F:1518 / $7F:151C: H, V -- that FD/C2C1's tail fills from
+// `$1D8B..$1D92` when it builds the set, AFTER the runner; the NMI's FD/C1EE programs the set `$0153` names (`AND #0F /
+// BEQ` -> set A). So the picture shows the counters as of the last build, not the live ones. They are the same on every
+// ordinary frame; they part when an iteration's head has stepped a layer and its build has not come: a song's upload
+// parking the loop inside the runner. MEASURED on the rule's cartridge, playthrough leg 127 (the Blackbird's wing, the
+// clouds on BG2; legs 126 + 127 played through): `$1D8D` F988 on f713 and F987 on f714, the frame op `EA 29` parks the
+// loop; `$7F:1514` -- the set `$0153` = 01 shows -- stays F988 to f754 (the same bytes in the port), and the cartridge's
+// pictures f716-f755 hold that step. The port read `$1D8D` live: the clouds a line on for the whole park (4013-4207 px
+// on 38 pictures). Not for a channel the window wave owns (`$1DFD` BG2, `$1DF9` BG3: its table is the wave's lines,
+// field.c), nor for a page kept elsewhere (a fight's copy), nor under the battle exit tail's `$0153` bit 7, nor before a
+// builder has written the tables.
+// The offsets below are against BG1's camera, and the host draws BG1 at ITS shown word too (field.c: `camx -= sprDX`,
+// `$7F:1508` / `150A` + set), so a shown layer is taken against BG1's shown word: its counter is returned as the shown
+// word plus BG1's live-minus-shown difference. MEASURED, the chest walk of loc 031 (`10 45` parks the loop f203-f244 with
+// the camera on its way: `$1D87` / `$1D8B` = 7200 live, `$7F:150C` / `1514` = 7100 shown, both layers one shown step
+// back): BG2 measured against the live BG1 sat a pixel off for the 42 pictures (8388 px each).
+static int ctPubCounter(const CtScene* sc, const uint8_t* s, int live, int tab, int bg1, int waveOwner) {
+  if (s != sc->mem->s || !gHdmaBuilt || !legsOn() || (s[0x0153] & 0x80) || s[waveOwner]) return (int16_t)camGet16(s, live);
+  const uint8_t* t = s + 0x10000 + ((s[0x0153] & 0x0F) ? 4 : 0);
+  int shown = (int16_t)(t[tab] | (t[tab + 1] << 8));
+  int b1Live = (int16_t)camGet16(s, bg1), b1Shown = (int16_t)(t[bg1 - 0x1D87 + 0x1508] | (t[bg1 - 0x1D87 + 0x1509] << 8));
+  return shown + b1Live - b1Shown;                             // (THE PUBLISHED COUNTERS)
+}
 void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* s, int* bg2x, int* bg2y, int* bg3x, int* bg3y) {
   if (!sc || !s) return;
+  const int c2x = ctPubCounter(sc, s, 0x1D8B, 0x1510, 0x1D87, 0x1DFD), c2y = ctPubCounter(sc, s, 0x1D8D, 0x1512, 0x1D89, 0x1DFD);
+  const int c3x = ctPubCounter(sc, s, 0x1D8F, 0x1518, 0x1D87, 0x1DF9), c3y = ctPubCounter(sc, s, 0x1D91, 0x151A, 0x1D89, 0x1DF9);
   int b1x = (int16_t)camGet16(s, 0x1D87), b1y = (int16_t)camGet16(s, 0x1D89);
   int cx = camGet16(s, 0x1D0A) * 8 + (s[0x1D93] & 7), cy = camGet16(s, 0x1D0E) * 8 + (s[0x1D96] & 7);
   int det2 = s[0x1D35] & 0x02, det3 = s[0x1D35] & 0x04;
@@ -4667,17 +4695,17 @@ void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* s, int* bg2x, int* 
   if (!det2 && (s[0x0BC9] & 0x80)) {
     int ex = (cx - b1x + sc->bgD2x) >> 3, ey = (cy - b1y + sc->bgD2y) >> 3;   // BG2's build camera in chips (the entry's
                                                                              //   or a rebuild's, see below)
-    if (bg2x) *bg2x = ((ex >> 1) & 0xFE) * 8 + (int16_t)camGet16(s, 0x1D8B) - cx;
-    if (bg2y) *bg2y = (ey >> 1) * 8 + (int16_t)camGet16(s, 0x1D8D) - cy;
+    if (bg2x) *bg2x = ((ex >> 1) & 0xFE) * 8 + c2x - cx;
+    if (bg2y) *bg2y = (ey >> 1) * 8 + c2y - cy;
   } else {
   // A camera-built layer whose tilemap was rebuilt at a later camera (op 0xE5's style branch: C0/78EC / 7CB5 build at
   // the live $1D0A/$1D0E and C0/74E8 / 74F7 zero its counters, ctXferReorigin) sits on its own build camera:
   // bgD2*/bgD3* = its build camera minus BG1's, 0 until such a rebuild.
-  if (bg2x) *bg2x = (int16_t)camGet16(s, 0x1D8B) - (det2 ? cx : b1x - sc->bgD2x);
-  if (bg2y) *bg2y = (int16_t)camGet16(s, 0x1D8D) - (det2 ? cy : b1y - sc->bgD2y);
+  if (bg2x) *bg2x = c2x - (det2 ? cx : b1x - sc->bgD2x);
+  if (bg2y) *bg2y = c2y - (det2 ? cy : b1y - sc->bgD2y);
   }
-  if (bg3x) *bg3x = (int16_t)camGet16(s, 0x1D8F) - (det3 ? cx : b1x - sc->bgD3x);
-  if (bg3y) *bg3y = (int16_t)camGet16(s, 0x1D91) - (det3 ? cy : b1y - sc->bgD3y);
+  if (bg3x) *bg3x = c3x - (det3 ? cx : b1x - sc->bgD3x);
+  if (bg3y) *bg3y = c3y - (det3 ? cy : b1y - sc->bgD3y);
 }
 
 // The field host passes this frame's post-collision scroll request ($1D2E/$1D30 units, signed 1/16 px) and

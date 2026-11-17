@@ -4485,11 +4485,16 @@ static int drawSprite(CtAssets* a, uint8_t* fb, uint8_t* idx, uint8_t* pal, int 
   // colours and pads 13-15 black. `shadowRow` = the 32-byte row for the object's slot ($0F81,X >> 1) on the live page
   // $7E:2300 (+ slot*32), the one the NMI uploads: the per-frame effect records (FD/E39C, src/objslot.c: op 0x88's
   // fades, scales and the FD/E532 rotation) write only that page; every other writer puts the same bytes on both pages
-  // (the allocator's two MVNs, the blob's two, C0/48C0's restore, C0/70E9's whole-page copy at the load). A row still
-  // all-zero (no ROM image to upload from) keeps the baked colours. Colour 0 is transparent regardless.
-  int fromShadow = 0;
+  // (the allocator's two MVNs, the blob's two, C0/48C0's restore, C0/70E9's whole-page copy at the load). Colour 0 is
+  // transparent regardless.
+  // A ROW OF ZEROS IS THE ROW: fifteen black colours. A colour record's fade-in starts there -- MEASURED on the rule's
+  // cartridge, playthrough leg 127 (the Blackbird's wing, loc 16B, the Golem Boss, object $2A): the allocator uploads
+  // its row `$2340-$235F` on f406 (C0:730D), the record zeroes all of it on f410 (FD:E699) and takes its first step on
+  // f413 (`$2344` = 2104); the pictures show the black circle it stands on, and nothing of it, until then. The drawer
+  // used to keep the sheet's baked colours for a row with colours 1-15 all zero (`no image to upload from`): the boss in
+  // full colour for three pictures before its fade from black (1676 px each). Only a caller with no row keeps the sheet's.
+  int fromShadow = shadowRow != NULL;                // (A ZEROED ROW IS BLACK)
   if (shadowRow) {
-    for (int k = 2; k < 32; k++) if (shadowRow[k]) { fromShadow = 1; break; }
     if (fromShadow)
       for (int k = 0; k < 16; k++) {
         uint16_t w = (uint16_t)(shadowRow[k * 2] | (shadowRow[k * 2 + 1] << 8));
@@ -5511,10 +5516,17 @@ static void fieldVramSink(int word, const uint8_t* src, int bytes);
 // The WRAM cell matters to the edge streamer, which builds from $7E:3000: with the cell left closed a row or column
 // streamed over the chest laid the closed lid back into the tilemap (MEASURED: loc 048, playthrough leg 33 f1239 --
 // 118 px, the cartridge shows the open one).
-static void fieldChestVram(uint8_t* w7, int ci) {
-  int v = w7[0x3000 + (ci & 0xFFFF)], fam = v == 0xE0;
-  if (v != 0xFE && v != 0xE0) return;
+// The handler's half (16E5 `STZ $61`, 16F0-1701): the family into $0161 and the WRAM cell bumped. Returns the family, -1
+// for a cell that is no lid (16FE BRA ->1770: no request).
+static int fieldChestBump(uint8_t* w7, int ci) {
+  int v = w7[0x3000 + (ci & 0xFFFF)];
+  w7[0x0161] = (uint8_t)(v != 0xFE);                               // 16E5 STZ $61 / 16F8 INC $61
+  if (v != 0xFE && v != 0xE0) return -1;
   w7[0x3000 + (ci & 0xFFFF)] = (uint8_t)(v + 1);
+  return v == 0xE0;
+}
+// The IRQ's half, C0/EFD6-F05D: the four words.
+static void fieldChestVram(uint8_t* w7, int ci, int fam) {
   int Y = ((ci & 0xFF) * 2 - w7[0x1D0A] + w7[0x1D99]) & 0x3F, X = (((ci >> 8) & 0xFF) * 2 - w7[0x1D0E] + w7[0x1D9A]) & 0x1F;
   int base = w7[0x1D7C] | (w7[0x1D7D] << 8), rec = fam ? 0xBF08 : 0xBFF8;
   g_ctVramMapDma = 1;
@@ -5983,9 +5995,42 @@ static void fieldIrqHand(uint8_t* w) {
   g_dlgHandRow = -1;
   w[0x0163] = 0x80;
 }
+// C0/ED15's map jobs, after the hand: `ED24 LDA $5F / BIT #10` -- a door's block, the words of the kind in $0160 to the
+// addresses the handler left in $09CA.., then `EFCC LDA #10 / TRB $5F / RTS` -- else `EFD1 BIT #02` -- a chest's lid, the
+// four words of EFD6 (above), `F059 LDA #02 / TRB $5F`. The main loop's handlers only ASK: each door handler ends `LDA #10
+// / TSB $5F` (C0/0E58, 100D, 11C2, 144D, 16D8) and the chest's `176C LDA #02 / TSB $5F`. So the block is on the screen
+// from the first IRQ at or after the request that finds $0153 bit 0 clear (C0/ECFC: the other parity is the tile
+// animation's) -- the request's own frame or the next -- and a chest asked for with a door waits for the IRQ after.
+// MEASURED on the rule's cartridge, playthrough leg 26 (the door before loc 0C6: column 07, row 26; from the state cut on
+// f7200): the latch `$0117` = 10 on f7245 (C0:9D52), the metatiles `$7E:5607..` FA FC -> FB FD on f7246 (C0:11D8..1212)
+// with `$0153` = 01 after that frame's flip, VRAM `$608F-$6131` (22 words) on f7247 (`$0153` = 00), the open door on
+// picture f7249. The port released the block in the handler: open on its picture f7246, the cartridge's f7248 (568 px).
+// The cells the two requests name are the port's (`$09CA..` / `$09B2..` are not kept); a state loaded between a request
+// and its IRQ falls back on $015B / $015D.
+static int g_irqDoorIdx = -1, g_irqChestIdx = -1, g_irqMapDirty;
+static int fieldIrqMapJobs(void* sd, uint8_t* w) {
+  if (w[0x015F] & 0x10) {                                          // ED24 LDA $5F / BIT #10
+    int di = g_irqDoorIdx >= 0 ? g_irqDoorIdx : (w[0x015B] | (w[0x015C] << 8));
+    int c = di & 0xFF, r = (di >> 8) & 0xFF;
+    fieldRingForgetRect(w, c - 1, r - 2, c + 1, r);
+    if (sd) { CtFieldScenePicReleaseRect(sd, 0, c - 1, r - 2, c + 1, r);
+              CtFieldSceneMapFromWramRect(sd, w, c - 1, r - 2, c + 1, r, 1); }
+    w[0x015F] &= (uint8_t)~0x10; g_irqDoorIdx = -1;                // EFCC LDA #10 / TRB $5F / RTS (THE IRQ'S MAP JOBS)
+    return g_irqMapDirty = 1;
+  }
+  if (w[0x015F] & 0x02) {                                          // EFD1 BIT #02
+    int ci = g_irqChestIdx >= 0 ? g_irqChestIdx : (w[0x015D] | (w[0x015E] << 8));
+    if (sd) CtFieldSceneChestOpen(sd, ci & 0xFF, (ci >> 8) & 0xFF);
+    fieldChestVram(w, ci, w[0x0161] != 0);                         // EFD6 LDA $61 / BNE ->F01C
+    if (sd) CtFieldScenePicReleaseRect(sd, 0, ci & 0xFF, (ci >> 8) & 0xFF, ci & 0xFF, (ci >> 8) & 0xFF);
+    w[0x015F] &= (uint8_t)~0x02; g_irqChestIdx = -1;               // F059 LDA #02 / TRB $5F
+    return g_irqMapDirty = 1;
+  }
+  return 0;
+}
 static int fieldIrqTiles(void* sd, uint8_t* w, int frameNo) {
   if (!w || (w[0x010F] & 0x80)) return 0;
-  if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return 0; }      // C0/ED03 JSR C0/ED15
+  if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return fieldIrqMapJobs(sd, w); }   // C0/ED03 JSR C0/ED15
   return fieldTileAnimRun(sd, w, frameNo);
 }
 // The battle's IRQ, D1/FE97: D1/F1B0 installs it with the fight's NMI (D1/E77C), CD/0418 keeps it beside the exit tail's
@@ -17507,18 +17552,18 @@ int main(int argc, char** argv) {
         // The handler reads the WRAM map (0D4C `LDX $5B / LDA $7E3000,X`), so the WRAM decides, and the render's copy takes
         // the bumped cells from it (rows r-2..r and columns c-1..c+1 cover all five handlers). This also covers a door a
         // script drew into the WRAM map (e.g. the Manoria cathedral's after the organ), which the render's copy lacks.
+        int dv = CtSceneMem7E(f.vm)[0x3000 + (di & 0xFFFF)];             // 0D4E LDA $7E3000,X: the kind
         int opened = CtWramDoorOpen(fieldWram(), di);                    // 0D4C LDX $5B
-        if (opened) fieldRingForgetRect(CtSceneMem7E(f.vm), (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2, (di & 0xFF) + 1,
-                                        (di >> 8) & 0xFF);
-        if (opened && CtFieldScenePicReleaseRect(f.sd, 0, (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2, (di & 0xFF) + 1,
-                                                 (di >> 8) & 0xFF)) dirty = 1;   // (the handler writes its block to VRAM)
-        if (opened && CtFieldSceneMapFromWramRect(f.sd, CtSceneMem7E(f.vm), (di & 0xFF) - 1, ((di >> 8) & 0xFF) - 2,
-                                                  (di & 0xFF) + 1, (di >> 8) & 0xFF, 1)) dirty = 1;
+        // The block's words are the IRQ's to write (fieldIrqMapJobs): the handler leaves the kind in $0160 (0D90 `STZ $60`,
+        // 0E8B / 1043 `LDA #01`, 1215 / 14A0 `LDA #02`) and asks -- `LDA #10 / TSB $5F`.
+        if (opened) { uint8_t* dw = CtSceneMem7E(f.vm);
+          dw[0x0160] = (uint8_t)(dv == 0xE6 ? 0 : (dv == 0xEC || dv == 0xEE) ? 1 : 2);
+          dw[0x015F] |= 0x10; g_irqDoorIdx = di; }
         // The door sound belongs to the handlers, not to the request: `JSR C0/1B90` sits inside each of the five
         // after the metatile bump (C0/0D92, 0E8F, 1040, 1212, 149D, its only callers in bank C0), so it fires when a
         // handler matched, which is what CtWramDoorOpen returns.
         if (opened) fieldSfxPost(CtSceneMem7E(f.vm), 0x01FC, "door");
-        if (dbg.trigDbg) fprintf(stderr, "[door] tile(%d,%d) opened=%d\n", di & 0xFF, (di >> 8) & 0xFF, dirty);
+        if (dbg.trigDbg) fprintf(stderr, "[door] tile(%d,%d) opened=%d\n", di & 0xFF, (di >> 8) & 0xFF, opened ? 1 : 0);
       }
       // ...and the same routine's chest arm (C0/16DC gates on $0117 bit1, the treasure probe's own
       // request at C0/1E4C, with the tile in $015D). One metatile, id $FE->$FF or $E0->$E1.
@@ -17530,12 +17575,11 @@ int main(int argc, char** argv) {
         fieldSfxPost(CtSceneMem7E(f.vm), 0x01FB, "chest");
         const uint8_t* cw7 = CtSceneMem7E(f.vm);
         int ci = cw7 ? cw7[0x015D] | (cw7[0x015E] << 8) : 0;
-        if (CtFieldSceneChestOpen(f.sd, ci & 0xFF, (ci >> 8) & 0xFF)) {          // 16EE LDX $5D
-          fieldChestVram((uint8_t*)cw7, ci);                 // 1700-176F, and the IRQ's C0/EFD6: the WRAM cell and its four words
-          CtFieldScenePicReleaseRect(f.sd, 0, ci & 0xFF, (ci >> 8) & 0xFF, ci & 0xFF, (ci >> 8) & 0xFF);   // 1705 (VRAM too)
-          dirty = 1;
-        }
-        if (getenv("CT_CHESTDBG")) fprintf(stderr, "chest: tile(%d,%d) bumped=%d\n", ci & 0xFF, (ci >> 8) & 0xFF, dirty);
+        int bumped = cw7 && fieldChestBump((uint8_t*)cw7, ci) >= 0;              // 16EE LDX $5D .. 1701: the WRAM cell
+        if (bumped) {
+          ((uint8_t*)cw7)[0x015F] |= 0x02; g_irqChestIdx = ci;                   // 176C LDA #02 / TSB $5F: the lid's words are
+        }                                                                        //   the IRQ's (fieldIrqMapJobs, C0/EFD6)
+        if (getenv("CT_CHESTDBG")) fprintf(stderr, "chest: tile(%d,%d) bumped=%d\n", ci & 0xFF, (ci >> 8) & 0xFF, bumped);
       }
       c0d3eDirty = dirty;
     }
@@ -18748,6 +18792,8 @@ int main(int argc, char** argv) {
                  (int)fadeBri, pendKind, bw[0x0101], bw[0x0100], bw[0x0113], bw[0x0112], bw[0x0117], bw[0x010F], bw[0x0153]); }
       if (!dbg.noAnim && !irqLoad && !fieldIrqLoadWas)
         bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);                  // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
+      else if (dbg.noAnim && !irqLoad && !fieldIrqLoadWas && !(bw[0x010F] & 0x80) && !(bw[0x0153] & 0x01))
+        bgDirty |= fieldIrqMapJobs(f.sd, bw);                         // (CT_NOANIM stills the tiles, not the doors)
       if (fieldIrqPreFlip) bw[0x0153] ^= 0x01;
       bgDirty |= CtFieldSceneSetCgram(f.sd, g_fieldCgram);
       bgDirty |= fieldTileDmaFlush(f.sd);                           // (a fight's last step, if the fight ended on it)
@@ -18910,6 +18956,7 @@ int main(int argc, char** argv) {
                 printf("%sBG%d %d,%d=%04X%s", k ? " " : "ringov:   ", L + 1, c, r, wv, (k == 7 || k == rn[L] - 1) ? "\n" : ""); } }
       }
     }
+    if (g_irqMapDirty) { bgDirty = 1; g_irqMapDirty = 0; }       // (a door's block or a lid the IRQ wrote this frame)
     if (f.sd && bgDirty) {
       int nw = 0, nh = 0; uint8_t* nprio = NULL;
       uint8_t* nb = CtFieldSceneBake(f.sd, &nw, &nh, &nprio);
@@ -19456,7 +19503,14 @@ int main(int argc, char** argv) {
         // front of the BG priority-1 foreground; below it, behind.
         int tf, bf, tp, bp;                               // tp/bp = the OBJ priority 0-3 of each byte
         { const uint8_t* w7 = f.vm ? CtSceneMem7E(f.vm) : NULL;
-          if (w7 && CtSceneActorCount(f.vm) > 1) { tp = (w7[0x0C00 + pObj * 2] >> 4) & 3; bp = (w7[0x0C01 + pObj * 2] >> 4) & 3; }
+          if (w7 && CtSceneActorCount(f.vm) > 1) { tp = (w7[0x0C00 + pObj * 2] >> 4) & 3; bp = (w7[0x0C01 + pObj * 2] >> 4) & 3;
+            // ...as the lead's template took them, like every object's below (move.c CtAnimShownPrio): the step commit's
+            // store (C0/9D62) is on the screen only from his next template. MEASURED on the rule's cartridge, playthrough
+            // leg 26 (walking up into a door; from the state cut on f7200): `$0C02` / `$0C03` = 20 20 on f7270 while his
+            // four pieces, OAM 36-39, still carry attribute 3A -- priority 3, in front of the door frame's priority tiles
+            // (words 71xx / 31xx) -- on pictures f7272-f7275; the port put him behind them (23 px each).
+            { uint8_t lp0, lp1;
+              if (CtSceneFrameLegsOn() && CtAnimShownPrio(pObj, &lp0, &lp1)) { tp = (lp0 >> 4) & 3; bp = (lp1 >> 4) & 3; } } }   // (THE LEAD'S TEMPLATE TOO)
           else { footPrio(&f.C, (int)px, footY, &tf, &bf); tp = tf ? 3 : 2; bp = bf ? 3 : 2; }
           tf = tp == 3; bf = bp == 3; }
         // The step commit's rule (C0/9B41: $0C00/$0C01 = 0x20 | (footTileBit << 4)): base priority 2, behind the

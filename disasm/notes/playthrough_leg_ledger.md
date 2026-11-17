@@ -478,3 +478,30 @@ carried on by mechanisms that quantise time:
     f725-f942, f1480-f1520, f1780-f1820). Seen there and not followed: `$1C2E` (object 23's `$1C00,X`) reads 03 on the
     cartridge and 07 in the port from an A press on f726; the script pointer's mirror `$11AE` is rewritten at the
     object's next visit after a song park (0940 for the cartridge's 0942, eight frames).
+- **Legs 26, 127 and 134 (2026-11-16, the second triage round; three subagents, read-only).** What they classified is
+  theirs (cut-state runs, not re-measured here) unless marked CONFIRMED; the fixes were derived and measured here.
+  - 26 (61 samples): two chains, each 0 px from one cartridge state. (a) f5100-f6300, a Hench one pixel lower: fight
+    1's exit is released a frame apart (`$0117` 01 -> 00 on f4688 for the port's f4687; the 2026-11-07 class), so the
+    pair's scripted walk starts a frame earlier and ends on the same frame -- one step more (`$189C` 28C3 for 28BC);
+    from a state cut on f4760 every cell and the picture at f5110 are equal. (b) f7800-f24300, loc 0C6 a line off and
+    the Yakra fight after it: the room's load is 77 frames on the cartridge and 78 in the port (the load clock), the
+    pan's first step f7414 / f7415 and its stop on the same frame -- one step short (`$1D0E` 0B for 0A); from a state cut
+    on f7380, 16 samples f7500-f24300 are 0 px. FIXED on the way (CONFIRMED, real ones): the door before that room
+    opened a picture early (568 px, f7248) -- the block is the IRQ's to write, on its parity
+    (field_doors_occluders_decisionbox.md sec. 4; a chest's lid the same, leg 93 f26048) -- and the lead's outline was
+    behind the door frame on f7272-f7275 (23 px: his pieces keep their template's priority).
+  - 127 (61 samples): the start is the mid-walk cut (played from leg 126 the first 407 frames are 0 px). From f753 a
+    time shift whose first cause is found but NOT one of the closed classes: the song upload of op `EA 29` parks the
+    main loop 41 frames on the cartridge (f714-f754) and 40 in the port -- `$0153` on the other phase from there, the
+    fight's call a frame late (`$0117` = 21 on f894 / f895), the ATB a tick behind, another fight by f12300. FIXED
+    inside the park: the clouds stood a line on for its 38 pictures (4013 px) -- the screen's layer scroll is the last
+    table build's (song_load_freeze.md sec. 10). OPEN: why
+    the upload is a frame short (and whether outside the chained run too). FIXED (CONFIRMED): the Golem Boss in full
+    colour on three pictures before its fade from black (f412-f414, 1676 px) -- a zeroed palette row is black.
+  - 134 (39 samples; f300, f4800, f12300, f12600 read): loc 0F4's load from the overworld is 35 frames for the
+    cartridge's 36, all three times (f64 / f65, f12342, f13552); every other load of the first 15,100 frames is equal.
+    The play clock is +1, +2, +3 from them, C0/0C70 seeds `$01F8` one on (06 / 07 at 0F2), and the idle animation's
+    roll (C0/A22A `INC $F8 / LDA $FE00,X / CMP #08`) falls on another object (f4770: object 7 on the cartridge, 6 in
+    the port). From states cut after each load the samples are 0 px. Not derived: why 0F4's load alone is short.
+    Seen and not read: one picture at 0F4's exit (f382, 19,712 px: the old room very dim on the lower lines on the
+    cartridge, black in the port).

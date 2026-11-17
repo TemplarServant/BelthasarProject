@@ -213,3 +213,49 @@ It is recorded here and not yet derived.
 Still open: the report itself. Scene 434 is the only decision box with a driveable repro on hand; a
 savestate of the choice the user actually saw would settle it the way `marle_no_caminho_bell.state`
 settled the bell (see [[ct-field-bell-minigame]]).
+
+---
+
+## 4. The door's block (and a chest's lid) reach VRAM through the IRQ (2026-11-16)
+
+Section 1's handlers bump the metatiles in the main loop's head. The tilemap words are not theirs to write: each ends
+by asking the field's IRQ --
+
+```
+0D90 STZ $60          (E6)      0E8B / 1043 LDA #01 / STA $60   (EC, EE)      1215 / 14A0 LDA #02 / STA $60   (FA, FC)
+..   the words' VRAM addresses into $09CA.. (C0/1B36: row x 32 + column, + $400 from column 32, + $1D7C)
+0E58 / 100D / 11C2 / 144D / 16D8   LDA #10 / TSB $5F / BRL ->16DC
+```
+
+-- and the chest's handler the same way (`176C LDA #02 / TSB $5F`). The IRQ, C0/ECCC at line 211:
+
+```
+ECFC LDA $0153 / AND #01 / BNE ->ED08      ; odd: JSL FD/FFFD, the tile animation
+ED03 JSR C0/ED15                           ; even:
+ED1D   LDA $63 / BMI ->ED24 / JSR C0/F05E  ;   the decision box's hand
+ED24   LDA $5F / BIT #10 / BNE ->ED2D / BRL ->EFD1
+ED2D   LDA $60 / BNE ..                    ;   the door's words by kind (kind 0: $7E:BF38, $7E:BF3A ..)
+EFCC   LDA #10 / TRB $5F / RTS             ;   (a door ends the IRQ's work: a lid asked for with it waits for the next)
+EFD1   BIT #02 / BNE ->EFD6 / RTS
+EFD6   LDA $61 / BNE ->F01C ..             ;   the lid's four words;  F059 LDA #02 / TRB $5F
+```
+
+So the block changes on the screen at the first IRQ at or after the request that finds `$0153` bit 0 clear: the
+request's own frame or the next.
+
+MEASURED on the rule's cartridge, playthrough leg 26 (the door before loc 0C6: `$015B` = 07 26, column 07 row 26; from
+the state cut on f7200, `--monitor 7E5407:2,7E5507:2,7E5607:2,7F1CC8:2,7E0117:1 --writer` and the frames' VRAM):
+
+    f7245  $0117 = 10 (C0:9D52)                       the latch
+    f7246  $7E:5607 FA FC -> FB FD (C0:11D8), $5507 F6 F8 -> F7 F9 (11F5), $5407 F2 F4 -> F3 F5 (1212);
+           $7F:1CC8 = 2607 (C0:28DF, the opened-door list); $0153 = 01 after the frame's flip
+    f7247  VRAM $608F-$6131, 22 words ($0153 = 00)    the IRQ's job
+    picture f7248 shut, f7249 open
+
+The port released the block in the handler: open on its picture f7246 (the cartridge's f7248: 568 px). And a chest
+(leg 93, `Got 1 Dark Mail!`): the lid a picture early, f26048 (146 px). field.c: the handlers set `$015F` bit 4 / bit 1
+(and `$0160` / `$0161`), fieldIrqMapJobs runs from the IRQ model's even arm. The `$09CA..` / `$09B2..` address words
+are not kept (the port names the cell).
+
+Checks: field-picture-door-opens-on-the-irqs-frame-vs-cartridge,
+field-picture-chest-lid-opens-on-the-irqs-frame-vs-cartridge.

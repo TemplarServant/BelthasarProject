@@ -3576,3 +3576,22 @@ onto the live one twice -- the field's staging (C0/0409) the frame before the mo
 Playthrough leg 51: `$229E`, `$2010`, `$235A`, `$237A` over f570 + 60 (15 steps) and the pictures f586 and f625
 (`lag=-1`; 304 and 300 px before). Two mutations (no staging copy; the boot's palettes at the entry).
 disasm/notes/battle_boot.md, "The palette pages at the entry".
+
+`field-picture-door-opens-on-the-irqs-frame-vs-cartridge` and
+`field-picture-chest-lid-opens-on-the-irqs-frame-vs-cartridge`: a door's block and a chest's lid are written by the
+field's IRQ (C0/ED24, C0/EFD1) on a frame whose `$0153` bit 0 is clear -- the handler's or the next. Playthrough leg
+26, f7248 (the door still shut; 568 px before) and leg 93, f26048 (the lid; 146 px before). One mutation, shared (the
+jobs on either parity). disasm/notes/field_doors_occluders_decisionbox.md sec. 4.
+
+`field-picture-lead-keeps-his-templates-priority-vs-cartridge`: the lead's pieces keep the OBJ priority his template
+took, as every other object's do. Playthrough leg 26, f7272: walking into a door, in front of its frame's priority
+tiles (23 px before).
+
+`field-picture-object-with-a-zeroed-palette-row-is-black-vs-cartridge`: a palette row of zeros is drawn as it is.
+Playthrough leg 127, f413: the Golem Boss before its fade-in's first step (1676 px in full colour before). One
+mutation each.
+
+`field-picture-park-shows-the-published-scroll-vs-cartridge`: the screen's BG2 / BG3 scroll is what FD/C2C1 last built
+into the HDMA tables (`$7F:1510..$151F`), not the live counters `$1D8B..`: through a song upload's park -- the head
+has stepped a layer, the build has not come -- the layers stand a step back. Playthrough leg 127, f730 (`lag=-2`): the
+wing's clouds (4013 px a line on before). One mutation. disasm/notes/song_load_freeze.md sec. 10.

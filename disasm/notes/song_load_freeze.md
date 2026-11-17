@@ -349,3 +349,46 @@ So the whole head holds: ct_vm.c takes `parked` (a tick lost to the call, or the
 and every head leg tests it. Tool tools/song_park_cmp.py (60 frames, seven cells, 0 differing; 50 before), check
 song-park-holds-the-loops-head-vs-cartridge. Not measured: a text box open across the call (the box machine is gated
 on the same flag, by the listing).
+
+## 10. The park's picture is the last table build's (2026-11-16)
+
+Section 9: the JSL parks inside the runner, after the iteration's head. The head (C0/881E) has stepped the layers'
+counters; FD/C2C1 -- after the runner, C0/00C7 -- has not built a table set from them. The screen's BG2 / BG3 scroll is
+HDMA channels 2 and 3 (field_hdma_tables.md): one-entry tables pointing at four words a set, BG2 `$7F:1510` (set A) /
+`$7F:1514` (set B), BG3 `$7F:1518` / `$7F:151C`, which the builder's tail copies from `$1D8B..$1D92`; the NMI programs
+the set `$0153` names. So for the whole park the picture keeps the counters of the iteration BEFORE.
+
+MEASURED on the rule's cartridge, playthrough leg 127 (the Blackbird's wing, BG2's clouds one line a frame; legs 126 +
+127 played through, both sides' cells every frame):
+
+    f712  $1D8D = F989, $7F:1510 = 0000 F989 (set A built, $0153 = 00)
+    f713  $1D8D = F988, $7F:1514 = 0000 F988 (set B built, $0153 = 01)
+    f714  $1D8D = F987 -- op `EA 29` ($29AE = 29, C0:3C39), the loop parked; no build, $0153 = 01
+    ..    the tables and $0153 unchanged to f754 (the port's WRAM the same, to its f753)
+    pictures f718-f755: the clouds at F988
+
+The port's render read `$1D8D`: the clouds a line on for the park (4013 / 4207 px on every picture, the second number
+with the tile animation's frame). ct_vm.c ctPubCounter: CtSceneLayerOffsetsOf takes the displayed set's words. Check
+field-picture-park-shows-the-published-scroll-vs-cartridge. BG1 was already drawn at its shown word (field.c, `camx
+-= sprDX`), so a shown layer is taken against BG1's SHOWN word: ctPubCounter returns the shown word plus BG1's
+live-minus-shown difference. MEASURED, the chest walk of loc 031 (field-chest-box-closed-by-camera, the rule's cartridge):
+`10 45` parks the loop f203-f244 with the camera on its way -- `$1D87` / `$1D8B` = 7200 live, `$7F:150C` / `$1514` = 7100
+shown; BG2 against the live BG1 sat a pixel off on the 42 pictures (8388 px each), against the shown one 0 px.
+
+Open beside it: this park is 41 frames on the cartridge (f714-f754) and 40 in the port -- `$0153` on the other phase
+from f753, the fight's call a frame late (f894 / f895) and the fight after it another fight. Leg 11's `EA 1F` is 41 on
+both. Not traced.
+
+MEASURED 2026-11-16 (the oracle's `--hookpc C0/3C43` / `3C47`, the JSL and its return; the port's `CT_SNDTRACE`, from the
+same cut states). Under the rule both sides START the JSL at line 228 (the port's ldStartRule: line 225 + the pad
+latch's wait; the trace's `from line 12` is the legacy argument it overrides). Boundaries crossed and the return line:
+
+    leg 127 `EA 29`   cartridge 40, line 238      port 39, line 140 (HDMA priced as the field's mean)
+    leg 11  `EA 1F`   cartridge 41, line 168      port 40, line 179
+
+So the port's clock runs short on both (about 100 and 250 lines). Leg 11's park still comes out 41 frames because the
+VM's consumer adds the pre-rule tail overrun (`return line + 61 >= 225` -> one more frame), which the rule's infinitely
+fast CPU does not have; leg 127's return line is too early for it. Tried and NOT kept: pricing the room's own HDMA
+program for these posts (CtAudioSetRuleHdma with the field's tables, as the battle exit chain does) -- leg 127 then
+returns exactly as the cartridge (40, line 238) but leg 11 falls to 40, line 157. The two errors (the clock's length
+and the overrun rule) are to be fixed together; until then the park's length is this class's open item.

@@ -44148,7 +44148,7 @@
       "pin": [
         "^racestep: "
       ],
-      "timeout_s": 420,
+      "timeout_s": 900,
       "mutations": [
         {
           "file": "src/seq_race.c",
@@ -44170,7 +44170,7 @@
         }
       ],
       "note_pass": "the race's per-frame task $7E:485D (src/seq_race.c) is the cartridge's: 253 calls along four drives and 22 poked frames (the finishes and the eight bumps), every WRAM byte and APU port write equal",
-      "notes": "Roadmap G1a item 1, the race's native port, stage 1 (user decision 2026-10-14: native, in stages). tools/race_step_cmp.py walks the user's Lab 32 capture (saves/race_re/race_user.state) and micro-executes the task on both sides from the same frame (ct.exe --callrom 7E485D --writes, CT_CALLROM_ALLWRITES=1, against ct.exe --racestep). disasm/notes/sequence_table.md sec. 12."
+      "notes": "Roadmap G1a item 1, the race's native port, stage 1 (user decision 2026-10-14: native, in stages). tools/race_step_cmp.py walks the user's Lab 32 capture (saves/race_re/race_user.state) and micro-executes the task on both sides from the same frame (ct.exe --callrom 7E485D --writes, CT_CALLROM_ALLWRITES=1, against ct.exe --racestep). disasm/notes/sequence_table.md sec. 12. | 2026-11-16: timeout 420 -> 900 s -- 88 s alone, past 420 s every time a 12-job suite ran beside it (three suites in a row)."
     },
     {
       "name": "race-task-4339-vs-oracle",
@@ -44197,7 +44197,7 @@
       "pin": [
         "^racestep"
       ],
-      "timeout_s": 420,
+      "timeout_s": 900,
       "mutations": [
         {
           "file": "src/seq_race.c",
@@ -44213,7 +44213,7 @@
         }
       ],
       "note_pass": "the race's camera task $7E:4339 (src/seq_race.c) is the cartridge's: 261 calls along four drives and 61 poked frames (the story's L/R turn, the angle on every quarter boundary)",
-      "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). The masks $00B6/$00B8 it leaves are what the race task $485D steers by."
+      "notes": "The race's native port, stage 1 (sequence_table.md sec. 12). The masks $00B6/$00B8 it leaves are what the race task $485D steers by. | 2026-11-16: timeout 420 -> 900 s -- 88 s alone, past 420 s every time a 12-job suite ran beside it (three suites in a row)."
     },
     {
       "name": "race-scripts-vs-oracle",
@@ -47340,15 +47340,14 @@
       "expect": [
         "chest-close: cartridge $0129 00@f0 02@f11 03@f12 04@f13 05@f14 06@f25 07@f51 0D@f280 00@f291",
         "chest-close: port      $0129 01@f11 02@f12 03@f13 04@f14 05@f15 06@f26 07@f52 0D@f281 00@f292",
-        "chest-close: f12 57323/57344 identical",
-        "chest-close: 319/320 frames identical"
+        "chest-close: 320/320 frames identical"
       ],
       "pin": [
         "^chest-close: "
       ],
       "timeout_s": 120,
       "note_pass": "a chest's box closes when the chest leaves the camera (C0/274D's bit-5 arm C0/2758): $0129 0D and 00 on the cartridge's frames (+1, the key), the picture's residuals pinned",
-      "notes": "C0/274D's bit-5 arm, C0/2758-277D (disasm/notes/field_caption_plane.md sec. 7): with none of $0154 bits 2/3/4 and bit 5 set (a chest's box, C0/1F1C `LDA #20 / TSB $54`, the only setter in bank C0), the main loop compares the chest's tile $015D/$015E (C0/1E52 `LDX $DB / STX $5D`, the only writer; --writer C0:1E54) with the camera's columns $1D0A/2..$1D0C/2 and rows $1D0E/2..$1D10/2 every frame (M8: `LDA / LSR / CMP $5D / BCS|BCC 2779`) and, outside, `2779 LDA #0D / STA $29` -- the box machine's close ramp C0/2032 from the next frame. The chest box does not hold the lead: he walks with it up. Fixture saves/field_re/s49_chest_walk.state (the rule's cartridge: --teleport 49 12 38 0 from s19_power_tab.state, loc 031 below the chest (12,37); the tool remakes it byte-identical when missing). Drive: A f10, Down f34, Right f134, Down f534. CARTRIDGE: $015D = 0C25 at f11, $0129 = 07 from f51; f280 `$1D0E` = 4A (the camera's top row = the chest's row 25) and $0129 = 0D (C0:277D) the same frame, rewritten every frame; $0127 24..00 f281-290; $0129 = 00 (C0:204F) / $0154 = 00 (C0:2055) f291. The port kept $015D in field.c's collision RAM (g_collRam), not the scene's WRAM, and had no arm: its box stood in state 7 forever. Now $015D/$015E live in the scene page (C0/16DC's bump reads them there too) and move.c CtVmCaption274D runs the arm after the box machine and the camera. PORT: 0D at f281, 00 at f292 = the cartridge's + 1, the same +1 every earlier edge shows (02 05 06). PINNED RESIDUALS, not this arm: the chest box's open ramp (f12-24) and typewriter (07 at port f55 vs cartridge f51+1: 3 frames late; the cartridge draws this box with C2/0003, the port with the field's textbox); the close ramp's picture f281-288 (the cartridge squeezes the text with the window, the port clips it -- the same residual the power-tab check pins on an A-press close, f166-169); f203-244 the camera X 1 px apart while the lead stands at a wall (cartridge $1D93 = 02 f203-245); from f246 Marle's follower sprite (~286 px). Re-pin only when one of those is fixed (verified against the cartridge's frames). | 2026-10-10 re-pinned: 179 -> 180/320 frames identical (the box's text on the NMI's frame, field-textbox-under-the-rule-vs-logical-oracle). | RE-PINNED 2026-10-11 (180 -> 188 of 320 frames identical; f17-f24 now equal and f281-f288 256 px closer, exactly one row each; no frame worse): the field box is drawn as the PPU draws it (field.c drawCtWindowPpu): BG1's window pixels in CGRAM's colours with HDMA channel 6's per-line CGADSUB/COLDATA (FD/D52D's records, now ported at the location entry), so the band's last line, where channel 6 is already back on the map's record (no BG1 math) while channel 4 still shows the window, shows the window's raw colour instead of the bitmap's baked gradient row. 2026-10-18 (ROADMAP F14, closed): f203-244 are exact now -- a sound upload (`JSL C7/0004`, the CPU in C7/09E5) holds the main loop from inside f203's event pass to f245, after C0/881E stepped the camera and before FD/C2C1 and C0/A810: the picture keeps the HDMA set built at f202 (HOFS 113; field.c draws the map at the shown word) and the lead at his words (1390; the host's copy had taken the step). 188 -> 230 frames identical. ==== MUTATION [4] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it. RE-PINNED 2026-11-15: the treasure string's `06` token no longer types its indent (field.c fieldTreasureMessage, TB_IND) -- the box reaches 07 on the cartridge's frame (07@f52 for 07@f55) and the typing frames f39-f52 are the cartridge's: 319/320 (was 305/320); f12 is the opening's own residual.",
+      "notes": "C0/274D's bit-5 arm, C0/2758-277D (disasm/notes/field_caption_plane.md sec. 7): with none of $0154 bits 2/3/4 and bit 5 set (a chest's box, C0/1F1C `LDA #20 / TSB $54`, the only setter in bank C0), the main loop compares the chest's tile $015D/$015E (C0/1E52 `LDX $DB / STX $5D`, the only writer; --writer C0:1E54) with the camera's columns $1D0A/2..$1D0C/2 and rows $1D0E/2..$1D10/2 every frame (M8: `LDA / LSR / CMP $5D / BCS|BCC 2779`) and, outside, `2779 LDA #0D / STA $29` -- the box machine's close ramp C0/2032 from the next frame. The chest box does not hold the lead: he walks with it up. Fixture saves/field_re/s49_chest_walk.state (the rule's cartridge: --teleport 49 12 38 0 from s19_power_tab.state, loc 031 below the chest (12,37); the tool remakes it byte-identical when missing). Drive: A f10, Down f34, Right f134, Down f534. CARTRIDGE: $015D = 0C25 at f11, $0129 = 07 from f51; f280 `$1D0E` = 4A (the camera's top row = the chest's row 25) and $0129 = 0D (C0:277D) the same frame, rewritten every frame; $0127 24..00 f281-290; $0129 = 00 (C0:204F) / $0154 = 00 (C0:2055) f291. The port kept $015D in field.c's collision RAM (g_collRam), not the scene's WRAM, and had no arm: its box stood in state 7 forever. Now $015D/$015E live in the scene page (C0/16DC's bump reads them there too) and move.c CtVmCaption274D runs the arm after the box machine and the camera. PORT: 0D at f281, 00 at f292 = the cartridge's + 1, the same +1 every earlier edge shows (02 05 06). PINNED RESIDUALS, not this arm: the chest box's open ramp (f12-24) and typewriter (07 at port f55 vs cartridge f51+1: 3 frames late; the cartridge draws this box with C2/0003, the port with the field's textbox); the close ramp's picture f281-288 (the cartridge squeezes the text with the window, the port clips it -- the same residual the power-tab check pins on an A-press close, f166-169); f203-244 the camera X 1 px apart while the lead stands at a wall (cartridge $1D93 = 02 f203-245); from f246 Marle's follower sprite (~286 px). Re-pin only when one of those is fixed (verified against the cartridge's frames). | 2026-10-10 re-pinned: 179 -> 180/320 frames identical (the box's text on the NMI's frame, field-textbox-under-the-rule-vs-logical-oracle). | RE-PINNED 2026-10-11 (180 -> 188 of 320 frames identical; f17-f24 now equal and f281-f288 256 px closer, exactly one row each; no frame worse): the field box is drawn as the PPU draws it (field.c drawCtWindowPpu): BG1's window pixels in CGRAM's colours with HDMA channel 6's per-line CGADSUB/COLDATA (FD/D52D's records, now ported at the location entry), so the band's last line, where channel 6 is already back on the map's record (no BG1 math) while channel 4 still shows the window, shows the window's raw colour instead of the bitmap's baked gradient row. 2026-10-18 (ROADMAP F14, closed): f203-244 are exact now -- a sound upload (`JSL C7/0004`, the CPU in C7/09E5) holds the main loop from inside f203's event pass to f245, after C0/881E stepped the camera and before FD/C2C1 and C0/A810: the picture keeps the HDMA set built at f202 (HOFS 113; field.c draws the map at the shown word) and the lead at his words (1390; the host's copy had taken the step). 188 -> 230 frames identical. ==== MUTATION [4] RE-TARGETED 2026-10-24 (tools/mutation_retarget.py): its find was gone after a refactor; the same edit on the code that replaced it. RE-PINNED 2026-11-15: the treasure string's `06` token no longer types its indent (field.c fieldTreasureMessage, TB_IND) -- the box reaches 07 on the cartridge's frame (07@f52 for 07@f55) and the typing frames f39-f52 are the cartridge's: 319/320 (was 305/320); f12 is the opening's own residual. | RE-PINNED 2026-11-16 (319 -> 320 of 320 frames identical): f12, the lid's own frame -- its four words are the IRQ's to write, on a frame whose `$0153` bit 0 is clear (C0/EFD1; field-picture-chest-lid-opens-on-the-irqs-frame-vs-cartridge), not the handler's.",
       "mutations": [
         {
           "file": "src/move.c",
@@ -47379,6 +47378,12 @@
           "find": "        if (f.vm && pObj >= 0 && CtSceneMainLoopParked(f.vm) && CtSceneActorCount(f.vm) > 1) {\n          const uint8_t* lw = CtSceneMem7E(f.vm);\n          dpx = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;",
           "replace": "        if (0) {   /* MUT */\n          const uint8_t* lw = CtSceneMem7E(f.vm);\n          dpx = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;",
           "why": "the parked frames draw the lead at its words: C0/A810's integrate has not run"
+        },
+        {
+          "file": "src/ct_vm.c",
+          "find": "  return shown + b1Live - b1Shown;                             // (THE PUBLISHED COUNTERS)",
+          "replace": "  (void)b1Live; (void)b1Shown; return shown;   /* MUT: a shown layer against the live BG1 */",
+          "why": "the host draws BG1 at its shown word; a shown BG2 is relative to it (f203-f244, a song park with the camera moving)"
         }
       ]
     },
@@ -54410,6 +54415,176 @@
           "find": "  if (h->frames == battleBootResumeFrame(h)) battleBootPalettes(h);",
           "replace": "  if (h->frames == 1) battleBootPalettes(h);   /* MUT: the boot's palettes at the entry */",
           "why": "C1/0023 JSL CC/E2E4 runs after CF/FB8E's JSL CD/0000 returns: after the song's upload"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-door-opens-on-the-irqs-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "door-opens-on-the-irqs-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: door-opens-on-the-irqs-frame leg 26 f7200 +48 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: door-opens-on-the-irqs-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a door stepped into opens on the frame the cartridge's IRQ writes its block",
+      "notes": "THE IRQ WRITES A DOOR'S BLOCK AND A CHEST'S LID, ON ITS OWN PARITY. The main loop's handlers only ask: each door handler bumps the metatiles, leaves the kind in `$0160` and ends `LDA #10 / TSB $5F` (C0/0E58, 100D, 11C2, 144D, 16D8); the chest's ends `176C LDA #02 / TSB $5F`. The field's IRQ (C0/ECCC, line 211) does `ECFC LDA $0153 / AND #01 / BNE ->ED08` -- an odd frame runs the tile animation (FD/FFFD) -- else `JSR C0/ED15`: the decision hand (F05E), then `ED24 LDA $5F / BIT #10` the door's words to the addresses in `$09CA..` and `EFCC LDA #10 / TRB $5F / RTS`, else `EFD1 BIT #02` the lid's four words (EFD6) and `TRB`. So the block is on the screen from the first IRQ at or after the request that finds `$0153` bit 0 clear. The port released the block (and wrote the lid's words) in the handler. field.c fieldIrqMapJobs, from the IRQ's even arm. MEASURED on the rule's cartridge, playthrough leg 26 (the door before loc 0C6, column 07 row 26; both sides from the state cut on f7200): the latch `$0117` = 10 on f7245 (C0:9D52), the metatiles `$7E:5607..` FA FC -> FB FD (and the two rows above) on f7246 (C0:11D8 / 11F5 / 1212) with `$0153` = 01 after that frame's flip, VRAM `$608F-$6131` (22 words) on f7247 (`$0153` = 00), the open door on picture f7249. Graded on f7248, still shut: 0 px (568 with the block released in the handler). Found from a triage subagent's note (the latch read 10 on the cartridge's frames). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return fieldIrqMapJobs(sd, w); }   // C0/ED03 JSR C0/ED15",
+          "replace": "  if (fieldIrqMapJobs(sd, w)) return 1; if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return 0; }   /* MUT: the map jobs on either parity */",
+          "why": "C0/ECFC LDA $0153 / AND #01 / BNE ->ED08: C0/ED15 (the hand, the door's block, the lid) only with bit 0 clear"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-chest-lid-opens-on-the-irqs-frame-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "chest-lid-opens-on-the-irqs-frame"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: chest-lid-opens-on-the-irqs-frame leg 93 +26048 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: chest-lid-opens-on-the-irqs-frame "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a chest's lid opens on the frame the cartridge's IRQ writes its four words",
+      "notes": "THE IRQ WRITES A DOOR'S BLOCK AND A CHEST'S LID, ON ITS OWN PARITY. The main loop's handlers only ask: each door handler bumps the metatiles, leaves the kind in `$0160` and ends `LDA #10 / TSB $5F` (C0/0E58, 100D, 11C2, 144D, 16D8); the chest's ends `176C LDA #02 / TSB $5F`. The field's IRQ (C0/ECCC, line 211) does `ECFC LDA $0153 / AND #01 / BNE ->ED08` -- an odd frame runs the tile animation (FD/FFFD) -- else `JSR C0/ED15`: the decision hand (F05E), then `ED24 LDA $5F / BIT #10` the door's words to the addresses in `$09CA..` and `EFCC LDA #10 / TRB $5F / RTS`, else `EFD1 BIT #02` the lid's four words (EFD6) and `TRB`. So the block is on the screen from the first IRQ at or after the request that finds `$0153` bit 0 clear. The port released the block (and wrote the lid's words) in the handler. field.c fieldIrqMapJobs, from the IRQ's even arm. MEASURED, playthrough leg 93 (the chest of `Got 1 Dark Mail!`): the picture f26048, the one frame of f26030-f26090 that differed (146 px, box x 113-126 y 176-187: the lid a frame early): 0 px. Played from the leg's start (a state cut on f26000 leaves 69 px of its own elsewhere). RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return fieldIrqMapJobs(sd, w); }   // C0/ED03 JSR C0/ED15",
+          "replace": "  if (fieldIrqMapJobs(sd, w)) return 1; if (!(w[0x0153] & 0x01)) { fieldIrqHand(w); return 0; }   /* MUT: the map jobs on either parity */",
+          "why": "C0/ECFC LDA $0153 / AND #01 / BNE ->ED08: C0/ED15 (the hand, the door's block, the lid) only with bit 0 clear"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-lead-keeps-his-templates-priority-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "lead-keeps-his-templates-priority"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: lead-keeps-his-templates-priority leg 26 f7200 +72 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: lead-keeps-his-templates-priority "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the lead's pieces keep the OBJ priority his template took, like every other object's",
+      "notes": "THE LEAD'S PIECES KEEP THEIR TEMPLATE'S PRIORITY TOO. A piece's attribute is written by the template alone (C0/CD47..: `$0F81,Y | $0D01,Y` and one of `$0C00,Y` / `$0C01,Y`); the emitters store positions. The actor loop already drew every object with the pair its last template took (move.c CtAnimShownPrio); the lead's own draw read `$0C00,X` live. MEASURED on the rule's cartridge, playthrough leg 26 (walking up into the door before loc 0C6; from the state cut on f7200): the step commit's `$0C02` / `$0C03` = 20 20 on f7270 (C0/9D62) while his four pieces, OAM 36-39, still carry attribute 3A -- priority 3, in front of the door frame's priority tiles (BG1 words 71xx / 31xx) -- on pictures f7272-f7275; the port put his outline behind them (23 px each, columns 119-121 and 134-135). Graded on f7272: 0 px. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "              if (CtSceneFrameLegsOn() && CtAnimShownPrio(pObj, &lp0, &lp1)) { tp = (lp0 >> 4) & 3; bp = (lp1 >> 4) & 3; } } }   // (THE LEAD'S TEMPLATE TOO)",
+          "replace": "              (void)lp0; (void)lp1; } }   /* MUT: the lead's pair read live */",
+          "why": "a piece's attribute is written by the template alone (C0/CD47..): $0C00,X reaches the screen at the next template"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-object-with-a-zeroed-palette-row-is-black-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "object-with-a-zeroed-palette-row-is-black"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: object-with-a-zeroed-palette-row-is-black leg 127 f380 +33 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: object-with-a-zeroed-palette-row-is-black "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an object whose palette row a colour record zeroed is drawn black, as on the cartridge",
+      "notes": "A ROW OF ZEROS IS THE ROW. An OBJ is drawn with its palette row of CGRAM, whatever is in it. The drawer kept the sheet's baked colours when colours 1-15 of the row were all zero (`no image to upload from`) -- a stand-in for a row the port had not filled. A colour record's fade-in STARTS from such a row. MEASURED on the rule's cartridge, playthrough leg 127 (the Blackbird's wing, loc 16B, the Golem Boss, object $2A; `--monitor 7E2340:8,7E2350:8 --writer` from the state cut on f380): the allocator uploads its row `$2340-$235F` on f406 (C0:730D), the record zeroes all of it on f410 (FD:E699) and takes its first step on f413 (`$2344` = 2104), then one every two frames; the pictures show the black circle it stands on and nothing of it until then. The port drew the boss in full colour on three pictures (1676 px each). Graded on f413: 0 px. Found by a triage subagent, confirmed here. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  int fromShadow = shadowRow != NULL;                // (A ZEROED ROW IS BLACK)",
+          "replace": "  int fromShadow = 0; if (shadowRow) for (int k = 2; k < 32; k++) if (shadowRow[k]) { fromShadow = 1; break; }   /* MUT: a zeroed row keeps the sheet's colours */",
+          "why": "an OBJ is drawn with CGRAM: a row the colour record zeroed (FD:E699) is fifteen black colours"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-park-shows-the-published-scroll-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "park-shows-the-published-scroll"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: park-shows-the-published-scroll leg 127 f700 +30 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: park-shows-the-published-scroll "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "through a song upload's park the layers stand where the last table build put them, as on the cartridge",
+      "notes": "THE SCREEN'S BG2 / BG3 SCROLL IS THE HDMA TABLES', NOT THE LIVE COUNTERS. Channels 2 and 3 point at four words a set -- BG2 `$7F:1510` (set A) / `$7F:1514` (set B), BG3 `$7F:1518` / `$7F:151C` -- which FD/C2C1's tail fills from `$1D8B..$1D92` when it builds the set, after the runner (C0/00C7); the NMI's FD/C1EE programs the set `$0153` names. On an ordinary frame they are the live counters. They part when an iteration's head has stepped a layer (C0/881E) and its build has not come: a song's upload parks the loop inside the runner (song_load_freeze.md sec. 9). MEASURED on the rule's cartridge, playthrough leg 127 (the Blackbird's wing, the clouds on BG2): `$1D8D` F988 on f713, F987 on f714 -- the frame op `EA 29` parks the loop, to f754 -- while `$7F:1514`, the set `$0153` = 01 shows, stays F988 (the port's WRAM has the same bytes), and the cartridge's pictures hold that step for the whole park. The port's render read `$1D8D` live: the clouds a line on, 4013-4207 px on every picture of f718-f755. ct_vm.c ctPubCounter (under CtSceneLayerOffsetsOf): the displayed set's words; not for a channel the window wave owns (`$1DFD` / `$1DF9`), a fight's copy of the page, or before a builder has run. The state is cut on f700; graded on f730 (`lag=-2`): 0 px. NOT DONE: BG1 -- the camera's own words (`$7F:1508` / `$150C`) -- is still read live (no case measured). Found by a triage subagent (the held picture), derived and confirmed here. RE-PIN only with the cartridge's picture in hand. A shown layer is measured against BG1's SHOWN word (the host draws BG1 at `$7F:1508` / `150A` + set): its counter is the shown word plus BG1's live-minus-shown difference -- measured against the live BG1 the chest walk of loc 031 (field-chest-box-closed-by-camera) put BG2 a pixel off through its park.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  return shown + b1Live - b1Shown;                             // (THE PUBLISHED COUNTERS)",
+          "replace": "  (void)shown; (void)b1Shown; (void)b1Live; return (int16_t)camGet16(s, live);   /* MUT: the live counters */",
+          "why": "the screen shows the set FD/C2C1 last built; the counters the head stepped are not on it yet"
         }
       ]
     },
