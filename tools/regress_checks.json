@@ -54589,6 +54589,40 @@
       ]
     },
     {
+      "name": "field-picture-target-hand-under-the-mist-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "target-hand-under-the-mist"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: target-hand-under-the-mist leg 65 f36900 +730 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: target-hand-under-the-mist "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the battle target hand is mixed with the room's colour-math layer like every battle sprite, as on the cartridge",
+      "notes": "THE HAND IS AN OBJ LIKE THE OTHERS. A fight's sprites stand under the field's screens (TM / TS / CGADSUB) outside the HUD's lines, and each battle sprite's pixel is the SUB pixel of a main-screen BG pixel that beats its OBJ priority and has the math (field.c plot(), g_bObjSubPrio -- Magus's castle, leg 95). The target hand (C1/19D8 / C1/1AD2 `LDA #32 / STA $0703,X`: palette 1, priority 3) was drawn with no priority, so opaque. MEASURED on the rule's cartridge, playthrough leg 65 (Denadoro, loc 093; TM 11101, TS 11001, half-add; both sides from the state cut on f36900): at (192,88) on f37621-f37638 the isolated layers are OBJ FFFFFF, BG3 313939, BG2 636300 and the picture 949C9C -- BG3 plus the hand, halved; the port showed FFFFFF (131 px a picture; fight B, from f30300, the same on f32988-f33005, 138 px). Graded on f37630 (`lag=-1`): 0 px. Found by a triage subagent (the layer isolation), confirmed here. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  g_bObjSubPrio = (0x32 >> 4) & 3;                          // (THE HAND UNDER THE MIST)",
+          "replace": "  /* MUT: the hand drawn opaque, no priority */",
+          "why": "attr 32 is OBJ priority 3: under BG3's priority tiles with the math the hand is the sub pixel"
+        }
+      ]
+    },
+    {
       "name": "field-picture-seeded-object-keeps-its-sprite-vs-cartridge",
       "argv": [
         "python",

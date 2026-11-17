@@ -9204,6 +9204,13 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
                h->handOamShown[d].x, h->handOamShown[d].y, mem[0x960D], mem[0xA62D], mem[0xA62E], mem[0xA62F],
                h->handPageShown == 0xFF ? -1 : h->handPageShown);
   g_bObjPalCur = 1;                                         // attr 32: OBJ palette 1 (the sprites' colour math)
+  // ...and OBJ priority 3, the attribute's bits 4-5, for the screens' math like every battle sprite (the bracket above):
+  // under a room whose BG3 has the colour math the hand is the SUB pixel of BG3's priority tiles. MEASURED on the rule's
+  // cartridge, playthrough leg 65 (Denadoro, TM 11101 / TS 11001, half-add; fights from the states cut on f30300 and
+  // f36900): at (192,88) on f37621-f37638 the layers are OBJ FFFFFF, BG3 313939 and the picture 949C9C -- BG3 + the hand,
+  // halved. The port drew the hand opaque (FFFFFF): 131-138 px on every picture of a target select (f32988-f33005,
+  // f37621-f37638). Found by a triage subagent, confirmed here.
+  g_bObjSubPrio = (0x32 >> 4) & 3;                          // (THE HAND UNDER THE MIST)
   for (int d = 3; d >= 0; d--) {                            // entry 0 over 1 over 2 over 3 (the lower OAM index in front)
     if (!((h->handVisShown >> d) & 1)) continue;
     int ax = h->handOamShown[d].x, ay = h->handOamShown[d].y;
@@ -9227,7 +9234,7 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
         }
       }
   }
-  g_bObjPalCur = -1;
+  g_bObjPalCur = -1; g_bObjSubPrio = -1;
 }
 
 // The battle tail: the C0/18B9 ack (TRB $17 bit 0 + TSB $18 bit 0) and the C0/0283 outcome dispatch on $7F01EC. It runs

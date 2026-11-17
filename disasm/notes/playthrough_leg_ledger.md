@@ -505,3 +505,19 @@ carried on by mechanisms that quantise time:
     the port). From states cut after each load the samples are 0 px. Not derived: why 0F4's load alone is short.
     Seen and not read: one picture at 0F4's exit (f382, 19,712 px: the old room very dim on the lower lines on the
     cartridge, black in the port).
+- **Legs 35, 65 and 92 (2026-11-16/17, the third triage round; three subagents, read-only).** Classified by them from
+  cut-state or shifted-pad runs (not re-measured here) unless marked.
+  - 65: FIXED (CONFIRMED) -- the battle target hand drawn opaque where the cartridge half-adds it under the mist (131-138
+    px, f32988-f33005 and f37621-f37638; check field-picture-target-hand-under-the-mist). OPEN, real: the description
+    box's typewriter a character off for 10-20 frames at a time (f43170: the port steps on the frame `$A013` clears, the
+    cartridge does not -- C1/007E's wait CD/04A6 types nothing; f43191 / f37973: the cartridge steps twice, a direct
+    CD/3E75 on top of CD/04AA's step; battle_message_window.md sec. 6). OPEN, real: f37958, one picture -- after an enemy's
+    action the cartridge restores BG3's tilemap / scroll on one frame and TM / TS / the colour math on the next; the port
+    does both at once (30039 px). f37800 and f40500: 0 px from cut states.
+  - 35: the Dragon Tank fight's boot is a frame short in the port (`$1E01` = 08 on f1724 for f1725, the band's seed f1725
+    for f1726: 14 frames from `$7C` = 0 against 15); with one idle frame taken out of the port's pad at f1780 every
+    sample f1800-f21600 is 0 px except the screen shakes, whose `$C0:FE00` reads run off `$7C` a frame apart. OPEN,
+    picture: the tank's hull colours during the boot (631 px, f1709-f1727), one HUD-window colour step on f1740, a spark
+    tile on the wreck (f21789-f21792 / f21809-f21812, 24 px), the wreck's debris four frames longer (f22532-f22535).
+  - 92: timing -- loc 0A6's load is 45 frames for the cartridge's 44 (ramp f1296 / f1295); the play clock, `$051D` and
+    `$01F8` stay a step behind and the torches flame a step apart. 0 px from states cut on f4000 and f26320.

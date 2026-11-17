@@ -3595,3 +3595,7 @@ mutation each.
 into the HDMA tables (`$7F:1510..$151F`), not the live counters `$1D8B..`: through a song upload's park -- the head
 has stepped a layer, the build has not come -- the layers stand a step back. Playthrough leg 127, f730 (`lag=-2`): the
 wing's clouds (4013 px a line on before). One mutation. disasm/notes/song_load_freeze.md sec. 10.
+
+`field-picture-target-hand-under-the-mist-vs-cartridge`: the battle target hand (attr 32, OBJ priority 3) takes part in
+the screens' colour math like every battle sprite: under Denadoro's BG3 mist (half-add) it is BG3 plus the hand, halved.
+Playthrough leg 65, f37630 from the state cut on f36900 (`lag=-1`; 131 px opaque before). One mutation.

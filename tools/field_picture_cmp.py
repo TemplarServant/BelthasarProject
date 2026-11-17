@@ -299,6 +299,9 @@ PICTURES = {
     # on the screen only from his next template -- his pieces keep priority 3, in front of the door frame's priority
     # tiles, on pictures f7272-f7275 (23 px each with the pair read live).
     'lead-keeps-his-templates-priority': dict(leg='26_yakra', at=7200, frames=72, own=True, lag=-2),
+    # Leg 65, Denadoro (TM 11101 / TS 11001, half-add): the target hand (attr 32, OBJ priority 3) is the sub pixel of BG3's
+    # mist like every battle sprite -- f37630, a target select of the fight from the state cut on f36900 (131 px opaque).
+    'target-hand-under-the-mist': dict(leg='65_denadoro', at=36900, frames=730, own=True, lag=-1),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live
