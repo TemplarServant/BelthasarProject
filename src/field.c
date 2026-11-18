@@ -4632,10 +4632,20 @@ static int fieldOamRenderOn(void) {
   if (on < 0) { const char* e = getenv("CT_OAMRENDER"); on = (e && *e == '0') ? 0 : 1; }
   return on;
 }
+// A FIGHT'S BOOT SHOWS THE FIELD'S LAST OAM UPLOAD. The boot's NMI uploads no OAM (`$7E` = 0, CD/09F1) until the band's
+// seed (CF:EB60's first store of the battle's mirror), so the PPU keeps the OAM, the OBJ tiles and the OBJ palettes the field's
+// NMI last shipped. The fight's entry keeps them (fieldBootOamSnapshot, at C0/0918's save -- after the queue's flush) and
+// the boot's pictures draw them through this same pass (g_oamOv*): the objects in the poses the field last showed. MEASURED
+// on the rule's cartridge, playthrough leg 35 (the Dragon Tank's fight): f1711-f1727 keep the field's picture of the tank's
+// head (obj 14) and the Grinder wheel (obj 15), the first battle picture is f1728; the port drew the combatants' staged
+// first fight poses through the boot (631 px a picture). A battle-boot draw stamps each entry's OBJ priority for the fight's
+// own foreground pass (g_bObjSubPrio -> plot's g_bObjPrioMask) instead of the field's stencil.
+static uint8_t g_bootOam[0x220]; static uint16_t g_bootVram[0x8000]; static uint8_t g_bootCgram[0x200]; static int g_bootHave;
+static const uint8_t* g_oamOvOam; static const uint16_t* g_oamOvVram; static const uint8_t* g_oamOvCgram; static int g_oamOvBattle;
 static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int viewY, int winOn,
                         const CtStencilSrc* sten, CtMotFrame* mot) {
   const uint8_t* m7 = CtSceneMem7E(vm);
-  const uint8_t* oam = m7 + 0x0700;
+  const uint8_t* oam = g_oamOvOam ? g_oamOvOam : m7 + 0x0700;
   static uint8_t idx[CT_SPR_W * CT_SPR_H];
   int nplot = 0;
   static uint8_t keep[128][16];                            // per entry and sprite row: the slivers drawn (bit per 8 px)
@@ -4663,8 +4673,8 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
   // queue this iteration's drain filled ($0940-$09A0), which the port flushes at its next tick's head -- so the tiles
   // the new entries name are the image plus the queue, a copy, the image itself untouched.
   static uint16_t vr[0x8000];
-  memcpy(vr, g_fieldVram, sizeof vr);
-  for (int q = 0; q < 0x80 && m7[0x09A0 + q]; q += 2)
+  memcpy(vr, g_oamOvVram ? g_oamOvVram : g_fieldVram, sizeof vr);
+  for (int q = 0; !g_oamOvVram && q < 0x80 && m7[0x09A0 + q]; q += 2)
     for (int ab = 0; ab < 2; ab++) {
       int dst = m7[0x0950 + ab * 0x20 + q] | (m7[0x0951 + ab * 0x20 + q] << 8);
       int src = m7[0x0940 + ab * 0x20 + q] | (m7[0x0941 + ab * 0x20 + q] << 8);
@@ -4702,7 +4712,7 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
     }
     if (!any) continue;
     uint8_t pal[16 * 3];
-    const uint8_t* row = g_fieldCgram + 0x100 + ((attr >> 1) & 7) * 32;
+    const uint8_t* row = (g_oamOvCgram ? g_oamOvCgram : g_fieldCgram) + 0x100 + ((attr >> 1) & 7) * 32;
     for (int k = 0; k < 16; k++) {
       uint16_t w = (uint16_t)(row[k * 2] | (row[k * 2 + 1] << 8));
       int r5 = w & 0x1F, g5 = (w >> 5) & 0x1F, b5 = (w >> 10) & 0x1F;
@@ -4710,7 +4720,7 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
       pal[k * 3 + 2] = (uint8_t)((b5 << 3) | (b5 >> 2));
     }
     int obj = -1, winClip = 0;
-    if (CtFieldOamTag(e, &obj, NULL, NULL) && obj >= 0 && obj < CtSceneActorCount(vm)) {
+    if (!g_oamOvBattle && CtFieldOamTag(e, &obj, NULL, NULL) && obj >= 0 && obj < CtSceneActorCount(vm)) {
       int pl, sp, ax, ay, fa; CtSceneActor(vm, obj, &pl, &sp, &ax, &ay, &fa);
       g_motOwn = CtMotSprite(mot, obj, ax, ay);
       winClip = winOn && CtSceneActorColorGated(vm, obj) ? winOn : 0;
@@ -4718,8 +4728,10 @@ static int fieldOamDraw(CtScene* vm, uint8_t* fb, uint8_t* front, int viewX, int
     g_bObjPalCur = (attr >> 1) & 7;                        // its palette (the colour window's math)
     int box[4] = { 0, 0, size - 1, size - 1 }, pr = (attr >> 4) & 3;
     // An entry whose Y is 224 or more shows only its rows that wrap past line 255 onto the top: it stands at Y - 256.
+    if (g_oamOvBattle) g_bObjSubPrio = pr;                // (a fight's boot: its foreground pass reads the priority)
     nplot += spritePixels(fb, idx, box, pal, NULL, pr, pr, viewX + x, viewY + (y >= 224 ? y - 256 : y) + 1, front, winClip,
                           NULL, sten);
+    if (g_oamOvBattle) g_bObjSubPrio = -1;
     g_bObjPalCur = -1;
   }
   return nplot;
@@ -9946,6 +9958,9 @@ static void fieldBattleConsumer(CtScene* vm, int interactive, CtBattleHost* h,
   // the port saved 01 and its return uploaded the pre-fight pose over the fight's last one (Lucca, 11 frames, 575 px).
   if (CtSceneFrameLegsOn()) CtAnimUploadFlush(s, NULL);
   memcpy(s + 0x12000, s + 0x0920, 0x14E0); g_battleObjSaved = 1; g_battleEndFeetOn = 0;
+  // ...and what the field's NMI last shipped to the PPU, which the boot's pictures keep (fieldOamDraw's g_oamOv*)
+  memcpy(g_bootOam, s + 0x0700, sizeof g_bootOam); memcpy(g_bootVram, g_fieldVram, sizeof g_bootVram);
+  memcpy(g_bootCgram, g_fieldCgram, sizeof g_bootCgram); g_bootHave = 1;
   // ---- JSL C1/0000 (C0/18A7): the battle module ----
   // The module starts from its own init on every fight (its work state cleared -- CtBattleBegin's clears stand in for
   // the parts of that init the WRAM staging lacks); the host is the port's half of that per-fight state, so it starts
@@ -20340,6 +20355,11 @@ int main(int argc, char** argv) {
       //  the one of the frame before the picture's; the first is the band's arm frame's.)
       g_bFieldOam = (battlePhase && g_battleObjSaved
                      && (bOam ? g_bOamHost.frames : liveHost.frames) < CtBattleBootArmFrame(&liveHost)) ? bmem : NULL;
+      if (g_bFieldOam && g_bootHave && fieldOamRenderOn() && f.vm && g_fw == CAMW) {   // (fieldOamDraw: the boot's pictures)
+        g_oamOvOam = g_bootOam; g_oamOvVram = g_bootVram; g_oamOvCgram = g_bootCgram; g_oamOvBattle = 1;
+        fieldOamDraw(f.vm, fb, NULL, 0, -1, 0, NULL, bMot ? mot : NULL);
+        g_oamOvOam = NULL; g_oamOvVram = NULL; g_oamOvCgram = NULL; g_oamOvBattle = 0;
+      } else
       battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
       g_bFieldOam = NULL;
       g_bNoPopups = 0;

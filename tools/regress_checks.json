@@ -55065,6 +55065,40 @@
       ]
     },
     {
+      "name": "field-picture-boot-shows-the-fields-last-oam-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "boot-shows-the-fields-last-oam"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: boot-shows-the-fields-last-oam leg 35 +1720 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: boot-shows-the-fields-last-oam "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fight's boot shows the field's last OAM upload until the band's seed: the Dragon Tank keeps its field poses",
+      "notes": "THE BOOT SHOWS THE FIELD'S LAST OAM UPLOAD (2026-11-18, disasm/notes/battle_picture_lags.md). The boot's NMI uploads no OAM ($7E = 0, CD/09F1) until the band's seed (CF:EB60), so the PPU keeps the field's last OAM, OBJ tiles and OBJ palettes. Leg 35: f1711-f1727 keep the tank's head (obj 14) and the Grinder wheel (obj 15) as the field last showed them; the port drew the combatants' first fight poses (631 px a picture). The entry keeps the field's mirror, VRAM and CGRAM at C0/0918's save and the boot draws them through fieldOamDraw. Found by the picture-audit triage workflow (verified). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "      if (g_bFieldOam && g_bootHave && fieldOamRenderOn() && f.vm && g_fw == CAMW) {",
+          "replace": "      if (0 && g_bFieldOam && g_bootHave && fieldOamRenderOn() && f.vm && g_fw == CAMW) {  /* MUT */",
+          "why": "the boot redraws the combatants in their staged poses"
+        }
+      ]
+    },
+    {
       "name": "field-objdata-sparkles-vs-cartridge",
       "argv": [
         "python",

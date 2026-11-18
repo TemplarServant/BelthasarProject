@@ -3623,6 +3623,10 @@ player page with `$97` = its slot. One mutation. disasm/notes/field_dash_run.md.
 from fight 1 waits two frames in C7's poll for the song C0/0330 re-posts, before its segment's wait (the torches' step, obj0's
 ambush and the formation as on the cartridge). One mutation. disasm/notes/field_load_cost.md.
 
+`field-picture-boot-shows-the-fields-last-oam-vs-cartridge`: leg 35 (the Dragon Tank), f1720 from the leg's start: a fight's
+boot keeps the field's last OAM upload (the tank's head and the Grinder in their field poses) until the band's seed. One
+mutation. disasm/notes/battle_picture_lags.md.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

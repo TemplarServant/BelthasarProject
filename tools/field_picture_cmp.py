@@ -329,6 +329,9 @@ PICTURES = {
     # on f3012-f3013 and the tiles step on f3014. Run two frames early, the port had the torches a step off, then obj0's ambush
     # and the formation (f4500: 961 px) and the fight's places (f5100: 532 px).
     'return-waits-out-the-songs-poll': dict(leg='58_heckran_cave', at=0, frames=4500, own=True, lag=-2),
+    # Leg 35, the Dragon Tank's fight: its boot (f1711-f1727) keeps the field's last OAM upload -- the tank's head and the
+    # Grinder wheel in the poses the field last showed -- until the first battle picture f1728 (631 px a picture before).
+    'boot-shows-the-fields-last-oam': dict(leg='35_dragon_tank', at=0, frames=1720, own=True, lag=-2),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

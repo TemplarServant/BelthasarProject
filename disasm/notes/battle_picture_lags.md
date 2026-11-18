@@ -474,3 +474,16 @@ op 29 hides the Golem Boss (`$9FFA` = 01 from f17159) and its attached object 0 
 the smoke cloud (tiles 0C2/0C4/0E2/0E4, then 0C6/0C8/0E6/0E8) through f17173; the port skipped the hidden combatant's whole entry
 (817 / 451 px at f17165 / f17171). field.c battleCombatantsRender keeps the objects' passes for a hidden combatant now. Check
 field-picture-hidden-boss-keeps-its-smoke-vs-cartridge.
+
+## The boot shows the field's last OAM upload, drawn from it (2026-11-18)
+
+The boot's NMI uploads no OAM (`$7E` = 0, CD/09F1) and the compose's first store of the battle's mirror is the band's seed
+(CF:EB60), so through the boot the PPU keeps the OAM, the OBJ tiles and the OBJ palettes the field's NMI last shipped. The port
+drew the boot by redrawing the combatants at their staged places with their staged poses, in the field's order and priority
+(battleFieldOamOrder, battleCmbObjPrio) -- right while the staged pose is the field's, wrong where the fight's first pose is
+not. MEASURED on the rule's cartridge, playthrough leg 35 (the Dragon Tank's fight): f1711-f1727 keep the field's picture of
+the tank's head (obj 14) and the Grinder wheel (obj 15), the first battle picture is f1728; the port showed their first fight
+poses through the boot (631 px a picture, both sprite drawers). With the field drawn from OAM the entry keeps the mirror, the
+VRAM image and CGRAM at C0/0918's save (after the queue's flush) and the boot's pictures draw them through fieldOamDraw, each
+entry's OBJ priority stamped for the fight's own foreground pass. Leg 35 f1720 0 px at every offset; the boots already exact
+(legs 74, 61) stay so. (The widescreen keeps the old path.) Check field-picture-boot-shows-the-fields-last-oam-vs-cartridge.
