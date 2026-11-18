@@ -332,6 +332,35 @@ PICTURES = {
     # Leg 35, the Dragon Tank's fight: its boot (f1711-f1727) keeps the field's last OAM upload -- the tank's head and the
     # Grinder wheel in the poses the field last showed -- until the first battle picture f1728 (631 px a picture before).
     'boot-shows-the-fields-last-oam': dict(leg='35_dragon_tank', at=0, frames=1720, own=True, lag=-2),
+    # Leg 55, the End of Time (loc 1D0): Gaspar's `C8 00` opens the exchange screen and the room comes back through C0/01A5.
+    # Its reload clears the whole $1D page (C0/01CC JSR C0/7F7E), BG3's wave phase $1DFB with it, and C0/0B28 builds the
+    # tables once before the vblank wait; screen $07's close waits one frame more in C2/82B2's C2/83CA (no song to put back);
+    # and the NMI-off stretch is 31 frames, obj0's slot-1 run priced op by op as the VM runs it. Each one off put the void's
+    # wave or the room's clocks off for the rest of the room (1280-11892 px a picture, f3000-f4800).
+    'menu-reload-clears-the-1d-page': dict(leg='55_spekkio', at=0, frames=4201, own=True, lag=-2),
+    # Leg 49, Proto Dome (loc 0E2): Robo's naming screen (`C8 C3`) comes back through C0/0D1C -> C0/01A5, whose obj0 slot-1
+    # run takes ops 18 / 7C / 7D besides 12 / 16. The walk refused op 18 and the load estimate priced the NMI-off stretch
+    # 35 frames for the cartridge's 37 (f11192-f11228 + 1): the room's visit countdowns restarted 2 frames early and Robo's
+    # later walks ended 1 px off (511 px at f12900). The run is now priced op by op as the VM runs it.
+    'naming-reload-prices-the-slot-1-run': dict(leg='49_robo', at=0, frames=12900, own=True, lag=-2),
+    # Leg 131, the Epoch's dock (loc 1D9) after the time trip: Marle's fn0 `8D` seats her at the pilot's place on C0/2848's
+    # first ramp frame; the lead's step starts from his own words $1800/$1880 (the ROM's only copy), so she stays there.
+    'lead-steps-from-its-own-words': dict(leg='131_c_trigger', at=0, frames=3900, own=True, lag=-1),
+    # Leg 96, the hut's exit onto 65,000,000 B.C. (1F3): the world loader's C2/23B4 / 23B7 free the fade objects' mutex
+    # $1BEC / $1BF6, which the seed carried set from the last field menu; the world fades in (it stayed black, 57344 px).
+    'world-load-frees-the-fade-mutex': dict(leg='96_laruba', at=0, frames=300, own=True, lag=-1),
+    # Leg 100, the Volcano absorbing a hit: C1/DDAD-DDB6 negates the slot's -dmg back, so the record and $AE7B take +dmg
+    # and the green popup reads 676 (the port printed FD5C as 64860).
+    'absorb-record-is-positive': dict(leg='100_lair_grind', at=0, frames=15900, own=True, lag=-1),
+    # Leg 111 (loc 189), fight 2: its message strip counter $CE14 starts from the map image C0/A33B decompressed at $7E:B500
+    # on fight 1's return (the tail past $C800 survives C0/09DD / C0/0A14); the name types in on the cartridge's parity.
+    'map-image-tail-seeds-the-strip-counter': dict(leg='111_mt_woe_chests', at=0, frames=12600, own=True, lag=-1),
+    # Leg 93, the Item overlay (a Mid Tonic on Marle at 1/242 HP): C2/AFED's B02B-B032 asks her sprite for the weak pose 12
+    # (the kneeling pair); no frame resets the request. OPEN: 18 px of her bow, drawn dark on the cartridge (colour math).
+    'item-overlay-asks-the-weak-pose': dict(leg='93_ozzie_way', at=0, frames=27900, own=True, lag=-2),
+    # Leg 125 (loc 170, the Blackbird): a fight's entry (C0/18A4 JSR C0/EC60) and its ack frame (C0/00EB's BRL C0/EC60) each
+    # count the idle counter $0158; without them every idle roll after a fight came 2 frames late (Marle's blink, f29400).
+    'idle-counter-counts-the-fights-waits': dict(leg='125_blackbird_wing', at=0, frames=29400, own=True, lag=-2),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

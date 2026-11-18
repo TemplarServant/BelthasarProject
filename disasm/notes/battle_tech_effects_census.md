@@ -194,7 +194,9 @@ DD0E  $0E = target (+0x21 | +0x26); $B1FC bit0 -> skip
 DD18  !($AE4D & 40) && ($0E & 04)  -> dmg = floor(dmg/10)*7        (Protect)           [NOT PORTED]
 DD45  else !($AE4D & 80) && ($0E & 40) -> dmg = floor(dmg/10)*7    (Magic Wall)        [NOT PORTED]
 DD78  dmg = min(dmg, 9999)                                                             [NOT PORTED]
-DD83  $B1FC bit6 (set by EF39 absorb) -> stage as a HEAL of dmg, clear bit6             [NOT PORTED]
+DD83  $B1FC bit6 (set by EF39 absorb) -> stage as a HEAL of dmg, clear bit6             [PORTED: battleDcfdTail]
+        (EBF8 with $B202 = 80 negates $AD89 for the slot; DDAD-DDB6 negates it back, JMP DE6F: the record $AD9C,X
+        and $AE7B take +dmg, kind 01 green -- 2026-11-18, leg 100's Volcano, field-picture-absorb-record-is-positive)
 DDBF  curHP == 0 -> nothing ; dmg >= curHP -> death staging ; else stage ; $AE7B += dmg
 ```
 The `+0x1E &= F9` wake, the rider and the charm bit are already ported for enemies/physicals (status note S8).

@@ -1283,6 +1283,18 @@ f171 (`$2603` 25 -> 75 at once, cmd 19 id 06), C2/B31C at f213 (`$2501` 3 -> 2),
   or the max -- C2/8E82's `$0F63`, not the HP gained. HP first (chime 06), then MP from index 2A (chime 07) in the
   frame the HP run ends. C2/8F55 waits on `$E8` (no input); the frame after the task ends, C2/B31C consumes the unit
   and C2/AFED redraws the panels -- the healed HP shows only then.
+* **C2/AFED asks each member's pose** (B02B-B032, 2026-11-18): per panel (C2/8820's member `$0D5F,X`, the loop ending on
+  an empty entry) C2/A1EF sets `$0D5D` = 4 when the HP bar's scale `$0D38[char]` (C2/813C: max / 10) >= the current HP
+  (`$9A93`), and `LDA $0D5D / BEQ / LDA #12 / STA $1811,Y` asks the sprite block for the weak (kneeling) pose 12, else
+  00. C2/B34F's rebuild after the use asks again on the new HP. The Tech screen's C2/BEDC does the same at BF11-BF22, but
+  its `$0D38,X` is read with X = the PANEL * 2 (C2/ED31's `LDX #C056` and BEFE's `LDA $71 / ASL / TAX` replaced A1EF's).
+  Bank C2 writes `$1811` nowhere else but the Form (C968 / C9A9 / C6FB), the shop (D610 / DDF0 / DDFD) and C2/FF3E: no
+  frame resets the requests. MEASURED, playthrough leg 93 (a Mid Tonic on Marle at 1/242): `$1851` = 12 at f27720
+  (C2:B035), 00 at f27909. The port requested nothing and reset every request each frame off three screens; now both
+  overlay builds ask and the reset spares the overlay (field-picture-item-overlay-asks-the-weak-pose-vs-cartridge). The
+  Tech screen's BF22 and C2/FF3E are not modelled: off the Form, the shop and the overlay the port still resets the requests
+  every frame (dropping it broke the Form's and the window colour's audits: writes there it does not model). OPEN: her bow (18 px),
+  dark on the cartridge, bright in the port -- the overlay window's colour math over the sprite.
 * **After the overlay's B**, C2/B0AB returns into C2/AB41: `$68` := 2 (the LIST -- the pick is gone) and task slot 6
   (the pinned hand) is killed. The port used to keep the item picked.
 * **The pinned hand's blink** is C2/8B6E on `$0DA3`/`$0DA0` (4 on, 4 off), stepped only while task slot 6 lives (from

@@ -750,7 +750,8 @@ static long pass286C(Walk* c, int loc) {
 // The reload's C0/0B5D -> C0/286C (C0/01A5 and the caller's legs)
 // =================================================================================================================
 
-// ---- C0/595C: object 0's slot 1 re-run (ops 00, 12, 16; any other op is not walked)
+// ---- C0/595C: object 0's slot 1 re-run, walked over the image (ops 00, 12, 16, 75, E4; any other op is not walked). The
+// port's own reload prices the run it made instead (ct_vm.c CtSceneSlot1Cycles, menu_shell_timing.md sec. 12).
 static int vmCmp(int op, int d9, int db, long* k) {        // the $6467 comparators: 1 = true (CLC, fall through)
   switch (op) {
     case 0: *k += (d9 == db) ? 110 : 104; return d9 == db;
@@ -802,6 +803,13 @@ static long vm595C(Walk* c) {
         for (int i = 6; i < 8; i++) if (fl >> i & 1) k += 822 + 266L * dx * (dy + 1) + 558L * dy;
       }
       truth = 1; c3 = pos + 7;                             // the next op, 8 bytes on
+    } else if (op == 0x75) {
+      // C0/6CBD `INY / TYX / LDA $7F2001,X / AND #00FF / ASL / TAX / LDA #01 / STA $7F0200,X`: the local the operand names
+      // set to 1, one straight path (VM_OP_STRAIGHT's 306), stored so a later op 12 of the run reads it. MEASURED, playthrough
+      // leg 55 (loc 1D0, the exchange screen's reload): the walk refused it and the load estimate stood in, 3 frames short.
+      k += 306;                                            // = VM_OP_STRAIGHT[0x75] (the dispatch's JSR to the RTS)
+      sb(c, 0x10200 + b8(c, 0x12001 + pos + 1) * 2, 1);
+      truth = 1; c3 = pos + 1;                             // the next op, 2 bytes on
     } else {
       static char msg[48];
       snprintf(msg, sizeof msg, "slot-1 op %02X (C0/595C)", op);
@@ -896,7 +904,7 @@ static long loadPackets(Walk* c, int loc) {
   return k;
 }
 
-static long prePass(Walk* c, int loc, int caller, long* vmOut) {
+static long prePass(Walk* c, int loc, int caller, long slot1, const char* slot1Why, long* vmOut) {
   const long REC = 0x360000L + (long)loc * 14;
   long k = 610;                                            // C0/0B5D -> C0/01A5 (0B4E's tail, 0B64, 0B75, D = $0100)
   // C0/01A5 -> C0/0960: C0/0905 (the $7F:2000 -> $7E:0920 MVN, 246,000), FD:C2C1, FD:C1EE, the three fill marks;
@@ -907,7 +915,15 @@ static long prePass(Walk* c, int loc, int caller, long* vmOut) {
   sb(c, 0x1DF9, b8(c, 0x11D26));                           // C0/01FF `LDA $7F1D26 / STA $1DF9`
   k += 454;                                                // C0/01DB-0208: the four copies, $1DF9, JSR 595C
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "595C", k);
+  // obj0's slot-1 run, walked here over the image (vm595C: ops 00 / 12 / 16 / 75 / E4, its constants graded on the reload
+  // traces). A run it does not walk takes the caller's price when the caller ran it itself (the port's VM, op by op on the
+  // WRAM each op read: ct_vm.c CtSceneSlot1Cycles).
+  const char* why0 = c->why;
   long vm = vm595C(c);
+  if (c->why != why0 && slot1 >= 0) {
+    c->why = why0; vm = slot1;
+    if (slot1Why) unpriced(c, slot1Why);
+  }
   *vmOut = vm;
   k += vm;
   if (getenv("CT_PASSCOST_DEBUG")) printf("pre: %-6s %ld\n", "tail", k);
@@ -946,13 +962,17 @@ long ct_field_pass_cycles(const uint8_t* rom, long romLen, const uint8_t* wram, 
 
 long ct_field_reload_cycles(const uint8_t* rom, long romLen, const uint8_t* wram, int loc, int caller,
                             CtReloadCost* out) {
+  return ct_field_reload_cycles_slot1(rom, romLen, wram, loc, caller, -1, NULL, out);
+}
+long ct_field_reload_cycles_slot1(const uint8_t* rom, long romLen, const uint8_t* wram, int loc, int caller, long slot1,
+                                  const char* slot1Why, CtReloadCost* out) {
   CtReloadCost r = { 0, 0, 0, 0, NULL };
   if (out) *out = r;
   if (!rom || !wram || loc < 0 || loc > 0x1FF || romLen < 0x400000) return -1;
   Walk c = { (uint8_t*)malloc(0x20000), rom, romLen, NULL, 0 };
   if (!c.w) return -1;
   memcpy(c.w, wram, 0x20000);
-  r.pre = prePass(&c, loc, caller, &r.vm);
+  r.pre = prePass(&c, loc, caller, slot1, slot1Why, &r.vm);
   r.pass = c.why ? 0 : pass286C(&c, loc);
   r.objects = c.drawn;
   r.why = c.why;

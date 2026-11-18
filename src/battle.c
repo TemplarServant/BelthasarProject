@@ -8061,10 +8061,14 @@ static int battleDcfdTail(CtBattleHost* h, int atk, int tgt, int dmg, int* stage
   }
   if (dmg >= 0x270F) dmg = 0x270F;                                 // DD75-DD80
   if (s[0xB1FC] & 0x40) {                                          // DD83-DDBC: the absorb
+    // C1/EBF8 with $B202 = 80 negates $AD89 for the HP slot (EC03-EC0C: the slot restores), then DDAD-DDB6 `EOR #FFFF /
+    // INC` negates it back and `JMP C1/DE6F` stores it: the record $AD9C,X and the sum $AE7B take +dmg, the kind 01
+    // (DD9E) drawing it green. MEASURED, playthrough leg 100 (the Volcano absorbing a hit): the cartridge's record reads
+    // 02A4 (676), the port's FD5C (its popup printed 64860).
     battleStageEBF8(s, tgt, dmg, 0x80);
-    battleShowRecordPut(s, tgt, (-dmg) & 0xFFFF, 1);
+    battleShowRecordPut(s, tgt, dmg, 1);                           // DE71-DE76
     s[0xB1FC] &= (uint8_t)~0x40;
-    int t = (s[0xAE7B] | (s[0xAE7C] << 8)) - dmg;
+    int t = (s[0xAE7B] | (s[0xAE7C] << 8)) + dmg;                  // DE79-DE7D
     s[0xAE7B] = (uint8_t)t; s[0xAE7C] = (uint8_t)(t >> 8);
     *staged = 1;
     return -dmg;
@@ -20767,7 +20771,14 @@ static void battleNmiTail(CtBattleHost* h) {
   uint8_t* s = h->mem;
   if (!battleFightNmiOn(h)) {
     battleFieldScrollTick(s);                                      // C0/1895 JSL C0/2C41 (tick 1), D1/F1D7 (tick 2)
-    if (h->frames == 1) CtHdmaTableBuild(s);                       // C0/189D JSR C0/00DE -> FD/C2C1
+    if (h->frames == 1) {
+      CtHdmaTableBuild(s);                                         // C0/189D JSR C0/00DE -> FD/C2C1
+      // C0/18A4 JSR C0/EC60, the field's last wait before C0/18A7's `JSL C1:0000`: its head counts the idle counter
+      // (`LDA $0158 / INC A / AND #83FF`). MEASURED on the rule's cartridge, playthrough leg 125: $0158 5C -> 5D at f324
+      // (C0:EC6C) on the fight's entry; the port skipped it and every idle roll after the fight landed 2 frames late.
+      int c = ((s[0x0158] | (s[0x0159] << 8)) + 1) & 0x83FF;
+      s[0x0158] = (uint8_t)c; s[0x0159] = (uint8_t)(c >> 8);
+    }
     // ...and both NMIs are the field's C0/EA63, which reaches C0/EC15 `JSL C2/8002` whatever $0152 says: the pad latch
     // and in it C2/85AE, the play clock (C0/0C70 seeds the $01F8 cursor from it;
     // disasm/notes/field_f8_cursor_play_clock.md).

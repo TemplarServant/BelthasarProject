@@ -154,7 +154,10 @@ LDA [$10],Y` -- the parent's +07 is the op's own address, because C2/0F86 stores
 
 They are the ONLY thing that moves the overworld's brightness: the NMI (C2/015E, full arm when $4C bit 0) writes
 `$2100 = $1C | $1D` at C2/031F and runs the object pass C2/051D at C2/0333 (a CLC handler gets +3 bumped at C2/054E, an SEC one
-is freed). $1BF6 is their mutex: bit 1 = fade-out running, bit 0 = fade-in running.
+is freed). $1BF6 is their mutex: bit 1 = fade-out running, bit 0 = fade-in running. The world loader frees it: C2/23A8's
+C2/23B4 `STZ $1BEC` / C2/23B7 `STZ $1BF6` (after C2/0471, before C2/26D6) -- a field menu's code leaves it set (7E:70BB, leg
+95), and without the store the next world's fade-in dies in state 0 (leg 96, 1F3 black; the port stores it since
+2026-11-18, field.c worldEnterAt; check field-picture-world-load-frees-the-fade-mutex-vs-cartridge).
 
 * C2/20A2 fade OUT (table C2/20AB: 20AF, 20DF). State 0: bit 1 busy -> SEC; else set it, +2++, rate 0 -> `$1C = 80, $1D = 0`
   SEC (a cut); else +0A = rate, +3 = 0 and on into state 1. State 1: wait while +3 < rate; +3 = 0; DEC $1D; at 0 -> `$1C = 80`,

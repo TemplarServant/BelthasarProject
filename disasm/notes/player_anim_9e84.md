@@ -285,3 +285,14 @@ GATO into enemy **slot 3** (`$019D = 10 80 …`, back-map `$01A3 = FF FF FF 10 F
 every `--battletest` check then asserts against. Verified end to end on four approach directions, on
 the real door entry from loc 439's left-edge exit, and seeded from the oracle's own pre-cutscene WRAM
 (the port reaches the D8 at f65, the oracle at f73).
+
+## The idle counter $0158 counts the fight's two field waits (2026-11-18)
+
+C0/EC60's head (`LDA $0158 / INC A / AND #83FF / STA $0158`) is the idle chain's clock (C0/A1FD: the blink at 2FF, then
+C0/A22F's `INC $F8 / LDA $FE00,X` every 128 frames, anim 21 when the value is < 8). A fight costs it two counts on the
+field's side: C0/18A4 `JSR C0/EC60`, the last wait before C0/18A7's `JSL C1:0000` (C0/1895-18A4, the battle host's tick 1),
+and the ack frame's C0/00EB (`JSR C0/881E / JSR C0/00DE / BRL C0/EC60`). MEASURED on the rule's cartridge, playthrough leg
+125 (loc 170): `$0158` 5C -> 5D at f324 (C0:EC6C), 5D -> 5E at f1675 (the `$0117` ack, C0:18C1). The port counted neither
+(its count runs only on field frames), so after each fight the idle rolls came 2 frames late: Marle's blink at f29400, the
+third member's at f99900. battle.c battleNmiTail's tick 1 and field.c's ack now count them
+(field-picture-idle-counter-counts-the-fights-waits-vs-cartridge).

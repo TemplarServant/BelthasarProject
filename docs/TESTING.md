@@ -3627,6 +3627,25 @@ ambush and the formation as on the cartridge). One mutation. disasm/notes/field_
 boot keeps the field's last OAM upload (the tank's head and the Grinder in their field poses) until the band's seed. One
 mutation. disasm/notes/battle_picture_lags.md.
 
+`field-picture-menu-reload-clears-the-1d-page-vs-cartridge`: leg 55 (the End of Time), f4201 from the leg's start, after
+Gaspar's exchange screen: C0/01A5's reload clears the `$1D` page (C0/7F7E) and rebuilds it as the location load does,
+C0/0B28 builds the tables once more, screen `$07`'s close waits C2/82B2's second C2/83CA frame, and the NMI-off stretch
+is 31 frames with obj0's slot-1 run priced as the VM runs it. Four mutations, one for each. An odd frame on purpose: the
+wave builder reads `$1DFB & 3E`. `field-picture-naming-reload-prices-the-slot-1-run-vs-cartridge`: leg 49 (Proto Dome),
+f12900, after Robo's naming screen: the same reload through C0/0D1C, its slot 1 with op 18 -- 37 frames, Robo's later walk
+on the cartridge's pixel. One mutation. disasm/notes/menu_shell_timing.md sec. 12.
+
+Six more from the picture audit's triage (2026-11-18), each with its mutations: `field-picture-lead-steps-from-its-own-words-vs-cartridge`
+(leg 131 f3900, the Epoch's pilot seat: the free-roam step starts from the lead's `$1800/$1880`, so a script's `8D` on the
+load ramp stands), `field-picture-world-load-frees-the-fade-mutex-vs-cartridge` (leg 96 f300, C2/23B4-23B7: 1F3 fades in;
+disasm/notes/ow_objvm.md), `field-picture-absorb-record-is-positive-vs-cartridge` (leg 100 f15900, C1/DDAD-DDB6 + DE6F:
+the green 676; battle_tech_effects_census.md), `field-picture-map-image-tail-seeds-the-strip-counter-vs-cartridge` (leg
+111 f12600, C0/A33B's whole image at `$7E:B500`, fight 2's `$CE14` from its tail; battle_message_window.md sec. 6) and
+`field-picture-item-overlay-asks-the-weak-pose-vs-cartridge` (leg 93 f27900, C2/AFED's pose 12 for a low-HP member; pinned
+at 18 px, the bow's colour math, OPEN; menu2_item_rest.md) and `field-picture-idle-counter-counts-the-fights-waits-vs-cartridge`
+(leg 125 f29400: a fight's C0/18A4 wait and its ack frame's C0/00EB count `$0158`, the blink on the cartridge's frame; two
+mutations; player_anim_9e84.md).
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

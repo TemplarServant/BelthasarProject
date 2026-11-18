@@ -909,6 +909,13 @@ int ct_lz_map_to_wram(const uint8_t* rom, size_t romLen, int loc, uint8_t* s7e) 
   if (!img) return 0;
   size_t n = ct_lz_decompress_bounded(rom, romLen, img, 0x20000, src);
   if (n < 6) { free(img); return 0; }
+  // C0/A33B's `JSL C3/0002` itself: the whole image at $7E:B500 (A352 `LDA #B500 / STA $0303`, A361 `LDA #7E / STA $0305`),
+  // the cells below read from it. C0/09DD ($B000-$BFFF) and C0/0A14 ($C000-$C7FF) write over its head on every path that
+  // runs A33B; the tail past $C800 stays until something else writes there. MEASURED, playthrough leg 111 (loc 189, the
+  // return from fight 1): C3:07BB writes $CE0F / $CA1E / $CE14 = 01 / 80 / 80 from the image (0x2775 bytes, to $DC74), and
+  // fight 2 starts its strip counter $CE14 (CD/0650, the message line's half by bit 0) from that 80; the port kept the last
+  // fight's count, the name typed a glyph off (43 px).
+  { size_t k = n < (size_t)(0x10000 - 0xB500) ? n : (size_t)(0x10000 - 0xB500); memcpy(s7e + 0xB500, img, k); }
   unsigned b0 = img[0], b1 = img[1];
   int wA = ((b0 & 3) + 1) * 16, hA = ((b0 & 0x0C) + 4) * 4;                 /* A3D9-A3F0 */
   int wB = (b0 & 0x30) + 0x10, hB = ((b0 & 0xC0) >> 2) + 0x10;              /* A3F5-A408 */

@@ -1171,6 +1171,10 @@ static void vmObjEnableOp(Mem* m, CtVmActor* actors, int nobj, int* mode, const 
 
 static void ctTileCopyQueue(CtScene* sc, int sl, int st, int el, int eb, int dl, int dt, int flags);   // fwd (needs CtScene)
 static int g_initLastOp = -1;   // C0/5906 TXY: the offset of the last op the init runner dispatched (C0/56CB's Y)
+// A script op wrote the lead's words $1800/$1880 at run time (8B C0/4B74, 8C C0/4BC3, 8D C0/4C31 / 4C3D): counted, so the
+// host's copy of his position (field.c's px / py) follows the ROM's only storage before its next step.
+static int g_leadPlaceSeq = 0;
+int CtSceneLeadPlaceSeq(void) { return g_leadPlaceSeq; }
 // The object pass's CPU time. While a location load runs its scripts' init (C0/5709) and obj0's slot 1 (C0/595C),
 // every op they dispatch is priced as the ROM runs it -- the runner's dispatch (CT_VM_DISPATCH) and the handler's arm
 // on the WRAM it reads (field_cost.c ct_vm_op_cycles) -- into g_ctLzSpriteCycles, the load's object-pass clock.
@@ -1812,9 +1816,11 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
   else if (op == 0x8B) { a->x = B[addr + 1] * 16 + 8; a->y = B[addr + 2] * 16 + 16; a->hasPos = 1; sc->fx[obj] = a->x; sc->fy[obj] = a->y - 0.0625;
     a->px16 = B[addr + 1] * 256 + 0x80; a->py16 = B[addr + 2] * 256 + 0xFF;
     vmPosWordsMirror(m, obj, a->px16, a->py16);                                    // C0/4B74's $1800/$1880 stores
-    vmPlacePrio(m, obj, B[addr + 1], B[addr + 2]); }                               // C0/4B98-4BBC
+    vmPlacePrio(m, obj, B[addr + 1], B[addr + 2]);                                 // C0/4B98-4BBC
+    if (obj == sc->playerObj) g_leadPlaceSeq++; }
   else if (op == 0x8C) { vmPos8C(m, a, obj, B[addr + 1], B[addr + 2]);           // C0/4BC3 (see vmPos8C)
-    sc->fx[obj] = a->px16 / 16.0; sc->fy[obj] = a->py16 / 16.0; }
+    sc->fx[obj] = a->px16 / 16.0; sc->fy[obj] = a->py16 / 16.0;
+    if (obj == sc->playerObj) g_leadPlaceSeq++; }
   // Op 0x8D (C0/4C27), the raw-word setter: `LDA $7F2001,X / STA $1800,X`, then the same into $1880,X; the two
   // 1/16 px words are stored unchanged. Unlike op 0x8B it has no foot anchor to apply (a -1/16 here would cross a
   // tile boundary on a tile-aligned word, which the C0/A947 camera-window test reads).
@@ -1822,7 +1828,8 @@ static void applyEffect(CtScene* sc, int obj, int addr, uint8_t op) {
     sc->fx[obj] = w8x / 16.0; sc->fy[obj] = w8y / 16.0; a->px16 = w8x; a->py16 = w8y;
     a->x = (int)sc->fx[obj]; a->y = (int)sc->fy[obj]; a->hasPos = 1;
     vmPosWordsMirror(m, obj, w8x, w8y);                                            // C0/4C31 / 4C3D, the raw words
-    vmPlacePrio(m, obj, w8x >> 8, w8y >> 8); }                                     // C0/4C42-4C6C
+    vmPlacePrio(m, obj, w8x >> 8, w8y >> 8);                                       // C0/4C42-4C6C
+    if (obj == sc->playerObj) g_leadPlaceSeq++; }
   else if (op == 0x0F || op == 0x17 || op == 0x1B || op == 0x1D || op == 0xA6 || op == 0xA7 ||   // C0/5535..5593 -> the
            op == 0x1E || op == 0x1F || op == 0x25 || op == 0x26) {                                  //   554B tail (move.c)
     int ni, tg; CtVmFacingFamily(m->s, B - sc->header, addr + sc->header, obj * 2, &ni, &tg);
@@ -6458,10 +6465,19 @@ void CtSceneBattleRemoveObj(CtScene* sc, int obj) {
 // A handler that parks (IP unchanged) would spin C0/595C forever; the port stops there instead.
 // Returns the frames its sound posts cost (step's priced JSL C7/0004: `sndFreezeFrames`): the CPU sits in C7's poll for them
 // inside the caller's segment, which an NMI-on caller (C0/0330, the battle return) has to wait out before it goes on.
+// Its CPU time, op by op as the run takes them: C0/595C's own runner (head 116, a fetch and BEQ 32 per op and at the
+// terminator, the ASL / TAX / JSR dispatch 154, the BRA back 18, the terminator's tail 58 -- field_cost.c vm595C's
+// constants) around each handler priced on the WRAM it is about to read (ct_vm_op_cycles). The menus' reload prices its
+// C0/0206 run with it (field_cost.c ct_field_reload_cycles_slot1). -1 when no ROM image is attached; *why names a path the
+// pricing does not walk.
+static long gSlot1Cyc = -1; static const char* gSlot1Why = NULL;
+long CtSceneSlot1Cycles(const char** why) { if (why) *why = gSlot1Why; return gSlot1Cyc; }
 int CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
+  gSlot1Cyc = -1; gSlot1Why = NULL;
   if (!sc || sc->nobj <= 0) return 0;
   int fn1 = fpPtr(sc, 0, 1);
   if (fn1 < 0 || fn1 >= sc->blen) return 0;
+  long s1cyc = 116; const char* s1why = NULL;           // 595C-5966: REP / STZ $6D / LDA $7F2003 / TAX / SEP
   const int freeze0 = sc->sndFreezeFrames;
   static int tr = -1; if (tr < 0) { const char* e = getenv("CT_SLOT1TRACE"); tr = (e && *e) ? 1 : 0; }
   char line[512]; int ln = 0;
@@ -6479,6 +6495,8 @@ int CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (sc->body[at] == 0x00) { why = "end"; break; }  // 5967 LDA / BEQ ->597C
     if (tr && ln < (int)sizeof line - 16) ln += snprintf(line + ln, sizeof line - ln, " %02X@%04X", sc->body[at], at);
     vmOpCost(sc->mem, sc->body, sc->blen, at, 0);       // a load's op, priced as C0/5977 dispatches it
+    if (gRomImg)                                        // 5967 LDA / BEQ (32), 596D-5977 dispatch (154), 597A BRA (18)
+      s1cyc += 32 + 154 + ct_vm_op_cycles(gRomImg, gRomImgLen, sc->mem->s, sc->body, sc->blen, at, 0, &s1why) + 18;
     int op = sc->body[at];
     step(sc, 0);                                        // 5977 JSR ($5D6E,X): its carry is ignored
     // 597A BRA ->5967 whatever the handler returned: an op that left X on itself is dispatched again at once. The wait
@@ -6490,6 +6508,10 @@ int CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
     if (sc->st[0].addr == at) { why = "parked"; break; } // the ROM would never leave C0/595C
   }
   int endAt = sc->st[0].addr;
+  if (gRomImg) {                                        // the terminator: 5967 LDA / BEQ, 597C RTS
+    gSlot1Cyc = s1cyc + 32 + 58;
+    gSlot1Why = strcmp(why, "end") ? "slot-1 run did not reach its terminator" : s1why;
+  }
   int dc = r8(sc->mem, 0x7E1001u);                      // what fn1's ops left in $1001 (op 0x87), else the saved count
   int wt = sc->st[0].wait;                              // ...and in $7F0A01 (a wait's end zeroes it)
   sc->st[0] = saved; sc->st[0].dc = dc; sc->st[0].wait = wt;

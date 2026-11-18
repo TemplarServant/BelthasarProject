@@ -161,7 +161,11 @@ before the HUD band's seed. So the boot's NMIs run CD/09F1 and the fight's run C
                       `$7E:B600 -> $5980` (even: tiles 130-14F, the right 16), $200 bytes (CD/3E8E)
 
 `$CE14` has no other writer (CD/0650's INC; CD/065F and CD/0694 read it): it is whatever the field left in
-`$7E:CE14` plus the fight's counted NMIs. Leg 117's first fight: 00 at the boot, one count at f703 (the NMI between
+`$7E:CE14` plus the fight's counted NMIs. (What the field leaves there: C0/A33B's `JSL C3/0002` decompresses the location's
+whole map image at `$7E:B500`, and C0/09DD / C0/0A14 cover only `$B000-$C7FF`, so a long image's tail is the byte -- leg 111,
+loc 189: the image runs to `$DC74` and fight 1's return (C0/0316) writes `$CE14` = 80 by C3:07BB at f10849, fight 2 counts
+from it. The port writes the image too since 2026-11-18, lz.c ct_lz_map_to_wram; check
+field-picture-map-image-tail-seeds-the-strip-counter-vs-cartridge.) Leg 117's first fight: 00 at the boot, one count at f703 (the NMI between
 CD/0399 and the band's seed), none while the band opens (`$CA1E` != 0, f704-f716), one a frame from f717.
 
 The port: `battleMsgStripUpload` (battle.c, from battleNmiHead) keeps the two halves in `CtBattleHost.msgStripVram`

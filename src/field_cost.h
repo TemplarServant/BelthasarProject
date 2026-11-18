@@ -26,6 +26,10 @@ typedef struct {
 // menu leaves it at its RTL -- the field's state restored (C0/0905), the location `loc`. -1 when a leg is not walked.
 long ct_field_reload_cycles(const uint8_t* rom, long romLen, const uint8_t* wram, int loc, int caller,
                             CtReloadCost* out);
+// ...the same, with obj0's slot-1 run (C0/0206 JSR C0/595C) priced by the caller when the walk refuses it: `slot1` cycles
+// (the port's VM ran it, ct_vm.c CtSceneSlot1Cycles), `slot1Why` a path that pricing did not walk; slot1 < 0: no fallback.
+long ct_field_reload_cycles_slot1(const uint8_t* rom, long romLen, const uint8_t* wram, int loc, int caller, long slot1,
+                                  const char* slot1Why, CtReloadCost* out);
 
 // The frames an NMI-off stretch of `cyc` cycles that ends in C0/0B28's vblank wait takes. C0/0B38 `LDA $4210 / BPL`
 // polls RDNMI, set at line 225 and cleared at line 0 or on the read. From phase 0, the read lands rem = C mod F cycles

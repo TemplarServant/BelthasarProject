@@ -538,7 +538,7 @@ read off the beam traces by tools/pass_cost_consts.py, arms no trace ran priced 
 | C0/7084, C0/7F7E | -- | 10,152, 2,820 |
 | C0/A33B map | the map packet, its header, record bytes 2 and 10, the `$E5:0000` list | lz.c's decompression + `ct_map_load_cycles` (walked: the header parse, C0/7399's masks, C0/A521's planes and RLE, C0/A66B; exact on both) |
 | C0/09DD, C0/0A14, C0/56D4 | FF arms, `$01BB` | 554 / 586 / 7,186 + the packet |
-| C0/595C, object 0's slot 1 | the script (decompressed to `$7F:2000` by C0/56D4) | ops 00 / 12 / 16 and the eight `$6467` comparators (true = CLC, fall through): 206 empty, 5,532 on loc $082 |
+| C0/595C, object 0's slot 1 | the script (decompressed to `$7F:2000` by C0/56D4) | the port's own run, op by op (sec. 12; the walk's twin vm595C: ops 00 / 12 / 16 / 75 / E4 and the eight `$6467` comparators): 206 empty, 5,532 on loc $082 |
 | C0/0209-024B, C0/1A03, C0/B192 | `$01AE`, `$7F:03FE`, the party vs `$0194-96`, n = `$7F2000` | 100 + 18 / 42 + 40; 272 (same party); 578 + 80 n |
 | C0/286C: C0/28E1 | the opened-door list `$7F:1CC8` (the port keeps it since ade848d: C0/28AA / 28C0 / 28E1, disasm/notes/field_door_list.md) | per door by tile type, over the ROM's rebuilt map |
 | C0/0A50 | BG3 (`$0BCA` & !`$01BB`), C0/A712's chests (`$F5:F000`, flags `$7F:0001`), the camera (C0/7506/7553 on `$0102/03`) | walked; the builders C0/75E9 / 78EC are constants (their parity tests run on the camera's even coordinates), C0/7F9A too (C0/74C7 zeroes `$1D99-9E`) |
@@ -559,7 +559,7 @@ NOT WALKED (the walk says so, field.c falls back to the load estimate and prints
 configurations no trace ran (`$1D35` bits 1-2, `$0BC9`, `$0126`, `$1DF9/$1DFD`, `$0153` bit 7, `$013C` bit 0, `$0BE9`,
 `$0351` bit 0 -- 450 of 512 locations have neither `$0BC9` nor map byte 1 bit 5, per their map headers); the palette
 allocator's C0/72B4 share scan and C0/7199 share; CAD9 classes 1-2 and `$1780` = 2 / 3; an opened chest (C0/A7E6);
-an FC door tile; slot-1 ops other than 00 / 12 / 16; a party changed in the menu (C0/1A1C); `$01AE` >= 0 or
+an FC door tile; a slot-1 op ct_vm_op_cycles does not walk (sec. 12); a party changed in the menu (C0/1A1C); `$01AE` >= 0 or
 `$7F:03FE` = 1-2; a map whose header bytes 2-3 are set (C0/A463 / C0/A4B3: the model stands in). And the DMA legs'
 sync (a few cycles each). The door path (every location load) still uses
 `LOADC_FIRST_PASS`: its C0/286C draws only the objects the loader has placed, and pricing it from the port's state at
@@ -618,3 +618,42 @@ early there and the late fade hid it. They take the +1 of every other key now, a
 
 And the resume (C0/2824) runs under the field's NMI and IRQ: field.c's `fieldNmi` takes it, so the animated tiles step
 (C0/ECDB) on its frames -- `$051D` was 8 steps behind after the naming's return.
+
+## 12. The reload clears the `$1D` page, builds at C0/0B28, and prices obj0's slot 1 as the VM runs it (2026-11-18)
+
+Three legs of C0/01A5 .. C0/286C the port had not taken, found by the picture audit's triage (playthrough leg 55, the End of
+Time, Gaspar's `C8 00` exchange screen; leg 49, Robo's naming `C8 C3`) and measured on the rule's cartridge:
+
+- **C0/01CC `JSR C0/7F7E`** (between C0/7084 and C0/A33B): `$014B = $1D00`, `$014E = $0100`, `$014D = 0`, then C0/7F95's
+  C0/2DF1 zeroes M7A / M7B and runs DMA channel 7 (DMAP 80, BBAD 34: the multiplier's product, 0) into `$00:1D00` for
+  `$0100` bytes -- the whole `$1D` page, as the location load's C0/0103 clears it. C0/A33B then writes the camera bounds
+  again (C0/7399 falls into C0/7477-74A5: `$1D1A-1D1D`), C0/A385-A4FB the layer scroll, and C0/01FF `LDA $7F1D26 / STA
+  $1DF9` puts back the wave switch C0/0138 stashed -- all before C0/0206's slot-1 run. Leg 55: `$1DFB` (BG3's wave phase,
+  FD/C5E2's `$1DFB & 3E`) reads 0F (C0/01AA's build), 00 at f2965 (the DMA: no CPU writer), 01 at f2983. The port kept
+  the stash's page: the wave 0x12 phases off for the rest of the room (1280-11892 px a picture, f3000-f4800). The port
+  now clears the page there and runs the location load's legs over it (fieldMaskBounds7477, CtWramLayerScrollDecode,
+  `$1DF9`, then CtSceneLoadCameraEntry after the run, as the location load does).
+- **C0/0B28's `JSL FD/C2C1`** (C0/286C's tail, before the vblank wait C0/0B38): one table build with `$0119` still 00 --
+  `$1DFB` 00 -> 01 at f2983 line 24, the set bit flipped. The port's reload tail only counted C0/EC60's idle frame.
+  It is the reload's second build: the first is C0/01AA's, right after C0/0905 (the X menu on party3_field, loc 082:
+  `$0153` 00 by FD:C2DE at the RTL frame f69, 01 by FD:C2D2 at f107, C0/EC60 at f108, the first INC $19 at f109). The
+  port had neither (two flips: the set bit came out right); with the tail's alone the set was a frame off and the
+  animated tiles stepped on the other frames (menu-resume-fade-in-vs-oracle 40 px, the torches of leg 82).
+- **C2/C7FF, screen `$07`'s close**: `JSR C2/CC0E / JMP C2/82B2`. With `$0F0F` = 0 (no song to put back) C2/CC0E's
+  C2/83CA fades to 0 and ends in C2/8403 `JMP C2/821E`; C2/CC23 returns; C2/82B2 runs C2/83CA again on `$0D10` = 0 (0 + FE
+  < 0 -> C2/8403 -> C2/821E), one more NMI-on frame before C2/82C1's `$2100` = 80 and the RTL. Leg 55: `$0D10` 0D .. 00
+  over f2944-f2951 on both sides, C0/0905 at f2953 on the cartridge, f2952 in the port. (The song path's RTL was already
+  the frame after the posts'.)
+- **obj0's slot-1 run priced by the VM.** The walk's twin vm595C knew ops 00 / 12 / 16 / E4; any other op sent the
+  reload to the load estimate (leg 55's loc 1D0: op 75, then 7D, D2, 10, 18; leg 49's loc 0E2: op 18) -- 28 frames for
+  the cartridge's 31 on leg 55, 35 for 37 on leg 49, the room's clocks that many frames early. The port runs that slot
+  itself (CtSceneRunObj0Slot1, C0/0206) just before it prices the stretch, so the run's own ops are priced as they run:
+  C0/595C's runner (head 116, 32 a fetch, 154 the dispatch, 18 the BRA, 58 the terminator's tail) around each handler's
+  ct_vm_op_cycles on the WRAM it is about to read (ct_vm.c CtSceneSlot1Cycles; field_cost.c
+  ct_field_reload_cycles_slot1). `Belthasar --reloadcost` over a cartridge dump still walks it with vm595C.
+  Leg 55: 10,494,103 cycles = 31 frames; leg 49: 12,706,215 = 37 -- the cartridge's (C0/0B5D to C0/0B28's frame + 1).
+
+Checks: field-picture-menu-reload-clears-the-1d-page-vs-cartridge (leg 55 +4201, four mutations; an odd frame: the builder reads `$1DFB & 3E`, so C0/0B28's one step shows on every second picture) and
+field-picture-naming-reload-prices-the-slot-1-run-vs-cartridge (leg 49 +12900). Open: the entry fade (C0/0CD4-0CE5 for
+op C8, C0/1949 for X) shows the frozen picture while the cartridge's PPU shows the live BG -- the animated tiles C0/ECDB
+steps under the fade (leg 55 f2880-f2886: the lamp's ring and flame, 335 px a frame).

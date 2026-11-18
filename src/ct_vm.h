@@ -193,6 +193,8 @@ void CtSceneBattleReturn(CtScene* sc);
 // script image is built. obj0's own state ($1180/$1C00/$1001/$7F0580) is untouched.
 // `site` names the caller for CT_SLOT1TRACE=1 (`slot1: <site> ops 16@0032 ... end@006B`).
 int CtSceneRunObj0Slot1(CtScene* sc, const char* site);   // -> the frames its sound posts cost
+long CtSceneSlot1Cycles(const char** why);                // the last run's CPU time (C0/595C), -1 = not priced
+int  CtSceneLeadPlaceSeq(void);                           // counts the run-time 8B / 8C / 8D that placed the lead
 // The active party $7E2980/81/82 (-1 each without a scene). It persists in WRAM across a load.
 void CtSceneGetParty(const CtScene* sc, int* a, int* b, int* c);
 // ---- Sound sink (disasm/notes/audio_commands.md sec. 6) ----

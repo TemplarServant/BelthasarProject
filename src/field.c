@@ -1144,6 +1144,12 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   worldClearHdmaArea(w->wram);                         // C2/2C7A JSR C2/2BFB, before C2/09C5's two maps
   CtWorldTilemapBuild(&w->stm, w->wram, &w->cam);
   w->entryLatch = 0xFFFF;
+  // C2/23B4 `STZ $1BEC` / C2/23B7 `STZ $1BF6`, after C2/0471 and before C2/26D6: the fade objects' mutex starts free. Its
+  // fade-in (C2/2105) tests `LDA $1BF6 / BNE ->218D` at C2/2116 and, on a set byte, ends without lighting the world.
+  // MEASURED, playthrough leg 96 (the hut's exit onto 1F3, 65,000,000 B.C.): the seed carries $1BF6 = 01 (the field
+  // menu's code at 7E:70BB wrote it in leg 95); the cartridge clears it at f130 (C2:23BA) and fades the world in from
+  // f165, the port kept it and showed black for the whole visit.
+  if (!g_owCaptureStart) { w->wram[0x1BEC] = 0; w->wram[0x1BF6] = 0; }   // (a capture's mid-world WRAM keeps its own)
   // C2/26D6: the overworld's flag block comes from the story page, not the world blob:
   //   REP #20 / LDX #01F0 / LDY #1BA7 / LDA #000F / MVN $00,$7F   -- 16 bytes $7F:01F0 -> $7E:1BA7
   //   SEP #20 / LDA $7F0000 / STA $1BA6
@@ -6288,6 +6294,22 @@ static void fieldPassObjSlots(void) {
   uint8_t* s = CtWramSys(fieldWram());
   if (s) memset(s + 0x0B88, 0x80, 0x1E);                    // 6F8D LDX #1E / 6F8F LDA #80 / STA $2180 / DEX / BNE
 }
+// C2/AFED's panel loop, `B02B LDA $0D5D / BEQ / LDA #12 / B032 STA $1811,Y` (Y = C2/F626's block of the member; the member
+// is C2/8820's `LDA $0D5F,X` with X = $71 the panel, the menu's compacted party (C2/8115), and the loop ends on an empty
+// entry, C2/8839's `BMI` -> B000 `BNE ->B03D`): the member's sprite asks for the weak pose 12 when
+// C2/A1EF set $0D5D -- `LDA $0D38,X / CMP $9A93 / BCC`: the HP bar's scale (C2/813C, max / 10) >= the current HP -- and
+// for 00 otherwise. The Item overlay's build and C2/B34F's rebuild after a use run it. MEASURED, playthrough leg 93 (a Mid
+// Tonic on Marle at 1/242 HP): `$1851` = 12 at f27720 (C2:B035), the kneeling pair on screen, 00 at f27909 after the use.
+static void menuItemPanelPoses(const uint8_t* s7) {
+  for (int k = 0; k < 3; k++) {
+    const uint8_t v = s7[0x0D5F + k];
+    if (v & 0x80) break;
+    const int pid = v & 7;
+    const int hp = s7[0x2603 + pid * 0x50] | (s7[0x2604 + pid * 0x50] << 8);
+    const int sc = s7[0x0D38 + pid * 2] | (s7[0x0D39 + pid * 2] << 8);
+    CtMenuSprRequest(pid, sc >= hp ? 0x12 : 0);
+  }
+}
 static void fieldExitPlaneWram(uint8_t* s, int loc);   // C0/A66B (below, with the treasure plane)
 static void fieldMapHeaderStage(uint8_t* s, int loc) {
   long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
@@ -6945,6 +6967,15 @@ static void fieldByteWatch(int frameNo) {
       last[k] = w[adr[k]];
     }
 }
+// C0/7477-74A5, the tail of C0/7399 (C0/A33B's `A4FD JSR C0/7399`): the location's scroll-mask bounds into $1D1A-$1D1D in
+// 16-px tiles, from the record fieldLoad decoded into f->mx0..my1 (the camera law C0/7506 / 7553 and the edge tests C0/9175,
+// C0/99DE read them). Run by every leg that runs C0/A33B: the location load (C0/0106) and the menus' reload C0/01A5 (C0/01CF),
+// each after its C0/7F7E cleared the page.
+static void fieldMaskBounds7477(const Field* f, uint8_t* s7c) {
+  if (!s7c) return;
+  s7c[0x1D1A] = (uint8_t)(f->mx0 / 16); s7c[0x1D1B] = (uint8_t)(f->mx1 / 16 - 1);
+  s7c[0x1D1C] = (uint8_t)(f->my0 / 16); s7c[0x1D1D] = (uint8_t)(f->my1 / 16 - 1);
+}
 static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   memset(f, 0, sizeof *f);
   f->loc = scene;
@@ -7111,11 +7142,7 @@ static int fieldLoad(CtAssets* a, Field* f, int scene, const uint8_t* gmem) {
   // the whole $1D page afterwards (its live mask == this one); the entry init (field main) reads these.
   // Before the init, as C0/7477 is: fn0's ops may write the page (loc 1A0's `4A 1C 1D 7E 05 / 4A 1D 1D 7E 10`, its camera's rows
   // 05-10; MEASURED, leg 119: written after the init, the 00-1F of the record undid them and the pan `E7` started 6 rows off).
-  {
-    uint8_t* s7c = CtWramSys(fieldWram());
-    s7c[0x1D1A] = (uint8_t)(f->mx0 / 16); s7c[0x1D1B] = (uint8_t)(f->mx1 / 16 - 1);
-    s7c[0x1D1C] = (uint8_t)(f->my0 / 16); s7c[0x1D1D] = (uint8_t)(f->my1 / 16 - 1);
-  }
+  fieldMaskBounds7477(f, CtWramSys(fieldWram()));
   f->vm = raw ? CtSceneCreateIn(fieldWram(), raw, (int)rl, gmem, scene) : NULL;
   if (g_fieldAudio) CtAudioSetEngineMode(g_fieldAudio, 0);
   // Character-sheet init ($7E2600). The ROM seeds the 8 char records once at new game (C2/956E: `LDX #0; LDY #2600;
@@ -11972,6 +11999,7 @@ int main(int argc, char** argv) {
   // C0/19A7's fade, the X path's), 2 = a parked op `C8 00` (C0/0CC7's fade, the shop's). menuExch68 is its $68 (1 the
   // picker C2/C7E0, 2 the second pick C2/C6B9), menuExchSong C2/CB8B's $0F0F (song $3E was posted), menuExchOld its $0F0E.
   int menuExchOn = 0, menuExch68 = 0, menuExchSong = 0, menuExchOld = 0, menuExchHold = 0, prevYBtn = 0;
+  int menuExchTail = 0;                                  // screen $07's close: C2/82B2's second C2/83CA wait (no song) done
   int menuExchWaveP = -1;   // the frame the exchange's BG3 wave task (C2/CECE -> FF/F716) first ran: P
   // Screen $0D (op 0xC8 $C0-$FF -> mode 3, C2/808F[3]): the ATB selector and the naming keyboard are one screen of the
   // shell, C2/E1E3's substates -- 0 the router C2/E1ED, 1 the keyboard C2/E21E, 2 the selector C2/E236, 3 the naming
@@ -15598,6 +15626,7 @@ int main(int argc, char** argv) {
                 menuItemShown[k][0] = (uint16_t)(s7[0x2603 + pid * 0x50] | (s7[0x2604 + pid * 0x50] << 8));
                 menuItemShown[k][1] = (uint16_t)(s7[0x2607 + pid * 0x50] | (s7[0x2608 + pid * 0x50] << 8));
               }
+              menuItemPanelPoses(s7);                         // C2/B02B-B032: each member's pose request
             } else if (menuItemTgt >= 0 && menuItemTgtBuild == 2) {   // its third frame: $0D13 |= 4 -- the overlay shows
               menuItemTgtBuild = 0; s7[0x0D75] = 2;           //   (C2/AF70 $0D75 = 2; the loop's first C2/E984 is next)
               if (CtMenuItemAllParty(s7, menuItemPicked)) {   // C2/B19B -> C2/8AD5: slot 6 becomes the three hands' task
@@ -15629,6 +15658,7 @@ int main(int argc, char** argv) {
                 menuItemShown[k][0] = (uint16_t)(s7[0x2603 + pid * 0x50] | (s7[0x2604 + pid * 0x50] << 8));
                 menuItemShown[k][1] = (uint16_t)(s7[0x2607 + pid * 0x50] | (s7[0x2608 + pid * 0x50] << 8));
               }
+              menuItemPanelPoses(s7);                         // C2/B34F's C2/AFED again: the poses on the new HP
             } else if (menuItemTgt >= 0) {                    // -- Use target-select (nested C2/B17F loop, $0D13 bit2)
               s7[0x0D75] = 2;                                 // C2/B83E -> C2/B869 every loop frame
               if (menuItemTgt >= partyN) menuItemTgt = partyN - 1;
@@ -16200,7 +16230,11 @@ int main(int argc, char** argv) {
         }
         else if (menuScreen == 0x0C)                         // the shop: $1811 as C2/DD7C / C2/D605 left it
           for (int c = 0; c < 7; c++) CtMenuSprRequest(c, menuShop.anim[c]);
-        else                 CtMenuSprFormAnims(&mh, -1, -1);  // off Form: everyone still (anim 0)
+        // The Item overlay's requests stand as its builds left them (C2/AFED's B032 at the build and C2/B34F's rebuild; no
+        // frame resets them in the ROM). Elsewhere the port still puts everyone still each frame: bank C2's other writers
+        // of `$1811` -- the Tech screen's C2/BEDC (BF22), C2/FF3E, ... -- are not modelled, and the Form's and the shop's
+        // are above.
+        else if (menuItemTgt < 0) CtMenuSprFormAnims(&mh, -1, -1);
         CtMenuSprTick(&mh);
         // --menutest: the animating member's pose, frame by frame, run-length encoded, so the timing is
         // checked too (C2/F750's second `DEC $13` is the difference between a 7- and an 8-frame pose).
@@ -16758,8 +16792,18 @@ int main(int argc, char** argv) {
         } else if (menuExchHold > 0) {
           menuExchHold--;
           memset(fb, 0, (size_t)CAMW * CAMH * 3);
+        } else if (menuExchOn && menuExchSong == 0 && !menuExchTail) {
+          // Screen $07's close with no song to put back ($0F0F = 0): C2/C7FF `JSR C2/CC0E / JMP C2/82B2`. C2/CC0E's
+          // C2/83CA ended on 0 (C2/8403 JMP C2/821E, the frame before this one), C2/CC23 finds $0F0F = 0 and returns, and
+          // C2/82B2 runs C2/83CA again on $0D10 = 0: 0 + FE is negative, C2/8403 -> C2/821E, one more NMI-on frame before
+          // C2/82C1's $2100 = 80 and the RTL. (The song path has the same wait: its RTL is the frame after the posts'.)
+          // MEASURED, playthrough leg 55 (loc 1D0, `C8 00`): $0D10 0D .. 00 over f2944-f2951 on both sides, C0/0905's
+          // restore at f2953 on the cartridge, f2952 in the port without this frame.
+          menuExchTail = 1;
+          memset(fb, 0, (size_t)CAMW * CAMH * 3);
         } else {
           // ---- The RTL (R): back in the caller (C0/1964 X / C0/0D1C shop / C2/2556 overworld).
+          long reloadS1 = -1; const char* reloadS1Why = NULL;    // the C0/0206 run's CPU time (CtSceneSlot1Cycles)
           if (menuStashOw == 0) memcpy(s7 + 0x0920, menuStash, 0x14E0);          // C0/01A5 -> C0/0905
           else if (menuStashOw == 1) { size_t o = 0; for (int k = 0; k < 6; k++) {  // C2/2E72
                  memcpy(s7 + kOwStash[k].at, menuStash + o, kOwStash[k].len); o += kOwStash[k].len; }
@@ -16774,14 +16818,29 @@ int main(int argc, char** argv) {
             // C0/01A5's rebuild legs before its C0/0206: `01C3 JSR C0/0960 / 01C6 C0/6DCF / 01C9 C0/7084 / 01CF C0/A33B
             // (the map decompressed into $7E:3000..) / 01D2 C0/09DD / 01D5 C0/0A14`: the palettes, the tiles, the WRAM
             // map and the two assemblies (fieldMapHeaderStage), all ahead of the slot-1 run below, so a tile copy that
-            // run makes lands on the fresh map and stays. (The layer-scroll decode A385 is C0/A33B's too, but it stays
-            // with the camera entry below: CtSceneCameraEntry carries C0/7F7E's clear of the $1D page, which in the ROM
-            // runs before A33B.)
+            // run makes lands on the fresh map and stays.
+            // Between the rows and the map, `01CC JSR C0/7F7E`: $14B = $1D00, $14E = $0100, $14D = 0, then C0/7F95's
+            // C0/2DF1 zeroes M7A / M7B and DMAs channel 7 from B-bus $2134 (the product, 0) into $00:1D00 for $0100 bytes:
+            // the whole $1D page, as the location load's C0/0103 clears it. Everything the page held before the menu goes,
+            // the BG3 wave's phase $1DFB with it (the reload's builds count it again from 0; MEASURED, playthrough leg 55 at
+            // loc 1D0: the cartridge's $1DFB reads 0F, 00 at the clear, 01 at C0/0B28's build, the port's kept the stash's 12).
+            // Then C0/A33B's layer-scroll decode (A385-A4FB) over the cleared page, and `01FF LDA $7F1D26 / STA $1DF9`: the
+            // wave's switch the open stashed (C0/0138), back before the slot-1 run, whose ops may write the page again.
+            // (Before them, right after C0/0905's restore: `01AA JSL FD/C2C1` -- a table build, the set bit flipped, the wave's
+            // phase stepped; C0/0B28's tail makes the second. MEASURED, the X menu on party3_field (loc 082): `$0153` 00 by
+            // FD:C2DE at the RTL frame f69, 01 by FD:C2D2 at f107, the first INC $19 at f109.)
+            CtHdmaTableBuild(s7);
+            memset(s7 + 0x1D00, 0, 0x100);
             fieldMapHeaderStage(CtSceneMem7E(f.vm), scene);
+            { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);
+              CtWramLayerScrollDecode(s7, m1, m2, m3); }
+            fieldMaskBounds7477(&f, s7);                     // A4FD -> C0/7477-74A5 (MEASURED, leg 55: $1D1A-1D1D by C0:74A5)
+            s7[0x1DF9] = s7[0x11D26];
             // Then C0/0206 `JSR C0/595C`: obj0's slot 1 run to its terminator over the fresh script, before the
             // reconcile (C0/1975 then C0/1978), the same trail the battle return (C0/0330) runs. A location whose
             // slot 1 re-posts its song or re-copies tiles does so here too.
             CtSceneRunObj0Slot1(f.vm, "C0/0206");
+            reloadS1 = CtSceneSlot1Cycles(&reloadS1Why);
             // The party reconcile, C0/1A03. C0/1A1B compares $2980-82 with the shadow $0194-0196. Equal: only
             // the positions are put back. Changed: every PC object is respawned (its fn0 re-run, C0/597D) so its
             // PC loader re-reads $2980 and picks its slot and sprite; then the saved positions go by slot into
@@ -16836,12 +16895,10 @@ int main(int argc, char** argv) {
             fieldDoorListApply("reload", frameNo);
             fieldChestPrebumpWram(CtWramSys(fieldWram()), CtWramGlb(fieldWram()), scene, f.C.cw, f.C.ch);   // 0A50 -> A712
             // ...and C0/286C's next leg, `286F JSR C0/0A50`: the camera from the saved arrival tile (C0/74A6 -> C0/7506 /
-            // C0/7553 on $0102/$0103, not the camera the menu found: a scripted scroll does not survive the menu), the
-            // map header's layer scroll (C0/A385, decoded here after the port's $1D-page clear) and the tilemaps built for
-            // that camera (C0/0A73).
-            CtSceneCameraEntry(f.vm, s7[0x0102], s7[0x0103]);
-            { uint8_t m1, m2, m3; CtFieldSceneMapHeader(f.sd, &m1, &m2, &m3);
-              CtSceneLayerScrollLoad(f.vm, m1, m2, m3); }
+            // C0/7553 on $0102/$0103, not the camera the menu found: a scripted scroll does not survive the menu), C0/74AC's
+            // window over the scroll C0/A33B decoded above, and the tilemaps built for that camera (C0/0A73) -- the
+            // location load's entry, the $1D page being as fresh as after one.
+            CtSceneLoadCameraEntry(f.vm, s7[0x0102], s7[0x0103]);
             fieldEntryTilemapFill(&f, scene);
             fieldPassObjSlots();                         // C0/2872 JSR C0/6F79
             CtSceneMenuReloadObjects(f.vm);              // C0/2875-2881: 7155 / E935 / B204 / A7E9 / B0E6 (the list rebuilt)
@@ -16874,12 +16931,14 @@ int main(int argc, char** argv) {
             // Under the NMI-off rule the stretch starts at phase 0, so W = floor(C / F) black frames follow the RTL's,
             // + 1 when the wait's `LDA $4210` lands past that vblank's 37 lines (ct_nmi_wait_frames); C0/2824's first
             // `INC $19` is the frame after. Not ported: a leg the walk does not cover (a layer or HDMA configuration
-            // no trace ran, a slot-1 op it does not price) falls back to the location-load estimate and says so.
+            // no trace ran; obj0's slot-1 run is the VM's own, priced op by op as it ran) falls back to the location-load estimate
+            // and says so.
             long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
             int loc = (s7[0x100] | (s7[0x101] << 8)) & 0x1FF;
             CtReloadCost rc; memset(&rc, 0, sizeof rc);
-            long cyc = rimg ? ct_field_reload_cycles(rimg, rl, s7, loc, (menuShopOn || menuNameOn || menuSavePtOn)
-                                                     ? CT_RELOAD_CALLER_C8 : CT_RELOAD_CALLER_X, &rc) : -1;
+            long cyc = rimg ? ct_field_reload_cycles_slot1(rimg, rl, s7, loc, (menuShopOn || menuNameOn || menuSavePtOn)
+                                                           ? CT_RELOAD_CALLER_C8 : CT_RELOAD_CALLER_X,
+                                                           reloadS1, reloadS1Why, &rc) : -1;   // slot 1: the VM's run
             if (cyc > 0) menuReloadW = ct_nmi_wait_frames(cyc);   // C0/0B38's wait: + 1 only past the vblank's 37 lines
             else {
               long dma = 0, lc = rimg ? ct_lz_load_cost(rimg, (size_t)rl, loc, &dma, NULL) : 0;
@@ -16900,8 +16959,11 @@ int main(int argc, char** argv) {
         memset(fb, 0, (size_t)CAMW * CAMH * 3);
         if (++menuReloadT >= menuReloadW || hostSyncFree()) {   // (free: no reload black)   // C0/2824's first INC is the next frame's
           menuPhase = 3; menuT = 0;
-          // C0/286C's tail, `28A1 JSR C0/0B28 / 28A4 JSR C0/EC60`: the reload's last wait counts one idle frame too.
-          if (f.vm && !inWorld) fieldWaitEC60(s7);
+          // C0/286C's tail, `28A1 JSR C0/0B28 / 28A4 JSR C0/EC60`: C0/0B28's `JSL FD/C124 / JSL FD/C2C1 / JSL FD/C1EE`
+          // builds the tables once more with $0119 still 00 (the wave's phase steps, the set bit flips; MEASURED, leg 55:
+          // the cartridge's FD/C2C1 at f2983 line 24, $1DFB 00 -> 01) before its vblank wait, and the reload's last wait
+          // counts one idle frame too. (FD/C124's records are fieldEntryTilemapFill's.)
+          if (f.vm && !inWorld) { CtHdmaTableBuild(s7); fieldWaitEC60(s7); }
         }
       } else {                                               // resume fade-in (C0/2824: 15 frames, field
         menuT++;                                             // still frozen - synchronous EC60 loop)
@@ -16933,7 +16995,7 @@ int main(int argc, char** argv) {
             if (menuExchOn == 2 && f.vm) CtSceneShopDone(f.vm);   //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
             if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                                s7[0x2980], s7[0x2981], s7[0x2982]);
-            menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
+            menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchTail = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
           }
           if (menuTest) {
             printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",
@@ -18082,6 +18144,19 @@ int main(int argc, char** argv) {
                                                     // screen / the ATB selector is up / after a game-over (input freeze)
       dx = cdx; dy = cdy; prun = crun;
       if (worldTest && (wtStage == 0 || wtStage == 2)) { dx = 0; dy = 1; }   // scripted: step off the house's door / walk out the market's south exit
+      // C0/881E -> C0/8A6D steps from the lead's own words $1800/$1880,X, the only place the ROM keeps his position, so a
+      // script op that placed him since the last step (8B / 8C / 8D, CtSceneLeadPlaceSeq) is where this step starts --
+      // (px, py) is their copy, read back as the explore-off arm below does. MEASURED on the rule's cartridge, playthrough
+      // leg 131 (loc 1D9, the Epoch's dock after the time trip): Marle's fn0 `8D` puts her on the pilot seat, $1804/$1884 =
+      // 07F0/09B0 (C0:4C34 / 4C40) on C0/2848's first ramp frame f3784, and she stays there; the port stepped from its copy,
+      // the arrival 0780/08FF, and wrote it back a frame later (485 px a picture, f3786-f4651). (--at is the harness's
+      // placement and keeps winning.)
+      { static int leadSeqSeen = 0; const int q = CtSceneLeadPlaceSeq();
+        if (f.vm && pObj >= 0 && q != leadSeqSeen && atX < 0) { const uint8_t* lw = CtSceneMem7E(f.vm);
+          px = (lw[0x1800 + pObj * 2] | (lw[0x1801 + pObj * 2] << 8)) / 16.0;
+          py = (lw[0x1880 + pObj * 2] | (lw[0x1881 + pObj * 2] << 8)) / 16.0;
+          leadStartX = (int)px; leadStartY = (int)py; doorFromX = px; doorFromY = py; }   // (the frame's start, as C0/99DE reads it)
+        leadSeqSeen = q; }
       double stepFromX = px, stepFromY = py;           // where C0/A810 leaves him if the step's ticket is dropped
       moved = fieldPlayerCollide(&f.C, f.vm, pObj, &pz, &px, &py, dx, dy, prun, 1, &camReqX, &camReqY);   // engine 8-way feelers + 9923 actor collision
       // The five ROM bytes C0/9E3F reads, copied out of this host's collision scratch page into the
@@ -18575,8 +18650,10 @@ int main(int argc, char** argv) {
               // (That is the CPU's time against the beam. Under the infinitely fast CPU the segments cost none: every
               // flip lands before line 211 and the IRQ steps the tiles on each wait whose flip sets the bit. MEASURED,
               // leg 95's return: `$0153` 01 / 00 / 01 / 00 / 01 on f1315-f1319 and `$051D` stepping on f1315, f1317, f1319.)
+              // The ack frame's C0/00EB ends in `BRL C0/EC60` like the others, so it counts the idle counter $0158 too (MEASURED,
+              // leg 125: 5D -> 5E at f1675, the $0117 ack's frame; the port counted from the frame after).
               if (ruleReturn) { battleReturnHold = 5 - 1; battleReturnWait = 0; fieldIrqPreFlip = !fieldRuleIfast();
-                                if (f.vm) CtSceneReturnWaitFrame(f.vm); }
+                                if (f.vm) { CtSceneReturnWaitFrame(f.vm); fieldWaitEC60(CtSceneMem7E(f.vm)); } }
               // ...and a defeat owes none of it: C0/0289's dispatch sends `$7F01EC = 1` with `$2A1F` bit 5 clear straight to
               // C0/02A0 (no C0/0304 reload), whose first pass is C0/00EB on the next frame (the gameOver branch below).
               if (gameOver) battleReturnHold = 0;
@@ -20157,7 +20234,7 @@ int main(int argc, char** argv) {
         if (menuExchOn == 2) CtSceneShopDone(f.vm);          //   bit6 -> $0118 bit6, so a parked `C8 00` steps over
         if (getenv("CT_SHOPTRACE")) printf("exchange: f%d closed, party %02X %02X %02X\n", frameNo,
                                            s7r[0x2980], s7r[0x2981], s7r[0x2982]);
-        menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
+        menuExchOn = 0; menuExchMhOk = 0; menuExch68 = 0; menuExchSong = 0; menuExchHold = 0; menuExchTail = 0; menuExchWaveP = -1; CtMenuExchFigure(0); menuScreen = 0;
       }
       if (menuTest) {
         printf("menutest: %s (panels %d, hp %d/%d %d/%d, resume %s)\n",

@@ -368,3 +368,16 @@ The old bound had been hiding a second defect. C0/0C76 runs at C0/00A4, ahead of
 this host runs the controller before its tick. Leg 20: on the frame the exit commits the port ran one more C0/9C5C, on row 30 (prop byte FF),
 which armed the conveyor momentum `$1D2A` the cartridge never sets, and the idle lead took a step in the next location. The controller now
 stands down on that frame (`CtSceneExitDrainDue`, `g_fieldExitDue`).
+
+## The step starts from the lead's own words (playthrough leg 131, 2026-11-18)
+
+C0/881E -> C0/8A6D works on the lead's `$1800/$1880,X` and keeps no other copy of his position, so whatever wrote those
+words since the last step -- a script's `8B` / `8C` / `8D` -- is where the next step starts. The port's host keeps (px, py)
+as their copy; the explore-off arm and the script-lock follow read them back, but the free-roam branch stepped from the
+copy and pushed it into the VM (CtSceneSetActorPosF). Leg 131, the Epoch's dock (loc 1D9) after the time trip, on the
+rule's cartridge: Marle's fn0 `8D` writes 07F0/09B0 (C0:4C34 / 4C40) on C0/2848's first ramp frame f3784 and she stays on
+the pilot seat; the port's branch put the arrival 0780/08FF back a frame later (485 px a picture, f3786-f4651). The branch
+now reads (px, py) -- and the frame's start the camera (C0/99DE) and the door test use -- from the words first, whenever a
+run-time 8B / 8C / 8D placed the lead since its last step (ct_vm.c CtSceneLeadPlaceSeq; not under --at, the harness's own
+placement, so the lockstep's injected lead and the harness keep the host's copy).
+Check field-picture-lead-steps-from-its-own-words-vs-cartridge.
