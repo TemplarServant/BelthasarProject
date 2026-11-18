@@ -6456,10 +6456,13 @@ void CtSceneBattleRemoveObj(CtScene* sc, int obj) {
 //   C0/0206  the menu-exit reload chain C0/01A5-0206 (C0/1975; after C0/56D4 re-decompresses the script)
 //   C0/0330  the battle-return tail C0/0304-038C (after C0/56D4; before C0/A712 and the regroup C0/5B1F)
 // A handler that parks (IP unchanged) would spin C0/595C forever; the port stops there instead.
-void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
-  if (!sc || sc->nobj <= 0) return;
+// Returns the frames its sound posts cost (step's priced JSL C7/0004: `sndFreezeFrames`): the CPU sits in C7's poll for them
+// inside the caller's segment, which an NMI-on caller (C0/0330, the battle return) has to wait out before it goes on.
+int CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
+  if (!sc || sc->nobj <= 0) return 0;
   int fn1 = fpPtr(sc, 0, 1);
-  if (fn1 < 0 || fn1 >= sc->blen) return;
+  if (fn1 < 0 || fn1 >= sc->blen) return 0;
+  const int freeze0 = sc->sndFreezeFrames;
   static int tr = -1; if (tr < 0) { const char* e = getenv("CT_SLOT1TRACE"); tr = (e && *e) ? 1 : 0; }
   char line[512]; int ln = 0;
   if (tr) ln = snprintf(line, sizeof line, "slot1: %s ops", site ? site : "?");
@@ -6493,6 +6496,9 @@ void CtSceneRunObj0Slot1(CtScene* sc, const char* site) {
   // obj0 before -> after: the ROM's runner leaves $1180/$1C00 alone, so the two must agree
   if (tr) fprintf(stderr, "%s %s@%04X obj0 @%04X p%d -> @%04X p%d\n", line, why, endAt & 0xFFFF,
                   saved.addr & 0xFFFF, saved.prio, sc->st[0].addr & 0xFFFF, sc->st[0].prio);
+  if (tr && sc->sndFreezeFrames != freeze0)              // (its own line: tools match the line above to its end)
+    fprintf(stderr, "slot1: %s sound posts %d frame(s)\n", site ? site : "?", sc->sndFreezeFrames - freeze0);
+  return sc->sndFreezeFrames - freeze0;
 }
 
 // battle_forest_return.md AD.3b/AD.5 step 3: the post-victory field resume (C0/0330 -> C0/5B1F). Seeds the arrival

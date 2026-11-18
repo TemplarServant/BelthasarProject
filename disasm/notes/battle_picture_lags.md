@@ -451,3 +451,26 @@ pictures differ from the port's on exactly row + 2 (f3734 .. f3753), the cartrid
 battle.c: the op notes the offset the frame's service left (battleOamHopBefore) and battleOamPosesKeep puts it back
 into the compose's copy, as for a script's teleport of a foot. Check
 field-picture-script-hop-reaches-the-mirror-a-frame-later-vs-cartridge.
+
+## The status icons' gate is the frame before's (2026-11-17)
+
+The compose's per-combatant entry (CF/E8D4) tests the action gate before the status icons: CF/EDB8-EDC0 `LDA $A013 / BNE skip /
+LDA $A0FE / BNE skip / JMP CF/EE2C`. The compose runs before the frame's main loop, so the main loop's C1:40A9 `INC $A013` (an
+action's open) on row r is in the compose of the frame after and the icons leave picture r + 3 -- a pose's distance (sec. 1).
+MEASURED on the rule's cartridge, playthrough leg 92 (the Flea fight): `$A013` 00 -> 01 on row f80398 on both sides; the icons
+(Frog's poison bubbles, Marle's star, Crono's face) are on the cartridge's picture f80400 and gone from f80401. The port's icon
+renderer (field.c battleStatusIconRender) reads the compose's copy, which took the frame's own `$A013`: the icons left a picture
+early (181 px). battle.c keeps `$A013` / `$A0FE` at the tick's head with the priority row (battleOamPrioBefore) and puts them into
+the compose's copy; f80400 0 px. (battleIconBuildFrame, the icon cursor's step, still reads the live bytes: its counters match
+the cartridge's WRAM.) Found by the picture-audit triage workflow.
+
+## A hidden combatant loses its cells only (2026-11-17)
+
+The compose's per-combatant entry CF/E8D4 runs CF/EDB8 (the effect objects marked 80, in front), CF/EAC5 (the cells) and CF/EDF7
+(the objects marked 40, behind). The hidden flag (`$9FF7,X`, op 29) is read by CF/EAD7 `LDA $9FEB,X / BEQ / RTS` (X = cmb + $0C)
+inside the cells' routine, and by the shadow (CF/EA8F) and the afterimage (CF/E9CB) -- not by the two objects' passes (the ROM's
+every `LDA $9FEB,X` / `$9FF7,X` in bank CF; the CF/FE28 read is the removal routine's palette part). MEASURED, playthrough leg 127:
+op 29 hides the Golem Boss (`$9FFA` = 01 from f17159) and its attached object 0 (`$A3DF..E2` = 00 00 00 80, `$A1D8` = 01) draws
+the smoke cloud (tiles 0C2/0C4/0E2/0E4, then 0C6/0C8/0E6/0E8) through f17173; the port skipped the hidden combatant's whole entry
+(817 / 451 px at f17165 / f17171). field.c battleCombatantsRender keeps the objects' passes for a hidden combatant now. Check
+field-picture-hidden-boss-keeps-its-smoke-vs-cartridge.

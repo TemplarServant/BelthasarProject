@@ -3600,6 +3600,29 @@ wing's clouds (4013 px a line on before). One mutation. disasm/notes/song_load_f
 the screens' colour math like every battle sprite: under Denadoro's BG3 mist (half-add) it is BG3 plus the hand, halved.
 Playthrough leg 65, f37630 from the state cut on f36900 (`lag=-1`; 131 px opaque before). One mutation.
 
+`field-picture-facing-latch-on-a-point-mode-vs-cartridge`: in the Flea fight (leg 92, f49200 from the field state cut on
+f32400) Frog faces left as on the cartridge: anim-script op 72 stores the facing latch `$A2B4` even for its point modes 19-23
+(C1/7639 / C1/764A compute a point and leave it; C1/6006 stores it all the same). 602 px with the point modes inert. One
+mutation. disasm/notes/battle_enemy_anim_script.md (the mode table).
+
+`field-picture-status-icons-gate-on-the-frame-before-vs-cartridge`: the same fight, f80400: the status icons leave the
+picture three rows after an action's open, as the compose (before the main loop) reads the frame before's `$A013` / `$A0FE`
+(CF/EDB8-EDC0). 181 px a picture early before. One mutation. disasm/notes/battle_picture_lags.md.
+
+`field-picture-golem-boss-exit-poses-vs-cartridge` / `field-picture-hidden-boss-keeps-its-smoke-vs-cartridge`: leg 127, the
+Golem Boss leaving the wing (from the state cut on f800). The anim-script pose engine names an enemy's tables by its staged
+stat block, not by `$AF0D` (a removal clears it before the exit action: the boss rises with its arms spread, 00/01/02/01 from
+f17066); and op 29's hidden flag drops only the combatant's cells (CF/EAD7), so its attached effect object 0 still draws the
+smoke cloud (f17165-f17171). One mutation each.
+
+`field-picture-lead-head-shake-on-its-own-slot-vs-cartridge`: leg 134 (Death Peak's wind, Ayla leading), f13800 from the leg's
+start (this room lines up at -3): the lead plays the head-shake (anim 17) as on the cartridge -- C0/9E84 runs on the port's own
+player page with `$97` = its slot. One mutation. disasm/notes/field_dash_run.md.
+
+`field-picture-return-waits-out-the-songs-poll-vs-cartridge`: leg 58 (Heckran's cave), f4500 from the leg's start: the return
+from fight 1 waits two frames in C7's poll for the song C0/0330 re-posts, before its segment's wait (the torches' step, obj0's
+ambush and the formation as on the cartridge). One mutation. disasm/notes/field_load_cost.md.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

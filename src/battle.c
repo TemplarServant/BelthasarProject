@@ -12314,6 +12314,21 @@ static int battleAscGetFacing(const CtBattleHost* h, int cmb) {
   if (cmb < 0 || cmb >= 11) return 0;
   return (cmb < 3) ? (BT_PCFACING(h, cmb) & 3) : (BT_ENFACING(h, cmb - 3) & 3);
 }
+// C1/75CC, the facing modes of anim-script op 72 (table C1/79A1) on the place (sx, sy): modes 00-18 write the latch $A2B4
+// (C1/75D7 a role's own facing, 75E3 the bearing to a role, 760A a literal, 7612 the bearing to (80,70)); modes 19-23
+// (C1/7639, C1/764A) compute a point and leave it. Returns the latch the op then stores (C1/6006 `LDA $A2B4`), or -1 for a
+// mode outside the table or one whose role is not a combatant.
+static int battleAscFaceMode(CtBattleHost* h, int mode, int sx, int sy) {
+  int fac = -1;
+  if (mode <= 0x09) { int o = h->ascRole[mode]; if (o < 0 || o >= 11) return -1; fac = battleAscGetFacing(h, o); }
+  else if (mode <= 0x13) { int o = h->ascRole[mode - 0x0A]; if (o < 0 || o >= 11) return -1;
+                           fac = ctBattleFaceTab[battleAtan2(sx, sy, BT_LIVEX(h, o), BT_LIVEY(h, o)) & 0xFF]; }
+  else if (mode <= 0x17) fac = mode - 0x14;
+  else if (mode == 0x18) fac = ctBattleFaceTab[battleAtan2(sx, sy, 0x80, 0x70) & 0xFF];
+  else if (mode > 0x23) return -1;
+  if (fac >= 0) h->mem[0xA2B4] = (uint8_t)fac;
+  return h->mem[0xA2B4];
+}
 // C1/6549, ops 9C / 9D: the slide of 98 / 99 (their handlers C1/6299 / C1/672E are the same, and read the op back from $9895:
 // `LDA $9895 / CMP #9C / BEQ / CMP #9D / BNE`, C1/62E4 for a combatant, C1/6425 for an effect object) toward a quarter of the
 // way. Before C1/0222 (the bearing) and C1/65BA (the unit steps and the half-distance $84 the hop divides by), the goal
@@ -12515,9 +12530,14 @@ static void battleAscPoseTick(CtBattleHost* h) {
     // $A2C8 and the pointer pair $A1FE,Y): nothing here reads the alive list $AF02. So a combatant off that list still
     // plays its window -- playthrough leg 97, slot 6 (id 61) acts at f2382 with $AF02+6 = FF since f2359, and the
     // cartridge publishes its anim 03 at f2386 (`$A21F` -> 0A), which takes the publish the victim's `06 03` then waits
-    // a frame for. The port names the tables by the staged id ($AF0D), FF only where no enemy was staged.
-    id = s[0xAF0D + (cmb - 3)];
-    if (id == 0xFF) { h->ascPmMode[cmb] = 0; return; }                          // no enemy staged in the slot
+    // a frame for. Nor does it read the staged list $AF0D, which a script's removal clears too: playthrough leg 127, the
+    // Golem Boss's exit from the wing -- `$AF0D` = FF from f17042, then its exit action arms anim 01 and the cartridge
+    // publishes 00/01/02/01 from f17066 (`$A127` 02, the cursor `$A13D` 00-03), the boss rising with its arms spread; named by
+    // `$AF0D` the port stopped and drew its folded idle (1652-2057 px, f17069-f17125). So the tables are named by the id the
+    // staging wrote into the slot's stat block (block+0, FD/B438 -- the one battleEnemyGenRender draws with), and only a slot
+    // no enemy was staged into stops (its record `$29BF + 12k` +6, the renderer's own test).
+    if (s[0x29BF + (cmb - 3) * 12 + 6] != 0) { h->ascPmMode[cmb] = 0; return; }   // no enemy staged in the slot
+    id = s[0x5FAD + (cmb - 3) * 0x80];
     facing = BT_ENFACING(h, cmb - 3) & 3;
   }
   h->ascPmCur[cmb] = (h->ascPmCur[cmb] + 1) & 0xFF;                             // C1/42B0
@@ -14031,20 +14051,31 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           }
           break;
         case 0x72: {                                                 // set facing (C1/5FDE -> C1/75CC)
-          // `72 tt`: the track's combatant's $96DB := f(tt), through the C1/75CC mode table (C1/79A1):
-          //   00-09  C1/75D7  copy role[tt]'s own facing ($96DB[$A014[tt]])
-          //   0A-13  C1/75E3  faceTab[atan2(self, role[tt-0x0A])] -- `72 0D` = face the victim, `72 0A` the actor
-          //   14-17  C1/760A  the literal facing tt-0x14
-          //   18     C1/7612  faceTab[atan2(self, (0x80,0x70))]
+          // `72 tt`: the track's combatant's $96DB := the latch $A2B4 after the C1/75CC mode table (C1/79A1) ran on tt:
+          //   00-09  C1/75D7  $A2B4 := role[tt]'s own facing ($96DB[$A014[tt]])
+          //   0A-13  C1/75E3  $A2B4 := faceTab[atan2(self, role[tt-0x0A])] -- `72 0D` = face the victim, `72 0A` the actor
+          //   14-17  C1/760A  $A2B4 := the literal facing tt-0x14
+          //   18     C1/7612  $A2B4 := faceTab[atan2(self, (0x80,0x70))]
+          //   19-21  C1/7639  a POINT only ($A2B0/$A2B2 = role[tt]'s place); 22-23 C1/764A the same plus $9708/$9713
+          // and C1/6006 / 6029 / 604E `LDA $A2B4` stores the latch whatever the mode: a point mode puts back the facing the last
+          // mode wrote. Those four routines are its only writers and op 72 its only reader (the ROM's every STA/LDA $A2B4), so
+          // the port keeps it in the WRAM image. MEASURED, playthrough leg 92 f49146-f49216 (the Flea fight): Frog turns LEFT
+          // on the cartridge on such a store; read as inert, the port left him facing right (mirrored, ~70 frames).
           int c = h->ascRole[t], fac = -1, sx, sy;
           if ((c < 0 || c >= 11) && t < 8) break;                      // a scratch object below 8: no facing
           battleAscGetPos(h, t, &sx, &sy);                             // (an effect object: C1/6034 `$80/$81 = $A240/$A250`)
-          if (a1 <= 0x09) { int o = h->ascRole[a1];
-                            if (o >= 0 && o < 11) fac = battleAscGetFacing(h, o); }
-          else if (a1 <= 0x13) { int o = h->ascRole[a1 - 0x0A];
-                            if (o >= 0 && o < 11) fac = ctBattleFaceTab[battleAtan2(sx, sy, BT_LIVEX(h, o), BT_LIVEY(h, o)) & 0xFF]; }
-          else if (a1 <= 0x17) fac = a1 - 0x14;
-          else if (a1 == 0x18) fac = ctBattleFaceTab[battleAtan2(sx, sy, 0x80, 0x70) & 0xFF];
+          // track 4 (C1/600E-6031): the same for every combatant of its $A018 list, each from its own place ($1D0C/$1D23,X)
+          if (t == 4) {
+            for (int y = 0; y < 11 && !(h->mem[0xA018 + y] & 0x80); y++) {
+              int x = h->mem[0xA018 + y];
+              if (x >= 11) continue;
+              int lf = battleAscFaceMode(h, a1, BT_LIVEX(h, x), BT_LIVEY(h, x));
+              if (lf >= 0) battleAscSetFacing(h, x, lf);
+              if (tr) fprintf(stderr, "asc f%d rel=%d t%d FACE cmb%d (list) mode=%02X -> %d\n", h->frames, rel, t, x, a1, lf);
+            }
+            break;
+          }
+          fac = battleAscFaceMode(h, a1, sx, sy);
           if (t >= 8) {                                                // C1/604B-6051: `$A230,X = $A2B4`
             if (fac >= 0) h->mem[0xA230 + (t - 8)] = (uint8_t)fac;
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d FACE obj%d mode=%02X -> %d\n", h->frames, rel, t, t - 8, a1, fac);
@@ -21353,14 +21384,24 @@ static void battleOamReset(const CtBattleHost* h) { gOamOwner = h; gOamCmpOn = g
 // the bytes the tick began with (battleOamPrioBefore, at the tick's head). MEASURED on the rule's cartridge, playthrough
 // leg 67 (Masa & Mune's tornado): `$99BB` 00 on row f32379 (CD:2B63), the same row in the port, and the picture changes
 // on f32382 -- row + 3, a pose's distance -- where the port's changed a picture early.
+// ...and the action gate the compose's per-combatant entry tests before the status icons (CF/EDB8-EDC0 `LDA $A013 / BNE /
+// LDA $A0FE / BNE / JMP CF/EE2C`): the main loop's C1:40A9 `INC $A013` (an action's open) on row r is in the compose of
+// the frame after, so the icons go from picture r + 3. MEASURED on the rule's cartridge, playthrough leg 92 (the Flea
+// fight): `$A013` 00 -> 01 on row f80398 on both sides; the icons are on the cartridge's f80400 and gone from f80401, and
+// the port, which read the frame's own value, took them off a picture early (181 px). The tick's head keeps the two bytes.
 static uint8_t gOamPrio[11]; static int gOamPrioF = -1; static const CtBattleHost* gOamPrioOwner;
+static uint8_t gOamGateA013, gOamGateA0FE;
 static void battleOamPrioBefore(const CtBattleHost* h) {
   memcpy(gOamPrio, h->mem + 0x99B5, sizeof gOamPrio); gOamPrioOwner = h; gOamPrioF = h->frames;
+  gOamGateA013 = h->mem[0xA013]; gOamGateA0FE = h->mem[0xA0FE];
 }
 static void battleOamCompose(CtBattleHost* h) {                    // CF/E778 JSR CF/E83A (the caller tests `$A028`)
   if (gOamOwner != h) battleOamReset(h);                           // (another host: nothing of it shipped yet)
   gOamCmpHost = *h; memcpy(gOamCmpMem, h->mem, sizeof gOamCmpMem); gOamCmpOn = 1; gOamCmpF = h->frames;
-  if (gOamPrioOwner == h && gOamPrioF == h->frames) memcpy(gOamCmpMem + 0x99B5, gOamPrio, sizeof gOamPrio);
+  if (gOamPrioOwner == h && gOamPrioF == h->frames) {
+    memcpy(gOamCmpMem + 0x99B5, gOamPrio, sizeof gOamPrio);
+    gOamCmpMem[0xA013] = gOamGateA013; gOamCmpMem[0xA0FE] = gOamGateA0FE;   // (CF/EDB8's gate: the frame before's)
+  }
 }
 // battleAdvanceAction is both halves of an action's frame: the service's engines (CF/EC78's feet, the trail, the effect
 // objects) and the main loop's script with its pose machine (C1/423A -> C1/42C4, whose C1/4307 `JSR C1/1C4A` publishes

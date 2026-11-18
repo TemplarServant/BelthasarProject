@@ -61,3 +61,14 @@ keyboard's X is pad B; a drive's `CT_RUN=1` ORs B (0x001) into the word on every
 
 - The d-pad itself still comes from the host keys / `wsDx` in that block, not from the latched `$00F9`; they agree
   frame for frame under the port's input convention, but the ROM reads `$00F9`.
+
+## The head-shake tests the lead's own index (2026-11-17)
+
+C0/9E84's run tail C0/A18C: `LDA $1D32 / BNE / LDA $1D33 / BNE / CPY $97 / BNE / LDA $E5 / BNE / BRA ->A1BB`, and A1BB `LDA #17 /
+STA $1680,Y / STZ $1681,Y / STZ $1601,Y` -- a lead whose intent is blocked (no step taken) plays the head-shake, anim 17; Y is the
+lead's own index (`$6D` = `$0197`). The idle tail's decision pose (A1E9) has the same `CPY $97`. The port runs 9E84 on the host's
+player page (field.c, g_collRam), where the lead is slot 2, but that page holds the scene's `$0197` for C0/9923's collision: with any
+lead but object 1 the test never matched. MEASURED on the rule's cartridge, playthrough leg 134 (Death Peak's wind, loc 0F4): with
+Ayla leading (`$0197` = 06) the wind stops her and `$1686` steps 17 01/02/03/00 every 10 frames f13733-f13802; the port kept the run
+cycle (anim 06; 151 px at f13800 from the leg's start, 411 from the f13700 cut). The page's `$97` is 02 for the call now (restored
+after). Check field-picture-lead-head-shake-on-its-own-slot-vs-cartridge.

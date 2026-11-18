@@ -302,6 +302,33 @@ PICTURES = {
     # Leg 65, Denadoro (TM 11101 / TS 11001, half-add): the target hand (attr 32, OBJ priority 3) is the sub pixel of BG3's
     # mist like every battle sprite -- f37630, a target select of the fight from the state cut on f36900 (131 px opaque).
     'target-hand-under-the-mist': dict(leg='65_denadoro', at=36900, frames=730, own=True, lag=-1),
+    # Leg 92, the Flea fight: anim-script op 72's point modes (19-23, C1/7639 / C1/764A) leave the facing latch `$A2B4` and the
+    # op stores it all the same (C1/6006), so Frog turns to the facing the last mode wrote -- LEFT on the cartridge, f49200
+    # from the leg's start (a state cut inside the fight cannot seed the port; 602 px with the point modes read as inert:
+    # Frog mirrored for ~70 frames).
+    'facing-latch-on-a-point-mode': dict(leg='92_slash', at=32400, frames=16800, own=True, lag=-1),
+    # ...and the status icons the compose builds (CF/EDB8-EDC0 `LDA $A013 / BNE / LDA $A0FE / BNE`): the compose runs before
+    # the frame's main loop, so an action's open (C1:40A9 on row f80398) takes them off picture f80401; read the same frame,
+    # the port took them off a picture early (f80400: 181 px -- Frog's poison bubbles, Marle's star, Crono's face).
+    'status-icons-gate-on-the-frame-before': dict(leg='92_slash', at=32400, frames=48000, own=True, lag=-1),
+    # Leg 127, the Golem Boss's exit from the wing ('I HATE heights!'): the anim-script pose engine names the enemy's tables by
+    # what the staging laid, not by the staged list `$AF0D` a removal cleared (FF from f17042): the boss rises with its arms
+    # spread, poses 00/01/02/01 from f17066 (f17069: 1652 px folded before).
+    'golem-boss-exit-poses': dict(leg='127_winged_epoch_179', at=800, frames=16269, own=True, lag=-1),
+    # ...and once op 29 hides it (`$9FFA` = 01 from f17159) its attached effect object 0 still draws the smoke cloud: the
+    # compose's hidden gate is in the cells' routine only (CF/EAD7), not in the objects' passes CF/EDB8 / CF/EDF7 (f17165: 817 px).
+    'hidden-boss-keeps-its-smoke': dict(leg='127_winged_epoch_179', at=800, frames=16365, own=True, lag=-1),
+    # Leg 134, Death Peak's wind (loc 0F4), Ayla leading (`$0197` = 06): the wind stops her and she plays the head-shake (anim
+    # 17, `$1686` 17 01/02/03/00 f13733-f13802) -- C0/9E84's run tail tests `CPY $97` (C0/A19A) with Y = the lead's index; the
+    # port ran it on its own page (the lead in slot 2) with the scene's `$97` and kept the run (anim 06, 411 px at f13800).
+    # (From the leg's start, where this room lines up at -3. From a state cut on f13700 the head-shake runs too but a step of
+    # its 10-frame cycle apart at f13800, 260 px at -2 -- not looked at.)
+    'lead-head-shake-on-its-own-slot': dict(leg='134_death_peak_wind', at=0, frames=13800, own=True, lag=-3),
+    # Leg 58, Heckran's cave: the return from fight 1 waits in C7's poll inside C0/0304's segment -- C0/0330's C0/595C re-posts
+    # the room's song (obj0 slot 1 `EC 11 ..`, C7/0A5A's counted poll, 2 frames) before that segment's C0/00EB: `$0153` stays 00
+    # on f3012-f3013 and the tiles step on f3014. Run two frames early, the port had the torches a step off, then obj0's ambush
+    # and the formation (f4500: 961 px) and the fight's places (f5100: 532 px).
+    'return-waits-out-the-songs-poll': dict(leg='58_heckran_cave', at=0, frames=4500, own=True, lag=-2),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

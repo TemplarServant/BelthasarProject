@@ -519,7 +519,7 @@ Three more mechanisms read straight out of the ROM in this pass.
 | `0A-13` | C1/75E3 | `faceTab[atan2(self, role[tt-0x0A])]` — `72 0D` faces the VICTIM, `72 0A` the ACTOR |
 | `14-17` | C1/760A | the literal facing `tt - 0x14` |
 | `18` | C1/7612 | `faceTab[atan2(self, (0x80,0x70))]` — the screen centre |
-| `19-1F` | C1/7639 | the POSITION resolver: writes `$A2B0`, not `$A2B4`, so the store re-uses a stale value — inert |
+| `19-21` | C1/7639 | the POSITION resolver: writes `$A2B0`/`$A2B2`, not `$A2B4`, so the store re-uses the latch the last mode wrote -- NOT inert: the combatant takes that facing (corrected 2026-11-17: playthrough leg 92, Frog in the Flea fight; modes 22-23, C1/764A, the same with `$9708`/`$9713`; `$A2B4`'s only writers are C1/75DF / 7606 / 760E / 762A and its only readers op 72's three stores) |
 
 Ops `A8`/`A9` stamp it too, from the heading op `76` left in `$A5AA` (`C1/69F1` / `C1/6B1E`:
 `LDA $A5AA,Y / TAX / LDA $C0F700,X / STA $96DB,Y`). Oracle: GATO's `72 0D` writes `$96DE[3] = 3` at f592
@@ -1057,3 +1057,14 @@ combatant of the list `$A018`, then `$A3A9,4 := 2` and C1/512C: the op's length,
 on, and the mover outlives the track (`$A337`/CF/F03E are the combatant's). MEASURED, the rule's cartridge, playthrough leg 114, action
 AB: track 4's `12 2B` then `1B 2B` at f55429 (C1:564D) with cmb9's y stepping 40 frames on (CF:F07C), its `06 07` at f55462, the parked
 track 3's at f55502. battle.c: g_ascMvFree (the port still moves only the list's first combatant).
+
+## The pose engine names the tables by the staging, not by `$AF0D` (2026-11-17)
+
+C1/424C-4304 reads what the staging laid for the combatant -- `$A124/$A12F/$A13A/$A150`, the facing latch `$96DB/$A214`, `$966E`,
+`$A2C8`, the pointer pair `$A1FE,Y` + the cursor, `LDA E4:,X` -- and publishes `$967B` / `JSR C1/1C4A`. It reads neither the
+alive list `$AF02` nor the staged list `$AF0D`, which a script's removal clears. MEASURED on the rule's cartridge, playthrough leg
+127 (the Golem Boss's exit from the wing, "I HATE heights!"): `$AF0D` = FF from f17042, then the exit action arms anim 01 and the
+cartridge publishes 00/01/02/01 from f17066 (`$A127` 02, the cursor `$A13D` 00-03): the boss rises with its arms spread. The port
+named the tables by `$AF0D` and stopped (its folded idle, 1652-2057 px f17069-f17125); it names them by the slot's stat block id
+(block+0, the id battleEnemyGenRender draws with) now, and stops only for a slot no enemy was staged into (`$29BF + 12k` +6).
+Check field-picture-golem-boss-exit-poses-vs-cartridge.

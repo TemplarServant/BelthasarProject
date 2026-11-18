@@ -903,3 +903,16 @@ a misnamed refusal: it was the RLE stream's end) and ct_map_build_cycles' median
 34. lz.c ct_map_load_cycles_w reads on in the walk's WRAM image (the port's, equal to the cartridge's there: `$7E:EE90..`
 holds `EE 00` on both sides at f8199); scene 389 now prices 11,941,979 cycles = 34 frames and its ramp lands on the
 cartridge's frame. Scene 356 (loc 164) was the same case (17 -> 18 frames).
+
+## The return waits out a song's poll inside its segment (2026-11-17)
+
+C0/0304's segment after C0/0327's wait runs C0/032D (JSR C0/56D4) and C0/0330 JSR C0/595C -- obj0's slot 1 to its end -- and a
+sound post in it (op EC, C0/3C98 -> JSL C7/0004 at C0/3CB4) waits on the SPC in C7/0A5A's counted poll before the segment goes on
+to C0/A712 and its C0/00EB. Under the rule the poll is a wait: its frames come before the segment's own C0/00EB, with no C0/00DE
+flip and no tile step. MEASURED on the rule's cartridge, playthrough leg 58 (Heckran's cave, the return from fight 1): the ack and
+`$051D`'s step on f3010; `$0153` 00 from f3011 to f3013 (the post, `EC 11 43 00` cmd 11, on f3012); the segment's wait on f3014
+(`$0153` 01, the step). The port's CtSceneRunObj0Slot1 dropped the frames its priced post cost (`sndFreezeFrames`), so the chain
+and everything after it ran two frames early -- the torches a step off, obj0's ambush and the formation (961 px at f4500), the next
+fight's places (532 px at f5100). The runner returns them now and the hold defers the segment's wait by them (field.c,
+battleReturnStall). Check field-picture-return-waits-out-the-songs-poll-vs-cartridge. (The menu exit's C0/0206 caller is the same
+shape and not measured.)

@@ -9292,16 +9292,21 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
                                                                              //   (the FE entry has none: FE904 BRA)
     if ((ord[i] & 0x40) && (front & (1 << g_bDrawOnly))) continue;   // FE8C2 BMI: its cells are the FE entry's
     const int pop =h && g_bDrawOnly < CT_BATTLE_FX_POOL && h->popups[g_bDrawOnly].active && !g_bNoPopups;
-    if (battleHiddenObj(mem, h, g_bDrawOnly)) {           // CF/FE28 `LDA $9FF7,X / BNE skip`: no OAM for a hidden object
-      if (pop) battleFxPopupEntry(fb, h, g_bDrawOnly, prevFb);   //   (its number as before: not derived for a hidden one)
-      continue;
-    }
+    // A HIDDEN combatant (`$9FF7,X`, op 29) loses its CELLS only: the compose's entry CF/E8D4 runs CF/EDB8 (the effect
+    // objects in front), CF/EAC5 (the cells, whose CF/EAD7 `LDA $9FEB,X / BEQ / RTS` with X = cmb + $0C is the only
+    // hidden gate of the three) and CF/EDF7 (the objects behind); the shadow (CF/EA8F) and the afterimage (CF/E9CB) read it
+    // too. MEASURED on the rule's cartridge, playthrough leg 127 (the Golem Boss's exit from the wing): op 29 hides the
+    // boss (`$9FFA` = 01 from f17159) and its attached object 0 (`$A3DF..E2` = 00 00 00 80, `$A1D8` = 01) draws its smoke
+    // cloud through f17173 (817 / 451 px the port lacked, which skipped the hidden combatant's whole entry). (The CF/FE28
+    // read the old comment cited is the removal routine's palette part, not the compose.)
+    const int hidden = battleHiddenObj(mem, h, g_bDrawOnly);
     if (g_bObjPrioMask) memcpy(prevFb, fb, sizeof prevFb);
     g_motOwn = battleMotOwn(h, g_bDrawOnly);
     g_bObjSubPrio = (g_bObjPrioMask && mem)                // its cells' OBJ priority (below), for the screens' math
                   ? battleCmbObjPrio(mem, g_bDrawOnly) : -1;
     g_bObjPalCur = battleCmbObjPal(mem, h, g_bDrawOnly);  // its cells' palette (an effect object's own: battleFxDrawOam)
     battleFxObjRender(fb, h, g_bDrawOnly, 0x40);     // CF/EDF7: the effect objects drawn after it (behind)
+    if (!hidden) {
     battleGatoRender(fb, mem, h);                     // GATO idle bob/claw-swap or rear-up attack
     battleEnemyGenRender(fb, mem, h);                 // every other staged enemy id: ROM idle window
     battleDissolveRender(fb, mem, h);                 // dying-enemy corpse (dither+pal4)
@@ -9311,6 +9316,7 @@ static void battleCombatantsRender(uint8_t* fb, const uint8_t* mem, const CtBatt
       battleStatusIconRender(fb, mem, h, g_bDrawOnly, BT_LIVEX(h, g_bDrawOnly), BT_LIVEY(h, g_bDrawOnly));
     battleAttackRender(fb, mem, h);                   // Crono swing pose
     battleMarleAttackRender(fb, mem, h);              // Marle crossbow pose (her shot's sparks: the effect objects)
+    }
     battleFxObjRender(fb, h, g_bDrawOnly, 0x80);     // CF/EDB8: the effect objects drawn before it (in front)
     // The cells' OBJ priority: CF/EB1E `$37 = $9930,X | $99A9,X` with X = cmb + $0C, i.e. $99B5 + cmb -- CC/E3F9's
     // default ($A5E3 for all eleven) or what the anim-script ops C1/7555 / C1/7595 set for the role. Painted back to
@@ -9621,12 +9627,13 @@ static void fieldResumeRebuildRun(CtScene* vm) {
   if (s) fieldResumeRebuild(s, g_resumeRebuildLoc, 31);
   g_resumeRebuildLoc = -1;
 }
-static void fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
+// Returns the frames C0/0330's sound posts cost (CtSceneRunObj0Slot1): C0/0304 waits them out in C7's poll before it goes on.
+static int fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
   uint8_t* s = CtSceneMem7E(vm);
-  if (!s) return;
+  if (!s) return 0;
   int outcome = h->glb[0x1EC];
   int cont = outcome == 1 ? (s[0x2A1F] & 0x20) != 0 : outcome != 2;   // C0/028D-029E
-  if (!cont) return;
+  if (!cont) return 0;
   // The map in WRAM, built again (the fight used $7E:3000-$CFFF for its own). C0/0316 JSR C0/A33B: the cells (C0/A521)
   // and the exit plane (C0/A66B; its masks `$1D1E/$1D1F` are the field page C0/0905 restored); C0/0324 JSR C0/09DD and
   // C0/032A JSR C0/0A14: the two assemblies at $7E:B000 / $7E:C000; and C0/0333 JSR C0/A712: the treasure plane and the
@@ -9639,9 +9646,10 @@ static void fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
   // `$1E01 = 18` at the ack + 2). field_load_cost.md sec. 16.
   if (stage == 1) fieldResumeRebuild(s, loc, 2);          // 0324 C0/09DD
   if (stage == 2) fieldResumeRebuild(s, loc, 4);          // 032A C0/0A14
+  int stall = 0;
   if (stage < 0 || stage == 2) {
     CtSceneScriptImage(vm);                               // 032D JSR C0/56D4: the image C0/0918 overwrote
-    CtSceneRunObj0Slot1(vm, "C0/0330");                   // 0330 JSR C0/595C
+    stall = CtSceneRunObj0Slot1(vm, "C0/0330");           // 0330 JSR C0/595C (its sound posts: frames in C7's poll)
   }
   if (stage == 2) fieldResumeRebuild(s, loc, 8);          // 0333-033F DP=$1D00 / JSR C0/A712
   // C0/034B `LDA $7E2A1F / BIT #80 / BNE ->035D`: a scripted battle (D8's imm2 bit 7, e.g. the attract's demo fights
@@ -9655,6 +9663,7 @@ static void fieldBattleResume(CtScene* vm, CtBattleHost* h, int stage) {
   // The tail ends `038C BRL ->00EB` and returns through C0/0283 to C0/18C4 `JSR C0/28E1`: the opened-door list re-applied
   // over the map C0/0316's C0/A33B decompressed afresh (above).
   if (stage == 4) fieldResumeRebuild(s, loc, 16);
+  return stall;
 }
 
 // ---- CT_BATTLESHOT_AT=<frame> (battle_actionfx.md V2/V3) ----
@@ -11877,6 +11886,7 @@ int main(int argc, char** argv) {
   int battlePhase = 0; CtBattleHost liveHost; memset(&liveHost, 0, sizeof liveHost);
   int battleReturnHold = 0;   // frames the field's return from a battle still owes (C0/0304's reload, after the ack)
   int battleReturnWait = -1;  // under the rule: which of the chain's five C0/00EB this frame ends in (0 = the ack's), else -1
+  int battleReturnStall = 0;  // ...and frames the chain spends in C7's poll inside a segment (C0/0330's sound posts)
   int fieldIrqPreFlip = 0;    // this frame's line-211 IRQ came before its main thread's C0/00DE flip (see the return chain)
   int fieldIrqLoadPrev = 0;   // the last frame was inside a location load (fade == 3): no NMI has armed this frame's IRQ
   int fieldIrqCommit = 0;     // this frame's iteration committed a location change (C0/0C9A): the load starts in it
@@ -18093,7 +18103,14 @@ int main(int argc, char** argv) {
                     // roll advances (A231 INC $F8) -- the scene's, which every other reader shares.
                     g_collRam[0x0158] = ls[0x0158]; g_collRam[0x0159] = ls[0x0159]; g_collRam[0x01F8] = ls[0x01F8];
                     g_collRam[0x011F] = ls[0x011F]; g_collRam[0x0162] = ls[0x0162]; }   // (A1E9's `LDA $62` / A1F7's `LDA $1F`)
-          CtPlayerAnimSelect(g_collRam, fRom, (int)fRomLen, 2);   // C0/9E29's head: JSR C0/9E84
+          // ...and `$0197`: 9E84 runs with Y = the lead's own index and its tails test `CPY $97` (A19A the run's head-shake,
+          // A1E9 the idle's decision pose), so on this page, where the lead is slot 2, `$97` is 02 for the call (the page
+          // holds the scene's for C0/9923's collision). MEASURED on the rule's cartridge, playthrough leg 134 (Death Peak's
+          // wind, loc 0F4): with Ayla leading (`$0197` = 06) the wind stops her and she plays the head-shake, `$1686` 17
+          // 01/02/03/00 f13733-f13802; the scene's 06 never matched Y = 2 here and the port kept the run (anim 06, 411 px).
+          { const uint8_t lead97 = g_collRam[0x0197]; g_collRam[0x0197] = 2;
+            CtPlayerAnimSelect(g_collRam, fRom, (int)fRomLen, 2);   // C0/9E29's head: JSR C0/9E84
+            g_collRam[0x0197] = lead97; }
           if (ls) { ls[0x1680 + pObj * 2] = g_collRam[0x1682]; ls[0x1681 + pObj * 2] = g_collRam[0x1683];
                     ls[0x1601 + pObj * 2] = g_collRam[0x1603];
                     ls[0x0158] = g_collRam[0x0158]; ls[0x0159] = g_collRam[0x0159]; ls[0x01F8] = g_collRam[0x01F8]; }
@@ -18288,11 +18305,23 @@ int main(int argc, char** argv) {
     if (battleReturnHold > 0) {                        // C0/000B + C0/0304 after a battle: the VM waits it out
       battleReturnHold--;
       // (under the rule each of these frames is one of the chain's C0/00EB waits: CtSceneReturnWaitFrame, see the ack)
+      // A segment whose sound post waits on the SPC (C0/0330's C0/595C: obj0's slot 1 re-posts the room's song, `EC 11 ..`,
+      // C7/0A5A's counted poll) holds the chain there: no C0/00EB ends those frames, so no leg advances and no wait's work
+      // (C0/881E, C0/00DE's flip) runs. MEASURED on the rule's cartridge, playthrough leg 58 (Heckran's cave, the return
+      // from fight 1): the ack and `$051D`'s step at f3010, C0/032D / C0/0330 and the JSL C7/0004 (cmd 11) at f3012, the poll
+      // to f3014 and the next tile step there -- the port ran the rest of the chain two frames early (the torches a step off,
+      // then obj0's ambush and the fight's places 1-2 px). The poll is INSIDE the segment, before its C0/00EB: the
+      // cartridge's `$0153` stays 00 on f3012-f3013 (no C0/00DE flip, no tile step) and the wait ends the segment on f3014.
       if (fieldRuleNmiOnHold() && f.vm && battleReturnWait >= 0) {
-        battleReturnWait++;
-        fieldBattleResume(f.vm, &liveHost, battleReturnWait);   // C0/0304's leg after this C0/00EB (fieldBattleResume)
-        fieldIrqPreFlip = !fieldRuleIfast() && battleReturnWait <= 2;   // C0/0327's and C0/0340's segments: the IRQ first (see the ack)
-        CtSceneReturnWaitFrame(f.vm);
+        if (battleReturnStall > 0) {                     // in C7's poll: no C0/00EB ends this frame...
+          if (--battleReturnStall == 0) CtSceneReturnWaitFrame(f.vm);   // ...but the poll's last, where the segment's wait is
+        } else {
+          battleReturnWait++;
+          int stall = fieldBattleResume(f.vm, &liveHost, battleReturnWait);   // C0/0304's leg after this C0/00EB (fieldBattleResume)
+          fieldIrqPreFlip = !fieldRuleIfast() && battleReturnWait <= 2;   // C0/0327's and C0/0340's segments: the IRQ first (see the ack)
+          if (stall > 0) { battleReturnStall = stall; battleReturnHold += stall; }   // its wait comes after the poll
+          else CtSceneReturnWaitFrame(f.vm);
+        }
         if (!battleReturnHold) battleReturnWait = -1;
       }
     }

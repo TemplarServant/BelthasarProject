@@ -54861,6 +54861,210 @@
       ]
     },
     {
+      "name": "field-picture-facing-latch-on-a-point-mode-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "facing-latch-on-a-point-mode"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: facing-latch-on-a-point-mode leg 92 f32400 +16800 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: facing-latch-on-a-point-mode "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "in the Flea fight Frog faces the way the cartridge turns him: anim-script op 72 stores the facing latch $A2B4 even for its point modes",
+      "notes": "THE FACING LATCH (2026-11-17). Op 72 (C1/5FDE) runs the C1/75CC mode table (C1/79A1) and then stores `$A2B4` into the combatant's $96DB (C1/6006; the track-4 list C1/6029; an effect object's $A230, C1/604E). Modes 00-18 write the latch (C1/75DF / 7606 / 760E / 762A -- its only writers); modes 19-21 (C1/7639) and 22-23 (C1/764A) compute a point ($A2B0/$A2B2) and leave it, so the store puts back the facing the last mode wrote. The port read the point modes as inert (disasm/notes/battle_enemy_anim_script.md said so) and left Frog facing right for ~70 frames of the Flea fight (leg 92 f49146-f49216; 602 px at f49200). The port keeps the latch in the WRAM image and runs the track-4 list (C1/600E). From the state cut on f32400, in the field before the fight (a state cut inside a fight cannot seed the port). Found by the picture-audit triage workflow. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  else if (mode > 0x23) return -1;\n  if (fac >= 0) h->mem[0xA2B4] = (uint8_t)fac;\n  return h->mem[0xA2B4];",
+          "replace": "  else return -1;  /* MUT: the point modes inert */\n  if (fac >= 0) h->mem[0xA2B4] = (uint8_t)fac;\n  return h->mem[0xA2B4];",
+          "why": "a point mode stores nothing: Frog keeps facing right"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-status-icons-gate-on-the-frame-before-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "status-icons-gate-on-the-frame-before"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: status-icons-gate-on-the-frame-before leg 92 f32400 +48000 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: status-icons-gate-on-the-frame-before "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the battle's status icons leave the picture on the cartridge's frame when an action opens: the compose's gate reads the frame before's $A013",
+      "notes": "THE ICONS' GATE IS THE FRAME BEFORE'S (2026-11-17, disasm/notes/battle_picture_lags.md). The compose's per-combatant entry (CF/E8D4) tests CF/EDB8-EDC0 `LDA $A013 / BNE / LDA $A0FE / BNE` before the status icons (CF/EE2C); the compose runs before the frame's main loop, so an action's open (C1:40A9 INC $A013) on row r takes the icons off picture r + 3. Leg 92 (the Flea fight): $A013 00 -> 01 on row f80398 on both sides; the cartridge shows the icons on f80400, the port took them off a picture early (181 px). battle.c keeps $A013 / $A0FE at the tick's head (battleOamPrioBefore) for the compose's copy. From the state cut on f32400 (the field before the fight). Found by the picture-audit triage workflow. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    gOamCmpMem[0xA013] = gOamGateA013; gOamCmpMem[0xA0FE] = gOamGateA0FE;   // (CF/EDB8's gate: the frame before's)",
+          "replace": "    /* MUT: the compose reads the frame's own gate */",
+          "why": "the icons leave a picture early when an action opens"
+        }
+      ]
+    },
+    {
+      "env": {},
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "name": "field-picture-golem-boss-exit-poses-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "golem-boss-exit-poses"
+      ],
+      "expect": [
+        "fieldpicture: golem-boss-exit-poses leg 127 f800 +16269 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: golem-boss-exit-poses "
+      ],
+      "note_pass": "the Golem Boss rises out of the wing with its arms spread, as on the cartridge: the pose engine names an enemy's tables by its staged block, not by $AF0D",
+      "notes": "THE POSE ENGINE NEVER READS $AF0D (2026-11-17). C1/424C-4304 reads the pointers and stride the staging laid ($A124/$A12F/$A13A/$A150, $96DB/$A214, $966E, $A2C8, $A1FE,Y), not the staged list $AF0D, which a script's removal clears: leg 127, the Golem Boss's exit from the wing -- $AF0D = FF from f17042, then its exit action arms anim 01 and the cartridge publishes 00/01/02/01 from f17066. Named by $AF0D the port stopped and drew its folded idle (1652-2057 px, f17069-f17125). The tables are named by the slot's stat block id (block+0, the renderer's). From the state cut on f800. Found by the picture-audit triage workflow (verified). One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    id = s[0x5FAD + (cmb - 3) * 0x80];",
+          "replace": "    id = s[0xAF0D + (cmb - 3)]; if (id == 0xFF) { h->ascPmMode[cmb] = 0; return; }  /* MUT */",
+          "why": "named by the staged list a removal cleared: the exit plays no window"
+        }
+      ]
+    },
+    {
+      "env": {},
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "name": "field-picture-hidden-boss-keeps-its-smoke-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "hidden-boss-keeps-its-smoke"
+      ],
+      "expect": [
+        "fieldpicture: hidden-boss-keeps-its-smoke leg 127 f800 +16365 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: hidden-boss-keeps-its-smoke "
+      ],
+      "note_pass": "a hidden combatant's attached effect objects are still drawn (the Golem Boss's smoke cloud), as on the cartridge",
+      "notes": "A HIDDEN COMBATANT LOSES ITS CELLS ONLY (2026-11-17). The compose's entry CF/E8D4 runs CF/EDB8 (objects in front), CF/EAC5 (the cells; CF/EAD7 `LDA $9FEB,X / BEQ / RTS`, X = cmb + $0C, the only hidden gate of the three) and CF/EDF7 (objects behind). Leg 127: op 29 hides the Golem Boss ($9FFA = 01 from f17159) and its object 0 ($A3DF..E2 = 00 00 00 80) draws its smoke cloud through f17173; the port skipped the hidden combatant's whole entry (817 / 451 px at f17165 / f17171). From the state cut on f800. Found by the picture-audit triage workflow (verified). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    const int hidden = battleHiddenObj(mem, h, g_bDrawOnly);\n",
+          "replace": "    const int hidden = battleHiddenObj(mem, h, g_bDrawOnly); if (hidden) continue;  /* MUT */\n",
+          "why": "a hidden combatant's whole entry skipped: the smoke cloud vanishes"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-lead-head-shake-on-its-own-slot-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "lead-head-shake-on-its-own-slot"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: lead-head-shake-on-its-own-slot leg 134 +13800 frames of the leg's pad: 0 px differ at port -3"
+      ],
+      "pin": [
+        "^fieldpicture: lead-head-shake-on-its-own-slot "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a lead other than Crono plays the head-shake when the wind stops her, as on the cartridge (C0/9E84's CPY $97 with the lead's own index)",
+      "notes": "THE HEAD-SHAKE TESTS THE LEAD'S OWN INDEX (2026-11-17, disasm/notes/field_dash_run.md). C0/9E84's run tail C0/A18C ends `CPY $97 / BNE` before A1BB's anim 17 (Y = the lead's index); the port runs 9E84 on its own player page where the lead is slot 2 but the page held the scene's $0197, so a lead other than object 1 never played it. Leg 134 (Death Peak's wind, Ayla leading, $0197 = 06): `$1686` 17 01/02/03/00 f13733-f13802 on the cartridge, the port kept the run (151 px at f13800). From the leg's start (this room lines up at -3). Found by the picture-audit triage workflow (verified). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          { const uint8_t lead97 = g_collRam[0x0197]; g_collRam[0x0197] = 2;",
+          "replace": "          { const uint8_t lead97 = g_collRam[0x0197];  /* MUT */",
+          "why": "9E84 sees the scene's $97: a lead other than object 1 never plays the head-shake"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-return-waits-out-the-songs-poll-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "return-waits-out-the-songs-poll"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: return-waits-out-the-songs-poll leg 58 +4500 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: return-waits-out-the-songs-poll "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fight's return waits in C7's poll for the song C0/0330 re-posts before the segment's wait, as on the cartridge",
+      "notes": "THE RETURN WAITS OUT THE SONG'S POLL (2026-11-17). C0/0304's segment after C0/0327 runs C0/032D (C0/56D4) and C0/0330 JSR C0/595C, obj0's slot 1, whose `EC 11 43 00` re-posts the room's song: JSL C7/0004 and C7/0A5A's counted poll hold the CPU two frames, inside the segment, before its C0/00EB. Measured on the rule's cartridge, leg 58 (Heckran's cave, the return from fight 1): `$051D` steps on f3010 and f3014, `$0153` 00 on f3011-f3013. The port's CtSceneRunObj0Slot1 ignored the frames its priced post cost: the chain ran two frames early (the torches a step off, then obj0's ambush, the formation 961 px at f4500 and the fight's places). The runner returns them and the hold defers the segment's wait. Found by the picture-audit triage workflow (verified). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          int stall = fieldBattleResume(f.vm, &liveHost, battleReturnWait);",
+          "replace": "          int stall = 0; fieldBattleResume(f.vm, &liveHost, battleReturnWait);  /* MUT */",
+          "why": "the song's poll costs no frame: the return chain runs two frames early"
+        }
+      ]
+    },
+    {
       "name": "field-objdata-sparkles-vs-cartridge",
       "argv": [
         "python",

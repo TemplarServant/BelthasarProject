@@ -192,7 +192,7 @@ void CtSceneBattleReturn(CtScene* sc);
 // C0/56C8, the menu-exit reload chain C0/0206 and the battle-return tail C0/0330, each right after the $7F:2000
 // script image is built. obj0's own state ($1180/$1C00/$1001/$7F0580) is untouched.
 // `site` names the caller for CT_SLOT1TRACE=1 (`slot1: <site> ops 16@0032 ... end@006B`).
-void CtSceneRunObj0Slot1(CtScene* sc, const char* site);
+int CtSceneRunObj0Slot1(CtScene* sc, const char* site);   // -> the frames its sound posts cost
 // The active party $7E2980/81/82 (-1 each without a scene). It persists in WRAM across a load.
 void CtSceneGetParty(const CtScene* sc, int* a, int* b, int* c);
 // ---- Sound sink (disasm/notes/audio_commands.md sec. 6) ----
