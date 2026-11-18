@@ -3646,6 +3646,10 @@ at 18 px, the bow's colour math, OPEN; menu2_item_rest.md) and `field-picture-id
 (leg 125 f29400: a fight's C0/18A4 wait and its ack frame's C0/00EB count `$0158`, the blink on the cartridge's frame; two
 mutations; player_anim_9e84.md).
 
+`field-picture-exit-tail-nmi-is-d1-f4c0-vs-cartridge`: leg 67 f16200, the fight after the Masamune's: the exit tail's NMI
+does D1/F4C0 alone (no `$CE14` count, no strip half; CD/09CE's CGRAM page only inside C7, DB = 0), so the typed box
+keeps the cartridge's parity. One mutation (the CGRAM half is not graded by this picture). disasm/notes/battle_boot.md "The exit tail's NMI".
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

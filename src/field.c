@@ -18609,7 +18609,7 @@ int main(int argc, char** argv) {
           // The exit tail. CD/043E `JSL C0/000B` (C0/1BE6's chain, posted on the frame the module ended, below) and
           // CD/0444 run inside the battle: its main loop sits in the SPC handshake while its NMI keeps coming, C0/2C41
           // drifting the field's layers on the stash, and C0/18B9's ack and C0/0283's restore come after the last of it.
-          CtBattleTailFrame(&liveHost);
+          CtBattleTailFrame(&liveHost, battleTailLeft > 1);   // C7's uploads (DB = 0); the last, CD/0444's CD/044A wait (DB = $7E)
           if (--battleTailLeft == 0) {
             fieldBattleFinish(f.vm, &liveHost, &gameOver);   // ack + C0/0283 dispatch AT THIS SITE (same frame),
             battlePhase = 0;                                 //   so the parked op-0xD8 sees $0118 next tick
@@ -18666,7 +18666,7 @@ int main(int argc, char** argv) {
             if (!battleResolved) battleResolveFrame = frameNo;
             battleResolved = 1;                              // post-victory return probe marker (STEP 6 check)
           }
-        } else if (battleExitPoll ? (CtBattleTailFrame(&liveHost), CtBattleExitPoll(&liveHost))   // CD/042B-0438
+        } else if (battleExitPoll ? (CtBattleTailFrame(&liveHost, 0), CtBattleExitPoll(&liveHost))   // CD/042B-0438 (DB = $7E)
                                   : (CtBattleTick(&liveHost, battleEndReq, binp) && (battleExitPoll = 1) && 0)) {
           // The module's last frame (CD/0418-0428) hands over to CD/044A's waits: from the next frame D1/F4C0 is the NMI
           // (CtBattleTailFrame) and the poll runs after it; on the frame it lets go, CD/043E `JSL C0/000B` -- the chain.

@@ -1097,7 +1097,7 @@ int  CtBattleIdleStep(CtBattleHost* h);
 void CtBattleStagerRecords(CtBattleHost* h);
 // One frame of the exit tail (CD/043E's C0/1BE6 upload, CD/0444): only the battle's NMI runs -- D1/E7AF's head and
 // D1/E7DE's tail, whose C0/2C41 keeps drifting the field's layers on the stash.
-void CtBattleTailFrame(CtBattleHost* h);
+void CtBattleTailFrame(CtBattleHost* h, int db0);   // D1/F4C0; db0 = the NMI came inside C7 (DB = 0)
 // The mover from a mid-battle seed (the --renderwram sweep CT_BATTLE_MVSWEEP): seed every mover byte the ROM keeps
 // per slot ($974A/$9752/$9786/$98AF/$98B7/$9737/$98A7/$9791/$9819/$9742/$98C2/$9897/$A5E4/$A5EC/$9829/$5E1D/
 // $9831/$9839, the live feet $1D0C/$1D23 and the record extents) and step the mode machine + mover one frame.

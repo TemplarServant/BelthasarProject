@@ -20799,9 +20799,20 @@ static void battleObjSlotFrame(CtBattleHost* h);
 // `JSL C0/000B` and CD/0444 run inside the battle, so its main loop sits in the SPC handshake while its NMI keeps
 // coming. That NMI is D1/F4C0, not the fight's: the CGRAM page, C0/0005 -> C0/0AFF (the field's HDMA tables), the
 // scrolls, `JSL CD/0C89` -> C0/2C41 with no $CD02 gate, and FD/E39C, the objslot records; no `$7C++`.
-void CtBattleTailFrame(CtBattleHost* h) {
+void CtBattleTailFrame(CtBattleHost* h, int db0) {
   if (!h) return;
-  battleNmiHead(h);                                                // D1/F4DE JSL CD/09CE: the page to CGRAM
+  // D1/F4C0-F4DC: `STA $00420C` (long), `LDA $4210`, $4200 = A1, `STZ $47`, then D1/F4DE `JSL CD/09CE` -- and nothing of
+  // the fight's NMI service (no CD/0650 `INC $CE14`, no message-strip half, no CD/08A4 tilemap, no D1/E7AF / CD/08B8-08EA
+  // latches, no OAM DMA: the sprites stay as the last fight NMI shipped them). CD/09CE's stores are absolute (`STZ $4377 /
+  // STZ $2121 / ... / STA $4374 / LDA #80 / STA $420B`) and D1/F4C0 never sets DB, so they reach the PPU only when the
+  // interrupted code runs with DB = 0 -- inside C7 (the chain's uploads, `db0`). Under CD/0428-0436's fade poll and CD/044A's
+  // wait DB is $7E: the page stays the last one shipped and the stores land in WRAM. (picture-audit triage rank 2: legs 67,
+  // 51, 111, 100, 65 -- the extra INCs flipped $CE14's parity for every later typed box.)
+  if (db0) memcpy(h->fxCgram, h->mem + 0x2200, sizeof h->fxCgram);   // the page $7E:2200 x 0200 to CGRAM 00
+  else {
+    static const uint8_t ch7[8] = { 0x02, 0x22, 0x00, 0x22, 0x7E, 0x00, 0x02, 0x00 };   // CD/09CE's channel-7 setup
+    h->mem[0x2121] = 0x00; memcpy(h->mem + 0x4370, ch7, 8); h->mem[0x420B] = 0x80;
+  }
   // D1/F4E2 JSL C0/0005 -> C0/0AFF: `LDA #80 / TSB $53`, FD/C2C1 twice (both table sets built; $0153 bit 0 back where
   // it was), `TRB $53`, FD/C1EE: the field's tables are live again under the tail, and its STA $420C (absolute: the
   // interrupted code's bank) decides whether they run (CtAudioSetRuleHdma, the exit's chain).

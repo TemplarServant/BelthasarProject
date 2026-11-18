@@ -150,6 +150,15 @@ c4322, and $2C74 += 2 every frame from c4306 through c4322 (C0:2CD6), the ack's 
 `--cputrace` shows C0:0AFF, C0:2C41 and FD:E39C once in each of its seven frames; in the 07D fight $7C holds 9D from
 c7280 to the ack while the field's colour records at $0520 step every frame.
 
+Only that (2026-11-18, the picture-audit triage's rank 2): D1/F4C0 reaches none of the fight NMI's service -- no CD/0650
+`INC $CE14` (the message strip's half by parity), no half upload, no CD/08A4, no D1/E7AF or CD/08B8-08EA latches, no OAM
+DMA. And CD/09CE's stores are ABSOLUTE (`STZ $4377 / STZ $2121 / ... / LDA #80 / STA $420B`) while D1/F4C0 never sets DB:
+under CD/0428-0436's fade poll and CD/044A's wait DB is $7E, so they land in WRAM $7E:2121 / 4370-4377 / 420B and CGRAM
+keeps the shipped page; only an NMI taken inside C7 (DB = 0, the chain's uploads) ships it -- the same rule as its
+`STA $420C`. The port ran the whole fight NMI head on each tail frame: an odd count flipped `$CE14`'s parity and every
+later typed box revealed its halves on the other frames (leg 67 f16200 / f20100, leg 51 f3900). battle.c
+CtBattleTailFrame(h, db0) now does D1/F4C0 alone (field-picture-exit-tail-nmi-is-d1-f4c0-vs-cartridge).
+
 ## The palette pages at the entry: two copies, each on its frame (2026-11-16)
 
 Entering a fight the base page `$7E:2000-$21FF` is copied onto the live page `$2200` twice.

@@ -361,6 +361,9 @@ PICTURES = {
     # Leg 125 (loc 170, the Blackbird): a fight's entry (C0/18A4 JSR C0/EC60) and its ack frame (C0/00EB's BRL C0/EC60) each
     # count the idle counter $0158; without them every idle roll after a fight came 2 frames late (Marle's blink, f29400).
     'idle-counter-counts-the-fights-waits': dict(leg='125_blackbird_wing', at=0, frames=29400, own=True, lag=-2),
+    # Leg 67 (the Masamune fight's exit): the exit tail's NMI is D1/F4C0 alone -- no CD/0650 `INC $CE14`, no strip half,
+    # and CD/09CE's CGRAM page only inside C7 (DB = 0) -- so the next fight's typed box keeps the cartridge's parity.
+    'exit-tail-nmi-is-d1-f4c0': dict(leg='67_masa_mune_fight', at=0, frames=16200, own=True, lag=-1),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

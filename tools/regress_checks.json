@@ -51343,7 +51343,7 @@
         "playthrough: 106_end_of_time SAME -- locs 133 1F3 116 1F3 112 111 110 1D0 | story A8 AB 40 AB | party 000105 | gold 2954 | hp 436 (4) | ctrl 8 | end picture 0 px at port -1",
         "playthrough: 107_keepers_dome DIFFERENT -- locs 1D0 0E3 0E2 1F2 0E1 0E0 0DF 1F2 0EC 0ED 0EC 1F2 0F1 0F2 0F3 | story AB 40 AB | party 000105 | gold 4034 | hp 335 (5) | ctrl 49 | end picture 57344 px at port +0",
         "playthrough: 108_epoch SAME -- locs 0F3 0F2 0F3 | story AB | party 000105 | gold 4034 | hp 335 (1) | ctrl 7 | end picture 0 px at port +0",
-        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53722 px at port -3",
+        "playthrough: 109_mt_woe_climb DIFFERENT -- locs 0F3 1F2 0F3 1B0 1F4 182 17C 184 1F4 18A 188 | story AB AE B4 | party 000105 | gold 7434 | hp 284 (4) | ctrl 11 | end picture 53736 px at port -4",
         "playthrough: 110_mt_woe_summit SAME -- locs 188 189 18B 18D 18B | story B4 | party 000105 | gold 7434 | hp 457 (3) | ctrl 17 | end picture 0 px at port +0",
         "playthrough: 111_mt_woe_chests SAME -- locs 18B 189 | story B4 | party 000105 | gold 8934 | hp 376 (2) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 112_mt_woe_189 SAME -- locs 189 188 | story B4 | party 000105 | gold 11934 | hp 310 (2) | ctrl 7 | end picture 0 px at port +0",
@@ -55357,6 +55357,40 @@
           "find": "                                if (f.vm) { CtSceneReturnWaitFrame(f.vm); fieldWaitEC60(CtSceneMem7E(f.vm)); } }",
           "replace": "                                if (f.vm) { CtSceneReturnWaitFrame(f.vm); } }  /* MUT */",
           "why": "the ack frame's wait counts nothing: the rolls a frame late"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-exit-tail-nmi-is-d1-f4c0-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "exit-tail-nmi-is-d1-f4c0"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: exit-tail-nmi-is-d1-f4c0 leg 67 +16200 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: exit-tail-nmi-is-d1-f4c0 "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the exit tail's NMI does what D1/F4C0 does: no $CE14 count, no strip half, the CGRAM page only inside C7",
+      "notes": "THE EXIT TAIL'S NMI IS D1/F4C0 (2026-11-18, picture-audit triage rank 2). D1/F4C0 runs `STA $00420C`, `LDA $4210`, $4200 = A1, `STZ $47`, JSL CD/09CE, JSL C0/0005, `STA $420C`, $2100, the six scrolls, CD/0C89, FD/FFF7 -- none of the fight NMI's service: no CD/0650 `INC $CE14` (the message strip's half by parity), no half upload, no CD/08A4, no D1/E7AF / CD/08B8-08EA latches, no OAM DMA. And CD/09CE's register stores are absolute while D1/F4C0 never sets DB: under CD/0428-0436's fade poll and CD/044A's wait (DB = $7E) they land in WRAM $7E:2121 / 4370-4377 / 420B and CGRAM keeps the shipped page; only an NMI taken inside C7 (DB = 0) uploads it. The port ran the whole fight NMI head on every tail frame: an odd number of tail frames flipped $CE14's parity, every later typed box revealed its halves on the other frames (leg 67 f16200 / f20100 27-56 px, leg 51 f3900, a share of 111 / 100 / 65). One mutation (the CGRAM half -- the page only inside C7 -- is not graded by this picture: dropping the C7 upload survived at f16200; open for a tail-frame picture).",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (db0) memcpy(h->fxCgram, h->mem + 0x2200, sizeof h->fxCgram);   // the page $7E:2200 x 0200 to CGRAM 00",
+          "replace": "  battleNmiHead(h); if (db0) memcpy(h->fxCgram, h->mem + 0x2200, sizeof h->fxCgram);  /* MUT */",
+          "why": "the tail runs the fight NMI's service: $CE14 counts, the typed box's parity flips"
         }
       ]
     },

@@ -392,3 +392,16 @@ fast CPU does not have; leg 127's return line is too early for it. Tried and NOT
 program for these posts (CtAudioSetRuleHdma with the field's tables, as the battle exit chain does) -- leg 127 then
 returns exactly as the cartridge (40, line 238) but leg 11 falls to 40, line 157. The two errors (the clock's length
 and the overrun rule) are to be fixed together; until then the park's length is this class's open item.
+
+## 11. OPEN: a script's song park over the room's HDMA program (2026-11-18)
+
+The picture audit's triage ranked first: a script's `JSL C7/0004` (op EA's C0/3C43) parks the main loop in the SPC
+handshake, and the loader clock prices the background at the field's per-engine mean (audio.c LD_BG). Playthrough leg 127
+(loc 16B, `EA 29`): the cartridge's park spans 40 boundaries ending on line 238; the port's 39, ending on line 140, and the
+Golem Boss fight meets another ATB phase. TRIED: CtAudioSetRuleHdma(prog 1, on, nmiOn) around CtSceneTick -- the room's
+FD/C1EE channels by `$0128`. Leg 127 came right (40 NMIs; from a cut at f600 the fight 0 px, 3602 before; leg 137 SAME), but
+the full suite lost 69 checks matched to the cartridge (the attract's world 5 entry and every later attract pin, the textbox
+rule on naga, the `$01F8` power-on seeds, leg 111): the walked program over-prices those rooms' parks where the mean was
+right. Reverted. Not derived yet: what the raster really takes in a park (which channels run while the CPU sits in C7,
+whether `$0128` is the mask at that point, the field IRQ at line 211's part); measure a few parks' cycles on the cartridge
+(`--hookpc C70004` with CT_HOOK_CYCLES) against both models before trying again.
