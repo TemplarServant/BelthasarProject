@@ -7625,6 +7625,14 @@ static uint16_t battleFleePalWord(uint16_t w, int k, int kind) {
 }
 // Combatant `cmb`'s OBJ palette (its OAM attribute bits 1-3, $993C,X: BT_OBJPAL) through the live page: `src` untouched
 // while the page is the base one, else the scaled copy written into `tmp`.
+// An enemy's colours 13-15: E4/0000's record holds twelve (1-12, CtBattleEnemyPalRom); the row's last three are whatever
+// the OBJ page holds -- on the cartridge 7FFF, CF/E5AA's pulsing grey and 14A5 (FF:9E0A) -- and a sheet may index them:
+// Magus's cells 042 / 044 use colour 15 (playthrough leg 95 f17100 / f51300 / f78000, drawn black from the zeroed entry).
+static void battleEnemyPalTail(const CtBattleHost* h, int cmb, uint16_t* pal) {
+  if (!h || cmb < 0 || cmb >= 11) return;
+  const uint8_t* row = (const uint8_t*)h->fxCgram + (8 + ((BT_OBJPAL(h, cmb) >> 1) & 7)) * 32;
+  for (int c = 13; c < 16; c++) pal[c] = (uint16_t)(row[c * 2] | (row[c * 2 + 1] << 8));
+}
 static const uint16_t* battleFleeObjPal(const CtBattleHost* h, int cmb, const uint16_t* src, uint16_t* tmp) {
   if (!h || cmb < 0 || cmb >= 11) return src;
   int k = battleFleePalK(h, 8 + ((BT_OBJPAL(h, cmb) >> 1) & 7)), kind = battleFleePalKind(h, 8 + ((BT_OBJPAL(h, cmb) >> 1) & 7));
@@ -8765,6 +8773,7 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     if (etype != 3 && h->ascOn && h->ascPmPose[3 + slot] >= 0) {
       uint16_t gp[16];
       if (CtBattleEnemyPalRom(id, gp) && etype <= 3) {
+        battleEnemyPalTail(h, 3 + slot, gp);
         const uint16_t* gw = battleEnemyFlashing(h, 3 + slot) ? battleFlashPalFor(h, 3 + slot) : gp;
         int gx, gy, gdx, gdy;
         gx = 16 * rec[0] + rec[2]; gy = 16 * rec[1] + rec[3];
@@ -8779,6 +8788,7 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
                                                                  //   keeps its own renderer above)
     uint16_t palw[16];
     if (!CtBattleEnemyPalRom(id, palw)) continue;
+    battleEnemyPalTail(h, 3 + slot, palw);
     uint16_t fpal[16];                                           // the live CGRAM page (the run-off's fade)
     const uint16_t* pw = battleEnemyFlashing(h, 3 + slot) ? battleFlashPalFor(h, 3 + slot) : battleFleeObjPal(h, 3 + slot, palw, fpal);   // hurt-flash swap (P3)
     int footX, footY, ldx, ldy;                                  // live foot = staged 16*rel+fine + walk delta

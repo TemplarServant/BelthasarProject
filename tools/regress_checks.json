@@ -55775,6 +55775,40 @@
       ]
     },
     {
+      "name": "field-picture-enemy-colours-13-15-are-the-live-rows-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "enemy-colours-13-15-are-the-live-rows"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: enemy-colours-13-15-are-the-live-rows leg 95 +17100 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: enemy-colours-13-15-are-the-live-rows "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an enemy's colours 13-15 come from the live OBJ page: Magus's cells that index colour 15 are not black",
+      "notes": "AN ENEMY'S COLOURS 13-15 ARE THE LIVE ROW'S (2026-11-19, picture-audit triage rank 13 a). The enemy palette record E4/0000 + record[+2] * 24 holds colours 1-12; the port's CtBattleEnemyPalRom zeroed 13-15 as unused. A sheet may index them: Magus's cells 042 / 044 use colour 15, and the OBJ row on the cartridge holds 7FFF / CF/E5AA's pulsing grey / 14A5 (FF:9E0A) there. field.c battleEnemyPalTail takes the three from the CGRAM page the NMI uploaded (h->fxCgram, the row of the combatant's OAM attribute `$993C`). Leg 95 f17096 / f17100: 3 px -> 0. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  for (int c = 13; c < 16; c++) pal[c] = (uint16_t)(row[c * 2] | (row[c * 2 + 1] << 8));",
+          "replace": "  (void)row;  /* MUT */",
+          "why": "colours 13-15 stay zero: black pixels on Magus"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",

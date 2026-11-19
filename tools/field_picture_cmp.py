@@ -404,6 +404,9 @@ PICTURES = {
     # init's FF00 -- running `B5 12`. C0/5215 has no "not placed" exit: every fourth frame its issue finds walls at tile
     # (FF, FF), draws at C0/AE27 (`$01F8` + 1) and stalls. The placed cats' wall bounces take their angles from that cursor.
     'unplaced-chaser-draws-its-rolls': dict(leg='133_clone', at=0, frames=45300, own=True, lag=-2),
+    # Leg 95, Magus (f17096-f17100): his cells 042 / 044 index colour 15 of his OBJ row; the enemy palette record holds
+    # colours 1-12 only, the last three are the live page's (7FFF, the pulsing grey, 14A5) -- not black.
+    'enemy-colours-13-15-are-the-live-rows': dict(leg='95_magus', at=0, frames=17100, own=True, lag=-1),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live
