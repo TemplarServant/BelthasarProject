@@ -55741,6 +55741,40 @@
       ]
     },
     {
+      "name": "field-picture-unplaced-chaser-draws-its-rolls-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "unplaced-chaser-draws-its-rolls"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: unplaced-chaser-draws-its-rolls leg 133 +45300 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: unplaced-chaser-draws-its-rolls "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the chase ops B5 / B6 run on an object no script placed (its words FF00): its stalled issues draw from $01F8 as on the cartridge",
+      "notes": "AN UNPLACED OBJECT CHASES TOO (2026-11-19, picture-audit triage rank 16). C0/3546 (op B5) is `STY $E3 / JSR C0/5215 / LDX $E3 / CLC / RTS`: perpetual, and C0/5215 reads the mover's tile bytes `$1801,X` / `$1881,X` whatever they hold -- the ROM has no \"not placed\" state, an object no script placed keeps its init's FF00 (C0/57CE). Crono's kitchen (loc 001) in playthrough leg 133, from f44864 on the rule's cartridge: object 10 (a cat not yet won) runs `B5 12` at (FF00, FF00) with cadence `$1000` = 04; each issue finds a wall both ways, C0/AE27 draws (`INC $F8`; C0:AE2B writes `$01F8` = 14 on f44902, 15 on f44906, every fourth frame) and the step stalls. The port's moveOp returned on `!hasPos`: the op completed, nothing was drawn, and the placed cats' wall bounces took other angles (199 / 131 px on f45300 / f45600). ct_vm.c: B5 / B6 run on the init's words (gUnplMover: the integrator counts the ticket down; the object is still not drawn, touched or collided). `$01F8`'s changes f44864-f45700: the cartridge's frames, all 197; pictures f44900-f45680 every 30th 0 px. One mutation.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "    if (!(op == 0xB5 || op == 0xB6) || obj >= 64) return 0;",
+          "replace": "    if (1) return 0;  /* MUT */",
+          "why": "an unplaced chaser completes its op at once: no roll is drawn"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",

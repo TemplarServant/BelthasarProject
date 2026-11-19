@@ -2248,10 +2248,25 @@ static int CtVmMoveTrace(CtScene* sc, int obj, int op, int addr, const char* whe
   return 1;                                          // always true: it is a probe inside an `if`
 }
 
+// An object no script placed still has the position its init gave it -- `$1800,X` / `$1880,X` = FF00 (C0/57CE's fill) --
+// and the ROM's movers have no "not placed" exit: the chase ops B5 / B6 (C0/3546 / 354F, perpetual: `CLC` after the
+// call) run C0/5215 on it like on any other. MEASURED, the rule's cartridge: Crono's kitchen (loc 001, playthrough leg
+// 133 from f44864), object 10 -- a cat not yet won, `B5 12`, cadence `$1000` = 04, at (FF00, FF00) for the whole visit:
+// every fourth frame its issue finds a wall both ways at tile (FF, FF), C0/AE27 draws (`INC $F8`, C0:AE2B writes `$01F8`
+// 14 on f44902, 15 on f44906, ..) and the step stalls. The port completed the op at once and drew nothing, so every
+// later roll of the room came from another place of the table. gUnplMover marks such a mover for the integrator (the
+// ticket's countdown); it is drawn, touched and collided as before: not at all.
+static uint8_t gUnplMover[64];
 static int moveOp(CtScene* sc, int obj, int addr, uint8_t op) {   // 1 = yield, 0 = complete
   CtVmActor* a = &sc->actors[obj]; const uint8_t* B = sc->body; Mem* m = sc->mem;
   CtVmMoveTrace(sc, obj, op, addr, "enter");
-  if (!a->hasPos) return 0;
+  if (obj < 64) gUnplMover[obj] = 0;
+  if (!a->hasPos) {
+    if (!(op == 0xB5 || op == 0xB6) || obj >= 64) return 0;
+    sc->fx[obj] = r16(m, 0x7E1800 + (uint32_t)obj * 2) / 16.0;      // the words the init left (C0/5239-5240 read them)
+    sc->fy[obj] = r16(m, 0x7E1880 + (uint32_t)obj * 2) / 16.0;
+    gUnplMover[obj] = 1;
+  }
   if (sc->cycles[obj] > 0) return 1;               // a step is in flight ($1A01) -> yield
   // The anim/facing layer, per handler (move.c's ctVmMoveActorOp flags): 0xA0 (C0/5129), 0xA1 (C0/5191) and
   // 0x9E/0x9F (C0/52C0/54F5) write no facing ($F700 -> $1600), run no C0/5614 and take no C0/568B.
@@ -5838,9 +5853,9 @@ void CtSceneTick(CtScene* sc) {
     w8(sc->mem, 0x7E0F00 + (uint32_t)n * 2, in ? 0x80 : 0x00);
   }
   for (int n = 0; n < sc->nobj; n++)                 // run_tasks: integrate movement (ROM C0/AA07)
-    if (CtVmMoveTrace(sc, n, 0xFF, 0, sc->hasTask[n] && sc->cycles[n] > 0 && sc->actors[n].hasPos
+    if (CtVmMoveTrace(sc, n, 0xFF, 0, sc->hasTask[n] && sc->cycles[n] > 0 && (sc->actors[n].hasPos || (n < 64 && gUnplMover[n]))
                                       ? "INTEG" : "skip") &&
-        sc->hasTask[n] && sc->cycles[n] > 0 && sc->actors[n].hasPos) {
+        sc->hasTask[n] && sc->cycles[n] > 0 && (sc->actors[n].hasPos || (n < 64 && gUnplMover[n]))) {
       double nfx = sc->fx[n] + sc->mx[n], nfy = sc->fy[n] + sc->my[n];
       // The tile the step would move into, as the BYTE the ROM's clamp carries into (vmTileByte): AA7E-AAC3 add the
       // velocity to the position's low byte (`ADC $1800,X`, or `SBC $D9` for a negative one) and a carry or borrow holds
@@ -5907,7 +5922,7 @@ void CtSceneTick(CtScene* sc) {
   // and commits every positioned object here. Committing all before the legs is equivalent to the ROM's
   // per-object interleave: the integrate touches only per-object tables, never the draw list or the camera.
   for (int n = 0; n < sc->nobj; n++) {
-    if (!sc->actors[n].hasPos) continue;                  // never placed: the ROM has no position for it either
+    if (!sc->actors[n].hasPos && !(n < 64 && gUnplMover[n])) continue;   // never placed and never moved: its init's words stand
     uint32_t X2 = (uint32_t)n * 2;
     int wx = (int)(sc->fx[n] * 16.0) & 0xFFFF, wy = (int)(sc->fy[n] * 16.0) & 0xFFFF;
     w8(sc->mem, 0x7E1800 + X2, wx); w8(sc->mem, 0x7E1801 + X2, wx >> 8);

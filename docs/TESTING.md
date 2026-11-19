@@ -3672,6 +3672,10 @@ tools/gate_transition_cmp.py pairs the stage at P+1 and the arrival at P+2 since
 `field-picture-slide-bearing-is-the-objects-heading-vs-cartridge`: leg 95 f64190 (Magus): ops 11 / 12 store the bearing
 as the effect object's heading `$A5B5` (C1/50C2), which an FF-angle orbit reads back. One mutation.
 
+`field-picture-unplaced-chaser-draws-its-rolls-vs-cartridge`: leg 133 f45300, Crono's kitchen: an object no script placed
+(a cat not yet won, at the init's FF00) still runs its chase op B5; its stalled issues draw from `$01F8` every fourth
+frame (C0/AE27), which the placed cats' bounces read. One mutation.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

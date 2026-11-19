@@ -399,6 +399,10 @@ PICTURES = {
     # object's heading `$A5B5,Y` (C1/50BD-50C2); the orbit that follows with an FF angle (C1/6E9A) reads it back, so the
     # sparkle starts where the slide left off (it spawned about half a turn round the circle).
     'slide-bearing-is-the-objects-heading': dict(leg='95_magus', at=0, frames=64190, own=True, lag=-1),
+    # Leg 133, Crono's kitchen (loc 001, from f44864): object 10 is a cat not yet won, never placed -- its words are the
+    # init's FF00 -- running `B5 12`. C0/5215 has no "not placed" exit: every fourth frame its issue finds walls at tile
+    # (FF, FF), draws at C0/AE27 (`$01F8` + 1) and stalls. The placed cats' wall bounces take their angles from that cursor.
+    'unplaced-chaser-draws-its-rolls': dict(leg='133_clone', at=0, frames=45300, own=True, lag=-2),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live
