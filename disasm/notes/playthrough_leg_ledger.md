@@ -535,7 +535,10 @@ Port bugs, fixed (disasm/notes/ow_objvm.md "The natives of 2026-11-18", ow_colou
 - **Leg 115** (the Blackbird over 1F4): f10172-f10226 the ship (in the world's own BG1 map packet; the port loaded a
   capture taken with it removed) and the fixed colour's ramp (C6/E170 / E1FF / E237 unported). 0 px at port -3.
 
-Timing left in leg 115, OPEN (not proven a closed class): the port's world runs three frames ahead of the cartridge's --
+Timing left in leg 115 (TRACED 2026-11-19, the battle exit's class, closed 2026-11-07): the Golem fight's exit releases on
+another frame -- the ack cells `$0117` / `$0118` part on f8493-f8498 and `$0153`'s parity is opposite from there on; the
+room's objects run a frame out of phase (object 0's two-op loop, object 11's cadence), object 8's script posts `88 80` on
+f9731 for the cartridge's f9733 and asks for the exit on f9829 for f9831. The port's world runs three frames ahead of the cartridge's --
 on the first world frame f9888 the scripts' waits read 35 in the port for the cartridge's 38 (block $0DB0 +0A), and at
 f9872-f9884 the port already holds the world's objects while the cartridge is still loading -- and every world picture
 to the leg's next load fits port -3 (f10100: port f10097 0 px; the flashes of f10128-f10208: port f10205 / f10206 for
