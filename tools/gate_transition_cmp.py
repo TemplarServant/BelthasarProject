@@ -15,16 +15,17 @@ cartridge's own WRAM the two sides reach the DD on the same frame (the same moni
 cartridge, CT_FIELD_MEMMON on the port). Each stretch is graded at its own relation (a pixel differs when a channel
 differs by more than 24 -- one INIDISP step does not; 128x112):
   * scene 8 and the arrival are the field: the image of the logic P is the cartridge's thumbnail P+2 and the port's
-    frame P (docs/TESTING.md, the alignment). The arrival is compared one frame later than that, P+1: its logic runs one frame
-    behind the cartridge's (the iris's `$0139 = 1` at label 1065 against 1064 -- the load clock);
+    frame P (docs/TESTING.md, the alignment), before the warp and after it;
   * the op's fade is the field's too (C0/3FBB-3FD1 run in the field's frame): graded at P+2, and by the mean brightness,
     which sees an INIDISP step the pixel threshold does not;
-  * the tunnel and the load are the warp stage's frames (src/seq_gwarp.c), from the one after the jump (`gatewarp: ... takes
-    over at f<J>`), which the port presents as the cartridge's thumbnails (gwarp_cmp's relation).
+  * the tunnel and the load are the warp stage's frames (src/seq_gwarp.c), opened on the jump's own frame (`gatewarp: ...
+    takes over at f<J>`, C0/3FD3): a native stage's picture P is the cartridge's P+1, as every stage's. (Until 2026-11-18
+    the port opened the warp a frame after the jump, and this tool had the stage at P+0 and the arrival at P+1, "the load
+    one frame long": one late frame read as two relations.)
 
   gate-transition: DD c<D>; scene 8 + the op's fade at P+2 c<B>..c<J>: <a> / <n> differ, mean within <d>;
-                   tunnel + load c<J+1>..c<L-1>: <b> / <n> differ; arrival from the lit c<L> at P+1 (the load one frame
-                   long): <k> / 300 differ, max <m> px
+                   tunnel + load at P+1 c<J+2>..c<L-1>: <b> / <n> differ; arrival from the lit c<L> at P+2: <k> / 300
+                   differ, max <m> px
 
 (disasm/notes/gate_warp_fd_family.md sec. 10. Regression check: field-gate-transition-vs-cartridge-from-its-wram.)
 """
@@ -95,12 +96,12 @@ def main():
     pre = [ndiff(cf(c)[1], pf(c, -2)[1]) for c in range(BASE + 3, J + 1) if cf(c) and pf(c, -2)]  # the field's P+2
     dmean = max((abs(float(cf(c)[1].mean()) - float(pf(c, -2)[1].mean())) for c in range(BASE + 3, J + 1)
                  if cf(c) and pf(c, -2)), default=0.0)
-    mid = [ndiff(cf(c)[1], pf(c)[1]) for c in range(J + 1, L) if cf(c) and pf(c)]                 # the stage's frames
-    arr = [ndiff(cf(c)[1], pf(c, -1)[1]) for c in range(L, L + 300) if cf(c) and pf(c, -1)]       # the field, one late
+    mid = [ndiff(cf(c)[1], pf(c, -1)[1]) for c in range(J + 2, L) if cf(c) and pf(c, -1)]         # the stage's frames, P+1
+    arr = [ndiff(cf(c)[1], pf(c, -2)[1]) for c in range(L, L + 300) if cf(c) and pf(c, -2)]       # the field again, P+2
     print('gate-transition: DD c%d; scene 8 + the op\'s fade at P+2 c%d..c%d: %d / %d differ, mean within %.1f; '
-          'tunnel + load c%d..c%d: %d / %d differ; arrival from the lit c%d at P+1 (the load one frame long): %d / %d '
+          'tunnel + load at P+1 c%d..c%d: %d / %d differ; arrival from the lit c%d at P+2: %d / %d '
           'differ, max %d px'
-          % (D, BASE + 3, J, sum(1 for v in pre if v), len(pre), dmean, J + 1, L - 1, sum(1 for v in mid if v),
+          % (D, BASE + 3, J, sum(1 for v in pre if v), len(pre), dmean, J + 2, L - 1, sum(1 for v in mid if v),
              len(mid), L, sum(1 for v in arr if v), len(arr), max(arr) if arr else 0))
     return 0
 

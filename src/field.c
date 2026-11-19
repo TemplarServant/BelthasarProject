@@ -17469,6 +17469,10 @@ int main(int argc, char** argv) {
             fadeBri = b - 1;
           } else { ffPro = 2; fadeBri = 0; }                 // 3FD3: the jump's frame (C0/0B4E, black)
           fade = 0; ffGo = 0;
+          // ...and the $FD warp's first frame: C0/3FD3 `JSR C0/0B4E`, `LDX #06FF / TXS`, C0/3FE8.. `JML $FD:FFF1` and
+          // FD/DB97's setup all run in the frame whose head found `$19` at 0 -- the warp's program opens on the jump's
+          // frame, not on the one after. MEASURED, the rule's cartridge: playthrough legs 105 (f1333) and 37 (f3106).
+          if (ffPro == 2 && CtSceneGateWarp(f.vm) >= 0) ffGo = 1;
         } else if (ffPro == 2) ffPro = 3;                    // the frame after the jump: the target starts
       }
     }

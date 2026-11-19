@@ -545,3 +545,11 @@ load's price): not traced.
 Still open in these scenes, WRAM / VRAM only (no measured picture): the hidden tilemap columns during a scroll (leg 44
 f1000-f1600: 30-100 words, the staging ring's leftovers in a row's whole-slot DMA); C2/2C93's rebuild after the time
 gauge / world map (no VRAM clear before it).
+
+## The gate warp a frame late (2026-11-18: legs 62, 72, 73, 85, 107, 105, 37)
+
+A port bug, fixed: the native warp's program opened on the frame after the jump's (C0/3FD3 runs the quiesce, the JML and
+FD/DB97's setup in the frame whose head finds `$19` at 0). Every scene after a gate ran a frame late against a pad that
+did not: legs 62, 72, 85 and 107 were DIFFERENT for it and are SAME now (their rows above called them timing: the first
+cause was this), leg 73's end picture went from 14407 px to 0 (still DIFFERENT on a chain). 104 of 138 legs SAME.
+Exposed by it: loc 008's reboot load after the gate return is one frame short in the port (the NMI-off load clock).

@@ -392,6 +392,9 @@ PICTURES = {
     # Leg 110, Mt. Woe's summit: `10 45` parks the loop on f26097-f26100 with BG1 / BG2 a step behind their counters and
     # the fog (BG3) not moving: each layer is drawn at ITS shown word (BG3's stood a pixel off, taken back by BG1's lag).
     'park-shows-each-layers-own-word': dict(leg='110_mt_woe_summit', at=0, frames=26099, own=True, lag=-2),
+    # Leg 105, the second gate of the leg (`FF 81`, the jump on f3106): C0/3FD3's quiesce, the JML and FD/DB97's setup run in
+    # the frame whose head found `$19` at 0, so the tunnel's pictures are the stage's own P+1 (they sat a frame late).
+    'gate-warp-opens-on-the-jumps-frame': dict(leg='105_zeal', at=0, frames=3300, own=True, lag=-1),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

@@ -3665,6 +3665,10 @@ dead-marked, the party on its battle cells) before C0/0738 stages the fallen pos
 combo's partner hands a pass later) and `field-picture-park-shows-each-layers-own-word-vs-cartridge` (leg 110 f26099: under
 a song park BG2 / BG3 are drawn at their own shown HDMA words). One mutation each.
 
+`field-picture-gate-warp-opens-on-the-jumps-frame-vs-cartridge`: leg 105 f3300, inside its second gate's tunnel: the warp's
+program opens on the jump's own frame (C0/3FD3), so the tunnel is the cartridge's at a stage's P+1. One mutation;
+tools/gate_transition_cmp.py pairs the stage at P+1 and the arrival at P+2 since.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).
