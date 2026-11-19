@@ -6436,7 +6436,12 @@ static void battleMenuInput(CtBattleHost* h, int cur, BattleMenuKey k, const cha
     } else if (k.a && s[0x95DC + cur] == 1) {                    // C1/12BC: the Tech list, behind $A0A7 bit 0
       if (!(s[0xA0A7] & 1)) {
         bsTechBuild(s);                                          //   C1/12D1 JSR C1/0A88: $99E3 (the next head posts the list)
-        battleTechOpen(h, cur); battleTechGreyPass(h, cur, NULL, 0); battleTechResolve(h, cur);
+        // C1/12C3-12E7 and no more: `$9EE7` = FF, `STZ $A09A / STZ $A099`, C1/0A88, C1/0AD3, `$9615` = `$95DB` = 1, `STZ
+        // $A869 / INC $A86A`. The grey pass C1/0EE1 and the resolver C1/0D4D are the NEXT pass head's (C1/0C40 / C1/0C83),
+        // one `$993A` rebuild later: this pass's C1/17DD still reads the record the list held before (`$9EE7` FF: no
+        // partner's hand), and the hands of a combo's row come up with the list's image. MEASURED, the rule's cartridge:
+        // playthrough leg 115 f4500-f4503 (the Comb row opened on Dalton's Golem).
+        battleTechOpen(h, cur);
         battleTechTrace(h, "tech-open", cur);
       }
     } else if (k.a && s[0x95DC + cur] == 2) {                    // C1/12ED: the Item list

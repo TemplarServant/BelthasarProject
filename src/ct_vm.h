@@ -120,6 +120,7 @@ void CtWramLayerScrollDecode(uint8_t* s, uint8_t md1, uint8_t md2, uint8_t md3);
 void CtSceneLoadCameraEntry(CtScene* sc, int arrTileX, int arrTileY);
 void CtSceneLayerOffsets(const CtScene* sc, int* bg2x, int* bg2y, int* bg3x, int* bg3y);
 void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* page, int* bg2x, int* bg2y, int* bg3x, int* bg3y);   // the same, from a copy of the object page (a battle: $7F:2000 - $0920)
+int CtSceneShownCounter(const CtScene* sc, const uint8_t* page, int L, int v, int* out);   // BG2 / BG3's word of the HDMA set on screen (1), or 0: the live counter is the picture's
 // The scene-entry OBJ palette sweep (C0/2881 -> C0/B0E6). Call it on a fresh scene entry after the lead is
 // placed and the camera is set; its box is not the per-frame one.
 void CtScenePalSweepEntry(CtScene* sc);

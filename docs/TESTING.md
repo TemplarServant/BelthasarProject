@@ -3650,6 +3650,21 @@ mutations; player_anim_9e84.md).
 does D1/F4C0 alone (no `$CE14` count, no strip half; CD/09CE's CGRAM page only inside C7, DB = 0), so the typed box
 keeps the cartridge's parity. One mutation (the CGRAM half is not graded by this picture). disasm/notes/battle_boot.md "The exit tail's NMI".
 
+`field-picture-record-grid-is-the-sub-screen-added-vs-cartridge`, `-record-static-scrolls-both-layers-`, `-lavos-rain-falls-at-
+random-places-`, `-magic-cave-beam-is-a-window-circle-`, `-blackbird-stands-in-the-map-packet-`: five overworld pictures (legs 44
+f2400 / f2700 / f3900, 86 f15104, 115 f10200) -- the sub screen as every enabled layer's operand, the record's static
+(C2/7A56: BG1 / BG2 scrolled a line at a time from ROM bytes, over C2/09C5's 36 columns), Lavos's rain (C2/7A0C / 7A31),
+the Magic Cave's beam (C6/E000 + C2/7911) and the world's maps from the ROM's packets at every load (C2/295E-29E8; the
+Blackbird in 1F4's BG1). One mutation each, two on the static. disasm/notes/ow_objvm.md "The natives of 2026-11-18".
+
+`field-picture-lost-fight-that-continues-runs-the-return-epilogue-vs-cartridge`: leg 105 f43200, the Blackbird's deck after
+Dalton's Golem wins: `$7F01EC` = 1 with `$2A1F` bit 5 joins C0/0304, whose C0/0715 runs whole (the Golem's object
+dead-marked, the party on its battle cells) before C0/0738 stages the fallen pose. One mutation.
+
+`field-picture-tech-open-resolves-on-the-next-pass-vs-cartridge` (leg 115 f4501: C1/12BC runs no grey pass / resolver, a
+combo's partner hands a pass later) and `field-picture-park-shows-each-layers-own-word-vs-cartridge` (leg 110 f26099: under
+a song park BG2 / BG3 are drawn at their own shown HDMA words). One mutation each.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

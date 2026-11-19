@@ -10992,16 +10992,16 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "techtrace f190 tech-open     95DB=1 95DC=1 9609=0 960D=00 9EE3=01120302FFFFFF A02A=1 9877=00 AE93=00 A013=0 curMP=8 gatoHP=76 dmg=0 span=0 techId=0",
+        "techtrace f190 tech-open     95DB=1 95DC=1 9609=0 960D=00 9EE3=00000000FF0000 A02A=1 9877=00 AE93=00 A013=0 curMP=8 gatoHP=76 dmg=0 span=0 techId=0",
         "techtrace f202 tech-confirm  95DB=1 95DC=1 9609=1 960D=12 9EE3=01120302FFFFFF A02A=1 9877=00 AE93=00 A013=0 curMP=8 gatoHP=76 dmg=0 span=0 techId=0"
       ],
       "pin": [
-        "tech-open .*9EE3=01120302FFFFFF A02A=1",
+        "tech-open .*9EE3=00000000FF0000 A02A=1",
         "tech-confirm .*960D=12 9EE3=01120302FFFFFF"
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "battle_tech_slice.md checks 1+2 (menu-open + resolver record). A-on-Tech opens the per-seat Tech submenu (5DB=1, RETIRING the old inert A-on-rows-1/2 boundary); the learned-tech list is built from the RAW E2837 seed (seed gato_cyclone.raw.wram = gato_t0 + 837|=0x80, Crono knows Cyclone -- GITIGNORED, regen: patch byte 0x2837 |= 0x80). tech-open pins the Cyclone resolver record EE3-9 = 01 12 03 02 FF FF FF (id/group/flags/MP/partners, byte-exact vs oracle gato_cyclone.state f402) + =1 (one tech). tech-confirm pins the target-select opening with the tech group 60D=EE4=0x12 (oracle f410). Re-pin only after an intended Tech-menu flow change (re-verify vs the dossier EE3 record + 60D). ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): only its frame numbers moved (-13) -- the same lines otherwise. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (battle.c battleTechSubmenu, the A-on-a-tech arm (C1/1369); battleTechTrace prints 960D and 9609 right after. The tech-open line (9EE3=01120302...) is unaffected; the tech-confirm line must change). ==== MUTATION [0] RE-TARGETED 2026-11-04 (by hand, the contributor refactor): its find no longer matched the current source; the same break on the code as it is now.",
+      "notes": "battle_tech_slice.md checks 1+2 (menu-open + resolver record). A-on-Tech opens the per-seat Tech submenu (5DB=1, RETIRING the old inert A-on-rows-1/2 boundary); the learned-tech list is built from the RAW E2837 seed (seed gato_cyclone.raw.wram = gato_t0 + 837|=0x80, Crono knows Cyclone -- GITIGNORED, regen: patch byte 0x2837 |= 0x80). tech-open pins the Cyclone resolver record EE3-9 = 01 12 03 02 FF FF FF (id/group/flags/MP/partners, byte-exact vs oracle gato_cyclone.state f402) + =1 (one tech). tech-confirm pins the target-select opening with the tech group 60D=EE4=0x12 (oracle f410). Re-pin only after an intended Tech-menu flow change (re-verify vs the dossier EE3 record + 60D). ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): only its frame numbers moved (-13) -- the same lines otherwise. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (battle.c battleTechSubmenu, the A-on-a-tech arm (C1/1369); battleTechTrace prints 960D and 9609 right after. The tech-open line (9EE3=01120302...) is unaffected; the tech-confirm line must change). ==== MUTATION [0] RE-TARGETED 2026-11-04 (by hand, the contributor refactor): its find no longer matched the current source; the same break on the code as it is now. || RE-PINNED 2026-11-18 (the tech-open line's 9EE3 only): the open C1/12BC runs no resolver (C1/12C3-12E7), so the line printed in the open's pass shows the record as the fixture left it (00000000FF0000); the next pass head resolves it (C1/0C83 -> C1/0D4D) and the second line, a pass later, is unchanged. Graded on the cartridge by field-picture-tech-open-resolves-on-the-next-pass-vs-cartridge.",
       "mutations": [
         {
           "file": "src/battle.c",
@@ -11032,16 +11032,16 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "techtrace f190 tech-open     95DB=1 95DC=1 9609=0 960D=00 9EE3=01128302FFFFFF A02A=1 9877=00 AE93=00 A013=0 curMP=1 gatoHP=76 dmg=0 span=0 techId=0",
+        "techtrace f190 tech-open     95DB=1 95DC=1 9609=0 960D=00 9EE3=00000000FF0000 A02A=1 9877=00 AE93=00 A013=0 curMP=1 gatoHP=76 dmg=0 span=0 techId=0",
         "techtrace f202 tech-grey-block 95DB=1 95DC=1 9609=0 960D=00 9EE3=01128302FFFFFF A02A=1 9877=00 AE93=00 A013=0 curMP=1 gatoHP=76 dmg=0 span=0 techId=0"
       ],
       "pin": [
-        "tech-open .*9EE3=01128302FFFFFF",
+        "tech-open .*9EE3=00000000FF0000",
         "tech-grey-block .*curMP=1"
       ],
       "tier": "quick",
       "timeout_s": 30,
-      "notes": "battle_tech_slice.md check 3 (the MP-grey rule). Seed gato_cyc_mp1.raw.wram = gato_t0 + 837|=0x80 + Crono curMP 607=1 (< Cyclone MP 2) -- GITIGNORED, regen: patch 0x2837|=0x80, 0x2607=1. When curMP<techMP the resolver sets EE5 bit7 (C1/11003 LDA A82,X / ORA #80): the record becomes 01 12 *83* 02 (tech-open pin), and A on the greyed tech is BLOCKED (LDA EE5 / BMI skip, C1/1369) -- tech-grey-block pins the block event (609 stays 0, no target-select opens, no dispatch), byte-exact EE5=0x83 vs oracle gato_cyc_lowmp. Re-pin only after an intended grey-rule change. ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): only its frame numbers moved (-13) -- the same lines otherwise. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (battle.c battleTechGreyPass (C1/0EE1), run by battleTechSubmenu before the resolver copies the record into $9EE3-9 (C1/0D4D); the A handler (C1/1369) blocks on $9EE5 bit 7. Both pinned lines carry 9EE3 and the second is the block event itself).",
+      "notes": "battle_tech_slice.md check 3 (the MP-grey rule). Seed gato_cyc_mp1.raw.wram = gato_t0 + 837|=0x80 + Crono curMP 607=1 (< Cyclone MP 2) -- GITIGNORED, regen: patch 0x2837|=0x80, 0x2607=1. When curMP<techMP the resolver sets EE5 bit7 (C1/11003 LDA A82,X / ORA #80): the record becomes 01 12 *83* 02 (tech-open pin), and A on the greyed tech is BLOCKED (LDA EE5 / BMI skip, C1/1369) -- tech-grey-block pins the block event (609 stays 0, no target-select opens, no dispatch), byte-exact EE5=0x83 vs oracle gato_cyc_lowmp. Re-pin only after an intended grey-rule change. ==== 2026-09-18, RE-PINNED (the battle opening, disasm/notes/battle_boot_turns.md): only its frame numbers moved (-13) -- the same lines otherwise. the ROM's turn machinery replaced the port's -- C1/8231's timer pass on the $B03A flags, C1/82A2's cursor on odd $0027, C1/8461's handler, the main loop after the 64-frame entrance loop (arm + 75 + k), #08 on the band's seed - 1, the demo's synchronous C1/B967. Anchors measured against the cartridge: GATO's first chime at #08 + 82 both sides, GATO's first action #08 + 180 (cartridge + 181), the forest's first Hetake action #08 + 205 (+ 207), the 0AD demo turn / $A013 +1. ==== 2026-09-18, THE MAIN LOOP'S TWO-FRAME ITERATION (the zelda3 model; disasm/notes/oracle_logical_frames.md §4). The battle's idle loop waits twice per iteration (C1/109D, C1/10BD): frame A runs the walk dispatch and C1/10BB STZ $E5, frame B C1/10C4 INC $E5 and the tail (timers, cursors, handlers), then the next head's C1/8121 INC $0027. The three rates this file carried -- the logic tick at 2.5 frames, the $A4 INC at 3 of 5, the mode pass at 4 of 5 -- were fits of the REAL cartridge's lagging iterations; the logical oracle runs every iteration in two frames, and the port now does: $A4 is the NMI's CF/E3F8 INC on $A013 = 0 and $E5 != 0, an enemy turn is C1/4058's two waits (CT_BATTLE_ENEMY_THINK 3 -> 2, the demo's C1/4058 3 -> 2), the first head is the entrance loop's end + CT_BATTLE_BOOT_CPU 0. battle-gato-fight-vs-logical-oracle grades the whole GATO fight against the logical oracle frame for frame; the ATB fills ~20% faster than on the lagging cartridge (song end -> attack A 231 against 279). This check moved with it and was re-pinned. ==== 2026-09-30, RE-PINNED (THE MENU PASS, disasm/notes/battle_menu_pass.md): the battle takes its keys the ROM's way -- CD/0340's edge latch in the NMI ($EE/$EF: the new presses, the 15-frame auto-repeat), consumed ONE key per pass on the 4-frame $993A request (C1/10C6 in the idle loop's frame B, before the timers; C1/10FA in the action loops), every handler leaving through C1/179C. A key now acts 1-4 frames after its press instead of on its frame, so a PC's command lands a pass later and the fight's later events move with it; at a fixed event anchor the picture differs only where GATO's idle cycle / the spotlight / a gauge is at another phase (old/new frames diffed). Graded on the rule's oracle: the latch, $9931 and $993A and the pass's effects frame for frame (gato_wait Lucca: Down f640 -> $EF f641 -> cursor f644; A f652 -> $EE f653 -> the list f656; A f676 -> confirm f680). || RE-PINNED 2026-10-01 AT THE RULE FLIP (CLAUDE.md: the infinitely fast CPU, the line cuts and NMI-on work free are the default now): the same lines, SHIFT -11 (the battle fixtures' boot is 11 frames shorter -- the song upload's CPU side is free; the attract / world legs move with the song loads priced on SPC time). ==== MUTATION ADDED 2026-10-24: the check declared none; derived from the code that produces its expect lines (battle.c battleTechGreyPass (C1/0EE1), run by battleTechSubmenu before the resolver copies the record into $9EE3-9 (C1/0D4D); the A handler (C1/1369) blocks on $9EE5 bit 7. Both pinned lines carry 9EE3 and the second is the block event itself). || RE-PINNED 2026-11-18 (the tech-open line's 9EE3 only): the open C1/12BC runs no resolver (C1/12C3-12E7), so the line printed in the open's pass shows the record as the fixture left it (00000000FF0000); the next pass head resolves it (C1/0C83 -> C1/0D4D) and the second line, a pass later, is unchanged. Graded on the cartridge by field-picture-tech-open-resolves-on-the-next-pass-vs-cartridge.",
       "mutations": [
         {
           "file": "src/battle.c",
@@ -51071,7 +51071,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "tab-data: 377 tables, 1032233 bytes identical"
+        "tab-data: 378 tables, 1032681 bytes identical"
       ],
       "pin": [
         "^tab-data: "
@@ -55391,6 +55391,284 @@
           "find": "  if (db0) memcpy(h->fxCgram, h->mem + 0x2200, sizeof h->fxCgram);   // the page $7E:2200 x 0200 to CGRAM 00",
           "replace": "  battleNmiHead(h); if (db0) memcpy(h->fxCgram, h->mem + 0x2200, sizeof h->fxCgram);  /* MUT */",
           "why": "the tail runs the fight NMI's service: $CE14 counts, the typed box's parity flips"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-record-grid-is-the-sub-screen-added-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "record-grid-is-the-sub-screen-added"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: record-grid-is-the-sub-screen-added leg 44 +2400 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: record-grid-is-the-sub-screen-added "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the sub screen is the operand of every layer CGADSUB enables: 1F7's green grid (BG3 on the sub screen) added to BG1 / BG2",
+      "notes": "THE SUB SCREEN IS EVERY ENABLED LAYER'S OPERAND (2026-11-18, picture-audit triage rank 5). ppu.c ppu_handlePixel: a main pixel whose layer CGADSUB enables takes the sub-screen pixel (CGWSEL bit 1) added or subtracted, halved when bit 6 is set and the sub pixel is not its backdrop; over the sub screen's backdrop the fixed colour, never halved. The world compositor applied it to BG3's own pixels only. Leg 44, the Day of Lavos's record on 1F7 (rule's cartridge, f2382-f2511): TM 13, TS 04, CGWSEL 02, CGADSUB 03 -- BG3's grid lines on the SUB screen added to BG1 / BG2 (3528 px a picture before). field.c: owComposeSub builds the sub screen from TS with BG3 at its mode-1 places and marks its opaque pixels (owSubOpq); worldComposeAt's `subGen` pass applies the math to BG1, BG2, OBJ palettes 4-7 and the backdrop from the layer each pixel ended on. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  const int subGen = zp && !mathFix && (cgadsub & 0x33);",
+          "replace": "  const int subGen = 0;  /* MUT */",
+          "why": "the sub screen reaches BG3's pixels only: no grid"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-record-static-scrolls-both-layers-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "record-static-scrolls-both-layers"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: record-static-scrolls-both-layers leg 44 +2700 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: record-static-scrolls-both-layers "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the record's static: BG1 and BG2 scrolled a line at a time from ROM bytes (C2/7A56), over C2/09C5's 36 columns",
+      "notes": "THE RECORD'S STATIC (2026-11-18, picture-audit triage rank 4). C2/7A56: `$8A35` = F0 .. .. F0 .. .. 00, channel 1 = DMAP 42 to $210D (BG1HOFS), channel 2 = DMAP 42 to $210F (BG2HOFS), both from $7E:8A35, `TSB $4A` #06; buffer A $7E:8B56 = 0x1C0 bytes of ROM C0:0000 (`MVN $7E,$C0`: the reset code read as scroll words), buffer B $8DF6 = the word `$20` repeated. C2/7AAF steps both table pointers $8A21 / $8A23 by 0x40 (back to $8B56 from $8D16); C2/7ADA aims them at A, C2/7AEB at B. The port named them UNDERIVED and skipped them, and its compositor read no BG1HOFS channel: leg 44 f2445-f2460 / f2477-f2480 / f2697-f2700 were 40683-53527 px off. The bytes come from the data container (the table C0:0000-01BF, assets/rom_closure.py world_tables). With the lines scrolled, every tilemap column shows, which measured two more things: C2/09C5 writes 18 block columns by 16 rows from the block left of / above the cursor (C2/0A15-0A41) -- 36 of the 64 columns, the rest 0000 after the loader's C2/26A8 clear -- where the port built all 64 round the camera, and its rows start by `$E7`'s parity (the port's row was one off on odd cells). Cartridge VRAM $6000 / $6800 against the port's maps at f2400-f2700: 0 words differ (490 before). Two mutations.",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    CtWorldHdmaSet(1, 0x42, 0x0D, 0x8A35); CtWorldHdmaSet(2, 0x42, 0x0F, 0x8A35);",
+          "replace": "    CtWorldHdmaSet(2, 0x42, 0x0F, 0x8A35);  /* MUT */",
+          "why": "BG1 keeps its plain scroll under the static"
+        },
+        {
+          "file": "src/world.c",
+          "find": "    int baseC = (H >> 3) - (((H >> 3) & 1) ? 1 : 2), baseR = (V >> 3) - (((V >> 3) & 1) ? 1 : 2);",
+            "replace": "    int baseC = (H >> 3) - 15, baseR = (V >> 3) - 2;  /* MUT */",
+            "why": "the 36 columns start 15 left of the cursor, the rows whatever its parity: the old build's origin"
+          }
+      ]
+    },
+    {
+      "name": "field-picture-lavos-rain-falls-at-random-places-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "lavos-rain-falls-at-random-places"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: lavos-rain-falls-at-random-places leg 44 +3900 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: lavos-rain-falls-at-random-places "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "Lavos's rain: each needle placed by two draws of C2/2336 (C2/7A0C / 7A31)",
+      "notes": "LAVOS'S RAIN (2026-11-18, picture-audit triage rank 4). C2/7A0C: `JSR C2/2336 / AND #00FF / ADC #0220 / STA $0014,X`, `JSR C2/2336 / AND #00FF / ADC #0038 / STA $0018,X`; C2/7A31 the same with #00E0 / #FFB8 -- a needle's place from two bytes of the C0:FE00 table by `$1B30`. The port skipped both (UNDERIVED): no needle moved off its spawn cell and `$1B30` stood. Leg 44 f3900: 1292 px -> 0. One mutation.",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    obPutW(B + OWOBJ_YPOS, (uint16_t)(obRnd(ram) + (b ? 0xFFB8 : 0x0038)));",
+          "replace": "    obPutW(B + OWOBJ_YPOS, (uint16_t)(obRnd(ram) + (b ? 0xFFC8 : 0x0048)));  /* MUT */",
+          "why": "the needles start 16 lines lower"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-magic-cave-beam-is-a-window-circle-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "magic-cave-beam-is-a-window-circle"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: magic-cave-beam-is-a-window-circle leg 86 +15104 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: magic-cave-beam-is-a-window-circle "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Magic Cave's beam: window 1's table by C6/E000, a circle a frame by C2/7911",
+      "notes": "THE MAGIC CAVE'S BEAM (2026-11-18, picture-audit triage rank 4). The world script's `4E 00 E0 C6` runs C6/E000 -- byte for byte C6/E448: `$8A35` = F0 .. .. F0 .. .. 00, channel 1 = DMAP 41 to $2126 (WH0 / WH1) from $7E:8A35, `TSB $4A` #02 -- and `34 11 79` runs C2/7911 a frame: the buffer by the caller's +24 bit 0 ($8B56 / $8DF6), `$8A21` / `$0356` = it, `$8A23` = it + $E0, `INC $0024,X`, `$0350` / `$0352` / `$0354` = the low bytes of +14 / +18 / +22, `$0358` = 7E, `TDC / JSL C3/0008` (the circle). The port skipped both (an UNDERIVED far target and native): no beam on leg 86 f14947-f15146 (580 px at the audit's sample). The whole world stretch f14909-f15170 is 0 px now. One mutation.",
+      "mutations": [
+        {
+          "file": "src/world.c",
+          "find": "    ram[0x0350] = B[0x14]; ram[0x0352] = B[0x18]; ram[0x0354] = B[0x22];",
+          "replace": "    ram[0x0350] = B[0x14]; ram[0x0352] = B[0x18]; ram[0x0354] = 0;  /* MUT */",
+          "why": "the circle's radius is 0: no beam"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-blackbird-stands-in-the-map-packet-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "blackbird-stands-in-the-map-packet"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: blackbird-stands-in-the-map-packet leg 115 +10200 frames of the leg's pad: 0 px differ at port -3"
+      ],
+      "pin": [
+        "^fieldpicture: blackbird-stands-in-the-map-packet "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a world's maps are the ROM's packets at every load (C2/295E-29E8): the Blackbird is in 1F4's BG1",
+      "notes": "A WORLD'S MAPS ARE THE ROM'S PACKETS (2026-11-18, picture-audit triage rank 5's unchecked half). The loader's C2/2C62-2C6B decompress four packets a load, each named by a header byte: C6:FF00[+10] to $7E:3000 (block definitions), C6:FF20[+11] to $4000 (the two block grids), C6:FF80[+12] to $7000, C6:FFA0[+13] to $7200. The port copied a capture of those buffers from its container, taken after a world script had edited them: equal to the packets on worlds 0, 2, 3, 5, 6, 7, one cell apart on world 1 and 34 cells on world 4 -- the Blackbird, blocks 71-C4 at BG1 cells (41..48, 19..24), which stands in 1F4's packet and which the capture's story had taken out. Leg 115 f10172-f10226 (TM 12, TS 01, CGADSUB 12: BG1 on the sub screen added to the clouds): no ship, 3072 px a picture. world.c CtWorldLoadMaps. Also ported for the same scene: C6/E170 (channel 2 = DMAP 40 to $2132 from $7E:8A42, the fixed colour's ramp $9176 FF / $91E6 E0 with 48 bytes F0 down to E1), C6/E1FF (the ramp at $9176 + the caller's +22) and C6/E237; the compositor takes the fixed colour a line at a time from a channel aimed at $2132 (owFixLine). TIMING, not graded here and OPEN: the port's world runs three frames ahead of the cartridge's from its first frame (object waits 35 against 38 on f9888); the first cause lies before the load (the field scene after Dalton's fight) and is not traced, so the picture is graded at port -3. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  CtWorldLoadMaps(w->wram, id);                         // the ROM's own map packets over the asset's capture (C2/295E-29E8)",
+          "replace": "  /* MUT */",
+          "why": "the capture's grid: no Blackbird"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-lost-fight-that-continues-runs-the-return-epilogue-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "lost-fight-that-continues-runs-the-return-epilogue"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: lost-fight-that-continues-runs-the-return-epilogue leg 105 +43200 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: lost-fight-that-continues-runs-the-return-epilogue "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a lost fight that continues runs C0/0715 whole: the enemy's object dead-marked, the party on its battle cells, then the fallen pose",
+      "notes": "A LOST FIGHT THAT CONTINUES RUNS THE RETURN'S EPILOGUE (2026-11-18, picture-audit triage rank 14). C0/0283's dispatch: `$7F01EC` = 0 -> BRL C0/0304; = 1 -> C0/0298 `LDA $7E2A1F / BIT #20 / BNE ->0304` (the story's lost fights), else the game over. C0/0304 sets the draw pass's marks and `JSR C0/0715` = 0723 JSR C0/076B (per bound enemy slot: the object dead-marked unless `$29C6` kept bit 6), 0726 JSR C0/0871 (the party's three slots back on their staging cells with their last battle frame, `$0F01` = record + 4), 072B JSR C0/B271 (the draw pass), and only then 072E `LDA $7F01EC / BEQ / DEC A / BEQ ->0738`: `LDA $97 / BMI` (`$99`, `$9B`), `$1780,Y` = 03, `$1301,Y` = `$0F01,Y` -- the fallen pose staged from the frame the epilogue stored. The port ran the three calls on a win only, and gated 0738's stores on the party list `$2980` instead of the slot table: after Dalton's Golem (leg 105, the Blackbird's deck) the Golem stayed drawn and the party stood in field poses, 3406 px at f43200 and 4578 at f43500; 0 now (f43100-f43560 every 20th). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  const int cont0304 = outcome == 0 || (outcome == 1 && (s[0x2A1F] & 0x20));",
+          "replace": "  const int cont0304 = outcome == 0;  /* MUT */",
+          "why": "the epilogue on a win only: the Golem stays, the party in field poses"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-tech-open-resolves-on-the-next-pass-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "tech-open-resolves-on-the-next-pass"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: tech-open-resolves-on-the-next-pass leg 115 +4501 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: tech-open-resolves-on-the-next-pass "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Tech list's open runs no grey pass and no resolver (C1/12BC): a combo's partner hands come up a pass later",
+      "notes": "THE TECH OPEN RESOLVES ON THE NEXT PASS (2026-11-18, picture-audit triage rank 18). C1/12BC-12E7: `$9EE7` = FF, `STZ $A09A / STZ $A099`, `INC $A862 / JSR C1/0A88 / JSR C1/0AD3 / STZ $A862`, `$9615` = `$95DB` = 01, `STZ $A869 / INC $A86A`, `JMP C1/179C`. The grey pass C1/0EE1 and the resolver C1/0D4D run in the next pass head (C1/0C40 / C1/0C83), one `$993A` rebuild later, so the open's own pass draws with `$9EE7` = FF (C1/17FE: no partner's hand). The port ran both inside the open: the hands of the Comb row four frames early (leg 115 f4500-f4503 on Dalton's Golem, 416 px at port -1; 0 on f4490-f4510 now). The partner-hands check of leg 95 stays 0 px. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        battleTechOpen(h, cur);",
+          "replace": "        battleTechOpen(h, cur); battleTechGreyPass(h, cur, NULL, 0); battleTechResolve(h, cur);  /* MUT */",
+          "why": "the open resolves at once: the partners' hands a pass early"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-park-shows-each-layers-own-word-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "park-shows-each-layers-own-word"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: park-shows-each-layers-own-word leg 110 +26099 frames of the leg's pad: 0 px differ at port -2"
+      ],
+      "pin": [
+        "^fieldpicture: park-shows-each-layers-own-word "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "under a song park each layer is drawn at its own shown scroll word: the fog that did not step stays where it is",
+      "notes": "A PARK SHOWS EACH LAYER'S OWN WORD (2026-11-18, picture-audit triage rank 17). While a song post parks the main loop before FD/C2C1 the PPU keeps the last HDMA set: BG1 $7F:1508 / 150A, BG2 $7F:1510 / 1512, BG3 $7F:1518 / 151A (set B + 4), each filled from its own counter at the last build. Leg 110, Mt. Woe's summit, `10 45` on f26097-f26100: BG1 / BG2 shown 61 for a live 62, BG3 (the fog) shown 0 = live 0. The tilemap ring took every layer's live counter less BG1's lag, so the fog was drawn a pixel off for the four pictures (8864 px each). ct_vm.c CtSceneShownCounter (the gates of the published counters); field.c hands the ring BG2's and BG3's own words. f26090-f26106 every frame 0 px. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (L && !battlePhase) { int sw;",
+          "replace": "          if (0 && L && !battlePhase) { int sw;  /* MUT */",
+          "why": "every layer takes BG1's lag: the fog a pixel off under the park"
         }
       ]
     },

@@ -736,6 +736,7 @@ static int worldInit(CtAssets* a, World* w, int id) {
   w->wram[0x1B38] = (uint8_t)nrec;
   memcpy(w->wram + 0x7E00, p, (size_t)nrec * 7); p += (size_t)nrec * 7;
   { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }
+  CtWorldLoadMaps(w->wram, id);                         // the ROM's own map packets over the asset's capture (C2/295E-29E8)
   CtWorldLoadTriggers(w->wram, id);                     // ...and the event / transition cells beside them (C2/2A44)
   size_t scrLen = CtWorldLoadScripts(w->wram, id);     // ...then the script packet over it at $7F:0400 (C2/2A16)
   memcpy(w->vram + 0x4000, p, 28672); p += 28672;
@@ -1553,6 +1554,15 @@ static int owHdmaWordAt(const uint8_t* wram, uint8_t en, uint8_t bbad, int line,
   }
   return 0;
 }
+// The fixed colour on a line: a channel aimed at $2132 rewrites the components its byte's bits 5 / 6 / 7 name (red / green /
+// blue), the others standing as the line before left them -- the Blackbird's dawn on 1F4, C6/E170's ramp on channel 2.
+static inline void owFixLine(const uint8_t* wr, uint8_t en, int y, int fix[3]) {
+  uint16_t v;
+  if (!en || !wr || !owHdmaWordAt(wr, en, 0x32, y + OW_HDMA_LINE, &v)) return;
+  if (v & 0x20) fix[0] = v & 0x1F;
+  if (v & 0x40) fix[1] = v & 0x1F;
+  if (v & 0x80) fix[2] = v & 0x1F;
+}
 // The colour window on line y, column x of the view: WOBJSEL $3A bit 5 window 1 (bit 4 inverts), bit 7 window 2 (bit 6), WOBJLOG
 // $40 bits 2-3 the join of both (0 OR, 1 AND, 2 XOR, 3 XNOR); window 1's edges owWin1Line's, window 2's the pushed $3D / $3E.
 static inline const uint8_t* owZp(const uint8_t* wr);     // (below: the direct page as the NMI pushed it)
@@ -1647,6 +1657,8 @@ static CtMotFrame* g_mot;                        // (the field's, below: the pic
 // opaque the fixed colour ($2132 -- the sub screen's backdrop). The Black Omen's rising on 1F6 is that case: TM = 15, TS = 12,
 // the silhouette on BG3 added (CGADSUB 04) to BG2's waved sea (C2:0632's `13 41 00 15 / 13 42 00 12`; --ppuregs / --hdma).
 static uint8_t owSubScr[OW_WMAX * CAMH * 3];
+// ...and where it is not its backdrop: ppu.c ppu_handlePixel adds the fixed colour there, never halved (`secondLayer != 5`).
+static uint8_t owSubOpq[OW_WMAX * CAMH];
 // The mosaic ($2106, the shadow `$1F` the NMI pushes: the size - 1 in the high nybble, BG1-BG4 in bits 0-3), ppu.c's: a layer
 // it covers takes, for the pixel at screen column x, the one at x - x % size, and for scanline L the one at L - (L - start) %
 // size -- start is 1 when the register was written in the vblank (ppu_handleFrameStart), so a screen row y takes y - y % size.
@@ -1662,11 +1674,13 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
   const uint8_t* wr = w->wram, *zp = wr ? owZp(wr) : NULL;          // (the NMI's shadows: the last pass's)
   const int mz = owMosaicSize(wr);
   const int tsub = zp ? zp[0x0042] : 0x13;
-  const int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0, zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
+  int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0, zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
   uint8_t opix[OW_WMAX], opri[OW_WMAX], oidx[OW_WMAX];
   for (int y = 0; y < CAMH; y++) {
-    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, v1 = cs->bg1v, hv;
+    uint16_t h2 = cs->bg2h, v2 = cs->bg2v, v1 = cs->bg1v, h1 = cs->bg1h, hv;
+    owFixLine(wr, hdmaEn, y, fix);
     if (hdmaEn & 0x06) {
+      if (owHdmaWordAt(wr, hdmaEn, 0x0D, y + OW_HDMA_LINE, &hv)) h1 = hv;
       if (owHdmaWordAt(wr, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) h2 = hv;
       if (owHdmaWordAt(wr, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) v2 = hv;
     }
@@ -1677,7 +1691,7 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
       int ci[2][2] = { { -1, -1 }, { -1, -1 } };                     // [bg][prio]
       for (int bg = 0; bg < 2; bg++) {
         if (!(tsub & (1 << bg))) continue;
-        uint16_t hofs = bg == 0 ? cs->bg1h : h2, vofs = bg == 0 ? v1 : v2;
+        uint16_t hofs = bg == 0 ? h1 : h2, vofs = bg == 0 ? v1 : v2;
         const int mo = owMosaicOn(wr, bg);
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         uint16_t chip = CtWorldStreamChip(stm, bg, wx, wy);
@@ -1689,14 +1703,25 @@ static void owComposeSub(const World* w, const CtWorldStream* stm, const CtWorld
                                (((w->vram[(bi + 16) & 0xFFFF] >> k) & 1) << 2) | (((w->vram[(bi + 17) & 0xFFFF] >> k) & 1) << 3));
         if (v4) ci[bg][(chip & 0x2000) ? 1 : 0] = pb + v4;
       }
+      // BG3 ($0042 bit 2) at its mode-1 places with the BG3 priority bit ($1E = 09; ppu.c layersPerMode[8]): its priority
+      // tiles above everything, the others under everything. 1F7's record: TS = 04, the green grid added to BG1 / BG2.
+      int c3[2] = { -1, -1 };
+      if ((tsub & 0x04) && w->haveBg3) {
+        const int mo3 = owMosaicOn(wr, 2); int pr, pb3;
+        uint8_t v3 = worldBg3Px(w, owBg3HLine(cs, &w->cam, y) + (mo3 ? owMosaicX(x, X0, mz) : x) - X0, cs->bg3v + (mo3 ? y - y % mz : y) + OW_BG_VLINE, &pr, &pb3);
+        if (v3) c3[pr ? 1 : 0] = pb3 + v3;
+      }
       int o = opix[x] ? opri[x] : -1, c = -1;
-      if (o == 3) c = opix[x];
+      if (c3[1] >= 0) c = c3[1];
+      else if (o == 3) c = opix[x];
       else if (ci[0][1] >= 0) c = ci[0][1];
       else if (ci[1][1] >= 0) c = ci[1][1];
       else if (o == 2) c = opix[x];
       else if (ci[0][0] >= 0) c = ci[0][0];
       else if (ci[1][0] >= 0) c = ci[1][0];
       else if (o >= 0) c = opix[x];
+      else if (c3[0] >= 0) c = c3[0];
+      owSubOpq[(size_t)y * W + x] = (uint8_t)(c >= 0);
       for (int ch = 0; ch < 3; ch++) d[x * 3 + ch] = c >= 0 ? w->pal[c][ch] : (uint8_t)((fix[ch] << 3) | (fix[ch] >> 2));
     }
   }
@@ -1907,13 +1932,18 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   const int showX = w->haveShow ? w->posShowX : w->mv.posX, showY = w->haveShow ? w->posShowY : w->mv.posY;
   uint8_t hdmaEn = 0, hwh0, hwh1; CtWorldNmiLatch(&hdmaEn, &hwh0, &hwh1);
   const int subOwn = zp && ((zp[0x0042] & 0x13) != (tmain & 0x13)) && mathBg3 && !mathFix;   // owComposeSub
+  // ...and the sub screen as the operand of every other layer CGADSUB enables (BG1, BG2, OBJ palettes 4-7, the backdrop):
+  // ppu_handlePixel's `mathEnabled && addSubscreen` arm, applied below from the layer each pixel ended on.
+  const int subGen = zp && !mathFix && (cgadsub & 0x33);
   const int mz = owMosaicSize(w->wram), mo3 = owMosaicOn(w->wram, 2);
-  if (subOwn) owComposeSub(w, stm, cs, hdmaEn, W, X0);
+  if (subOwn || subGen) owComposeSub(w, stm, cs, hdmaEn, W, X0);
   for (int y = 0; y < CAMH; y++) {
     uint8_t* dst = fb + (size_t)y * W * 3;
     uint16_t bg2hL = cs->bg2h, bg2vL = cs->bg2v;                 // BG2's scroll on this line: HDMA's when a channel feeds it
     uint16_t bg1vL = cs->bg1v;                                     // and BG1's VOFS (1F5's wave: $C6:E595's channel 3)
+    uint16_t bg1hL = cs->bg1h;                                     // and BG1's HOFS (1F7's static: C2/7A56's channel 1)
     if (hdmaEn & 0x06) { uint16_t hv;
+      if (owHdmaWordAt(w->wram, hdmaEn, 0x0D, y + OW_HDMA_LINE, &hv)) bg1hL = hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x0F, y + OW_HDMA_LINE, &hv)) bg2hL = hv;
       if (owHdmaWordAt(w->wram, hdmaEn, 0x10, y + OW_HDMA_LINE, &hv)) bg2vL = hv; }
     if (hdmaEn & 0x08) { uint16_t hv; if (owHdmaWordAt(w->wram, hdmaEn, 0x0E, y + OW_HDMA_LINE, &hv)) bg1vL = hv; }
@@ -1922,7 +1952,7 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
       bgCover[y * W + x] = 0;
       for (int bg = 0; bg < 2; bg++) {                 // BG1 over BG2 (both transparent at idx 0)
         if (!(tmain & (1 << bg))) continue;             // $212C bit0 BG1 / bit1 BG2
-        uint16_t hofs = bg == 0 ? cs->bg1h : bg2hL, vofs = bg == 0 ? bg1vL : bg2vL;
+        uint16_t hofs = bg == 0 ? bg1hL : bg2hL, vofs = bg == 0 ? bg1vL : bg2vL;
         const int mo = owMosaicOn(w->wram, bg);         // (the mosaic: the line's own scroll, the block's first pixel)
         int wx = hofs + (mo ? owMosaicX(x, X0, mz) : x) - X0, wy = vofs + (mo ? y - y % mz : y) + OW_BG_VLINE;
         uint16_t chip = CtWorldStreamChip(stm, bg, wx, wy);
@@ -2140,6 +2170,35 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
         }
       }
     }
+  // The sub-screen operand (CGWSEL bit 1 set) on the layers the painters above left unmathed -- BG1, BG2, OBJ palettes 4-7
+  // and the backdrop (BG3's pixels took theirs above; OBJ palettes 0-3 never math): the main pixel plus or minus the sub
+  // screen's, halved when bit 6 is set; where the sub screen is its backdrop, the fixed colour and no half. The prevent
+  // modes test the colour window as the fixed arm's do. MEASURED: 1F7's record (TS 04, CGWSEL 02, CGADSUB 03: BG3's green
+  // grid added to BG1 / BG2, playthrough leg 44 f2400) and the Blackbird's flight (TS 01, CGADSUB 12, leg 115 f10200).
+  if (subGen) {
+    const int prevent = (cgwsel >> 4) & 3;
+    int fix[3] = { zp[0x0048] & 0x1F, zp[0x0049] & 0x1F, zp[0x0047] & 0x1F };   // R, G, B
+    for (int y = 0; y < CAMH; y++) {
+      uint8_t* dst = fb + (size_t)y * W * 3;
+      owFixLine(w->wram, hdmaEn, y, fix);
+      for (int x = 0; x < W; x++) {
+        int L = mlayer[y * W + x];
+        if (L == 2 || L >= 6 || !(cgadsub & (1 << L)) || prevent == 3) continue;
+        if (prevent == 1 || prevent == 2) {
+          int inWin = w->wram ? owColorWin(w->wram, owZp(w->wram), hdmaEn, hwh0, hwh1, y, x - X0) : 0;
+          if ((prevent == 1 && !inWin) || (prevent == 2 && inWin)) continue;
+        }
+        const int opq = owSubOpq[(size_t)y * W + x];
+        const uint8_t* sp = owSubScr + ((size_t)y * W + x) * 3;
+        for (int ch = 0; ch < 3; ch++) {
+          int m5 = dst[x * 3 + ch] >> 3, s5 = opq ? sp[ch] >> 3 : fix[ch], o5 = mathSub ? m5 - s5 : m5 + s5;
+          if (mathHalf && opq) o5 >>= 1;
+          if (o5 > 31) o5 = 31; if (o5 < 0) o5 = 0;
+          dst[x * 3 + ch] = (uint8_t)((o5 << 3) | (o5 >> 2));
+        }
+      }
+    }
+  }
   // The fixed-colour operand (CGWSEL bit 1 clear), ppu_handlePixel's arm: the main-screen pixel, on a layer CGADSUB enables
   // (0-5; OBJ palettes 0-3 are layer 6 and never math), plus or minus the fixed colour, halved when bit 6 is set (with the
   // fixed colour as operand the half always applies), clamped to 0..31 per channel.
@@ -2149,10 +2208,11 @@ static void worldComposeAt(World* w, uint8_t* fb, int W, int X0, const CtWorldSt
   // an empty window 1, so no math applies anywhere and its clouds stay grey.
   if (mathFix) {
     const int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
-    const int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0,
-                         zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
+    int fix[3] = { zp ? (zp[0x0048] & 0x1F) : 0, zp ? (zp[0x0049] & 0x1F) : 0,
+                   zp ? (zp[0x0047] & 0x1F) : 0 };   // R, G, B
     for (int y = 0; y < CAMH; y++) {
       uint8_t* dst = fb + (size_t)y * W * 3;
+      owFixLine(w->wram, hdmaEn, y, fix);
       for (int x = 0; x < W; x++) {
         int L = mlayer[y * W + x];
         int inWin = (clip == 1 || clip == 2 || prevent == 1 || prevent == 2) && w->wram ? owColorWin(w->wram, owZp(w->wram), hdmaEn, hwh0, hwh1, y, x - X0) : 0;
@@ -9554,9 +9614,14 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
   // ($7E29C6,X, masked above) either removes the field object ($1000,obj |= bit 7) or restores its field position from
   // the staging ($29BF+X + the arena origin $F0/$F1). The slot -> object back-map is $01A3+slot (set at staging,
   // C0/0557). Then each present PC seat's field position is re-derived from its staging tile ($29B0+5*seat, C0/08A0).
-  // The regroup (C0/0330 -> C0/5B1F) is fieldBattleResume's. Defeat (outcome 1) goes to the scripted-loss / game-over
-  // path below.
-  if (outcome == 0) {
+  // The regroup (C0/0330 -> C0/5B1F) is fieldBattleResume's.
+  // EVERY outcome that reaches C0/0304 runs it: C0/0289-029E send `$7F01EC` = 0 there and = 1 (the party fell) too when
+  // `$2A1F` bit 5 says the fight is one the story loses (`BIT #20 / BNE ->0304`); C0/0313 `JSR C0/0715` is the tail's first
+  // call either way, and its own outcome test comes after the three (C0/072E). MEASURED, the rule's cartridge: Dalton's
+  // Golem on the Blackbird (playthrough leg 105 f43200): the Golem's object dead-marked and the party back on its battle
+  // cells in its last battle frames, where the port (the epilogue on a win only) kept the Golem and the field's poses.
+  const int cont0304 = outcome == 0 || (outcome == 1 && (s[0x2A1F] & 0x20));
+  if (cont0304) {
     int nobj = CtSceneActorCount(vm);
     int oTX = ((s[0x1D0A] | (s[0x1D0B] << 8)) >> 1) & 0xFF;   // arena origin tiles ($F0/$F1), staging's oTX/oTY
     int oTY = ((s[0x1D0E] | (s[0x1D0F] << 8)) >> 1) & 0xFF;
@@ -9611,12 +9676,12 @@ static void fieldBattleFinish(CtScene* vm, CtBattleHost* h, int* gameOver) {
   // ---- C0/0283 outcome dispatch on $7F01EC ----
   if (outcome == 1) {
     if (s[0x2A1F] & 0x20) {
-      // scripted-loss continue (C0/0298 -> 0304) + C0/0715: for each live party slot (Y = the
-      // $0197/$0199/$019B slot->obj-X table): $1780,Y = 3 and $1301,Y = $0F01,Y (defeat-pose
-      // staging for the field resume).
+      // scripted-loss continue (C0/0298 -> 0304): C0/0715's own tail C0/072E-076A, after the epilogue above and its draw
+      // pass -- `LDA $97 / BMI` (then `$99`, `$9B`: the slot -> object table, not the party list), `LDA #03 / STA $1780,Y`,
+      // `LDA $0F01,Y / STA $1301,Y`: the fallen pose staged from the frame C0/08CB just stored.
       for (int k = 0; k < 3; k++) {
-        if (s[0x2980 + k] & 0x80) continue;          // empty party slot
         uint8_t Y = s[0x197 + k * 2];
+        if (Y & 0x80) continue;                      // C0/073C / 074C / 075C BMI
         s[0x1780 + Y] = 3; s[0x1301 + Y] = s[0x0F01 + Y];
       }
     } else {
@@ -19303,6 +19368,10 @@ int main(int argc, char** argv) {
           rb[L] = pg[0x1D7C + L * 2] | (pg[0x1D7D + L * 2] << 8);
           rs[L * 2] = (int16_t)(pg[0x1D87 + L * 4] | (pg[0x1D88 + L * 4] << 8)) - sprDX;
           rs[L * 2 + 1] = (int16_t)(pg[0x1D89 + L * 4] | (pg[0x1D8A + L * 4] << 8)) - sprDY + 1 - fillHold;
+          // (BG2 / BG3 by their OWN shown words where the HDMA set is the picture: a layer that did not step has no lag)
+          if (L && !battlePhase) { int sw;
+            if (CtSceneShownCounter(f.vm, pg, L, 0, &sw)) rs[L * 2] = sw;
+            if (CtSceneShownCounter(f.vm, pg, L, 1, &sw)) rs[L * 2 + 1] = sw + 1 - fillHold; }
           if (battlePhase && L) { rs[L * 2] += g_bDriftAdj[(L - 1) * 2]; rs[L * 2 + 1] += g_bDriftAdj[(L - 1) * 2 + 1]; }   // (the
         }                                                                //   records' counters in a fight: above)
       }

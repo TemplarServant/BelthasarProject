@@ -4722,6 +4722,20 @@ static int ctPubCounter(const CtScene* sc, const uint8_t* s, int live, int tab, 
   int b1Live = (int16_t)camGet16(s, bg1), b1Shown = (int16_t)(t[bg1 - 0x1D87 + 0x1508] | (t[bg1 - 0x1D87 + 0x1509] << 8));
   return shown + b1Live - b1Shown;                             // (THE PUBLISHED COUNTERS)
 }
+// A layer's own shown word (L = 1 BG2, 2 BG3; v = 0 H, 1 V), for a reader that places the layer by its counter alone (the
+// tilemap ring, field.c): 1 and the word of the set on screen, or 0 where the live counter is the picture's (the gates
+// above). Each layer has ITS lag: a park that caught BG1 / BG2 a step behind their counters leaves a BG3 that did not move
+// where it is. MEASURED, the rule's cartridge: playthrough leg 110 f26097-f26100 (Mt. Woe's summit, the fog on BG3 under
+// `10 45`'s park: BG1 / BG2 shown 61 for a live 62, BG3 shown 0 = live 0 -- taken back by BG1's step, the fog stood a
+// pixel off for the four pictures, 8864 px each).
+int CtSceneShownCounter(const CtScene* sc, const uint8_t* s, int L, int v, int* out) {
+  static const int waveOf[3] = { 0, 0x1DFD, 0x1DF9 };
+  if (!sc || !s || L < 1 || L > 2) return 0;
+  if (s != sc->mem->s || !gHdmaBuilt || !legsOn() || (s[0x0153] & 0x80) || s[waveOf[L]]) return 0;
+  const uint8_t* t = s + 0x10000 + ((s[0x0153] & 0x0F) ? 4 : 0) + 0x1508 + L * 8 + (v ? 2 : 0);
+  if (out) *out = (int16_t)(t[0] | (t[1] << 8));
+  return 1;
+}
 void CtSceneLayerOffsetsOf(const CtScene* sc, const uint8_t* s, int* bg2x, int* bg2y, int* bg3x, int* bg3y) {
   if (!sc || !s) return;
   const int c2x = ctPubCounter(sc, s, 0x1D8B, 0x1510, 0x1D87, 0x1DFD), c2y = ctPubCounter(sc, s, 0x1D8D, 0x1512, 0x1D89, 0x1DFD);

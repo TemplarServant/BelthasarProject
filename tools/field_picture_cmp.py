@@ -364,6 +364,34 @@ PICTURES = {
     # Leg 67 (the Masamune fight's exit): the exit tail's NMI is D1/F4C0 alone -- no CD/0650 `INC $CE14`, no strip half,
     # and CD/09CE's CGRAM page only inside C7 (DB = 0) -- so the next fight's typed box keeps the cartridge's parity.
     'exit-tail-nmi-is-d1-f4c0': dict(leg='67_masa_mune_fight', at=0, frames=16200, own=True, lag=-1),
+    # Leg 44, the Day of Lavos's record on 1F7 (the overworld: port P = cartridge P + 1). Three pictures of one scene:
+    # - f2400, the record's grid: TS 04, CGWSEL 02, CGADSUB 03 -- BG3 on the SUB screen added to BG1 / BG2 (the green
+    #   lines every 32 px); the compositor took sub-screen math for BG3's own pixels only.
+    # - f2700, the static: C2/7A56 aims channels 1 and 2 at BG1HOFS / BG2HOFS through one indirect table whose lines
+    #   are 0x1C0 bytes of ROM C0:0000 (`MVN $7E,$C0`), C2/7AAF stepping the pointers. Every tilemap column shows, so
+    #   the picture also holds C2/09C5's extent (36 columns from the cursor's block, zeros beyond after C2/26A8).
+    # - f3900, the rain: C2/7A0C / 7A31 place each needle at a random spot (two draws of C2/2336).
+    'record-grid-is-the-sub-screen-added': dict(leg='44_day_of_lavos', at=0, frames=2400, own=True, lag=-1),
+    'record-static-scrolls-both-layers': dict(leg='44_day_of_lavos', at=0, frames=2700, own=True, lag=-1),
+    'lavos-rain-falls-at-random-places': dict(leg='44_day_of_lavos', at=0, frames=3900, own=True, lag=-1),
+    # Leg 86, the Magic Cave opening on 1F1: C6/E000 installs window 1's table (the bytes of C6/E448) and C2/7911 draws
+    # a circle a frame into its double buffer (C3/0008 around the caller's +14 / +18, radius +22) -- the beam.
+    'magic-cave-beam-is-a-window-circle': dict(leg='86_magic_cave', at=0, frames=15104, own=True, lag=-1),
+    # Leg 115, the Blackbird over 1F4 after Dalton: the ship is BG1 -- blocks 71-C4 of the world's own map packet
+    # (C6:FF20[header +11], C2/298C), which the loader decompresses at every load; a script takes it out when the story
+    # has no Blackbird. TS 01, CGADSUB 12: BG1 on the sub screen added to the clouds. (The port's world runs three
+    # frames ahead here, from its first frame on -- the cause, before the load, is not traced -- so it is graded at port -3.)
+    'blackbird-stands-in-the-map-packet': dict(leg='115_dalton', at=0, frames=10200, own=True, lag=-3),
+    # Leg 105, the Blackbird's deck after Dalton's Golem beats the party (a fight the story loses: `$7F01EC` = 1 with
+    # `$2A1F` bit 5): C0/0298 `BIT #20 / BNE ->0304` joins the won fight's tail, whose C0/0715 dead-marks the Golem's
+    # object and puts the party back on its battle cells in its last battle frames before C0/0738 stages the fallen pose.
+    'lost-fight-that-continues-runs-the-return-epilogue': dict(leg='105_zeal', at=0, frames=43200, own=True, lag=-2),
+    # Leg 115, the Comb row opened on Dalton's Golem (f4500-f4503): the open C1/12BC runs no grey pass and no resolver;
+    # the next pass head does, so a combo's partner hands come up one menu pass (four frames) after the A.
+    'tech-open-resolves-on-the-next-pass': dict(leg='115_dalton', at=0, frames=4501, own=True, lag=-1),
+    # Leg 110, Mt. Woe's summit: `10 45` parks the loop on f26097-f26100 with BG1 / BG2 a step behind their counters and
+    # the fog (BG3) not moving: each layer is drawn at ITS shown word (BG3's stood a pixel off, taken back by BG1's lag).
+    'park-shows-each-layers-own-word': dict(leg='110_mt_woe_summit', at=0, frames=26099, own=True, lag=-2),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

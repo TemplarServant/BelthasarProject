@@ -142,3 +142,20 @@ compositors (worldComposeAt, owComposeSub, owWindow1Pass, owColorWin, and the fr
 live WRAM and turned white a frame early (f2920: 56901 px) and dark a frame early (f2924: 56590 px). They read them through
 `owZp` now (owColorWin takes both: the shadows from the latch, the HDMA tables from the live WRAM, which the channels read during
 the frame). Check attract-1f7-flash-is-pushed-by-the-next-nmi-vs-oracle (f2918-f2925: every frame 57344 / 57344).
+
+## The sub screen is every enabled layer's operand (2026-11-18)
+
+snes/ppu.c ppu_handlePixel: `mathEnabled = mainLayer < 6 && mathEnabled[mainLayer] && !prevent`; with CGWSEL bit 1 the
+operand is the sub-screen pixel, or the fixed colour where the sub screen is its backdrop (`secondLayer == 5`); the half
+(CGADSUB bit 6) applies only over an opaque sub pixel. The world compositor did this for BG3's main pixels alone (its
+`subOwn` gate needed CGADSUB bit 2). Two scenes use the other layers:
+
+- 1F7, the Day of Lavos's record (leg 44 f2382-f2511): TM 13, TS 04, CGWSEL 02, CGADSUB 03 -- BG3 on the sub screen (a
+  green grid, a line every 32 px) added to BG1 and BG2.
+- 1F4, the Blackbird after Dalton (leg 115 f10172-f10226): TM 12, TS 01, CGWSEL 02, CGADSUB 12 -- BG1 (the ship) on the
+  sub screen added to BG2's clouds and to OBJ palettes 4-7.
+
+field.c: owComposeSub now also places BG3 (its priority tiles above everything, the others under everything: mode 1 with
+the BG3 priority bit) and marks the opaque pixels (owSubOpq); worldComposeAt's `subGen` pass runs after the painters, on
+BG1 / BG2 / OBJ palettes 4-7 / the backdrop, from the layer each pixel ended on (mlayer), with the prevent modes' window
+test. The fixed colour of both arms is taken a line at a time when a channel is aimed at $2132 (C6/E170).

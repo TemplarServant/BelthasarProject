@@ -265,3 +265,53 @@ f2372 (C2:2C35 / 2C4A / 2C32); the port kept the field's `$1B58` = 0A and `$0282
 
 The BG3 drift (C2/75C3 / 75FD / 7702 / 77F2) stores `$24` / `$2A` back into WRAM (C2/7737-774F); the port kept them in its
 camera only. world.c's object pass writes them after each visit (no picture change: the renderer reads the camera).
+
+## The natives of 2026-11-18 (the picture-audit triage's ranks 4 and 5)
+
+Op 0x34 targets (bank C2, M = 8, X = 16, `LDX $4E` = the caller's block) and op 0x4E far targets (bank C6) the port
+named UNDERIVED and skipped. Each from `tools/romdis.py`; measured on the rule's cartridge in playthrough legs 44, 86, 115.
+
+- **C2/7A0C, C2/7A31** -- a random place: `JSR C2/2336 / AND #00FF / CLC / ADC #0220 (7A31: #00E0) / STA $0014,X`, then
+  `JSR C2/2336 / AND #00FF / CLC / ADC #0038 (7A31: #FFB8) / STA $0018,X`. Lavos's rain on 1F7 (leg 44 f3900).
+- **C2/7A56** -- the record's static: `$7E:8A35` = `F0 .. .. F0 .. .. 00`; `$4310` = 0D42 and `$4320` = 0F42 (DMAP 42,
+  indirect, write twice: BG1HOFS and BG2HOFS), both tables $7E:8A35; `TSB $4A` #06; `MVN $7E,$C0` of 0x1C0 bytes from
+  C0:0000 to $7E:8B56 (buffer A: the reset code's bytes read as scroll words); `LDA $20 / STA $7E8DF6` and an `MVN` that
+  repeats that word down 0x1C0 bytes (buffer B: the plain scroll). The entries' pointers are the NMI's copies of `$8A21`
+  / `$8A23` (C2/02B2).
+- **C2/7AAF** -- `$8A21` and `$8A23` each + 0x40, back to 8B56 at 8D16. **C2/7ADA** -- 8B56 / 8C36 (buffer A).
+  **C2/7AEB** -- 8DF6 / 8ED6 (buffer B).
+- **C2/7911** -- a window circle a frame: buffer 8B56 (+24 bit 0 clear) or 8DF6; `$8A21` = `$0356` = it, `$8A23` = it +
+  E0; `INC $0024,X`; `$0350` / `$0352` / `$0354` = the LOW bytes of +14 / +18 / +22 (8-bit stores); `$0358` = 7E; `TDC /
+  JSL C3/0008`. The Magic Cave's beam on 1F1 (leg 86 f14947-f15146).
+- **C6/E000** -- byte for byte C6/E448 (window 1's table on channel 1, `TSB $4A` #02).
+- **C6/E170** -- the fixed colour's ramp: `$7E:8A42` = `F0 .. .. F0 .. .. 00`; `$4320` = 3240 (DMAP 40 to $2132), table
+  $7E:8A42, `TSB $4A` #04; `$8A25` = 9176, `$8A27` = 91E6; $9176-$91E6 = FF, $91E6-$9256 = E0; then through WMDATA at
+  $91E6: F0 down to E9 twice each, E8 down to E1 four times each (48 bytes). **C6/E1FF** -- the same 48 bytes at $9176 +
+  the caller's +22. **C6/E237** -- `$00 = ($1BA9 & 3C) >> 2`. The Blackbird's flight over 1F4 (leg 115 f9980-f10230).
+
+The compositor's side (src/field.c): a channel aimed at $210D gives BG1's H scroll by the line (as $210F / $2110 / $210E
+already did); one aimed at $2132 the fixed colour by the line (owFixLine: the byte's bits 5 / 6 / 7 name the components).
+The far-target fallback names each unknown target once (it named the first only, which hid C6/E170 behind C6/E000).
+
+### The loader's maps are the ROM's packets (C2/295E / 298C / 29BA / 29E8)
+
+`LDY #0010 / LDA [$ED],Y / BMI` (none) `/ ASL A / ADC [$ED],Y / TAX / LDA $C6FF00,X ..` then `JSL C3/0002`: C6:FF00[header
++10] to $7E:3000, C6:FF20[+11] to $4000, C6:FF80[+12] to $7000, C6:FFA0[+13] to $7200. The container's world asset holds
+a capture of those buffers; it equals the packets on worlds 0, 2, 3, 5, 6, 7, differs by one BG1 cell on world 1 (grid
+offset 0F81) and by 34 on world 4: the Blackbird (blocks 71-C4 at BG1 cells (41..48, 19..24)), which is in the packet and
+which the capture's story had removed by script. world.c CtWorldLoadMaps decompresses the packets at every load; the
+capture stays the fallback of a run with no ROM table.
+
+### C2/09C5's extent
+
+18 block columns (`LDA #0012 / STA $02`) by 16 block rows (C2/0A6C `LDA #0010`), starting at the block that holds the
+cell left of / above the cursor: `$0C` = (`$E3` * 8 - 8 if bit 3 is set, else - 16) & 01FF, `$0E` the same on `$E7` & FF.
+Each block column is staged through `STA ($E0),Y` (left tile column at Y = 2 * row, right at + $40) and sent by C2/0ADC's
+two $40-byte DMAs with VMAIN 81; `$E0` does not move, so the ring keeps the 18th column's words. The world loader's first
+step is C2/26A8 (all of VRAM cleared by a fixed DMA), so after a load the other 28 columns are 0000. MEASURED: leg 44
+f2400 (1F7, `$E3` 44, `$E7` 27): columns 2..37 written, row 5 = the world's row 45; the port (64 columns round the camera,
+rows from `$E7` - 2 whatever its parity) differed in 490 words, 0 now. The hidden columns show only when a line's scroll
+leaves the camera's (the static above). OPEN: during a scroll the hidden columns still differ in places (leg 44 f1000-
+f1600, 30-100 words: the ring's leftovers a row's whole-slot DMA carries) -- not on screen in any measured picture; and
+C2/2C93's rebuild after the time gauge / world map has no VRAM clear before it (the gauge's own tiles stand in the columns
+it does not write) -- not ported, not measured.

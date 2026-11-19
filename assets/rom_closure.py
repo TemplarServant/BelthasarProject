@@ -651,6 +651,7 @@ def world_tables(rom):
     for a, b in zip(WORLD_PACKET_TABLES, WORLD_PACKET_TABLES[1:]):
         t('world packet pointers ($C6:%04X)' % a, C6 + a, C6 + b)
     t('time gauge packets (C2:7220, 3 x {source, destination})', C2 + 0x7220, C2 + 0x7220 + 12)
+    t("the record's static (C0:0000, C2/7A8F MVN 0x1C0 into $7E:8B56)", 0x000000, 0x0001C0)
     for a, b in world_scripts(rom):
         t('overworld script ($%02X:%04X)' % (0xC0 + (a >> 16), a & 0xFFFF), a, b)
     # bank C2's tables, each from its reader (a word read at the largest index: + 2)

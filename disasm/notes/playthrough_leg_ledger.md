@@ -521,3 +521,27 @@ carried on by mechanisms that quantise time:
     tile on the wreck (f21789-f21792 / f21809-f21812, 24 px), the wreck's debris four frames longer (f22532-f22535).
   - 92: timing -- loc 0A6's load is 45 frames for the cartridge's 44 (ramp f1296 / f1295); the play clock, `$051D` and
     `$01F8` stay a step behind and the torches flame a step apart. 0 px from states cut on f4000 and f26320.
+
+## The overworld's unported natives and maps (2026-11-18: legs 44, 86, 115)
+
+Port bugs, fixed (disasm/notes/ow_objvm.md "The natives of 2026-11-18", ow_colour_math_per_world.md's last section):
+
+- **Leg 44** (the Day of Lavos, 1F7): f2382-f2511 the record's green grid (BG3 on the sub screen added to BG1 / BG2: the
+  compositor's sub-screen math reached BG3's pixels only), f2445-f2460 / f2477-f2480 / f2697-f2700 the static (C2/7A56,
+  7AAF, 7ADA, 7AEB unported; no BG1HOFS channel read; C2/09C5's extent), f3900 the rain (C2/7A0C / 7A31 unported). Every
+  world frame f2370-f2760 and the samples to f4300 are 0 px at port -1.
+- **Leg 86** (the Magic Cave opens, 1F1): f14947-f15146 the beam (C6/E000 and C2/7911 unported). The world stretch
+  f14909-f15170 is 0 px at port -1.
+- **Leg 115** (the Blackbird over 1F4): f10172-f10226 the ship (in the world's own BG1 map packet; the port loaded a
+  capture taken with it removed) and the fixed colour's ramp (C6/E170 / E1FF / E237 unported). 0 px at port -3.
+
+Timing left in leg 115, OPEN (not proven a closed class): the port's world runs three frames ahead of the cartridge's --
+on the first world frame f9888 the scripts' waits read 35 in the port for the cartridge's 38 (block $0DB0 +0A), and at
+f9872-f9884 the port already holds the world's objects while the cartridge is still loading -- and every world picture
+to the leg's next load fits port -3 (f10100: port f10097 0 px; the flashes of f10128-f10208: port f10205 / f10206 for
+f10208). The first cause is before the load, in the field scene after Dalton's fight (the fight's exit, the fade or the
+load's price): not traced.
+
+Still open in these scenes, WRAM / VRAM only (no measured picture): the hidden tilemap columns during a scroll (leg 44
+f1000-f1600: 30-100 words, the staging ring's leftovers in a row's whole-slot DMA); C2/2C93's rebuild after the time
+gauge / world map (no VRAM clear before it).
