@@ -1176,10 +1176,22 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
     // 2C3B-2C41 `STZ $02B1 / $02B2 / $02B3`: the lead's and the two followers' idle counters (the fidget at $F0,
     // C2/35BD / C2/3C97 / 3CB7) start from zero on every world load, not from what the field left there.
     w->wram[0x02B1] = w->wram[0x02B2] = w->wram[0x02B3] = 0;
-    memset(w->wram + OWOBJ_BASE, 0, OWOBJ_END - OWOBJ_BASE);
+    // C2/0471: `LDX #0B30 / STX $4E / LDY #0040 / REP #20 / STZ $0000,X / TXA / CLC / ADC #0040 / TAX / DEY / BNE` -- the
+    // CLASS WORD of each of the 64 blocks, nothing else: the other 62 bytes of a block keep what the field's object page
+    // held there until an allocation writes them, and the field finds them again when it comes back. MEASURED, the rule's
+    // cartridge, playthrough leg 84: `$1608` / `$160A` (the facing of two objects of loc 028 that no script turns) read 01
+    // from the leg's start through the 1F0 visit of f1209-f2699 and after it; the port zeroed the whole area at the
+    // world's entry and the two stood facing up for the rest of the leg (281 px on its end picture).
+    for (int ob = OWOBJ_BASE; ob < OWOBJ_END; ob += OWOBJ_STRIDE) { w->wram[ob] = 0; w->wram[ob + 1] = 0; }
+    // The bootstrap object, C2/2C8B `LDX #0400 / LDA #7F / JMP C2/04D9` -> C2/048A with `$4E` = 0B30 (C2/0474): the class
+    // word, `STZ $0003,X` (16-bit) and `STZ $0002,X`, then the MVN of the parent's +05..+3F -- block $0B30's, i.e. the
+    // field's bytes $0B35-$0B6F -- and C2/04EB-04F7's pc, bank and `STZ $000A,X`. Every other object descends from it.
     uint8_t* B0 = w->wram + 0x0C30;                  // C2/048A's scan starts at $0C30, not $0B30
+    w->wram[0x4E] = 0x30; w->wram[0x4F] = 0x0B;
     B0[0] = (uint8_t)(OWOBJ_CLASS_VM & 0xFF); B0[1] = (uint8_t)(OWOBJ_CLASS_VM >> 8);
-    B0[OWOBJ_PC] = 0x00; B0[OWOBJ_PC + 1] = 0x04; B0[OWOBJ_PC + 2] = 0x7F;
+    B0[2] = 0; B0[3] = 0; B0[4] = 0;
+    memmove(B0 + 5, w->wram + OWOBJ_BASE + 5, 0x3B);
+    B0[OWOBJ_PC] = 0x00; B0[OWOBJ_PC + 1] = 0x04; B0[OWOBJ_PC + 2] = 0x7F; B0[OWOBJ_WAIT] = 0;
   } else {
     memcpy(w->wram + OWOBJ_BASE, w->objSnap, 0x1000);
   }

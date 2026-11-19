@@ -555,3 +555,12 @@ FD/DB97's setup in the frame whose head finds `$19` at 0). Every scene after a g
 did not: legs 62, 72, 85 and 107 were DIFFERENT for it and are SAME now (their rows above called them timing: the first
 cause was this), leg 73's end picture went from 14407 px to 0 (still DIFFERENT on a chain). 104 of 138 legs SAME.
 Exposed by it: loc 008's reboot load after the gate return is one frame short in the port (the NMI-off load clock).
+
+## Leg 84's end picture (2026-11-19)
+
+281 px, static: Crono's idle look (anim 21, C0/A1E9-A249) on the cartridge, Lucca's in the port. The roll is one of
+three a 128-frame beat (`$0158` & 7F = 7F; `INC $F8`, `$FE00[$F8]` < 08) and the port's `$01F8` is two draws behind
+(36 for 38 on f8355) with `$0158` three frames behind: loc 029's scene takes control on f6903 for the cartridge's
+f6900 (both sides loaded 029 on f3846; the cadence after that load) and 028 loads on f7336 for f7333. Timing (the load
+clock), not a draw bug. Found on the way and FIXED: the world's entry zeroed the whole object page (C2/0471 zeroes
+the class words alone) -- `$1608` / `$160A` differed from f1210 to the leg's end.

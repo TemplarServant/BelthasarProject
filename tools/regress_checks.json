@@ -55877,6 +55877,40 @@
       ]
     },
     {
+      "name": "leg-cells-world-entry-zeroes-class-words-only-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_cells_cmp.py",
+        "world-entry-zeroes-class-words-only"
+      ],
+      "env": {},
+      "expect": [
+        "legcells: world-entry-zeroes-class-words-only leg 84 f1260-f2760: 0 of 1501 frames differ"
+      ],
+      "pin": [
+        "^legcells: world-entry-zeroes-class-words-only "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_cells_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the world's entry zeroes each object block's class word and nothing else (C2/0471): the field's bytes in the page stand",
+      "notes": "THE WORLD'S ENTRY ZEROES THE CLASS WORDS ONLY (2026-11-19). C2/0471: `LDX #0B30 / STX $4E / LDY #0040 / REP #20 / STZ $0000,X / TXA / CLC / ADC #0040 / TAX / DEY / BNE` -- the class word of each of the 64 blocks; the other 62 bytes of a block keep what the field's object page ($0B30-$1B2F) held until an allocation writes them (C2/048A: the class, `STZ $0003,X` 16-bit, `STZ $0002,X`, then the MVN of the parent's +05..+3F), and the field finds them again when it comes back. The bootstrap object is C2/2C8B `LDX #0400 / LDA #7F / JMP C2/04D9` -> C2/048A with `$4E` = 0B30: its +05..+3F are block $0B30's -- the field's $0B35-$0B6F -- then the pc, the bank and `STZ $000A,X`. The port zeroed the whole area and set the bootstrap's class and pc alone. MEASURED on the rule's cartridge, playthrough leg 84: `$1608` / `$160A` (the facing of two objects of loc 028 that no script turns) read 01 from the leg's start through the 1F0 visit of f1209-f2699 and after it; the port's read 00 from f1210. With the class words alone zeroed and the bootstrap built as C2/04D9 does, the two cells are the cartridge's on every frame of the leg and the world stretch f1215-f2695 (every 5th picture) is 0 px. (Leg 84's end picture stays 281 px: Crono's idle look, rolled from `$01F8` two draws apart after loc 029's scene ran three frames late -- the load clock.) One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    for (int ob = OWOBJ_BASE; ob < OWOBJ_END; ob += OWOBJ_STRIDE) { w->wram[ob] = 0; w->wram[ob + 1] = 0; }",
+          "replace": "    memset(w->wram + OWOBJ_BASE, 0, OWOBJ_END - OWOBJ_BASE);  /* MUT */",
+          "why": "the whole object area zeroed: the field's bytes are gone when it comes back"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",

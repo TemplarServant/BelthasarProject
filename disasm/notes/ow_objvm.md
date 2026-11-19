@@ -315,3 +315,13 @@ leaves the camera's (the static above). OPEN: during a scroll the hidden columns
 f1600, 30-100 words: the ring's leftovers a row's whole-slot DMA carries) -- not on screen in any measured picture; and
 C2/2C93's rebuild after the time gauge / world map has no VRAM clear before it (the gauge's own tiles stand in the columns
 it does not write) -- not ported, not measured.
+
+### The world's entry and the object page (C2/0471, C2/04D9; 2026-11-19)
+
+C2/0471 zeroes the CLASS WORD of each of the 64 blocks ($0B30 + $40 k) and sets `$4E` = 0B30; nothing else of the
+page is touched. C2/048A (every allocation) writes the class, `STZ $0003,X` (16-bit), `STZ $0002,X` and MVNs the
+parent's +05..+3F. The bootstrap object (C2/2C8B -> C2/04D9 -> C2/048A, parent = block $0B30) therefore inherits the
+field's bytes $0B35-$0B6F, then takes its pc ($7F:0400), bank and `STZ $000A,X`; every other object descends from it.
+Unallocated blocks keep the field's bytes, and the field's tables that share the page ($1600 facing, ...) come back
+as the world left them. The port zeroed the whole area (leg 84: `$1608` / `$160A` 01 -> 00 across the 1F0 visit).
+Check leg-cells-world-entry-zeroes-class-words-only-vs-cartridge. Found with it: op 00 (C2/1039-108A) zeroes +0E / +0F too (`STZ $000E,X`, 16-bit) -- the port left the attribute +0F, which the bootstrap now inherits from the field (40 on leg 44: every child of 1F7 drawn flipped).

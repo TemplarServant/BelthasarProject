@@ -3683,6 +3683,10 @@ colours 1-12; 13-15 are the live OBJ row's, which his cells 042 / 044 index. One
 description typed while the main loop's CD/0009 takes an effect program down: no step on the frame CD/0453 is entered,
 two on the frame it returns in (CD/3E89's and CD/04DB's). One mutation each.
 
+`leg-cells-world-entry-zeroes-class-words-only-vs-cartridge` (tools/leg_cells_cmp.py: named WRAM cells on every frame of a
+stretch of a leg, both sides): leg 84 over its 1F0 visit (f1260-f2760): C2/0471 zeroes each
+object block's class word alone, so two field cells inside the page (`$1608` / `$160A`) keep their 01. One mutation.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

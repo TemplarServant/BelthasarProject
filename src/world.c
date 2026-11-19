@@ -2153,7 +2153,10 @@ static int obRun(uint8_t* ram, uint8_t* B, CtWorldCam* c) {
              op[0], op[1], op[2], op[3], op[4]);
     switch (op[0]) {
       case 0x00:                                    // reset state (keep +07/+09/+0A)
-        obPutW(B + OWOBJ_GOSUB, 0); obPutW(B + OWOBJ_ANIM, 0); obPutW(B + OWOBJ_ANIMBK, 0);
+        // C2/1039-108A, sixteen-bit stores: `STZ $0005,X / $000B,X / $000D,X / $000E,X / $0010,X .. $003E,X` -- the
+        // attribute +0F goes with +0E (the bootstrap object inherits block $0B30's, the field's `$0B3F`: 40 on 1F7's load of
+        // playthrough leg 44, 00 in every child after this op).
+        obPutW(B + OWOBJ_GOSUB, 0); obPutW(B + OWOBJ_ANIM, 0); obPutW(B + OWOBJ_ANIMBK, 0); obPutW(B + 0x0E, 0);
         for (int i = 0x10; i < OWOBJ_STRIDE; i += 2) obPutW(B + i, 0);
         adv = 1; break;
       case 0x01: B[OWOBJ_ATTR] = (uint8_t)((B[OWOBJ_ATTR] & 0xF1) | op[1]); adv = 2; break;
