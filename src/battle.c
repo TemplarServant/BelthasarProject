@@ -13924,8 +13924,9 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           if (op == 0x9D) battleAscQuarterGoal(lx, ly, &gx, &gy);    // C1/62E4-62EF / C1/6425-6430 -> C1/6549
           battleAscSlideArm(h, t, gx, gy);
           if (op == 0x9D) h->ascMvN[t] = (h->ascMvN[t] * 4) & 0xFF;  // C1/6319-6329 / C1/645B-646B: the count x 4
-          if (op == 0x11 && t >= 8)                                  // C1/50C2 `STA $A5B5,Y`: the 11/12 arm keeps the
+          if (op == 0x11 && t >= 8) {                                // C1/50C2 `STA $A5B5,Y`: the 11/12 arm keeps the
             h->ascHead[t] = battleAtan2(lx, ly, gx, gy) & 0xFF;      //   bearing as the object's heading too
+            battleAscHeadMirror(h, t); }                             //   (the byte C1/6E9A's FF-angle orbit reads back)
           if (op == 0x11) h->ascHopOn[t] = 0;
           else battleAscHopArm(h, t, lx, ly, gx, gy, h->ascScr90, op == 0x9B);
           if (tr) fprintf(stderr, "asc f%d rel=%d t%d SLIDE-STORED (%d,%d)->(%d,%d) speed=%d n=%d\n",
@@ -14003,7 +14004,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           gx = a1; gy = a2;
           h->mem[0xA2B0] = (uint8_t)gx; h->mem[0xA2B2] = (uint8_t)gy;   // C1/4FC2 / C1/4FC8
           battleAscSlideArm(h, t, gx, gy);
-          if (t >= 8) h->ascHead[t] = battleAtan2(lx, ly, gx, gy) & 0xFF;   // C1/50C2: the bearing as its heading
+          if (t >= 8) { h->ascHead[t] = battleAtan2(lx, ly, gx, gy) & 0xFF; battleAscHeadMirror(h, t); }   // C1/50C2: the bearing as its heading ($A5B5,Y)
           h->ascHopOn[t] = 0;
           if (tr) fprintf(stderr, "asc f%d rel=%d t%d SLIDE-XY (%d,%d)->(%d,%d) speed=%d n=%d\n",
                           h->frames, rel, t, lx, ly, gx, gy, h->ascSpeed[t], h->ascMvN[t]);
@@ -14020,7 +14021,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
             if (op == 0x9C) battleAscQuarterGoal(lx, ly, &gx, &gy);  // C1/62E4-62EF / C1/6425-6430 -> C1/6549
             battleAscSlideArm(h, t, gx, gy);
             if (op == 0x9C) h->ascMvN[t] = (h->ascMvN[t] * 4) & 0xFF;   // C1/6319-6329 / C1/645B-646B: the count x 4
-            if (op == 0x12 && t >= 8) h->ascHead[t] = battleAtan2(lx, ly, gx, gy) & 0xFF;   // C1/50C2
+            if (op == 0x12 && t >= 8) { h->ascHead[t] = battleAtan2(lx, ly, gx, gy) & 0xFF; battleAscHeadMirror(h, t); }   // C1/50C2
             if (op == 0x12) h->ascHopOn[t] = 0;
             else battleAscHopArm(h, t, lx, ly, gx, gy, a1, op == 0x9A);
             if (tr) fprintf(stderr, "asc f%d rel=%d t%d SLIDE (%d,%d)->(%d,%d) speed=%d n=%d\n",

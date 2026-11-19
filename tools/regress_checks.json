@@ -55707,6 +55707,40 @@
       ]
     },
     {
+      "name": "field-picture-slide-bearing-is-the-objects-heading-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "slide-bearing-is-the-objects-heading"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: slide-bearing-is-the-objects-heading leg 95 +64190 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: slide-bearing-is-the-objects-heading "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "ops 11 / 12 store the slide's bearing as the effect object's heading ($A5B5): the FF-angle orbit starts from it",
+      "notes": "THE SLIDE'S BEARING IS THE OBJECT'S HEADING (2026-11-18, picture-audit triage rank 13 d). C1/50BA-50C2: `LDY $A2B6 / LDA $DB / STA $A355,Y / STA $A5B5,Y` -- the 11 / 12 arm of the slide ops keeps the bearing in the mover's angle and in the effect object's heading byte, which C1/6E9A's orbit reads back when its angle operand is FF. The port kept the heading in its own per-track cell (ascHead) and did not write `$A5B5`, so the orbit read a stale byte: Magus's fight in leg 95, the sparkle about half a turn round its circle on f64185-f64205 (26 / 134 / 72 / 26 / 10 px), 0 now on f64180-f64230. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (t >= 8) { h->mem[0xA5B5 + (t - 8)] = (uint8_t)h->ascHead[t]; return; }",
+          "replace": "  if (t >= 8) return;  /* MUT */",
+          "why": "the heading byte is never written: the orbit reads a stale one"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",
