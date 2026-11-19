@@ -542,8 +542,7 @@ f9731 for the cartridge's f9733 and asks for the exit on f9829 for f9831. The po
 on the first world frame f9888 the scripts' waits read 35 in the port for the cartridge's 38 (block $0DB0 +0A), and at
 f9872-f9884 the port already holds the world's objects while the cartridge is still loading -- and every world picture
 to the leg's next load fits port -3 (f10100: port f10097 0 px; the flashes of f10128-f10208: port f10205 / f10206 for
-f10208). The first cause is before the load, in the field scene after Dalton's fight (the fight's exit, the fade or the
-load's price): not traced.
+f10208).
 
 Still open in these scenes, WRAM / VRAM only (no measured picture): the hidden tilemap columns during a scroll (leg 44
 f1000-f1600: 30-100 words, the staging ring's leftovers in a row's whole-slot DMA); C2/2C93's rebuild after the time
