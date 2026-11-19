@@ -3679,6 +3679,10 @@ frame (C0/AE27), which the placed cats' bounces read. One mutation.
 `field-picture-enemy-colours-13-15-are-the-live-rows-vs-cartridge`: leg 95 f17100 (Magus): the enemy palette record holds
 colours 1-12; 13-15 are the live OBJ row's, which his cells 042 / 044 index. One mutation.
 
+`field-picture-teardown-entry-types-nothing-vs-cartridge` / `-teardown-return-types-twice-`: leg 65 f43176 / f43200, a
+description typed while the main loop's CD/0009 takes an effect program down: no step on the frame CD/0453 is entered,
+two on the frame it returns in (CD/3E89's and CD/04DB's). One mutation each.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

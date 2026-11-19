@@ -407,6 +407,11 @@ PICTURES = {
     # Leg 95, Magus (f17096-f17100): his cells 042 / 044 index colour 15 of his OBJ row; the enemy palette record holds
     # colours 1-12 only, the last three are the live page's (7FFF, the pulsing grey, 14A5) -- not black.
     'enemy-colours-13-15-are-the-live-rows': dict(leg='95_magus', at=0, frames=17100, own=True, lag=-1),
+    # Leg 65, a description typed while the main loop takes an effect program down (CD/0009 -> CD/0453, f43170-f43191):
+    # the frame CD/0453 is entered makes no step (its first wait comes before CD/04DB) and the frame its last wait returns
+    # in makes two (CD/3E89's, then CD/04DB's). f43176: the box a glyph ahead in the port; f43200: a glyph behind.
+    'teardown-entry-types-nothing': dict(leg='65_denadoro', at=0, frames=43176, own=True, lag=-1),
+    'teardown-return-types-twice': dict(leg='65_denadoro', at=0, frames=43200, own=True, lag=-1),
     # Leg 127, the same wing: op `EA 29` parks the main loop on f714 (the song's upload, to f754), after that iteration's
     # head stepped the clouds' counter (`$1D8D` F988 -> F987) and before FD/C2C1 built a table set from it -- the screen
     # keeps the set it had (`$7F:1514` = F988) for the whole park. f730: the clouds a line on with the counter read live

@@ -4996,6 +4996,15 @@ static int battleTypewriterHeld(const CtBattleHost* h, int opened) {
 // the description was a character behind the cartridge's for as long as it was typed (27-50 px a picture).
 // gTypeStepDue: this frame's step waits for the action loop's pass (battleTickBody, the `wasFrozen` branch).
 static int gTypeStepDue;
+// The step around the main loop's effect teardown. CD/0009 = CD/04AA: `JSR CD/3E44`, then CD/04B5-04C4 `JSR CD/0453` when a
+// program is to be taken down, and only after it CD/04DB `JSR CD/04DF`. CD/0453 waits through CD/3E75, whose tail CD/3E89
+// makes the step of every frame it comes back in. So the frame CD/0453 is ENTERED makes no step (its first wait comes
+// before CD/04DB), and the frame its last wait returns in makes two: CD/3E89's, then CD/04DB's on the way out.
+// MEASURED, the rule's cartridge, playthrough leg 65 (a description typed under a teardown): the trace of f43170 is
+// C1:10A0, CD:04AA, CD:0453, CD:3E75, CD:3E7D -- no CD:04DF, `$CCED` stands at 02 -- and f43191's is CD:04DF, C1:10E3,
+// CD:04DF, C1:007E, `$CCED` 09 -> 0B. The port stepped once on each: a glyph ahead for the first box, one behind after.
+static int gTdSkipStep;        // this tick entered CD/0453 from the main loop: its service makes no step
+static int gTdExtraStep;       // 2: CD/0453's last frame (this tick); 1: the frame it returns in owes CD/3E89's step
 static int battleWaitIsC110FA(CtBattleHost* h);                  // (below, with the action's frame counts)
 static void battleTypewriterStep(CtBattleHost* h);
 static void battleTypeStepAfterPass(CtBattleHost* h) {          // 11110 `JSL CD0009` -> CD/04DB -> CD/04DF `LDA $CD05 / BEQ`
@@ -5016,6 +5025,9 @@ static void battleSysMsgFrame(CtBattleHost* h) {
       s[0xCD1D] = 0; s[0xCCEC] = 0; s[0xCCED] = 0; s[0xCA24]++; battleFleeTrace(h, "box-close"); }
   }
   gTypeStepDue = 0;
+  if (gTdSkipStep) { gTdSkipStep = 0; return; }                // CD/0453 entered: CD/04DB is not reached this frame
+  if (gTdExtraStep == 2) gTdExtraStep = 1;                     // (the teardown's last frame: its own step below)
+  else if (gTdExtraStep == 1) { gTdExtraStep = 0; if (s[0xCD05]) battleTypewriterStep(h); }   // CD/3E89, then CD/04DB below
   if (!held && battleWaitIsC110FA(h)) { gTypeStepDue = 1; return; }   // (after this frame's pass: C1/10FA)
   if (s[0xCD05] && !held) battleTypewriterStep(h);
 }
@@ -16140,7 +16152,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->ascOwnsFlash = 0;
   for (int k = 0; k < 11; k++) { h->ascHopY[k] = 0; h->ascShadow[k] = 0; }   // $A4AF / $A5D8: nothing hops or casts a shadow at boot
   gPcTileHeld[0] = gPcTileHeld[1] = gPcTileHeld[2] = -1;        // (every seat's tiles are its published pose's)
-  gTypeStepDue = 0;
+  gTypeStepDue = 0; gTdSkipStep = 0; gTdExtraStep = 0;
   // $9888/$993C boot fill (battle_hurt_flash_sync.md sec. 1.1, sec. A4).
   // PCs: CC/E6F8 `LDA #0A / STA $9888 / STA $993C / INC A / INC A / STA $9889 / ... / STA $988A` -- three
   // unrolled stores, seat-indexed and unconditional, so 0x0A/0x0C/0x0E regardless of who occupies the seat.
@@ -20971,8 +20983,9 @@ static int battleFxTeardown(CtBattleHost* h) {
     // (No end-of-fight skip: the main loop's C1/8120 runs C1/0003 #03, the idle tick and its CD/0009, before C1/8130's
     //  checks, C1/B223 -> C1/813F (defeat) and C1/8167 (victory).)
     battleFxTeardownEnter(h);
+    gTdSkipStep = 1;                                               // (the step around the teardown: gTdSkipStep, above)
   }
-  battleFxTeardownStep(h);
+  if (!battleFxTeardownStep(h)) gTdExtraStep = 2;
   return 1;
 }
 // A counter's window, C1/4058: its two C1/007E waits, then C1/40A3 `JSR C1/10FA` reaches C1/1110 `JSL CD0009` before

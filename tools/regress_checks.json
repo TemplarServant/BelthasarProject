@@ -55809,6 +55809,74 @@
       ]
     },
     {
+      "name": "field-picture-teardown-entry-types-nothing-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "teardown-entry-types-nothing"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: teardown-entry-types-nothing leg 65 +43176 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: teardown-entry-types-nothing "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the frame the main loop enters CD/0453 types no glyph (CD/04DB comes after the teardown)",
+      "notes": "THE TYPEWRITER AROUND THE MAIN LOOP'S TEARDOWN (2026-11-19, picture-audit triage rank 27; the ledger's open item of leg 65). CD/0009 = CD/04AA: `JSR CD/3E44`, CD/04B5-04C4 `JSR CD/0453` when `$CCEA` is set and `$A013` clear, and only then CD/04DB `JSR CD/04DF` (the step: `LDA $CD05 / BEQ`, C2/0009, `INC $CCED`). CD/0453 waits through CD/3E75, whose tail CD/3E89 makes the step of every frame it comes back in. So the frame CD/0453 is entered makes no step, and the frame its last wait returns in makes two. MEASURED on the rule's cartridge (`--cputrace` from a state cut at f43166): f43170 is C1:10A0, CD:04AA, CD:0453, CD:3E75, CD:3E7D with no CD:04DF (`$CCED` stands at 02); f43171-f43190 each CD:04DF, C1:10E3, CD:3E75; f43191 is CD:04DF, C1:10E3, CD:04DF, C1:007E (`$CCED` 09 -> 0B). The port stepped once on each: its `$CCED` a glyph ahead on f43170-f43180 and a glyph behind from f43191 (43 px at the audit's f43200). battle.c gTdSkipStep / gTdExtraStep. `$CCED` / `$CD05` / `$A013` / `$CCEA` now equal on every row f43165-f43210; pictures f43160-f43210 0 px. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  if (gTdSkipStep) { gTdSkipStep = 0; return; }                // CD/0453 entered: CD/04DB is not reached this frame",
+          "replace": "  gTdSkipStep = 0;  /* MUT */",
+          "why": "the entry frame steps: the box a glyph ahead"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-teardown-return-types-twice-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "teardown-return-types-twice"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: teardown-return-types-twice leg 65 +43200 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: teardown-return-types-twice "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the frame CD/0453's last wait returns in types two glyphs (CD/3E89's step, then CD/04DB's)",
+      "notes": "THE TYPEWRITER AROUND THE MAIN LOOP'S TEARDOWN (2026-11-19, picture-audit triage rank 27; the ledger's open item of leg 65). CD/0009 = CD/04AA: `JSR CD/3E44`, CD/04B5-04C4 `JSR CD/0453` when `$CCEA` is set and `$A013` clear, and only then CD/04DB `JSR CD/04DF` (the step: `LDA $CD05 / BEQ`, C2/0009, `INC $CCED`). CD/0453 waits through CD/3E75, whose tail CD/3E89 makes the step of every frame it comes back in. So the frame CD/0453 is entered makes no step, and the frame its last wait returns in makes two. MEASURED on the rule's cartridge (`--cputrace` from a state cut at f43166): f43170 is C1:10A0, CD:04AA, CD:0453, CD:3E75, CD:3E7D with no CD:04DF (`$CCED` stands at 02); f43171-f43190 each CD:04DF, C1:10E3, CD:3E75; f43191 is CD:04DF, C1:10E3, CD:04DF, C1:007E (`$CCED` 09 -> 0B). The port stepped once on each: its `$CCED` a glyph ahead on f43170-f43180 and a glyph behind from f43191 (43 px at the audit's f43200). battle.c gTdSkipStep / gTdExtraStep. `$CCED` / `$CD05` / `$A013` / `$CCEA` now equal on every row f43165-f43210; pictures f43160-f43210 0 px. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  else if (gTdExtraStep == 1) { gTdExtraStep = 0; if (s[0xCD05]) battleTypewriterStep(h); }   // CD/3E89, then CD/04DB below",
+          "replace": "  else if (gTdExtraStep == 1) { gTdExtraStep = 0; }  /* MUT */",
+          "why": "the return frame steps once: the box a glyph behind"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",
