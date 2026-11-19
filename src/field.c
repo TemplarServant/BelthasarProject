@@ -5678,12 +5678,17 @@ static long loadSinkWall(int sp) {
   }
   return 0;
 }
+static int g_loadPostLine = -1;        // a load's queued JSL placed inside its frame: the line it begins on (else the caller's)
 static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
+  if (g_loadPostLine >= 0) startLine = g_loadPostLine;
   CtAudio* a = (CtAudio*)ctx; int fr = 0, el = startLine;
   uint8_t c0 = mem7E ? mem7E[0x1E00] : 0, c1 = mem7E ? mem7E[0x1E01] : 0;
-  if (g_ruleAudio) CtAudioSetRuleIrq(a, g_fieldIrqLine);
+  // The HDMA the JSL meets is the room's own: the field's mean is the six-channel program's, and a room with other
+  // channels live (`$0128`, their tables) spends what its program costs over that one (audio.c CtAudioFieldHdmaOver) --
+  // the Gate's warp, leg 84's `10 37`: 21,300 master a frame on the cartridge for the mean's 14,310.
+  if (g_ruleAudio) { CtAudioSetRuleIrq(a, g_fieldIrqLine); CtAudioSetRuleHdmaOver(a, CtAudioFieldHdmaOver(a, mem7E)); }
   CtAudioSetPostLine(a, startLine); CtAudioService(a, mem7E); CtAudioLastPostRaster(a, &fr, &el, NULL);
-  if (g_ruleAudio) CtAudioSetRuleIrq(a, -1);
+  if (g_ruleAudio) { CtAudioSetRuleIrq(a, -1); CtAudioSetRuleHdmaOver(a, 0); }
   if (getenv("CT_SNDTRACE") && c0)
     fprintf(stderr, "[snd] vm f%d cmd=%02X p1=%02X from line %d: %d NMI(s) crossed, returns on line %d\n", g_sndTraceFrame, c0, c1, startLine, fr, el);
   return (hostSoundInstant() ? 0 : fr) * 1024 + el;  // (instant uploads: the upload parks nothing)
@@ -5698,11 +5703,17 @@ static void fieldSoundFlush(uint8_t* mem7E) { if (g_fieldAudio && mem7E) CtAudio
 // leg 15, the world -> 078).
 #define OW_EXIT_POST_AT (CtAudioRulePadWait() + 20 + 2178)
 #define OW_EXIT_POST_GAP 156L
+// ...so the load that follows is an NMI-off stretch that began at C2/246D, not at C0/0B5D: C2/2470 -> the $82's JSL, the
+// two JSLs' own time, the gap between them and the $83's RTL -> C0/0B5D (OW_EXIT_SPC_LEAD less C0/0B5D -> C0/1B73's JSL,
+// 716 + 3060) are the load's wall time too (leg 64, 1F1 -> 08A: C0/0B5D is reached 8,956 master past C2/2470).
+static long g_owExitWall = 0;
 static void owExitSoundPosts(uint8_t* m) {
   static const uint8_t cmd[2] = { 0x82, 0x83 };
   if (g_ruleAudio && g_fieldAudio) CtAudioSetRulePost(g_fieldAudio, OW_EXIT_POST_AT, CtAudioRulePadWait());
+  g_owExitWall = 2178L + OW_EXIT_POST_GAP + (OW_EXIT_SPC_LEAD - 716L - 3060L);
   for (int k = 0; k < 2; k++) {
     m[0x1E00] = cmd[k]; m[0x1E01] = 0x00; m[0x1E02] = 0xFF; fieldSoundFlush(m);   // C2/24E3 / 24F4
+    if (g_fieldAudio) g_owExitWall += (long)CtAudioLastPostCode(g_fieldAudio);
     if (!k && g_ruleAudio && g_fieldAudio) CtAudioAdvance(g_fieldAudio, OW_EXIT_POST_GAP);   // C2/24F4-2501, the JSL
   }
   if (g_ruleAudio && g_fieldAudio) CtAudioSetRulePost(g_fieldAudio, CtAudioRulePadWait(), CtAudioRulePadWait());
@@ -12905,6 +12916,8 @@ int main(int argc, char** argv) {
           const int fromReset = coldResetCyc != 0;      // this load is the reset's C0:0066
           lcCyc += coldResetCyc; coldResetCyc = 0;     // a reset's C0/000E ran before this load (and in the same black): its DMA
           long lcWall = coldResetWall; coldResetWall = 0;   // ...and its JSL C7:0000
+          const long owExitW = g_owExitWall; g_owExitWall = 0;   // ...or the world's exit before it (C2/246D -> C0/0B5D)
+          if (!inWorld) lcWall += owExitW;
           // ...and C0/1B8B's song JSL, inside the load: its whole-frame boundaries and the lines around them.
           { int sp = (!inWorld && f.vm) ? CtSceneLoadSongPrice() : -1;
             if (sp >= 0) lcWall += loadSinkWall(sp); }
@@ -12946,6 +12959,7 @@ int main(int argc, char** argv) {
               { long bo = owBlackOmenCyc(&wd);          // C2/2D91 (C2/2D6A), story D4 on 1F0 / 1F1 / 1F2 / 1F6
                 if (bo && getenv("CT_LOADCOST")) printf("loadwalk: world %d -- C2/2D91 %ld cycles\n", haveWorld ? wd.world : 0, bo);
                 owW += bo; }
+              owW += (long)((double)owExitW * (double)CT_LOAD_FRAME_CYCLES / 357368.0);   // (a world left for another)
               lcCyc = owW;
               loadHold = ct_nmi_wait_frames(owW) - 1;
               if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- %ld cycles, %d packet(s), cells %02X/%02X %02X/%02X\n",
@@ -13072,9 +13086,19 @@ int main(int argc, char** argv) {
         uint32_t at = g_loadSpcBase + (uint32_t)(((double)LOAD_NMIOFF_AT + (double)T * 357368.0 / CT_LOAD_FRAME_CYCLES) * apm);
         if ((int32_t)(at - gridNext) >= 0) break;          // a later frame's
         CtAudioAdvanceTo(audio, at);
+        // The load runs with the NMI off (C0/0B5D) and the screen blank: no NMI, no V-IRQ and no HDMA run steals from C7
+        // -- the loader's quiet background, as C0/1B8B's JSL at the load's head is priced -- and the JSL begins on the
+        // line the walk's work reached.
+        g_loadPostLine = (int)((225L + ((long)LOAD_NMIOFF_AT + (long)((double)T * 357368.0 / CT_LOAD_FRAME_CYCLES)) / 1364L) % 262L);
+        if (g_ruleAudio) CtAudioSetEngineMode(audio, 2);
         int sp = CtSceneLoadPostsFlush(f.vm, 1);
+        if (g_ruleAudio) CtAudioSetEngineMode(audio, 0);
+        g_loadPostLine = -1;
         if (sp >= 0) {
-          loadW += (long)((double)loadSinkWall(sp) * (double)CT_LOAD_FRAME_CYCLES / 357368.0);
+          // The JSL's own wall time: it began where the SPC was advanced to (`at`, the rule's clock), not on the nominal
+          // line 12 loadSinkWall counts from -- the driver answers on its tick, so the end is the same line either way and
+          // (end - 12) charged the lines before the JSL a second time (leg 78's `10 38`: lines 139-210, not 12-210).
+          loadW += (long)((double)CtAudioLastPostCode(audio) * (double)CT_LOAD_FRAME_CYCLES / 357368.0);
           int h = ct_nmi_wait_frames(loadW) - 1;
           loadHold += h - loadW0; loadW0 = h;
         }
@@ -13092,7 +13116,10 @@ int main(int argc, char** argv) {
         while (due < np && (loadPostTotal - CtSceneLoadPostCycles(due) + tail) / CT_LOAD_FRAME_CYCLES >= loadHold) due++;
       }
       if (due) {
+        const int quiet = fade == 3 && g_ruleAudio && audio;   // (inside the load's black: NMI off, as above)
+        if (quiet) CtAudioSetEngineMode(audio, 2);
         int sp = CtSceneLoadPostsFlush(f.vm, due);
+        if (quiet) CtAudioSetEngineMode(audio, 0);
         // The frames those JSLs crossed are the load's too (an init script's song upload): the black holds for them, as
         // it holds for C0/1B8B's above, and the SPC time they ran ahead is what those frames stand still for (audio.c).
         // A walked load's W takes their time whole -- the fraction too: the hold is ct_nmi_wait_frames of the new W.

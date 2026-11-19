@@ -916,3 +916,93 @@ and everything after it ran two frames early -- the torches a step off, obj0's a
 fight's places (532 px at f5100). The runner returns them now and the hold defers the segment's wait by them (field.c,
 battleReturnStall). Check field-picture-return-waits-out-the-songs-poll-vs-cartridge. (The menu exit's C0/0206 caller is the same
 shape and not measured.)
+
+## 18. The sound JSLs inside a load: their own time, their place, their background (2026-11-19)
+
+Measured with `--hookpc` on C0/0B5D, 56D4, 5709, 9DC3, 2848, 0B38 and C7/0004 / C7/019A from a state five frames before
+the load (the frame / line each is first reached on), against the port's CT_LOADCOST lines, on playthrough legs 34, 47,
+63 and 78. CPU cycles after C0/0B5D (wall x 346,886 / 357,368):
+
+| load | C0/5709 | the JSL enters | leaves | C0/9DC3 | C0/2848 | C0/0B38 |
+|---|---|---|---|---|---|---|
+| leg 34, 048 -> 01C | 6,342,665 | 6,429,623 | 6,503,339 | 9,542,346 | 9,556,444 | 11,153,639 |
+| leg 47, 10F -> 0DF | 9,049,945 | 9,132,377 | 19,329,432 | 20,966,382 | 20,979,053 | -- |
+| leg 63, 1F1 -> 087 | 7,933,843 | 8,033,032 | 22,517,182 | 26,737,827 | 26,750,555 | 28,460,122 |
+| leg 78, 11D -> 11C | 9,499,156 | 9,580,230 | 9,689,113 | -- | 11,324,149 | 13,090,586 |
+
+Three errors of the port, each a frame or two on the loads that have such a JSL:
+
+1. **The JSL's wall time was counted from line 12.** The sink reports NMIs crossed and an end line for a clock that
+   began on the nominal line 12; a JSL placed inside its frame begins where the walk's work reached (leg 78: line 129).
+   The driver answers on its tick, so the end line is the cartridge's either way and (end - 12) charged the lines
+   before the JSL twice. Now the JSL's own master cycles (CtAudioLastPostCode), from its true line.
+2. **The background.** The queued JSLs ran on the rule's field clock (the NMI's waits, the V-IRQ, six HDMA channels a
+   line). Inside the load the NMI is off and the screen blank: the loader's quiet background (engine mode 2), as the
+   load's own song JSL C0/1B8B. A song upload was ~4-5% slow: leg 47's 31 frames + 11 lines for 29 + 104, leg 63's 43 +
+   79 for 41 + 198.
+3. **What comes after the JSL.** Of the walk's legs counted before it, the ROM runs after it the runner heads and tails
+   of the objects still to visit (C0/58ED-5924, 460 each) and the constants from C0/5924 to C0/2848 (2,160: C0/9DC3 ->
+   C0/2848 less the walked C0/9DC3 and C2/8004). The JSL entered ~12,000 cycles late; the driver's tick absorbed it into
+   a shorter wait and the load's total fell short by as much (leg 34 a frame early: its poll lands 4,400 cycles past
+   the vblank's 37 lines).
+
+A load's frame count turns on C0/0B38's poll against the vblank's 37 lines (ct_nmi_wait_frames), so a walk a few
+thousand cycles off flips a load whose poll lands near either edge. Checks: the four `leg-cells-load-*`.
+
+4. **A load out of the world.** Its NMI-off stretch begins at C2/246D (the world's exit, before the `82` / `83` posts),
+   8,956 master before C0/0B5D on leg 64 (C0/0B5D on line 234 h 924; a field load's is on line 228). The exit's wall
+   time joins the load's (field.c g_owExitWall). Check leg-cells-world-exit-load-starts-at-the-worlds-nmi-off.
+
+Where C0/0B5D sits in its frame is part of the count: the poll's beam position is C0/0B5D's plus the stretch's wall
+time (leg 84's gate arrival: C0/0B5D on line 6 h 858, the poll 20,212,534 master later on line 153 of f701).
+5. **The field's JSLs with the NMI on met the field's mean HDMA.** The warp song `10 37` (leg 84, f335) stalls the field 19
+   frames + 3 lines on the cartridge and stalled it 18 + 233 lines in the port: the Gate's room has other channels live
+   (21,300 master a frame of HDMA for the mean's 14,310), so every Gate arrival lit a frame early. The VM's sink now
+   adds what the room's program costs over the mean's (audio.c CtAudioFieldHdmaOver: the channels `$0128` enables and
+   their tables, by the channels' rules, less the six-channel program's 12,664 a frame): 21,046 there, nothing in a
+   six-channel room. Check leg-cells-field-upload-meets-the-rooms-hdma.
+   TRIED AND DROPPED: naming program 1 for every field JSL (line by line, 14,472 a frame in a six-channel room for the
+   cartridge's 14,478). The frame's total is truer, yet the attract's `10 18` on f2068 then returns on line 224 for
+   line 235 -- 29 frames for the cartridge's 30 -- and forty attract checks move: an upload's last line turns on the
+   poll loop's phase against the SPC's (battle_exit_fade_poll.md), which moves with where in the frame the cycles go,
+   not only how many. The same total spread evenly (the mean) keeps line 235.
+
+OPEN, seen on the way (leg 84, the Gate's `FF 80` on f358): the cartridge's `$0153` keeps 01 from the op's frame to the
+load -- C0/3FC1's loop and C0/3FD3's jump are inside the runner's visit, so that frame's C0/00C7 `JSL FD/C2C1` never
+runs -- where the port's tick builds a set on the op's frame (00 through the fade and the tunnel; no picture shows it
+there). Skipping the call on the op's frame makes `$0153` the cartridge's on f330-f640, but FD/C2C1 also steps the
+window wave ($1D8F.., no CLC), which no load resets: in the attract the candle flames of loc 07D (f6400-f6820) then
+stand one wave step off the cartridge's, which the port matches pixel for pixel today
+(attract-07d-frog-squash-colours-vs-oracle). So the ROM builds a set once more somewhere after such an op than the
+skip alone gives; not found, not changed.
+
+## 19. The attract against the cartridge in absolute SPC time (2026-11-19)
+
+The SPC's cycle count is a clock both sides share from power-on (17,088 a frame): every CPU store to $2140 over the
+attract, the cartridge's (`ct.exe --peek boot` PEEK_APUTRACE=0:11300) against the port's (CT_AUDIO_PORTTRACE), paired in
+order (46,383 stores; one resync: the cartridge's second `10` at f8606). -17,088 is a frame early.
+
+| stretch (cartridge frames) | before sec. 18's fixes | after |
+|---|---|---|
+| the in-load `10 18` of loc 07D (f6377) | +801 | +210 |
+| the 07D fight's set (f7227-f7238), its ends | +3,378 / +3,347 / +809 | -10 / -24 / -24 |
+| the 087 fight's set (f9361-f9377), its last end | -3,117 | -96 |
+| the 087 fight (f9377-f9854) | -17,089..-17,099 (a frame early) | +1..-13 |
+| its exit chain's start (f9910) | -17,090 | +5 |
+| the exit chain's blocks (f9911-f9922), their ends | -11,943..-16,672 | +4,032..+4,230 |
+| the title's return (f10251-f11092) | +47..-48 | +17,039..+17,134 (a frame late) |
+
+The port had run the 087 fight one frame early and come level again at its exit; it now runs the fight level and comes
+out a frame late. The exit chain's first handshake is where both lose 4,100 cycles: after `FE` the cartridge's `7F` /
+`00` / `02` / `03` come on lines 247, 249, 11, 12 and the port's on 227, 228, 56, 75 -- the driver answers on its tick, and
+the port's tick stands elsewhere. Twenty-two checks were re-pinned by that frame (each picture is the cartridge's at
+the shifted pair).
+
+Posts of both builds that are still far off: the in-load JSLs of loads the WORLD or a DF reboot starts (f2503 +6,456,
+f3585 +8,816, f3588 +20,969: they are posted by the frames left, on a frame grid). TRIED AND NOT LANDED
+(build/_pt77/wip_lead24_exact.patch in the working copy of the session that wrote this): placing those like a
+field-to-field load's (the `83`'s RTL + 92 less the exit's wall for the world; the vblank + 5,646 - 716 for DF) brings
+them to +207 / +172 / +5,228, and the attract then runs one to three frames late from f3899 on -- at f3585 the cartridge's
+`10` lands 172 APU cycles before a driver tick and its `11` follows at once; the port's, 172 later, misses that tick and
+waits 3,193 for the next, and the load is a frame longer. An in-load post has to stand within about a line (the walk is
+good to two or three) wherever the cartridge's falls that close to a tick; 53 legs graded the same with and without.

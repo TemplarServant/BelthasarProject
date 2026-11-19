@@ -83,6 +83,7 @@ struct CtAudio {
   int engineMode;                    // 0 field, 1 battle: the background block the loader clock charges
   int postLine;                      // raster line a JSL $C7:0004 begins on (default 12: the runner's early queue)
   int lastFrames, lastEndLine;       // the last clocked JSL: NMIs crossed, the line it returned on
+  long long lastCode;                // ...and C7's own wall time, from its first instruction (the rule's wait to the post excluded)
   long lastPolls; long long lastMaster;   // ...its $2140 polls and master cycles
   int mutedFrame;                    // CtAudioFrame skipped this frame: a clocked JSL already ran its SPC time
   long rulePostAt, ruleNmiWait;      // the rule (CtAudioSetRulePost): where the CPU posts, master cycles past the vblank,
@@ -93,6 +94,7 @@ struct CtAudio {
   int instant;                       // the mod (CtAudioSetInstant): a JSL's SPC time is not owed to the next frames, its output not played
   int ruleIrqLine;                   // the rule: the V-IRQ line whose handler waits for its H-blank (CtAudioSetRuleIrq; -1 none)
   LdHdma hdma;                       // the HDMA the loader clock walks (CtAudioSetRuleHdma); kept across the JSLs of a chain
+  long hdmaOver;                     // the mean's HDMA plus this a frame (CtAudioSetRuleHdmaOver)
   // The output is the DSP's own stream, in order. snes/dsp.c keeps only its last 0x400 samples, and a clocked
   // `JSL $C7:0004` can run ~56 frames of SPC inside one host frame, so every sample is moved into this FIFO as it is
   // emitted (apuRun) and each output frame is the next 534 of them (song_load_freeze.md sec. 6).
@@ -289,6 +291,7 @@ typedef struct {
   int irqLine;                // ...the V-IRQ whose handler waits for that line's H-blank (-1: none armed), and
   int irqPending, irqWaiting; //    the wait met at the raster / being walked (the refresh inside it costs it nothing)
   LdHdma* hd;                 // the HDMA program the raster walks (CtAudioSetRuleHdma), or NULL: LD_BG's mean
+  double hdmaOverLine;        // ...plus this a visible line (CtAudioSetRuleHdmaOver: a room's program over the mean's)
   long long dbgCpu, dbgCpuAll, dbgBg[4], clk0, cpu0;   // traces: CPU cycles; refresh, hdma, -, the IRQ's wait; clk0/cpu0 where C7 began
 } LdClock;
 static LdClock ld;
@@ -404,6 +407,7 @@ static long ldHdmaLine(LdHdma* hd) {
   return cost;
 }
 static void ldCatch(CtAudio* a);
+static int g_tapeState;              // CT_APUTAPE, the cartridge's clock (a harness mode, below): 0 untried, 1 on, 2 off
 static void ldWalk(long cycles) {        // wall time passes: the raster walks and queues the background it meets
   while (cycles > 0) {
     int next = (ld.hPos < 16) ? 16 : (ld.hPos < 536) ? 536 : (ld.hPos < 1104) ? 1104 : LD_MASTER_PER_LINE;
@@ -416,7 +420,7 @@ static void ldWalk(long cycles) {        // wall time passes: the raster walks a
       if (ld.vPos <= 224 && ld.hd) { long h = ldHdmaLine(ld.hd); ld.stolen += h; ld.dbgBg[1] += h;
         { static int hl = -1; if (hl < 0) { const char* e = getenv("CT_AUDIO_HDMALINES"); hl = (e && *e) ? 1 : 0; }   // (debug)
           if (hl) fprintf(stderr, "hdmaline nmi%d v=%d cost=%ld on=%d\n", ld.nmis, ld.vPos, h, ld.hd->on); } }
-      else if (ld.vPos <= 224) { ld.hdmaFrac += LD_BG[ld.mode].hdmaLine; long h = (long)ld.hdmaFrac; ld.hdmaFrac -= (double)h; ld.stolen += h; ld.dbgBg[1] += h; } }
+      else if (ld.vPos <= 224) { ld.hdmaFrac += LD_BG[ld.mode].hdmaLine + ld.hdmaOverLine; long h = (long)ld.hdmaFrac; ld.hdmaFrac -= (double)h; ld.stolen += h; ld.dbgBg[1] += h; } }
     else if (ld.hPos == LD_MASTER_PER_LINE) { ld.hPos = 0; ld.vPos++;
       if (ld.vPos == LD_LINES_PER_FRAME) ld.vPos = 0;
       if (ld.ifast && ld.vPos == ld.irqLine) ld.irqPending = 1;          // the rule: the V-IRQ (its wait, ldRun below)
@@ -444,6 +448,7 @@ static void ldIrqWait(void) {
 static void ldRun(long cycles) {         // the loader's CPU spends `cycles` -- after sitting out whatever the raster queued
   if (!ld.active || cycles <= 0 || ld.clk > ld.budget) return;
   while (cycles > 0) {
+    if (g_tapeState == 1) ld.stolen = 0;                // (the cartridge's clock: the tape's stores pace C7, see tapeHold)
     if (ld.stolen > 0) { long b = ld.stolen; ld.stolen = 0; ldWalk(b); continue; }   // the background runs first (it may queue more)
     if (ld.irqPending) { ldIrqWait(); continue; }
     int next = (ld.hPos < 536) ? 536 : (ld.hPos < 1104) ? 1104 : LD_MASTER_PER_LINE;
@@ -459,8 +464,59 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
   int n = (int)ld.owed;
   if (n > 0) { int ran = apuRun(a, n); ld.owed -= (double)ran; ld.ran += ran; g_sndSpcCycles += ran; }
 }
+// ---- The cartridge's clock (a HARNESS mode, CT_APUTAPE=<file>; never the game's) ----
+// The tape is every store the cartridge's CPU made to $2140-$2143 over a run, in order, with the SPC's cycle count at
+// the store (`ct.exe --peek` PEEK_APUTRACE, cut to `port value apuc` lines by tools/playthrough.py). With it the port's
+// clocked JSLs make each store on the cartridge's SPC cycle: C7 runs with nothing stolen from it (so it is never late)
+// and waits at each store for the tape's cycle. The SPC then gets the cartridge's inputs at the cartridge's times and
+// stays on its tick lattice, which the port's own C7 pricing cannot hold to the cycle (battle_exit_fade_poll.md: the
+// timing class the game does not reproduce). A store the tape does not have next (another port or value) ends the mode
+// with a report: the two sides no longer send the same commands.
+typedef struct { uint8_t port, val; uint32_t apuc; } ApuTapeE;
+static ApuTapeE* g_tape; static long g_tapeN, g_tapePos, g_tapeLate, g_tapeLateMax;
+static int tapeOn(void) {
+  if (g_tapeState == 0) {
+    const char* f = getenv("CT_APUTAPE"); g_tapeState = 2;
+    FILE* fp = (f && *f) ? fopen(f, "r") : NULL;
+    if (fp) {
+      long cap = 1 << 16; g_tape = (ApuTapeE*)malloc((size_t)cap * sizeof *g_tape);
+      unsigned pk, pv; unsigned long long pc;
+      while (g_tape && fscanf(fp, "%u %x %llu", &pk, &pv, &pc) == 3) {
+        if (g_tapeN == cap) { cap *= 2; g_tape = (ApuTapeE*)realloc(g_tape, (size_t)cap * sizeof *g_tape); if (!g_tape) break; }
+        g_tape[g_tapeN].port = (uint8_t)pk; g_tape[g_tapeN].val = (uint8_t)pv; g_tape[g_tapeN].apuc = (uint32_t)pc; g_tapeN++;
+      }
+      fclose(fp);
+      if (g_tape && g_tapeN) g_tapeState = 1;
+      fprintf(stderr, "aputape: %ld store(s) from %s\n", g_tapeN, f);
+    }
+  }
+  return g_tapeState == 1;
+}
+static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level with the CPU (ldCatch) and the store is next
+  if (g_tapePos >= g_tapeN) return;
+  const ApuTapeE* e = &g_tape[g_tapePos];
+  if (e->port != k || e->val != v) {
+    fprintf(stderr, "aputape: MISMATCH at store %ld of %ld: the cartridge's $214%d = %02X, the port's $214%d = %02X -- the tape is off from here\n",
+            g_tapePos, g_tapeN, e->port, e->val, k, v);
+    g_tapeState = 2; return;
+  }
+  g_tapePos++;
+  uint32_t cur = machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles;
+  int32_t d = (int32_t)(e->apuc - cur);
+  if (d > 0) {                                              // early: the CPU waits (nothing is stolen from a wait)
+    ldWalk((long)((double)d / LD_APU_PER_MASTER + 0.5)); ld.stolen = 0; ld.irqPending = 0;
+    ld.lastClk = ld.clk; ld.owed = 0;
+    for (int g = 0; g < 64; g++) {
+      cur = machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles;
+      int32_t r = (int32_t)(e->apuc - cur); if (r <= 0) break;
+      int ran = apuRun(a, r); ld.ran += ran; g_sndSpcCycles += ran; if (ran <= 0) break;
+    }
+  } else if (d < 0) { g_tapeLate++; if (-d > g_tapeLateMax) g_tapeLateMax = -d; }
+}
 static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
-  ldCatch(a); W(a, k, v);
+  ldCatch(a);
+  if (tapeOn()) tapeHold(a, k, v);
+  W(a, k, v);
   // CT_AUDIO_PORTTRACE=1: every CPU store to the ports with the SPC's cycle count and its PC -- the port's side of the
   // oracle's PEEK_APUTRACE (`aputrace fN CPU $2140 = ..  apuc=..`), to set the two processors' interleaving side by side
   { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
@@ -483,6 +539,7 @@ static int ldStartRule(CtAudio* a) {
   memset(&ld, 0, sizeof ld); ld.active = 1; ld.mode = a->engineMode; ld.ifast = 1; ld.nmiWait = a->ruleNmiWait; g_ldA = a;
   ld.irqLine = a->ruleIrqLine;
   ld.hd = a->hdma.prog ? &a->hdma : NULL;
+  ld.hdmaOverLine = (double)a->hdmaOver / 225.0;
   ld.budget = 400LL * frame;
   long at = spcPos % frame;                                          // a post past an earlier one's frames counts its own
   long pos = 225L * LD_MASTER_PER_LINE + at;                         // the vblank's line 225, h 0, + the offset
@@ -1565,7 +1622,7 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
         I_LDA_DP + I_LDA_DP + I_IMM8 + I_LDA_DP + 18);                // 011E-013D ... JMP C7/0192
   ldRun(296);                                                         // $0192-$01A0: the epilogue and the RTL
   ldCatch(a);
-  a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
+  a->lastMaster = ld.clk; a->lastCode = ld.clk - ld.clk0; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
   a->cycleCarry -= (double)ld.ran;                                    // the SPC time it already ran
   a->ready = 1;
@@ -1907,7 +1964,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
     if (CtAudioRuleOn() && !a->ruleOff && a->engineMode != 2 && !a->ruleNmiOff && !touches) {
       int undone = (mb[0x05] & 0x80) && ((c0 >= 0x30 && c0 < 0x40) || c0 == 0x71);   // (the dispatch below says -1)
       mb[0x00] = 0x00;                                 // $C7:0192's STZ $00, every exit
-      a->lastMaster = 0; a->lastFrames = 0; a->lastPolls = 0;
+      a->lastMaster = 0; a->lastCode = 0; a->lastFrames = 0; a->lastPolls = 0;
       return undone ? -1 : 0;
     } }
   // CT_SNDPOSTS=1: every JSL that reaches the ports, `sndpost f<host frame> cmd=<$1E00> p1=<$1E01>`: the port's side of
@@ -1972,7 +2029,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   ldRun(I_SEP + I_LDA_DP + 2 * I_SEP + 3 * I_PLX16 + I_PLP + I_PLX16 + I_PLP + 42);   // $0192 SEP / STZ $00 / REP / REP / PLY PLX PLA (16) / PLP / PLD / PLB / RTL = 304
   ldCatch(a);                                          // the SPC is level with the CPU at the RTL
   if (a->spc == SPC_BOTH) CtSndLockstepRam(a->apu);
-  a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
+  a->lastMaster = ld.clk; a->lastCode = ld.clk - ld.clk0; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   if (ldTrace() && ld.polls) { fprintf(stderr, "[ldtrace] polls per token:"); for (int k = 0; k <= 64; k++) if (ldHist[k]) fprintf(stderr, " %d:%ld", k, ldHist[k]);
     fprintf(stderr, "  | %lld master, %d NMIs, line %d\n", ld.clk, ld.nmis, ld.vPos); memset(ldHist, 0, sizeof ldHist); }
   // CT_AUDIO_RULETRACE=1: every JSL under the rule's clock: the command, where it began, the SPC time it took and the
@@ -2003,7 +2060,7 @@ int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
     ldRun(I_BR_T);                                     // 5AAF BEQ ->5AAA
   }
   ldCatch(a);
-  a->lastMaster = ld.clk; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
+  a->lastMaster = ld.clk; a->lastCode = ld.clk - ld.clk0; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
   if (!instantJsl(a, fifoAt)) a->cycleCarry -= (double)ld.ran;        // the SPC time this spin already ran
   if (frames) *frames = a->lastFrames;
@@ -2095,6 +2152,18 @@ void CtAudioSetRuleHdma(CtAudio* a, const uint8_t* wram128, int prog, int on, in
   a->hdma.prog = wram128 ? prog : 0; a->hdma.wram = wram128; a->hdma.on = on; a->hdma.nmiOn = nmiOn;
   a->hdma.cutLine = (cutLine >= 0 && cutLine < LD_LINES_PER_FRAME) ? cutLine : -1;
 }
+// The field's mean HDMA (LD_BG[0]: 14,310 master a frame) is the six-channel program's -- 12,664 by the channels' rules
+// (ldHdmaInit / ldHdmaLine less their alignments) and the alignments' mean. A room with other channels live spends its
+// own figure: the mean plus what its program costs over that one, a frame (leg 84's Gate room: 21,300 on the cartridge).
+#define LD_FIELD_PROGRAM 12664L
+long CtAudioFieldHdmaOver(const CtAudio* a, const uint8_t* wram128) {
+  if (!a || !wram128) return 0;
+  LdHdma h; memset(&h, 0, sizeof h); h.prog = 1; h.wram = wram128; h.on = 1; h.cutLine = -1;
+  long c = ldHdmaInit(&h, a), det = c ? c - LD_HDMA_SYNC : 0;
+  for (int v = 0; v < 225; v++) { c = ldHdmaLine(&h); if (c) det += c - LD_HDMA_SYNC; }
+  return det ? det - LD_FIELD_PROGRAM : 0;               // (no channel enabled: the mean stands, as it did)
+}
+void CtAudioSetRuleHdmaOver(CtAudio* a, long over) { if (a) a->hdmaOver = over; }
 void CtAudioSetRuleHdmaStage(CtAudio* a, const uint8_t* wram128, uint8_t hdmaen, const uint8_t dmap[8],
                               const uint16_t adr[8], const uint8_t bank[8]) {
   if (!a) return;
@@ -2109,6 +2178,7 @@ long CtAudioRulePadWait(void) { return LD_PAD_WAIT; }
 // The master cycles from the start of vblank (line 225, h 0) to line `line` (h 0) of the next picture: where a NMI's
 // raster wait CD/3B82 for that line releases the CPU (the rule's post position after a battle NMI's line wait).
 long CtAudioRuleLineAt(int line) { return (long)(LD_LINES_PER_FRAME - 225 + line) * LD_MASTER_PER_LINE; }
+long long CtAudioLastPostCode(const CtAudio* a) { return a ? a->lastCode : 0; }
 long long CtAudioLastPostRaster(const CtAudio* a, int* frames, int* endLine, long* polls) {
   if (!a) return 0;
   if (frames) *frames = a->lastFrames; if (endLine) *endLine = a->lastEndLine; if (polls) *polls = a->lastPolls;

@@ -31,6 +31,12 @@ printed (the offset, informational). One line a leg:
 
     playthrough: 01_bedroom SAME -- locs 000 001 | story 00 01 | party 00 80 80 | end loc 001 story 01 ...
     playthrough: 3/3 legs SAME
+
+`cmp ... --clock` (or PT_CLOCK=1) grades the port ON THE CARTRIDGE'S CLOCK: the leg's SPC stores are read off the cartridge
+(oracle_tape) and the port makes each on the same SPC cycle (CT_APUTAPE, src/audio.c). A song upload's last line and a
+fight's exit release follow the SPC driver's tick lattice, which follows C7's pace to a few hundred cycles -- timing the
+game does not reproduce (CLAUDE.md, the 2026-11-07 decision); on the tape they are the cartridge's, so what still differs
+is behaviour. The plain `cmp` stays the port's own clock.
 """
 import hashlib
 import os
@@ -58,6 +64,8 @@ MON = [('loc', '7E0100', '0100', 2), ('story', '7F0000', '10000', 1), ('party', 
 # black screen with no joypad, which the port does in one go (CLAUDE.md: timing artefacts are not reproduced). So the
 # control byte is graded only on frames whose $0119 is not 0: the frames a player can see and act on.
 GRADED = [k for k, _, _, _ in MON if k != 'bri']
+CLOCK = '--clock' in sys.argv or os.environ.get('PT_CLOCK') == '1'      # cmp on the cartridge's clock (oracle_tape)
+PORT_STDERR = ''
 
 
 # ------------------------------------------------------------------------------------------------------------ the route
@@ -419,6 +427,26 @@ def oracle_timeline(start, pad, mon=None):
 
 
 # --------------------------------------------------------------------------------------------------------------- the port
+def oracle_tape(start, pad, out):
+    """The cartridge's clock for a leg (cmp --clock): every store its CPU makes to $2140-$2143, `port value apuc` a line,
+    in order -- the port's CT_APUTAPE (src/audio.c). Read off `--peek` PEEK_APUTRACE; nothing of the oracle changes."""
+    frames = sum(n for _, n in pad)
+    raw = os.path.join(TMP, 'tape.raw')
+    pr = subprocess.Popen([CT, '--peek', start, raw, '--frames', str(frames), '--btnscript', btnscript(pad) or '0:0'], cwd=ROOT,
+                          env=dict(RULE, PEEK_APUTRACE='0:%d' % frames), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          text=True, errors='replace')
+    n = 0
+    with open(out, 'w') as fh:
+        for line in pr.stdout:
+            if ' CPU $214' not in line:
+                continue
+            m = re.search(r'CPU \$214([0-3]) = ([0-9A-F]{2}) .*apuc=(\d+)', line)
+            if m:
+                fh.write('%s %s %s' % m.groups() + chr(10)); n += 1
+    pr.wait()
+    return n
+
+
 def wram_of(state):
     raw = os.path.join(TMP, 'seed.raw')
     subprocess.run([CT, '--peek', state, raw, '--btnscript', '0:0'], cwd=ROOT, env=RULE, capture_output=True)
@@ -475,8 +503,9 @@ def port_timeline(start, pad, first=0):
                         '--walkscript', walkscript(pad, first) if first else walkscript(pad)], cwd=ROOT, env=env,
                        capture_output=True, text=True,
                        errors='replace')
-    global PORT_STDOUT
+    global PORT_STDOUT, PORT_STDERR
     PORT_STDOUT = r.stdout or ''
+    PORT_STDERR = r.stderr or ''
     pics = {}
     for f in at:
         fn = os.path.join(TMP, 'p_f%d.raw' % f)
@@ -554,10 +583,17 @@ def cmp_leg(legs, i, verbose):
         return None
     if not os.path.exists(start):
         sys.exit('playthrough: %s has no start state (%s): run `play all` first' % (lg['name'], start))
+    if CLOCK:                                                # the cartridge's clock: its SPC stores, replayed (CT_APUTAPE)
+        tape = os.path.join(TMP, 'aputape.txt')
+        oracle_tape(start, lg['pad'], tape)
+        os.environ['CT_APUTAPE'] = tape
     ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
     o, p = chains(oracle_timeline(start, lg['pad'])), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad']), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0
+    if CLOCK:
+        m = re.search(r'^aputape: MISMATCH.*$', PORT_STDERR, re.M)
+        print("playthrough: %s on the cartridge's clock%s" % (lg['name'], ' -- ' + m.group(0) if m else ''))
     print('playthrough: %s %s -- locs %s | story %s | party %s | gold %s | hp %s (%d) | ctrl %d | end picture %s' % (
         lg['name'], 'SAME' if same else 'DIFFERENT', fmt(o, 'loc'), fmt(o, 'story'), fmt(o, 'party'),
         le(o['gold'][-1][1]), le(o['hp'][-1][1]), len(o['hp']), len(o['ctrl']),
@@ -686,7 +722,7 @@ def main():
             # order. The start states are made above, once; a child finds them keyed and current.
             from concurrent.futures import ThreadPoolExecutor
             def one(i):
-                env = dict(os.environ, PT_TMP=os.path.join(TMP, 'j%d' % i))
+                env = dict(os.environ, PT_TMP=os.path.join(TMP, 'j%d' % i), PT_CLOCK='1' if CLOCK else '0')
                 os.makedirs(env['PT_TMP'], exist_ok=True)
                 return subprocess.run([sys.executable, os.path.abspath(__file__), 'cmp', legs[i]['name']] +
                                       (['-v'] if '-v' in a else []), cwd=ROOT, env=env, capture_output=True,

@@ -321,9 +321,10 @@ PICTURES = {
     # Leg 134, Death Peak's wind (loc 0F4), Ayla leading (`$0197` = 06): the wind stops her and she plays the head-shake (anim
     # 17, `$1686` 17 01/02/03/00 f13733-f13802) -- C0/9E84's run tail tests `CPY $97` (C0/A19A) with Y = the lead's index; the
     # port ran it on its own page (the lead in slot 2) with the scene's `$97` and kept the run (anim 06, 411 px at f13800).
-    # (From the leg's start, where this room lines up at -3. From a state cut on f13700 the head-shake runs too but a step of
-    # its 10-frame cycle apart at f13800, 260 px at -2 -- not looked at.)
-    'lead-head-shake-on-its-own-slot': dict(leg='134_death_peak_wind', at=0, frames=13800, own=True, lag=-3),
+    # (From the leg's start, where this room lines up at -2, the field's relation -- at -3 until 2026-11-19, the leg's
+    # loads a frame off. From a state cut on f13700 the head-shake runs too but a step of its 10-frame cycle apart at
+    # f13800, 260 px at -2 -- not looked at.)
+    'lead-head-shake-on-its-own-slot': dict(leg='134_death_peak_wind', at=0, frames=13800, own=True, lag=-2),
     # Leg 58, Heckran's cave: the return from fight 1 waits in C7's poll inside C0/0304's segment -- C0/0330's C0/595C re-posts
     # the room's song (obj0 slot 1 `EC 11 ..`, C7/0A5A's counted poll, 2 frames) before that segment's C0/00EB: `$0153` stays 00
     # on f3012-f3013 and the tiles step on f3014. Run two frames early, the port had the torches a step off, then obj0's ambush

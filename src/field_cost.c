@@ -85,8 +85,22 @@ static long chestsA712(Walk* c, int loc) {
   int base = rom8(c, 0xF5, 0xF000) | (rom8(c, 0xF5, 0xF001) << 8);
   int lo = rom8(c, 0xF5, 0xF000 + 2 * loc) | (rom8(c, 0xF5, 0xF001 + 2 * loc) << 8);
   int hi = rom8(c, 0xF5, 0xF002 + 2 * loc) | (rom8(c, 0xF5, 0xF003 + 2 * loc) << 8);
-  if (lo == hi) return k + 76;                             // A712_NONE
-  if ((rom8(c, 0xF5, lo) | (rom8(c, 0xF5, lo + 1) << 8)) == 0) { unpriced(c, "chests: C0/A763"); return k; }
+  // The alias, C0/A75D-A767: a list whose first word is 0000 names another location in its second word -- `LDA $F50000,X /
+  // BNE ->A769` not taken, `A763 LDA $F50002,X / BRA ->A748` -- and the head runs again from A748 with that word (no
+  // `AND #01FF`): `ASL A / TAX / LDA $F5F002,X / STA $56 / LDA $F5F000,X / CMP $56 / BEQ`. Five locations do (06D, 12C,
+  // 12F, 1EA, 1EF). In master cycles, D's low byte 0 as the head's other constants have it: A756 BEQ not taken 12, STA $08
+  // 28, STX $50 28, TAX 12, LDA long,X 36, BNE not taken 12, A763 LDA long,X 36, BRA 18 = 182; then A748 ASL 12, TAX 12,
+  // LDA long,X 36, STA $56 28, LDA long,X 36, CMP $56 28 = 152. MEASURED: loc 12F's load was refused by the walk and
+  // estimated a frame long on each of its ten loads of playthrough leg 100 (41 black frames on the cartridge, 42).
+  for (int guard = 0; guard < 4; guard++) {
+    if (lo == hi) return k + 76;                           // A712_NONE
+    if ((rom8(c, 0xF5, lo) | (rom8(c, 0xF5, lo + 1) << 8)) != 0) break;
+    int al = rom8(c, 0xF5, lo + 2) | (rom8(c, 0xF5, lo + 3) << 8);
+    k += 182 + 152;
+    lo = rom8(c, 0xF5, (0xF000 + 2 * al) & 0xFFFF) | (rom8(c, 0xF5, (0xF001 + 2 * al) & 0xFFFF) << 8);
+    hi = rom8(c, 0xF5, (0xF002 + 2 * al) & 0xFFFF) | (rom8(c, 0xF5, (0xF003 + 2 * al) & 0xFFFF) << 8);
+  }
+  if (lo == hi) return k + 76;
   k += 190;                                                // A712_SOME
   for (int x = lo; ; x += 4) {
     k += 28;                                               // A712_TEST

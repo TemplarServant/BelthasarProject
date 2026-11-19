@@ -3687,6 +3687,16 @@ two on the frame it returns in (CD/3E89's and CD/04DB's). One mutation each.
 stretch of a leg, both sides): leg 84 over its 1F0 visit (f1260-f2760): C2/0471 zeroes each
 object block's class word alone, so two field cells inside the page (`$1608` / `$160A`) keep their 01. One mutation.
 
+`leg-cells-chest-alias-load-is-walked-vs-cartridge`: leg 100 f3550-f3620, loc 12F's load: the chest list's alias
+(C0/A75D-A767) is priced by the load's cost walk, 41 black frames as on the cartridge. One mutation.
+`leg-cells-load-post-*` / `leg-cells-*load-upload-*` (four checks): a sound JSL an init script makes inside a load. Its
+wall time counts from the line it begins on (leg 78), it comes before the later objects' runner heads (leg 34), and a
+song it uploads runs on the loader's quiet background -- no NMI, V-IRQ or HDMA (legs 47 and 63). One mutation each.
+`leg-cells-world-exit-load-starts-at-the-worlds-nmi-off-vs-cartridge`: leg 64, 1F1 -> 08A: the load's stretch begins at
+C2/246D, before the world's two exit posts. One mutation.
+`leg-cells-field-upload-meets-the-rooms-hdma-vs-cartridge`: leg 84, the Gate's warp song: the JSL is priced on the
+room's live HDMA channels (the mean plus its program's excess), so the field stands the cartridge's 19 frames. One mutation.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

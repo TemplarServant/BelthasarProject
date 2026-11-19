@@ -86,6 +86,8 @@ void      CtAudioSetRuleHdma(CtAudio* a, const uint8_t* wram128, int prog, int o
 // ...and a $C3 stage's own channels (program 2), for the posts its NMI makes: `$420C` as the stage's NMI writes it and each
 // channel's $43x0 / $43x2-$43x3 / $43x4 as the stage's code set them, the tables read from the host's WRAM ($7E / $7F).
 // No V-IRQ cuts it and every NMI leaves it on. CtAudioSetRuleHdma(a, NULL, ..) puts the mean back.
+long CtAudioFieldHdmaOver(const CtAudio* a, const uint8_t* wram128);   // FD/C1EE's live channels over the mean's program, master a frame
+void CtAudioSetRuleHdmaOver(CtAudio* a, long over);   // the mean's HDMA plus `over` a frame for the JSLs that follow (0 = the mean)
 void      CtAudioSetRuleHdmaStage(CtAudio* a, const uint8_t* wram128, uint8_t hdmaen, const uint8_t dmap[8],
                                   const uint16_t adr[8], const uint8_t bank[8]);
 long      CtAudioRulePadWait(void);
@@ -94,6 +96,7 @@ long      CtAudioRuleLineAt(int line);                  // vblank -> line `line`
 // same clock as the JSL. Returns 1 when the driver answered and reports the frames the spin cost;
 // 0 = it gave up at SPIN_LIMIT.
 int       CtAudioWaitReplyNibble(CtAudio* a, int* frames);
+long long CtAudioLastPostCode(const CtAudio* a);       // the last JSL's own master cycles, C7/0004 to its RTL (no wait before it)
 long long CtAudioLastPostRaster(const CtAudio* a, int* frames, int* endLine, long* polls);   // master cycles
 
 // Seed the CPU-side $1E00 page as the upload tail $C7:00FF does (audio_boot.md

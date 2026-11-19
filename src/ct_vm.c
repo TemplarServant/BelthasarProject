@@ -37,6 +37,13 @@ void CtSceneSetSoundSink(const CtSoundSink* sink) {
 static int gLoadPostMode = 0, gLoadPostOn = 0, gLoadPostN = 0, gLoadPostDone = 0;
 static uint8_t gLoadPost[32][4];
 static long gLoadPostCyc[32];
+// The walk's legs that the ROM runs AFTER a queued JSL though the host counts them in the load's total: the heads and
+// tails of the objects the init runner has still to visit (C0/58ED-5924, 460 each: field_cost.c's `objects`), and the
+// constant instructions from the runner's end to C0/2848 (C0/5924's BRL, C0/56C8-56D3, C0/28AA: 2160, the remainder of
+// the cartridge's C0/9DC3 -> C0/2848 over the walked C0/9DC3 and C2/8004 on route legs 47 and 63).
+static int gLoadPostObjsLeft = 0;
+#define LOAD_POST_HEAD 460L
+#define LOAD_POST_TAIL_FIXED 2160L
 void CtSceneLoadPostsMode(int on) { gLoadPostMode = on ? 1 : 0; }
 int  CtSceneLoadPostsPending(void) { return gLoadPostN - gLoadPostDone; }
 long CtSceneLoadPostCycles(int k) { k += gLoadPostDone; return (k >= 0 && k < gLoadPostN) ? gLoadPostCyc[k] : -1; }
@@ -3828,6 +3835,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
     // (the solid byte and the next object's $1B00) and $1B80/$1B81 (op 0x7A's jump flag and gravity).
     // A jump left in one location (C0/4E1E) therefore never carries into the next.
     w16(sc->mem, 0x7E1B01 + (uint32_t)n * 2, 0); w16(sc->mem, 0x7E1B80 + (uint32_t)n * 2, 0);
+    gLoadPostObjsLeft = count - 1 - n;
     int slot0 = (raw[1 + n * 32] | (raw[1 + n * 32 + 1] << 8)) - sc->header;
     int stopAddr = -1, stopOp = -1;
     if (slot0 >= 0 && slot0 < sc->blen) {
@@ -3918,6 +3926,7 @@ CtScene* CtSceneCreateIn(CtWram* w, const uint8_t* raw0, int rawLen, const uint8
   // It ignores the carry, so an op that ends a visit (CLC) does not end this run. A handler that parks
   // (IP unchanged) would spin C0/595C forever; the port stops there instead. The runner is
   // CtSceneRunObj0Slot1, also called by the menu exit and the battle return.
+  gLoadPostObjsLeft = 0;
   if (count > 0) {
     CtSceneRunObj0Slot1(sc, "C0/56C8");
     sc->st[0].prio = 7;                              // C0/595C leaves $1001 alone: obj0 keeps the load's count, or the
@@ -7285,7 +7294,8 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
                       blen, L[0] | (L[1] << 8), m[0], m[1], m[2], m[3], gSoundSink.post ? 1 : 0); } }
   int rr = -1;
   if (gLoadPostOn && gSoundSink.post && mem->s[0x1E00]) {      // the load's last JSLs: queued for its last frame (above)
-    if (gLoadPostN < 32) { gLoadPostCyc[gLoadPostN] = g_ctLzSpriteCycles; memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4); }
+    if (gLoadPostN < 32) { gLoadPostCyc[gLoadPostN] = g_ctLzSpriteCycles - LOAD_POST_HEAD * gLoadPostObjsLeft - LOAD_POST_TAIL_FIXED;
+                           memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4); }
     w8(mem, 0x7E1E00, 0x00);
     return startLine;                                          // nothing crossed here: the load's black prices it
   }
