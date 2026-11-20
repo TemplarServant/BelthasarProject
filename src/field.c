@@ -5678,6 +5678,18 @@ static long loadSinkWall(int sp) {
   }
   return 0;
 }
+// CT_LITTAPE=<file> (tools/playthrough.py cmp --clock): the cartridge's lit frames, one decimal a line, ascending.
+static int fieldLitTapeNext(int frame) {
+  static int* t; static int n = -1;
+  if (n < 0) {
+    n = 0; const char* f = getenv("CT_LITTAPE"); FILE* fp = (f && *f) ? fopen(f, "r") : NULL;
+    if (fp) { int cap = 256, v; t = (int*)malloc(sizeof(int) * (size_t)cap);
+              while (t && fscanf(fp, "%d", &v) == 1) { if (n == cap) { cap *= 2; t = (int*)realloc(t, sizeof(int) * (size_t)cap); if (!t) break; } t[n++] = v; }
+              fclose(fp); if (!t) n = 0; }
+  }
+  for (int k = 0; k < n; k++) if (t[k] > frame) return t[k];
+  return -1;
+}
 static int g_loadPostLine = -1;        // a load's queued JSL placed inside its frame: the line it begins on (else the caller's)
 static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
   if (g_loadPostLine >= 0) startLine = g_loadPostLine;
@@ -12011,6 +12023,13 @@ int main(int argc, char** argv) {
   int pLeadHold = 0, pLeadShown = -1, pLeadHoldAf = -1;   // the battle epilogue's $0F01 for the lead, held for the drain
   unsigned pRng = 0x2C9E3D1Bu;      // advanced each frame -> the random idle-blink trigger (ROM gates on $FE00[$F8])
   int owExitWait = 0, owExitOff = 0;              // the overworld's state 3 (C2/2402): NMIs left before $0100, and the record
+  // The world's MAIN LOOP inside C2/0462's `JSL C7/0004` (a song the request queue uploads): the NMIs go on -- the object
+  // pass, the lead -- but nothing of the main loop does: `$1BEC` stands at FF (C2/045D), so C2/2ED9 refuses every request
+  // (C2/2EDE BMI), and a `$027C` = 3 the pass sets (C2/35E5) is taken up, with its fade object and its eighteen NMIs, only
+  // when the JSL returns. MEASURED, the rule's cartridge, playthrough leg 72 (1F0, the walk into loc 024): `10 3C` posted
+  // on f577 and `$1E00` cleared on f599; the script's next request `81 00 FF FF` staged on f600 (C2/2EEE) and never
+  // posted; the exit's `82` / `83` on f618 = f600 + 18. The port posted `81 00` on f578 and left on f603.
+  int owMainStall = 0, owExit3Pend = 0;
   int owEnterCd = 0, running = 1, frameNo = vehicleFrameBase;   // the overworld entry debounce (an A press held across an
   int gameOver = 0;                // battle outcome-1 with $2A1F bit5 clear -> the C0/02A0 defeat sequence
   int goPhase = 0;                 //   0 = not in it; 1 = (a) awaiting a button edge, world still
@@ -12589,11 +12608,18 @@ int main(int argc, char** argv) {
         int gated = inWorld;
         // the main loop's C2/0454 does not run while the world's NMI is held in its pass's JSL (owPassHold / owPassResume)
         if (gated && (owPassHold > 0 || owPassResume)) gated = 2;
+        // ...nor while the main loop is still inside an earlier post's JSL (owMainStall), nor in its state 3, whose
+        // eighteen waits are C2/0346's alone (a request staged then is never posted: the exit's `82` overwrites it)
+        if (gated && owMainStall > 0) { gated = 2; if (--owMainStall == 0) mm[0x1BEC] = 0x00; }   // 20466, the JSL back
+        else if (gated && (mm[0x027C] == 3 || owExitWait || owExit3Pend)) gated = 2;
         if (gated == 2) {}
         else if (!gated || mm[0x1BEC]) {
           if (gated) mm[0x1BEC] = 0xFF;                 // 2045D
           CtAudioService(audio, mm);                    // 20462
-          if (gated) mm[0x1BEC] = 0x00;                 // 20466
+          int fr = 0;
+          if (gated && audio && g_ruleAudio) CtAudioLastPostRaster(audio, &fr, NULL, NULL);
+          if (gated && fr > 0 && !hostSoundInstant()) owMainStall = fr;   // the JSL crossed `fr` vblanks: the loop is in it
+          else if (gated) mm[0x1BEC] = 0x00;            // 20466
         } }
       // CT_AUDIO_VOICETRACE=1: the DSP voice count every frame. A post only writes the APU ports; the key-on happens
       // when the driver next runs (CtAudioFrame, below), so this trace against the `battlesfxout` frames shows whether
@@ -13006,6 +13032,11 @@ int main(int argc, char** argv) {
         }
       }
     } else if (fade == 3) {                             // the load: black, and nothing runs
+      // The cartridge's clock (a HARNESS mode, CT_LITTAPE; never the game's): the frames the cartridge's `$0119` left 00 on.
+      // A load whose own count ends within three frames of one ends on it -- the NMI-off load clock is the timing class
+      // the game does not reproduce (CLAUDE.md), and a leg graded on the cartridge's clock takes its loads' lengths too.
+      { int L = fieldLitTapeNext(frameNo);
+        if (L >= 0 && !inWorld) { int want = L - frameNo; if (want >= 1 && want - loadHold <= 3 && loadHold - want <= 3) loadHold = want; } }
       if (--loadHold <= 0) {
         if (inWorld) { fade = 0; fadeBri = 15; }        // C2's first NMI: the world's own fade object takes the screen
         else { fade = 2; fadeBri = 0; loadFadeEntry = 1; loadRamp = 1; loadFadeF0 = frameNo; }
@@ -13828,7 +13859,7 @@ int main(int argc, char** argv) {
       if (!owResumeFrame) { g_owLead.up = wUp; g_owLead.down = wDown; g_owLead.left = wLeft; g_owLead.right = wRight; }
       g_owLead.fade = fade != 0; g_owLead.menuPhase = menuPhase != 0; g_owLead.exitWait = owExitWait != 0;
       g_owLead.hostRan = 0; g_owLead.enterReq = 0; g_owLead.gate = 0; g_owLead.enterOk = (owEnterCd == 0);
-      if (fade || !owPad || menuPhase || owExitWait) { wUp = wDown = wLeft = wRight = 0; }   // frozen during a scene-transition
+      if (fade || !owPad || menuPhase || owExitWait || owExit3Pend) { wUp = wDown = wLeft = wRight = 0; }   // frozen during a scene-transition
                                                   // fade, and under the menu's two fades: C2/356C
                                                   // `$027C != 1 -> JSR C2/0E1D / CLC / RTS` = anim only, no input.
                                                   // The ambient object VM, camera and streamer below keep running,
@@ -14219,7 +14250,7 @@ int main(int argc, char** argv) {
       if (!fade) worldTick++;                        // the overworld is paused while a transition fades
       // (The sea's colour cycle is the world script's own op 0x04 rows, uploaded by the NMI above, not the host's.)
       if (owEnterCd > 0) owEnterCd--;
-      else if (((owEnterReq || g_owLead.enterReq) || (talkPressed && owPad)) && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait) {   // enter the location (C2/35E5; talkPressed: a harness's own A edge, which feeds no $00F8)
+      else if (((owEnterReq || g_owLead.enterReq) || (talkPressed && owPad)) && !owVehicleModule && !owEventModule && wd.entryLatch != 0xFFFF && !fade && !owExitWait && !owExit3Pend) {   // enter the location (C2/35E5; talkPressed: a harness's own A edge, which feeds no $00F8)
         // C2/35E5 `$027C = 3`, and the main loop's state 3 is the whole exit (C2/2402):
         //   2452 LDA #C2 / LDX #2EC1 / JSR C2/04D9     a VM object on $C2:2EC1 = `28 01 52` (fade out at rate 1, die)
         //   245C NMITIMEN $81 / LDX #0012 / JSR C2/0346 x18   eighteen NMIs -- the object pass runs the fade in them
@@ -14229,9 +14260,12 @@ int main(int argc, char** argv) {
         CtWorldEntry en;
         if (CtWorldEntryDecode(wd.wram, wd.entryLatch, &en) && en.destLoc < 0x1F0) {
           wd.wram[0x027C] = 3;
-          CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC1);
-          owExitWait = 18; owExitOff = wd.entryLatch;
+          if (owMainStall > 0) owExit3Pend = wd.entryLatch + 1;        // (the main loop is in a post's JSL: state 3 waits)
+          else { CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC1); owExitWait = 18; owExitOff = wd.entryLatch; }
         }
+      }
+      if (owExit3Pend && owMainStall == 0 && wd.wram) {                // the JSL is back: state 3's body (C2/2452-245C)
+        CtWorldSpawnVm(wd.wram, 0xC2, 0x2EC1); owExitWait = 18; owExitOff = owExit3Pend - 1; owExit3Pend = 0;
       }
       }   // !owLoading
       // The picture (and, for the options, its owners and the widescreen's sides). The view is the ROM's, composed as
@@ -14825,6 +14859,10 @@ int main(int argc, char** argv) {
             s7[0x0F0E] = cur; menuExchOld = cur;
             if (cur != 0x3E) {                               // C2/CBA4-CBA8: C2/CBBF's task, posted below
               s7[0x0F0F] = 1; menuExchSong = 3;
+              // C2/CBAB `LDX #0108 / STX $02 / JSR C2/CBF7`: `81 08 01 01`, the room's song down, posted here -- before the
+              // task C2/CBBF is spawned (C2/CBB5) and long before its `14 3E` (leg 75: both on f976, the 81 first)
+              s7[0x1E00] = 0x81; s7[0x1E01] = 0x08; s7[0x1E02] = 0x01; s7[0x1E03] = 0x01;   // C2/CBF7-CC06
+              fieldSoundFlush(s7);                           // C2/CC09 JSL C7/0004
             }
           }
           if (getenv("CT_SHOPTRACE")) printf("exchange: f%d S0, roster %02X%02X%02X%02X%02X%02X%02X%02X%02X free %d reserve %d, P = S0 + %d\n",

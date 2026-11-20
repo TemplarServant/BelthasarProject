@@ -38,6 +38,16 @@ CASES = {
     # menu pass, whose handlers blip (C1/1B55, `19 00`) -- and only then go on with the script, whose sound ops are C1/619E-
     # 61F5. Leg 42, f2249: the cartridge's `19 00` (C1/1B5D, line 64) and then `18 04` (C1/61B0, line 68) in one frame.
     'action-script-sounds-after-the-menu-pass': dict(leg='42_arris_beyond', frames=2400),
+    # The naming screen (C2/CB8B): with another song playing, C2/CBAB `LDX #0108 / STX $02 / JSR C2/CBF7` posts `81 08 01 01`
+    # -- the room's song down -- before the task C2/CBBF is spawned, whose `14 3E` / `81 01 FF FF` follow. Leg 75, f976.
+    'naming-screen-turns-the-song-down-first': dict(leg='75_ayla_joins', frames=1100),
+    # The world's main loop inside C2/0462's JSL (a song its request queue uploads): `$1BEC` = FF refuses every request
+    # (C2/2EDE) and a `$027C` = 3 the pass sets waits for the JSL. Leg 72 (1F0): `10 3C` f577-f599, the script's `81 00 FF
+    # FF` staged on f600 and never posted, the exit's `82` / `83` on f618.
+    'world-main-loop-stands-in-a-song-upload': dict(leg='72_mystic_mountain', frames=700),
+    # Op 0xFF < $90 never returns to the runner: no object is visited again. The same leg's Gate out of loc 024 (`FF 82`
+    # after `10 37` on f1234): nothing is posted during the fade and the tunnel (the port ran obj12's `E8 53` on f1318).
+    'no-script-runs-after-op-ff': dict(leg='72_mystic_mountain', frames=1400),
 }
 
 

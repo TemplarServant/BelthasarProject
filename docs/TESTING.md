@@ -3703,6 +3703,10 @@ the port's CT_SNDPOSTS against the cartridge's stores at C7/0635 / C7/0A6E).
 ends (C2/A45A) and the commit's blip stays staged behind the $B5 (C2/9CE4). One mutation.
 `leg-sound-action-script-sounds-after-the-menu-pass-vs-cartridge`: leg 42, f2249: a menu blip and a script sound of one
 frame in the main thread's order (C1/10FA's pass, then the script). One mutation.
+`leg-sound-naming-screen-turns-the-song-down-first-vs-cartridge`: leg 75: C2/CBAB's `81 08 01 01` before the task's
+`14 3E`. `leg-sound-world-main-loop-stands-in-a-song-upload-vs-cartridge`: leg 72: no request and no exit while the
+world's main loop is inside C2/0462's JSL. `leg-sound-no-script-runs-after-op-ff-vs-cartridge`: leg 72's Gate: no
+object visited once op 0xFF < $90 has the frame. One mutation each.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles

@@ -622,3 +622,14 @@ handlers blip through C1/1B55 -- then `JSL CD0009`, then the script's next ops, 
 C1/61C1, C1/61EB / 61F5). Leg 42 f2249 on the cartridge: `19 00` stored on line 64 (C1/1B5D), `18 04` on line 68
 (C1/61B0). The port's script runs with the frame's service, before the pass; its sound posts of an action's frame are
 held for the pass. Check leg-sound-action-script-sounds-after-the-menu-pass-vs-cartridge.
+
+### Three more sequence differences found command for command (2026-11-20)
+
+- **The naming screen**, C2/CB8B: when another song plays, C2/CBAB `LDX #0108 / STX $02 / JSR C2/CBF7` posts `81 08 01 01`
+  before C2/CBB5 spawns the song task (leg 75 f976: the 81 by C2/CBFC, then the 14 by C2/CBD3).
+- **The world's main loop in C2/0462's JSL**: `$1BEC` = FF for the upload's frames, so C2/2ED9 refuses requests, and
+  state 3 (the entrance's exit) starts when the JSL returns; state 3's waits post nothing (leg 72: `10 3C` f577-f599,
+  `81 00 FF FF` staged f600 and overwritten by the exit's `82` on f618).
+- **Op 0xFF < $90** never returns to the runner: no object is visited after it (leg 72's Gate: the port ran an `E8 53`
+  48 frames into the tunnel).
+Checks: the three `leg-sound-*` of the same names.

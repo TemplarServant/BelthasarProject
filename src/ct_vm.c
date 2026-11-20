@@ -2701,6 +2701,11 @@ static int ssCallBusy(const CtScene* sc, int tgt, int pr) {
 }
 static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
   CtSS* s = &sc->st[obj]; const uint8_t* B = sc->body; int blen = sc->blen, addr = s->addr;
+  // Op 0xFF < $90 has left the main loop for good (C0/3FC1's fade loop, then C0/3FD3 `JSR C0/0B4E / LDX #06FF / TXS` and
+  // the JML): its loop is inside the runner's visit, so no object is visited again -- not the ones behind it in that
+  // frame's queue, not anyone on a later frame. (Leg 72, the Gate out of loc 024: the port ran obj12's `E8 53` 48 frames
+  // into the tunnel; the cartridge posts nothing after the op's `10 37`.)
+  if (sc->seqHas || sc->warpReq) return 1;
   if (ssParked(s)) {                               // 0x04/0x07, IP on the call: wait for the callee's function
     // The wait poll (C0/61A7): wait while the callee's current priority ($1C00) is <= the called priority (61D2
     // `CMP $D9` / 61D6 `BCS keep-waiting`); release only when the callee climbs above it (returned past the

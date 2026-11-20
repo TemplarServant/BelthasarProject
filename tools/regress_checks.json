@@ -56217,6 +56217,108 @@
       ]
     },
     {
+      "name": "leg-sound-naming-screen-turns-the-song-down-first-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "naming-screen-turns-the-song-down-first"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: naming-screen-turns-the-song-down-first leg 75 +1100: 24 commands on the cartridge, 24 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: naming-screen-turns-the-song-down-first "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the naming screen turns the room's song down before it loads its own",
+      "notes": "THE NAMING SCREEN'S FIRST POST (2026-11-20). C2/CB8B: `STZ $0F0F`, the story bit, the playing song into `$0F0E`, and when it is not $3E: `INC $0F0F`, C2/CBAB `LDX #0108 / STX $02 / JSR C2/CBF7` -- `81 08 01 01`, the room's song down -- and only then C2/CBB5 spawns the task C2/CBBF (`14 3E 80 80`, `81 01 FF FF`). The port spawned the task alone. MEASURED on the rule's cartridge, leg 75 (Ayla's naming) with PEEK_WRITEWATCH=1E00:4: on f976 `$1E00` = 81 by C2/CBFC with `$1E01` = 08, `$1E02` / `$1E03` = 01, then the 14 by C2/CBD3. The leg's 24 commands are the cartridge's in order (the port had 23). One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "              s7[0x1E00] = 0x81; s7[0x1E01] = 0x08; s7[0x1E02] = 0x01; s7[0x1E03] = 0x01;   // C2/CBF7-CC06",
+          "replace": "              s7[0x1E00] = 0x00;  /* MUT */",
+          "why": "the song task alone: no `81 08` before the `14 3E`"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-world-main-loop-stands-in-a-song-upload-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "world-main-loop-stands-in-a-song-upload"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: world-main-loop-stands-in-a-song-upload leg 72 +700: 7 commands on the cartridge, 7 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: world-main-loop-stands-in-a-song-upload "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "while the world's main loop is inside a song upload no request is taken and the exit waits for it",
+      "notes": "THE WORLD'S MAIN LOOP INSIDE A SONG UPLOAD (2026-11-20). The world posts its sound requests from the main loop: C2/0454 `LDA $1BEC / BEQ`, C2/045D `LDA #FF / STA $1BEC`, C2/0462 `JSL C7/0004`, C2/0466 `STZ $1BEC`. A song that has to be uploaded keeps the main loop in that JSL for the upload's frames; the NMIs go on (the object pass, the lead), but C2/2ED9 refuses every request while `$1BEC` is negative (C2/2EDE BMI) and a `$027C` = 3 the pass sets (the entrance, C2/35E5) is taken up by state 3 -- its fade object C2:2EC1 and its eighteen NMIs -- only when the JSL returns; state 3's waits post nothing. MEASURED on the rule's cartridge, leg 72 (1F0, the walk into loc 024; PEEK_WRITEWATCH=1E00:4): `10 3C` by C2/2EEE on f577, `$1E00` cleared on f599; the script's next request `81 00 FF FF` staged on f600 and never posted; `82` / `83` by C2/24E8 / C2/24F9 on f618 = f600 + 18. The port posted the `81 00` on f578 and left the world on f603. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "          if (gated && fr > 0 && !hostSoundInstant()) owMainStall = fr;   // the JSL crossed `fr` vblanks: the loop is in it",
+          "replace": "          if (0) {}  /* MUT */",
+          "why": "the main loop never stands in the JSL: the next request posted a frame on, the exit 15 frames early"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-no-script-runs-after-op-ff-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "no-script-runs-after-op-ff"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: no-script-runs-after-op-ff leg 72 +1400: 11 commands on the cartridge, 11 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: no-script-runs-after-op-ff "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "once op 0xFF < $90 has taken the main loop no object is visited again",
+      "notes": "NO VISIT AFTER OP 0xFF < $90 (2026-11-20). C0/3FBB-3FD1 is the op's own fade loop (`DEC $19 / JSR C0/881E / JSL FD/FFF7 / JSR C0/EC60`) and C0/3FD3 its jump (`JSR C0/0B4E / LDX #06FF / TXS`, then the JML to the $C3 sequence or the $FD warp), all inside the runner's visit: the scheduler is never reached again, so no object behind it in that frame's queue and no object on a later frame runs. The port's scene went on visiting. MEASURED on the rule's cartridge, leg 72, the Gate out of loc 024 (`10 37` on f1234, then `FF 82`): no command until the arrival's; the port ran obj12's `E8 53` on f1318, 48 frames into the tunnel (and leg 85 the same). The leg's 11 commands to f1400 are the cartridge's. One mutation.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (sc->seqHas || sc->warpReq) return 1;",
+          "replace": "  /* MUT */",
+          "why": "objects still visited under the op: a sound in the tunnel"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",

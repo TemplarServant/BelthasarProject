@@ -587,8 +587,17 @@ def cmp_leg(legs, i, verbose):
         tape = os.path.join(TMP, 'aputape.txt')
         oracle_tape(start, lg['pad'], tape)
         os.environ['CT_APUTAPE'] = tape
+    otl = oracle_timeline(start, lg['pad'])
+    if CLOCK:                                                # ...and its lit frames: a load's black ends on the cartridge's
+        lit = os.path.join(TMP, 'littape.txt'); prev = None
+        with open(lit, 'w') as fh:
+            for f, d in otl:
+                if prev == '00' and d['bri'] != '00':
+                    fh.write('%d' % f + chr(10))
+                prev = d['bri']
+        os.environ['CT_LITTAPE'] = lit
     ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
-    o, p = chains(oracle_timeline(start, lg['pad'])), chains(ptl)
+    o, p = chains(otl), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad']), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0
     if CLOCK:

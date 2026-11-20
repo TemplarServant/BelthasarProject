@@ -408,6 +408,7 @@ static long ldHdmaLine(LdHdma* hd) {
 }
 static void ldCatch(CtAudio* a);
 static int g_tapeState;              // CT_APUTAPE, the cartridge's clock (a harness mode, below): 0 untried, 1 on, 2 off
+static long g_tapeCredit;            // ...master cycles a late store leaves the CPU to win back before the next one (ldRun)
 static void ldWalk(long cycles) {        // wall time passes: the raster walks and queues the background it meets
   while (cycles > 0) {
     int next = (ld.hPos < 16) ? 16 : (ld.hPos < 536) ? 536 : (ld.hPos < 1104) ? 1104 : LD_MASTER_PER_LINE;
@@ -447,8 +448,8 @@ static void ldIrqWait(void) {
 }
 static void ldRun(long cycles) {         // the loader's CPU spends `cycles` -- after sitting out whatever the raster queued
   if (!ld.active || cycles <= 0 || ld.clk > ld.budget) return;
+  if (g_tapeCredit > 0) { long t = cycles < g_tapeCredit ? cycles : g_tapeCredit; cycles -= t; g_tapeCredit -= t; }   // (the tape)
   while (cycles > 0) {
-    if (g_tapeState == 1) ld.stolen = 0;                // (the cartridge's clock: the tape's stores pace C7, see tapeHold)
     if (ld.stolen > 0) { long b = ld.stolen; ld.stolen = 0; ldWalk(b); continue; }   // the background runs first (it may queue more)
     if (ld.irqPending) { ldIrqWait(); continue; }
     int next = (ld.hPos < 536) ? 536 : (ld.hPos < 1104) ? 1104 : LD_MASTER_PER_LINE;
@@ -467,13 +468,19 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
 // ---- The cartridge's clock (a HARNESS mode, CT_APUTAPE=<file>; never the game's) ----
 // The tape is every store the cartridge's CPU made to $2140-$2143 over a run, in order, with the SPC's cycle count at
 // the store (`ct.exe --peek` PEEK_APUTRACE, cut to `port value apuc` lines by tools/playthrough.py). With it the port's
-// clocked JSLs make each store on the cartridge's SPC cycle: C7 runs with nothing stolen from it (so it is never late)
-// and waits at each store for the tape's cycle. The SPC then gets the cartridge's inputs at the cartridge's times and
+// clocked JSLs make each store on the cartridge's SPC cycle: C7 is priced as always (its counted polls -- C7/0A71's
+// 0x400 -- must time out where the cartridge's do) and a store that comes early waits for the tape's cycle; one that
+// comes late is made at once (`aputape: .. late` at the exit says how many and by how much). The SPC then gets the
+// cartridge's inputs at the cartridge's times and
 // stays on its tick lattice, which the port's own C7 pricing cannot hold to the cycle (battle_exit_fade_poll.md: the
 // timing class the game does not reproduce). A store the tape does not have next (another port or value) ends the mode
 // with a report: the two sides no longer send the same commands.
 typedef struct { uint8_t port, val; uint32_t apuc; } ApuTapeE;
-static ApuTapeE* g_tape; static long g_tapeN, g_tapePos, g_tapeLate, g_tapeLateMax;
+static ApuTapeE* g_tape; static long g_tapeN, g_tapePos, g_tapeLate, g_tapeLateMax, g_tapeLateSum;
+static void tapeReport(void) {
+  if (g_tapeN) fprintf(stderr, "aputape: %ld of %ld store(s) made, %ld late (max %ld, mean %.1f APU cycles)%s\n", g_tapePos, g_tapeN,
+                       g_tapeLate, g_tapeLateMax, g_tapeLate ? (double)g_tapeLateSum / g_tapeLate : 0.0, g_tapeState == 2 ? " -- OFF after a mismatch" : "");
+}
 static int tapeOn(void) {
   if (g_tapeState == 0) {
     const char* f = getenv("CT_APUTAPE"); g_tapeState = 2;
@@ -486,7 +493,7 @@ static int tapeOn(void) {
         g_tape[g_tapeN].port = (uint8_t)pk; g_tape[g_tapeN].val = (uint8_t)pv; g_tape[g_tapeN].apuc = (uint32_t)pc; g_tapeN++;
       }
       fclose(fp);
-      if (g_tape && g_tapeN) g_tapeState = 1;
+      if (g_tape && g_tapeN) { g_tapeState = 1; atexit(tapeReport); }
       fprintf(stderr, "aputape: %ld store(s) from %s\n", g_tapeN, f);
     }
   }
@@ -511,7 +518,10 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
       int32_t r = (int32_t)(e->apuc - cur); if (r <= 0) break;
       int ran = apuRun(a, r); ld.ran += ran; g_sndSpcCycles += ran; if (ran <= 0) break;
     }
-  } else if (d < 0) { g_tapeLate++; if (-d > g_tapeLateMax) g_tapeLateMax = -d; }
+  } else if (d < 0) {                                       // late: made at once, and the lateness is the CPU's to win back
+    g_tapeLate++; g_tapeLateSum += -d; if (-d > g_tapeLateMax) g_tapeLateMax = -d;
+    g_tapeCredit = (long)((double)(-d) / LD_APU_PER_MASTER);
+  }
 }
 static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
   ldCatch(a);
