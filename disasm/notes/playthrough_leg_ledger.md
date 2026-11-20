@@ -564,3 +564,32 @@ three a 128-frame beat (`$0158` & 7F = 7F; `INC $F8`, `$FE00[$F8]` < 08) and the
 f6900 (both sides loaded 029 on f3846; the cadence after that load) and 028 loads on f7336 for f7333. Timing (the load
 clock), not a draw bug. Found on the way and FIXED: the world's entry zeroed the whole object page (C2/0471 zeroes
 the class words alone) -- `$1608` / `$160A` differed from f1210 to the leg's end.
+
+## The legs' sound commands, command for command (2026-11-20)
+
+`tools/leg_sound_cmp.py` (and, across the route, a scratch sweep of the same comparison): each leg's sound commands -- the
+command byte and its first parameter, in order -- the port's against the cartridge's. A difference here is not timing:
+it is another sound, a missing one or another order. Found and fixed that way (audio_commands.md): the Equip list's
+second blip, a fight's script sounds after the menu pass, the naming screen's first post, the world's main loop inside an
+upload, no script after op 0xFF < $90. Of the first 97 legs, 84 now send the cartridge's commands exactly.
+
+Open, each the leg's FIRST difference (later ones follow from it):
+
+| leg | first difference | what is known |
+|---|---|---|
+| 24, 25 | a menu blip `19 00` four frames before the cartridge's, beside the second PC's ready chime `19 42` (leg 24: cartridge chimes f5070 / f5074, blip f5076; port on the cartridge's clock f5071 / f5075, blip f5073) | the fight is in step until there; the pad's press reaches the battle menu four frames early -- the menu pass's input, not sound |
+| 35, 63, 65, 94 | a `19 42` / `19 00` / `18 xx` two or three frames apart in the other order | the same family (which frame a pass or a chime falls on) |
+| 43, 51, 99 | fights that part earlier in the leg | not looked at command by command |
+| 54, 55 | one extra `18 xx` in a run of them, three frames after a regular one (leg 55, End of Time, obj24's function at $0C2A: cartridge f206, 218, 224, 230, 236, 244, 250; port 205, 217, 220, 226, ...) | a function called again as soon as its `00` has run; the port's object got a visit one tick after its E8 where the first time it waited four -- the call / return scheduling |
+| 85 | extra `18 6E` | after the leg has already parted |
+| 47 | -- | the tool's: the race stage posts from its own code, not from the two command PCs |
+
+Leg 55's extra `18 A7`, measured further (obj24 of the End of Time: `$11B0` its script pointer, `$1C30` its priority,
+`$1031` its countdown, both sides per frame). The steady cycle is the same on both: called (`$11B0` = 10CA, countdown
+0), the E8 on the next frame (countdown 4), three frames of countdown, the `00`, called again -- six frames. They part
+once, at the start: the cartridge's object is CALLED on f212 and its E8 only runs on f217 -- for f213-f216 nothing of
+it moves, the countdown standing at 0, right after its own `E5` (the tile copy at $0C31, f201-f204) -- with the
+countdown reloaded to 4; the port's call lands on f217, the E8 runs in that same frame with the countdown left at 0,
+the `00` on f218 and the next call on f219: one cycle of three frames, one sound more. So it is the frames the main
+loop spends on the E5's transfer (no event pass in them, `$0117` bit 5) against the caller's op -- which of them comes
+first -- not the sound. Not fixed.
