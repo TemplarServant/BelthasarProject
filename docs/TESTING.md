@@ -3707,6 +3707,10 @@ frame in the main thread's order (C1/10FA's pass, then the script). One mutation
 `14 3E`. `leg-sound-world-main-loop-stands-in-a-song-upload-vs-cartridge`: leg 72: no request and no exit while the
 world's main loop is inside C2/0462's JSL. `leg-sound-no-script-runs-after-op-ff-vs-cartridge`: leg 72's Gate: no
 object visited once op 0xFF < $90 has the frame. One mutation each.
+`leg-sound-song-command-leaves-its-record-in-the-mailbox-vs-cartridge`: leg 29, all four bytes: `18 FF 80 07` after
+`10 1B` (C7/0A39-0A51's record in `$1E02` / `$1E03`, kept by a load's queued JSLs).
+`leg-sound-stage-driver-reset-keeps-the-fourth-byte-vs-cartridge`: leg 47's race: $7E:317E's `STZ $1E02` is 8-bit,
+the reset's commands go out `.. .. .. FF`. One mutation each.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles

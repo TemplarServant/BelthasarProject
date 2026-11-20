@@ -146,7 +146,9 @@ static void seqDriverReset(R* r, const CtRaceIo* io) {
                                      { 0xF2, 0x01, 0x00 }, { 0x81, 0x00, 0xFF } };
   if (r->w[0x0384] & 0x20) return;                                    // 3177 LDA $0384 / BIT #20 / BNE -> RTS
   for (int k = 0; k < 5; k++) {
-    if (k == 0) { r->w[0x1E02] = 0; r->w[0x1E03] = 0; }              // STZ $1E02 (16-bit)
+    if (k == 0) r->w[0x1E02] = 0;                                    // 317E STZ $1E02, 8-bit: $1E03 keeps what it had
+                                                                      // (leg 47's race: `$1E02 = 00 by 7E/3181` alone, and
+                                                                      // `85 00 00 FF` at the ports)
     r->w[0x1E00] = cmd[k][0];
     if (k == 0 || k == 3 || k == 4) r->w[0x1E01] = cmd[k][1];
     if (k == 4) r->w[0x1E02] = cmd[k][2];

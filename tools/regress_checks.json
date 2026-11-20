@@ -56319,6 +56319,74 @@
       ]
     },
     {
+      "name": "leg-sound-song-command-leaves-its-record-in-the-mailbox-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "song-command-leaves-its-record-in-the-mailbox"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: song-command-leaves-its-record-in-the-mailbox leg 29 +7500: 97 commands on the cartridge, 97 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: song-command-leaves-its-record-in-the-mailbox "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a sound op after a song command goes out with the song's record in its fourth byte",
+      "notes": "A SONG COMMAND LEAVES ITS RECORD IN THE MAILBOX (2026-11-20). C7/0A39-0A51, every song command ($10 / $11 / $14 / $15): `LDA $C7241E,X / STA $02` and `LDA $C7241D,X / AND #0F / STA $03` -- the song's scalar and echo delay into `$1E02` / `$1E03` -- before the four stores. The field's sound ops $E8 (`18 id 80`) and $EC write no `$1E03`, so the next one goes out with the song's. A load's init scripts are queued for the load's end (ct_vm.c gLoadPost), each with the mailbox as it stood when it was staged: the port's `18 FF 80` after `10 1B` carried the FF from before the song. Now the queue leaves the record in the mailbox as the JSL would (CtSoundSink.songBytes). MEASURED on the rule's cartridge, leg 29 (the Gate home, loc 071's arrival; PEEK_WRITEWATCH=1E00:4): `$1E03 = 07 by C7/0A53`, then `18 FF 80 07` at the ports. The check grades all four bytes of the leg's 97 commands to f7500 (`bytes=4`; a song's third and fourth are C7's own). One mutation.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "      if (gSoundSink.songBytes && gSoundSink.songBytes(gSoundSink.ctx, mem->s, rb)) { w8(mem, 0x7E1E02, rb[0]); w8(mem, 0x7E1E03, rb[1]); } }",
+          "replace": "      (void)rb; }  /* MUT */",
+          "why": "the queued sound op keeps the fourth byte from before the song"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-stage-driver-reset-keeps-the-fourth-byte-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "stage-driver-reset-keeps-the-fourth-byte"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: stage-driver-reset-keeps-the-fourth-byte leg 47 +420: 9 commands on the cartridge, 9 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: stage-driver-reset-keeps-the-fourth-byte "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a $C3 stage's driver reset sends its five commands with the fourth byte the field left",
+      "notes": "THE STAGE'S DRIVER RESET KEEPS `$1E03` (2026-11-20). $7E:3177 (the $C3 overlay's reset, five commands through $7E:377E): its `STZ $1E02` at $7E:317E is 8-bit. MEASURED on the rule's cartridge, leg 47 (the race, f353; PEEK_WRITEWATCH=1E00:4): `$1E02 = 00 by 7E/3181` alone -- where the 16-bit stores report both bytes (`$1E00 = 85` and `$1E01 = 00 by 7E/3187`, `$1E02 = FF` and `$1E03 = FF by 7E/3775`) -- and `85 00 00 FF`, `89 00 00 FF`, `F2 00 00 FF`, `F2 01 00 FF`, `81 00 FF FF` at the ports. The port cleared `$1E03` with it and sent 00 (title_intro.c's copy already had the 8-bit store). One mutation.",
+      "mutations": [
+        {
+          "file": "src/seq_stage.c",
+          "find": "    if (k == 0) r->w[0x1E02] = 0;                                    // 317E STZ $1E02, 8-bit: $1E03 keeps what it had",
+          "replace": "    if (k == 0) { r->w[0x1E02] = 0; r->w[0x1E03] = 0; }  /* MUT */",
+          "why": "a 16-bit clear: the reset's commands go out with 00"
+        }
+      ]
+    },
+    {
       "name": "field-picture-item-overlay-asks-the-weak-pose-vs-cartridge",
       "argv": [
         "python",

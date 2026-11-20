@@ -633,3 +633,14 @@ held for the pass. Check leg-sound-action-script-sounds-after-the-menu-pass-vs-c
 - **Op 0xFF < $90** never returns to the runner: no object is visited after it (leg 72's Gate: the port ran an `E8 53`
   48 frames into the tunnel).
 Checks: the three `leg-sound-*` of the same names.
+
+### The fourth byte: what a command finds in `$1E03` (2026-11-20)
+
+Found with the cartridge's tape (every CPU store to $2140-$2143, `tools/playthrough.py cmp --clock`):
+
+- **A song command leaves its record in the mailbox.** C7/0A39-0A51: `$1E02` = C7:241E,X and `$1E03` = C7:241D,X & 0F,
+  before the stores. Ops $E8 / $EC write no `$1E03`: the next sound goes out with the song's echo delay (leg 29:
+  `10 1B FF 07`, then `18 FF 80 07`). A load's queued JSLs (ct_vm.c gLoadPost) now leave it at staging time.
+- **$7E:317E `STZ $1E02` is 8-bit** (the $C3 stage's driver reset): `85 00 00 FF` on leg 47, not `.. 00`.
+Checks: `leg-sound-song-command-leaves-its-record-in-the-mailbox-vs-cartridge`, `leg-sound-stage-driver-reset-keeps-the-
+fourth-byte-vs-cartridge` (`bytes=4` cases of tools/leg_sound_cmp.py).

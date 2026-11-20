@@ -23,10 +23,10 @@
 // ---- Sound sink (ct_vm.h; disasm/notes/audio_commands.md sec. 6) ----
 // The VM stages sound commands in WRAM at $1E00-$1E03 as the ROM does, then hands off through this hook
 // (the C analogue of `JSL $C7:0004`). The mailbox stays in WRAM because $1E03 persists across commands.
-static CtSoundSink gSoundSink = { 0, 0, 0 };
+static CtSoundSink gSoundSink = { 0, 0, 0, 0 };
 void CtSceneSetSoundSink(const CtSoundSink* sink) {
   if (sink) gSoundSink = *sink;
-  else { gSoundSink.ctx = 0; gSoundSink.post = 0; gSoundSink.port = 0; }
+  else { gSoundSink.ctx = 0; gSoundSink.post = 0; gSoundSink.port = 0; gSoundSink.songBytes = 0; }
 }
 // The load's last sound JSLs. A location load runs its scripts' init (C0/5709) and obj0's slot 1 (C0/56C8 -> C0/595C)
 // at its end with the NMI off, so their sound commands reach the SPC in the load's last frame. The port runs the load in
@@ -7301,6 +7301,12 @@ static int vmSoundPostMem(Mem* mem, int blen, int startLine) {   // the `JSL $C7
   if (gLoadPostOn && gSoundSink.post && mem->s[0x1E00]) {      // the load's last JSLs: queued for its last frame (above)
     if (gLoadPostN < 32) { gLoadPostCyc[gLoadPostN] = g_ctLzSpriteCycles - LOAD_POST_HEAD * gLoadPostObjsLeft - LOAD_POST_TAIL_FIXED;
                            memcpy(gLoadPost[gLoadPostN++], mem->s + 0x1E00, 4); }
+    // The JSL itself runs later, but the script goes on now, and what it stages next finds the mailbox as the JSL left
+    // it: a song command's C7/0A39-0A51 store the song's record into $1E02 / $1E03 (`LDA $C7241E,X / STA $02`, `LDA
+    // $C7241D,X / AND #0F / STA $03`), and a sound op that follows (`LDA #18 / STA $1E00`, its id and pan) writes
+    // neither $1E03, so its fourth byte is the song's (leg 29, loc 071's arrival: `10 1B FF 07`, then `18 FF 80 07`).
+    { uint8_t rb[2];
+      if (gSoundSink.songBytes && gSoundSink.songBytes(gSoundSink.ctx, mem->s, rb)) { w8(mem, 0x7E1E02, rb[0]); w8(mem, 0x7E1E03, rb[1]); } }
     w8(mem, 0x7E1E00, 0x00);
     return startLine;                                          // nothing crossed here: the load's black prices it
   }

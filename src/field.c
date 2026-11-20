@@ -5690,6 +5690,17 @@ static int fieldLitTapeNext(int frame) {
   for (int k = 0; k < n; k++) if (t[k] > frame) return t[k];
   return -1;
 }
+// C7/0A39-0A51, what a song command leaves in the mailbox's third and fourth bytes (ct_vm.h CtSoundSink.songBytes): only
+// a command the dispatch takes to C7/01A1 ($10, $11, $14, $15 with the driver latch up) with a song id under the count.
+static int fieldSoundSongBytes(void* ctx, const uint8_t* mem7E, uint8_t out[2]) {
+  CtAudio* a = (CtAudio*)ctx; int edl = 0, scalar = 0;
+  if (!a || !mem7E || !(mem7E[0x1E05] & 0x80)) return 0;
+  uint8_t c = mem7E[0x1E00];
+  if (c != 0x10 && c != 0x11 && c != 0x14 && c != 0x15) return 0;
+  if (mem7E[0x1E01] >= CtAudioSongCount(a) || !CtAudioSongRecord(a, mem7E[0x1E01], &edl, &scalar)) return 0;
+  out[0] = (uint8_t)scalar; out[1] = (uint8_t)edl;
+  return 1;
+}
 static int g_loadPostLine = -1;        // a load's queued JSL placed inside its frame: the line it begins on (else the caller's)
 static int fieldSoundPostVm(void* ctx, uint8_t* mem7E, int startLine) {
   if (g_loadPostLine >= 0) startLine = g_loadPostLine;
@@ -11941,7 +11952,7 @@ int main(int argc, char** argv) {
         if (!ruleSeeded && !stateApu[0]) CtAudioSeedMailboxPage(audio, CtSceneMem7E(f.vm));     // the $C7:00FF tail incl. the $1E05 latch
         g_fieldAudio = audio;
         CtWorldSetJsl(owSoundJsl);                    // the overworld pass's inline JSL (C2/2F0F)
-        { static CtSoundSink sink; sink.ctx = audio; sink.post = fieldSoundPostVm; sink.port = fieldSoundPort;
+        { static CtSoundSink sink; sink.ctx = audio; sink.post = fieldSoundPostVm; sink.port = fieldSoundPort; sink.songBytes = fieldSoundSongBytes;
           CtSceneSetSoundSink(&sink); CtSceneLoadPostsMode(1); }   // the VM's six sound ops reach the SPC (a load's
                                                                     //   last ones in its last frame: CtSceneLoadPostsFlush)
         // ...and the battle module's anim-script SFX reach it through the same wire (battle.h's

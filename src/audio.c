@@ -477,9 +477,17 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
 // with a report: the two sides no longer send the same commands.
 typedef struct { uint8_t port, val; uint32_t apuc; } ApuTapeE;
 static ApuTapeE* g_tape; static long g_tapeN, g_tapePos, g_tapeLate, g_tapeLateMax, g_tapeLateSum;
+static long g_tapeResendCart, g_tapeResendPort; static int g_tapeDup; extern int g_ctAudioTraceFrame;
+static long long g_tapeWaited, g_tapeCredited;   // CT_APUTAPE_TRACE: master cycles waited / credited inside the JSL
 static void tapeReport(void) {
-  if (g_tapeN) fprintf(stderr, "aputape: %ld of %ld store(s) made, %ld late (max %ld, mean %.1f APU cycles)%s\n", g_tapePos, g_tapeN,
-                       g_tapeLate, g_tapeLateMax, g_tapeLate ? (double)g_tapeLateSum / g_tapeLate : 0.0, g_tapeState == 2 ? " -- OFF after a mismatch" : "");
+  if (g_tapeN) fprintf(stderr, "aputape: %ld of %ld store(s) made, %ld late (max %ld, mean %.1f APU cycles), a counted poll's resend on one "
+                       "side only: the cartridge %ld, the port %ld%s\n", g_tapePos, g_tapeN,
+                       g_tapeLate, g_tapeLateMax, g_tapeLate ? (double)g_tapeLateSum / g_tapeLate : 0.0, g_tapeResendCart, g_tapeResendPort,
+                       g_tapeState == 2 ? " -- OFF after a mismatch" : "");
+}
+// The four stores before `pos` are one command's ($2143, $2142, $2141, $2140).
+static int tapeCmdBefore(long pos) {
+  return pos >= 4 && g_tape[pos - 4].port == 3 && g_tape[pos - 3].port == 2 && g_tape[pos - 2].port == 1 && g_tape[pos - 1].port == 0;
 }
 static int tapeOn(void) {
   if (g_tapeState == 0) {
@@ -502,6 +510,24 @@ static int tapeOn(void) {
 static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level with the CPU (ldCatch) and the store is next
   if (g_tapePos >= g_tapeN) return;
   const ApuTapeE* e = &g_tape[g_tapePos];
+  // A counted poll (C7/0635's and C7/0A71's 0x400) that times out sends the command again, and whether it does hangs on
+  // where the SPC's driver stood when the store came -- its tick lattice, to the cycle. One side's resend is not another
+  // command: the port's own (the command before, again) is made and not counted, the cartridge's (the same four stores
+  // 0x400 polls after the first, ~3,340 APU cycles) is stepped over.
+  if (g_tapeDup > 0) {
+    const ApuTapeE* q = &g_tape[g_tapePos - g_tapeDup];
+    if (q->port == k && q->val == v) { g_tapeDup--; return; }
+    g_tapeDup = 0;
+  }
+  if ((e->port != k || e->val != v) && k == 3 && tapeCmdBefore(g_tapePos) && g_tape[g_tapePos - 4].val == v) {
+    g_tapeDup = 3; g_tapeResendPort++; return;
+  }
+  while ((e->port != k || e->val != v) && tapeCmdBefore(g_tapePos) && g_tapePos + 4 < g_tapeN &&
+         e[0].port == 3 && e[0].val == e[-4].val && e[1].port == 2 && e[1].val == e[-3].val &&
+         e[2].port == 1 && e[2].val == e[-2].val && e[3].port == 0 && e[3].val == e[-1].val &&
+         (uint32_t)(e[0].apuc - e[-1].apuc) < 4000u) {
+    g_tapePos += 4; g_tapeResendCart++; e = &g_tape[g_tapePos];
+  }
   if (e->port != k || e->val != v) {
     fprintf(stderr, "aputape: MISMATCH at store %ld of %ld: the cartridge's $214%d = %02X, the port's $214%d = %02X -- the tape is off from here\n",
             g_tapePos, g_tapeN, e->port, e->val, k, v);
@@ -510,17 +536,22 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
   g_tapePos++;
   uint32_t cur = machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles;
   int32_t d = (int32_t)(e->apuc - cur);
-  if (d > 0) {                                              // early: the CPU waits (nothing is stolen from a wait)
-    ldWalk((long)((double)d / LD_APU_PER_MASTER + 0.5)); ld.stolen = 0; ld.irqPending = 0;
-    ld.lastClk = ld.clk; ld.owed = 0;
-    for (int g = 0; g < 64; g++) {
-      cur = machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles;
-      int32_t r = (int32_t)(e->apuc - cur); if (r <= 0) break;
-      int ran = apuRun(a, r); ld.ran += ran; g_sndSpcCycles += ran; if (ran <= 0) break;
-    }
-  } else if (d < 0) {                                       // late: made at once, and the lateness is the CPU's to win back
+  { static int tt = -1; if (tt < 0) tt = getenv("CT_APUTAPE_TRACE") ? 1 : 0;      // CT_APUTAPE_TRACE=1: a command's lead / lag
+    if (tt && k == 0 && (d > 4000 || d < -4000))
+      fprintf(stderr, "aputape: f%d store %ld $2140 = %02X %s by %d APU cycles (line %d)\n", g_ctAudioTraceFrame, g_tapePos - 1, v,
+              d > 0 ? "EARLY" : "late", d > 0 ? d : -d, ld.active ? ld.vPos : -1); }
+  // The clock's own place is the SPC's less what the SPC ran past it (`ld.owed` < 0: an instruction's overshoot, which
+  // ldCatch carries). The wait and the credit are measured from the clock, so the SPC's time and the clock's stay one:
+  // a wait that ran the SPC to the tape's cycle and dropped the overshoot let the SPC lead the clock by a few cycles a
+  // store -- two frames over a sound set's upload, and the fight after it found its first command "two frames early".
+  double lead = (double)d - ld.owed;                        // APU cycles from the clock to the tape's cycle
+  if (lead >= 1.0) {                                        // early: the CPU waits (nothing is stolen from a wait)
+    long w = (long)(lead / LD_APU_PER_MASTER + 0.5);
+    ldWalk(w); ld.stolen = 0; ld.irqPending = 0; g_tapeWaited += w;
+    ldCatch(a);
+  } else if (lead <= -1.0) {                                // late: made at once, and the lateness is the CPU's to win back
     g_tapeLate++; g_tapeLateSum += -d; if (-d > g_tapeLateMax) g_tapeLateMax = -d;
-    g_tapeCredit = (long)((double)(-d) / LD_APU_PER_MASTER);
+    g_tapeCredit = (long)(-lead / LD_APU_PER_MASTER); g_tapeCredited += g_tapeCredit;
   }
 }
 static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
@@ -563,6 +594,9 @@ static int ldStartRule(CtAudio* a) {
 }
 // the $400-poll loops the ROM uses outside the token (C7/0A6E, C7/0603, C7/062F): CMP $2140, BEQ, DEX, BNE
 static int ldPoll400(CtAudio* a, uint8_t want) {
+  // (The tape's credit is for code, not for a wait on the SPC: a poll loop that ran free would time out where the
+  // cartridge's saw the echo, and resend. What is left of it is dropped here: the echo is the next common point.)
+  g_tapeCredit = 0;
   for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) {
       { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
         if (pt && a->apu) fprintf(stderr, "porttrace ECHO %02X seen apuc=%llu after %d polls\n", want,
@@ -1980,7 +2014,7 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
   // CT_SNDPOSTS=1: every JSL that reaches the ports, `sndpost f<host frame> cmd=<$1E00> p1=<$1E01>`: the port's side of
   // tools/sound_post_cmp.py, which reads the cartridge's $2140 command writes (C7/0635, a song's C7/0A6E) and their $2141.
   { static int sp = -1; if (sp < 0) sp = getenv("CT_SNDPOSTS") ? 1 : 0;
-    if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01]); }
+    if (sp && (mb[0x05] & 0x80) && mb[0x00]) printf("sndpost f%d cmd=%02X p1=%02X p2=%02X p3=%02X\n", g_ctAudioTraceFrame, mb[0x00], mb[0x01], mb[0x02], mb[0x03]); }
   { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
     if (pt && (mb[0x05] & 0x80) && mb[0x00]) fprintf(stderr, "porttrace JSL cmd=%02X %02X mode=%d rule=%d off=%d nmioff=%d\n", mb[0x00], mb[0x01],
                                                     a->engineMode, CtAudioRuleOn(), a->ruleOff, a->ruleNmiOff); }
@@ -2048,6 +2082,10 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
     fprintf(stderr, "[ruleaudio] cmd=%02X %02X %02X %02X from %ld master past the vblank (asked %ld): %lld master, %d NMI(s) "
                     "crossed, returns on line %d h %d, %ld polls\n", cmd, mb[1], mb[2], mb[3], a->lastRuleStart, a->rulePostAt,
             ld.clk, ld.nmis, ld.vPos, ld.hPos, ld.polls);
+  if (tapeOn() && getenv("CT_APUTAPE_TRACE") && ld.nmis > 0)
+    fprintf(stderr, "aputape: f%d JSL cmd=%02X clk %lld master (%d NMIs), SPC ran %ld APU = %.0f master; waited %lld, credited %lld\n", g_ctAudioTraceFrame, cmd,
+            ld.clk - ld.clk0, ld.nmis, (long)ld.ran, (double)ld.ran / LD_APU_PER_MASTER, g_tapeWaited, g_tapeCredited);
+  g_tapeWaited = g_tapeCredited = 0;
   ld.active = 0; ld.ifast = 0;
   // The caller freezes for lastFrames; debit the SPC time this JSL ran from CtAudioFrame's budget so
   // the SPC is not advanced twice, here and once per frozen frame.

@@ -210,6 +210,8 @@ typedef struct {
                                               // raster line it returned on (audio.c's loader clock), given the
                                               // line it began on; -1 = unpriced (no clock behind this sink).
   uint8_t (*port)(void* ctx, int k);          // read $2140+k (k = 0..3)
+  int   (*songBytes)(void* ctx, const uint8_t* mem7E, uint8_t out[2]);   // what a song command's JSL leaves in $1E02 /
+                                              // $1E03 (C7/0A39-0A51: the song's record); 0 = the JSL writes neither
 } CtSoundSink;
 void CtSceneSetSoundSink(const CtSoundSink* sink);   // NULL detaches
 // A location load's last JSLs (its init runner and obj0's slot 1), queued while the mode is on and posted by the flush
