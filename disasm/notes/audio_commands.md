@@ -604,3 +604,21 @@ five fall through to `applyEffect(...); s->addr = nxt; return 0;` (continue). Th
 *scheduler* divergence independent of whether audio is emitted, and it is the one thing on this
 front that can move `--vmdiff`. The `OPLEN` table already matches the ROM exactly, so no length
 change is needed.
+
+### The Equip screen's blips (C2/9C90, C2/A45A, C2/9CDE + C2/9CE4; 2026-11-20)
+
+A on a gear row: C2/9C90 `JSR C2/EAC2`, then the candidate list climbs (C2/A4AF, eight passes); the climb's end
+(C2/A44D-A45A: `INC $00C1 / LDA #DF / STA $0D13 / LDA #04 / STA $54 / PLP / JMP C2/EAC2`) blips again, seven frames
+after the first. The commit: C2/9CDC `LDA #B5 / JSR C2/EABA`, C2/9CE1 `JSR C2/9CFC`, C2/9CE4 `JSR C2/EAC2` -- the second
+call finds the latch `$0D76` at 3 and returns at C2/EB0E with `$1E00` = 18, `$1E01` = 00 written and no JSL (the bytes
+stand until the next `JSL C7/0004` overwrites them). Measured on playthrough leg 39 from f5420: every bank-C2 sound
+call site hooked (`--hookpc`, 115 sites): C2/9C90 f5427 / f5509, C2/A45A f5434 / f5516, C2/9CDE and C2/9CE4 f5459,
+C2/9EE0 f5491. Check leg-sound-equip-list-blips-when-drawn-vs-cartridge (tools/leg_sound_cmp.py).
+
+### A fight's blip and its script's sound in one frame (C1/10FA, then the script; 2026-11-20)
+
+An action's loops return from their frame's wait into C1/10FA -- the menu pass (C1/1B67, C1/0C2D, C1/1153, C1/17DD), whose
+handlers blip through C1/1B55 -- then `JSL CD0009`, then the script's next ops, the sound ops among them (C1/619E,
+C1/61C1, C1/61EB / 61F5). Leg 42 f2249 on the cartridge: `19 00` stored on line 64 (C1/1B5D), `18 04` on line 68
+(C1/61B0). The port's script runs with the frame's service, before the pass; its sound posts of an action's frame are
+held for the pass. Check leg-sound-action-script-sounds-after-the-menu-pass-vs-cartridge.

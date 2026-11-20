@@ -807,6 +807,28 @@ static int battleSfxPost(CtBattleHost* h, uint8_t cmd, uint8_t id, uint8_t pan) 
   }
   return 1;
 }
+// ...and the same post made by the ACTION SCRIPT's sound ops (78-7D, C1/619E / 61C1 / 61EB / 61F5). The script is the main
+// thread's: an action's loops come back from their frame's wait into C1/10FA -- the menu pass, whose handlers blip
+// (C1/1B55) -- and `JSL CD0009`, and only then go on with the script. The port steps the script with the frame's service
+// (battleAdvanceAction), ahead of the pass, so on an action's frames the script's posts wait here for the pass
+// (battleTickBody, the `wasFrozen` branch). MEASURED, the rule's cartridge, playthrough leg 42 f2249: `$1E00` = 19 by
+// C1/1B5D (line 64), then `$1E00` = 18 / `$1E01` = 04 by C1/61B0 / C1/61A4 (line 68); the port posted the 04 first (ten
+// legs of the route have the pair).
+static struct { uint8_t cmd, id, pan; } gScriptSfxQ[8];
+static int gScriptSfxN, gScriptSfxDefer;
+static int battleSfxPostScript(CtBattleHost* h, uint8_t cmd, uint8_t id, uint8_t pan) {
+  if (!gBattleSndOn) return 0;
+  if (gScriptSfxDefer && gScriptSfxN < 8) {
+    gScriptSfxQ[gScriptSfxN].cmd = cmd; gScriptSfxQ[gScriptSfxN].id = id; gScriptSfxQ[gScriptSfxN].pan = pan; gScriptSfxN++;
+    return 1;
+  }
+  return battleSfxPost(h, cmd, id, pan);
+}
+static void battleScriptSfxFlush(CtBattleHost* h) {
+  gScriptSfxDefer = 0;
+  for (int k = 0; k < gScriptSfxN; k++) battleSfxPost(h, gScriptSfxQ[k].cmd, gScriptSfxQ[k].id, gScriptSfxQ[k].pan);
+  gScriptSfxN = 0;
+}
 // The same post without a pan write. C1/40D3-40DD is `LDA #FF / STA $1E01 / LDA #18 / STA $1E00 /
 // JSL $C7:0004` with no $1E02 store, so the driver sees whatever pan the previous post left.
 static int battleSfxPostNoPan(CtBattleHost* h, uint8_t cmd, uint8_t id) {
@@ -13466,7 +13488,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           long tb = (op == 0x7C ? 0x0D6D4CL : 0x0D6DACL) + h->mem[0xA4E7];
           int id = (tb < romLen) ? CtRomByte(rom, 0x400000L, (long)(tb)) : 0, a = h->ascRole[0];
           int pan = (a >= 0 && a < 11) ? (BT_LIVEX(h, a) & 0xFF) : 0x80;
-          if (battleSfxPost(h, 0x18, id, pan) || !gBattleSndOn)
+          if (battleSfxPostScript(h, 0x18, id, pan) || !gBattleSndOn)
             if (getenv("CT_BATTLE_TRACE"))
               fprintf(stderr, "battlesfx f%d rel=%d op%02X wpn=%02X id=%02X pan=%02X\n", h->frames, rel, op, h->mem[0xA4E7], id, pan);
           break;
@@ -14121,7 +14143,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           break;
         case 0x78: case 0x79: {                                      // sound, centre pan (C1/619E)
           uint8_t cmd = (uint8_t)(0x18 + (op - 0x78));               //   cmd = $9895 - #78 + #18
-          battleSfxPost(h, cmd, (uint8_t)a1, 0x80);                  //   id = the script operand, pan #80
+          battleSfxPostScript(h, cmd, (uint8_t)a1, 0x80);            //   id = the script operand, pan #80
           if (getenv("CT_BATTLE_TRACE"))
             fprintf(stderr, "battlesfx f%d rel=%d op%02X track=%d cmd=%02X id=%02X pan=80\n",
                     h->frames, rel, op, t, cmd, a1);
@@ -14130,7 +14152,7 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           uint8_t cmd = (uint8_t)(0x18 + (op - 0x7A));
           int pan = 0x80;
           if (battleAscResolve(h, t, a2, &gx, &gy)) pan = gx & 0xFF;    //   pan = $A2B0 = the point's X
-          battleSfxPost(h, cmd, (uint8_t)a1, (uint8_t)pan);
+          battleSfxPostScript(h, cmd, (uint8_t)a1, (uint8_t)pan);
           if (getenv("CT_BATTLE_TRACE"))
             fprintf(stderr, "battlesfx f%d rel=%d op%02X track=%d cmd=%02X id=%02X pan=%02X\n",
                     h->frames, rel, op, t, cmd, a1, pan);
@@ -21986,7 +22008,10 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     h->stActKind = 0;
   }
   battleOamPosesBefore(h);                                         // (the action's script is the main loop's: below)
+  if (gScriptSfxN) battleScriptSfxFlush(h);                        // (a frame that left before its pass)
+  gScriptSfxDefer = wasFrozen ? 1 : 0;                             // an action's frame: the script's sounds after C1/10FA
   battleAdvanceAction(h);
+  if (!wasFrozen) battleScriptSfxFlush(h);
   if (!battleDeathHold(h)) {
     battleReactiveCounterTick(h, 1);   // the close's counter loop, before C1/881C's scan (below)
     for (int c = 3; c < 11; c++)       // C1/881C -> C1/AC75 -> CF/FE20: the deaths with no routine, after the loop
@@ -22090,6 +22115,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   if (wasFrozen) {
     if (!h->menuPassHold && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }   // C1/10FA
     battleTypeStepAfterPass(h);                                  // 11110 `JSL CD0009`: the step, after the pass
+    battleScriptSfxFlush(h);                                     // ...and the script goes on: its sound ops (above)
     if (!s[0xA013]) {                                           // C1/41BA STZ $A013 ran this frame: the handler returns,
       h->iterPh = 0; s[0x00E5] = 0;                             //   the next head runs here ($E5 still C1/4062's 0)
       // ...into a status timer's handler, whose dispatch loop (C1/8339 INX) goes on with the next arrays and the ATB's

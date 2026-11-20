@@ -15613,7 +15613,12 @@ int main(int argc, char** argv) {
               if (menuEqListRise >= CT_MENU_EQ_LIST_RISE_PX) { menuEqListRise = -1; menuEqListFresh = 1;   // the list is drawn
                                                                s7[0x0D92] = 0x68; s7[0x0D93] = 0x42;   // C2/A42C LDX #4268
                                                                menuEqScrollbarSeed(s7, menuEqCount);   // C2/A463
-                                                               menuSbTask = 1; s7[0x0D9A] = 0; }   // (C2/A432 -> A463 -> 8B93)
+                                                               menuSbTask = 1; s7[0x0D9A] = 0;     // (C2/A432 -> A463 -> 8B93)
+                                                               // C2/A44D-A45A, the climb's end: `INC $00C1 / LDA #DF / STA
+                                                               // $0D13 / LDA #04 / STA $54 / PLP / JMP C2/EAC2` -- the list
+                                                               // is live and blips (the cartridge's second `18 00` of every
+                                                               // list opened, seven frames after C2/9C90's)
+                                                               menuSfx(s7, 0x00, "equip-list-drawn"); }
             } else if (menuEqListFall > 0) {                 // C2/A64D's yield, then C2/A697's loop: no input read
               menuEqListFall -= 4;
               menuEqSlideDp(s7, 0, 0);                       // C2/A518's pass: $22 / $24 += $26
@@ -15695,6 +15700,8 @@ int main(int argc, char** argv) {
                 menuEqShowCount = menuEqCount;                           //  descent)
                 CtMenuEquipApply(s7, glb, menuStatChar, menuEquipSlot, menuEqCand[menuEqCell]);
                 menuSfx(s7, 0xB5, "equip-commit");
+                menuSfx(s7, 0x00, "equip-commit-blip");      // C2/9CE4 JSR C2/EAC2: behind the $B5's throttle -- staged in
+                                                             //   $1E00 / $1E01, never posted (C2/EB0E)
                 menuEqCount = CtMenuEquipCandidates(s7, menuEquipSlot, menuStatChar, menuEqCand, menuEqCnt);
                 if (menuEqCell >= menuEqCount) menuEqCell = menuEqCount ? menuEqCount - 1 : 0;
                 if (menuEqScroll > menuEqCell) menuEqScroll = menuEqCell;

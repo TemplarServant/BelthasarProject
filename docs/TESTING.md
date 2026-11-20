@@ -3697,6 +3697,13 @@ C2/246D, before the world's two exit posts. One mutation.
 `leg-cells-field-upload-meets-the-rooms-hdma-vs-cartridge`: leg 84, the Gate's warp song: the JSL is priced on the
 room's live HDMA channels (the mean plus its program's excess), so the field stands the cartridge's 19 frames. One mutation.
 
+`leg-sound-*` (tools/leg_sound_cmp.py: a leg's sound commands -- the command byte and its first parameter, in order --
+the port's CT_SNDPOSTS against the cartridge's stores at C7/0635 / C7/0A6E).
+`leg-sound-equip-list-blips-when-drawn-vs-cartridge`: leg 39's three equips: the candidate list blips when its climb
+ends (C2/A45A) and the commit's blip stays staged behind the $B5 (C2/9CE4). One mutation.
+`leg-sound-action-script-sounds-after-the-menu-pass-vs-cartridge`: leg 42, f2249: a menu blip and a script sound of one
+frame in the main thread's order (C1/10FA's pass, then the script). One mutation.
+
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
 (f2080-f2110), leg 26's door (from f7200), leg 127's boss fade-in (from f380) and leg 63 just after a load (f594-f605).

@@ -51299,7 +51299,7 @@
         "playthrough: 62_steel_saber SAME -- locs 087 1F1 070 071 1D0 008 1B7 005 1F0 011 1F0 005 1B7 008 1D0 071 070 1F1 074 | story 57 40 57 40 57 40 57 40 57 | party 000102 | gold 674 | hp 187 (1) | ctrl 33 | end picture 0 px at port +0",
         "playthrough: 63_zombor DIFFERENT -- locs 074 1F1 087 | story 57 5A | party 000102 | gold 2474 | hp 98 (6) | ctrl 7 | end picture 13592 px at port +0",
         "playthrough: 64_to_denadoro SAME -- locs 087 1F1 08A 1F1 091 | story 5A | party 000102 | gold 2424 | hp 202 (2) | ctrl 3 | end picture 0 px at port -2",
-        "playthrough: 65_denadoro DIFFERENT -- locs 091 08E 092 08F 093 096 090 094 095 08F 097 | story 5A 5D | party 000102 | gold 4509 | hp 99 (14) | ctrl 31 | end picture 0 px at port +0",
+        "playthrough: 65_denadoro SAME -- locs 091 08E 092 08F 093 096 090 094 095 08F 097 | story 5A 5D | party 000102 | gold 4509 | hp 99 (14) | ctrl 31 | end picture 0 px at port +0",
         "playthrough: 66_masa_mune SAME -- locs 097 | story 5D | party 000102 | gold 4509 | hp 217 (4) | ctrl 2 | end picture 0 px at port -2",
         "playthrough: 67_masa_mune_fight SAME -- locs 097 1F1 | story 5D 60 | party 000102 | gold 6409 | hp 115 (3) | ctrl 3 | end picture 0 px at port -1",
         "playthrough: 68_porre SAME -- locs 1F1 09C 1F1 09D 1F1 | story 60 | party 000102 | gold 3629 | hp 232 (2) | ctrl 3 | end picture 0 px at port -1",
@@ -51327,8 +51327,8 @@
         "playthrough: 90_castle_wings SAME -- locs 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 | story 88 | party 000401 | gold 1249 | hp 226 (2) | ctrl 3 | end picture 0 px at port -1",
         "playthrough: 91_flea SAME -- locs 0A6 1D5 0A9 | story 88 | party 000401 | gold 3199 | hp 262 (4) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 92_slash DIFFERENT -- locs 0A9 1D5 0A6 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 0AA | story 88 | party 000401 | gold 1909 | hp 277 (3) | ctrl 21 | end picture 39204 px at port +3",
-        "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 39682 px at port +6",
-        "playthrough: 94_ozzie_barrier SAME -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 0 px at port -1",
+        "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 39657 px at port +6",
+        "playthrough: 94_ozzie_barrier DIFFERENT -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 54016 px at port +0",
         "playthrough: 95_magus DIFFERENT -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 11 px at port -1",
         "playthrough: 96_laruba SAME -- locs 113 1F3 124 | story 8D 8E | party 000401 | gold 12154 | hp 322 (1) | ctrl 5 | end picture 0 px at port -1",
         "playthrough: 97_dactyl_nest SAME -- locs 124 1F3 125 126 127 1F3 147 | story 8E 90 93 | party 000401 008181 000581 000501 | gold 12154 | hp 164 (3) | ctrl 13 | end picture 0 px at port +0",
@@ -51897,7 +51897,7 @@
       "env": {},
       "expect": [
         "legwindow: fight-exit-gives-up-the-kept-music leg 113 f250+7900: 2 steps compared, 0 differing",
-        "  free:  cartridge f303-f8070: both come back on 01, the port +0 frame(s)"
+        "  free:  cartridge f303-f8070: both come back on 01, the port -2 frame(s)"
       ],
       "pin": [
         "^legwindow: fight-exit-gives-up-the-kept-music ",
@@ -56145,6 +56145,74 @@
           "find": "  if (g_ruleAudio) { CtAudioSetRuleIrq(a, g_fieldIrqLine); CtAudioSetRuleHdmaOver(a, CtAudioFieldHdmaOver(a, mem7E)); }",
           "replace": "  if (g_ruleAudio) { CtAudioSetRuleIrq(a, g_fieldIrqLine); }  /* MUT */",
           "why": "the field's mean HDMA: the warp's song uploads a frame fast"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-equip-list-blips-when-drawn-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "equip-list-blips-when-drawn"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: equip-list-blips-when-drawn leg 39 +5700: 85 commands on the cartridge, 85 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: equip-list-blips-when-drawn "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Equip screen's candidate list blips when its climb ends, and a leg's sound commands are the cartridge's in order",
+      "notes": "THE EQUIP LIST BLIPS WHEN IT IS DRAWN (2026-11-20). Found by replaying a leg's SPC stores on the cartridge's clock (`playthrough.py cmp --clock`: `aputape: MISMATCH at store 290 of 348` on leg 39), then command for command (tools/leg_sound_cmp.py). The field menu's Equip screen: A on a gear row is C2/9C90 `JSR C2/EAC2` (the blip) and the candidate list's climb C2/A4AF, eight passes of 4 px; the climb's end, C2/A44D `INC $00C1 / LDA #DF / STA $0D13 / LDA #04 / STA $54 / PLP / C2/A45A JMP C2/EAC2`, makes the list live and blips again. The commit is C2/9CDC `LDA #B5 / JSR C2/EABA`, C2/9CE1 `JSR C2/9CFC` and C2/9CE4 `JSR C2/EAC2` -- a blip the $B5's throttle (`$0D76` = 3, C2/EB0B `LDA $0D76 / BNE` -> RTS) leaves staged in `$1E00` / `$1E01` and unposted. MEASURED on the rule's cartridge, leg 39 from f5420 (PEEK_WRITEWATCH=1E00:2 with PEEK_APUTRACE, and `--hookpc` on each of bank C2's 115 sound call sites): C2/9C90 on f5427 and f5509, C2/A45A on f5434 and f5516 (seven frames on), C2/9CDE + C2/9CE4 on f5459 (`18 B5` posted, `18 00` written and left), C2/9EE0 on f5491. The port made no second blip (three of the leg's 85 commands missing: f5434, f5516, f5662) and no staged one. With both, the leg's commands are the cartridge's, 85 for 85 in order. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                                                               menuSfx(s7, 0x00, \"equip-list-drawn\"); }",
+          "replace": "                                                               }  /* MUT */",
+          "why": "the climb's end makes no sound: three commands short"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-action-script-sounds-after-the-menu-pass-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "action-script-sounds-after-the-menu-pass"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: action-script-sounds-after-the-menu-pass leg 42 +2400: 55 commands on the cartridge, 55 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: action-script-sounds-after-the-menu-pass "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "on an action's frames the script's sound ops come after the menu pass's blip, as the main thread runs them",
+      "notes": "THE ACTION SCRIPT'S SOUNDS COME AFTER THE MENU PASS (2026-11-20). An action's loops (C1/4943, C1/40A3, the script loop C1/40B6, C1/40E4) come back from their frame's wait into C1/10FA: `LDA $993A / BEQ / STZ $993A / STZ $E5 / JSR C1/1B67 / JSR C1/0C2D / JSR C1/1153 / JSR C1/17DD`, the menu pass -- its handlers blip through C1/1B55 (`19 00`) -- then `JSL CD0009`, and only then the script goes on, whose sound ops are C1/619E (78 / 79), C1/61C1 (7A / 7B) and C1/61EB / 61F5 (7C / 7D). The port steps the script with the frame's service, ahead of the pass, so a blip and a script sound of one frame reached the SPC in the other order. MEASURED on the rule's cartridge, playthrough leg 42 from f2230 (PEEK_WRITEWATCH=1E00:4 with PEEK_APUTRACE): on f2249 `$1E01` = 00 / `$1E00` = 19 by C1/1B58 / C1/1B5D, stored to $2140 on line 64, then `$1E01` = 04 / `$1E00` = 18 by C1/61A4 / C1/61B0 on line 68. Ten legs of the route had such a pair (42, 45, 49, 53, 57, 59, 67, 79, 80, 81). The script's posts of an action's frame now wait for the pass (battle.c battleSfxPostScript / battleScriptSfxFlush); leg 42's 55 commands are the cartridge's in order. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  gScriptSfxDefer = wasFrozen ? 1 : 0;",
+          "replace": "  gScriptSfxDefer = 0;  /* MUT */",
+          "why": "the script's sounds posted with the service, ahead of the pass's blip"
         }
       ]
     },
