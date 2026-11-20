@@ -408,7 +408,7 @@ static long ldHdmaLine(LdHdma* hd) {
 }
 static void ldCatch(CtAudio* a);
 static int g_tapeState;              // CT_APUTAPE, the cartridge's clock (a harness mode, below): 0 untried, 1 on, 2 off
-static long g_tapeCredit;            // ...master cycles a late store leaves the CPU to win back before the next one (ldRun)
+static int g_tapePoll;               // ...inside a poll of the SPC's ports: the one thing the CPU's time is charged for there
 static void ldWalk(long cycles) {        // wall time passes: the raster walks and queues the background it meets
   while (cycles > 0) {
     int next = (ld.hPos < 16) ? 16 : (ld.hPos < 536) ? 536 : (ld.hPos < 1104) ? 1104 : LD_MASTER_PER_LINE;
@@ -448,7 +448,7 @@ static void ldIrqWait(void) {
 }
 static void ldRun(long cycles) {         // the loader's CPU spends `cycles` -- after sitting out whatever the raster queued
   if (!ld.active || cycles <= 0 || ld.clk > ld.budget) return;
-  if (g_tapeCredit > 0) { long t = cycles < g_tapeCredit ? cycles : g_tapeCredit; cycles -= t; g_tapeCredit -= t; }   // (the tape)
+  if (g_tapeState == 1 && !g_tapePoll) return;   // (the tape: code is free -- each store waits for its cycle -- and only a poll costs)
   while (cycles > 0) {
     if (ld.stolen > 0) { long b = ld.stolen; ld.stolen = 0; ldWalk(b); continue; }   // the background runs first (it may queue more)
     if (ld.irqPending) { ldIrqWait(); continue; }
@@ -468,17 +468,25 @@ static void ldCatch(CtAudio* a) {        // snes_catchupApu: run the SPC up to t
 // ---- The cartridge's clock (a HARNESS mode, CT_APUTAPE=<file>; never the game's) ----
 // The tape is every store the cartridge's CPU made to $2140-$2143 over a run, in order, with the SPC's cycle count at
 // the store (`ct.exe --peek` PEEK_APUTRACE, cut to `port value apuc` lines by tools/playthrough.py). With it the port's
-// clocked JSLs make each store on the cartridge's SPC cycle: C7 is priced as always (its counted polls -- C7/0A71's
-// 0x400 -- must time out where the cartridge's do) and a store that comes early waits for the tape's cycle; one that
-// comes late is made at once (`aputape: .. late` at the exit says how many and by how much). The SPC then gets the
-// cartridge's inputs at the cartridge's times and
-// stays on its tick lattice, which the port's own C7 pricing cannot hold to the cycle (battle_exit_fade_poll.md: the
-// timing class the game does not reproduce). A store the tape does not have next (another port or value) ends the mode
-// with a report: the two sides no longer send the same commands.
+// clocked JSLs make each store on the cartridge's SPC cycle. The CPU's own code costs nothing there (ldRun returns): the
+// cartridge's CPU time between two stores is what the tape already holds, and pricing it again only made the port late
+// by its own error -- a hundred SPC cycles a store through an upload, which the SPC's echo keeps to the upload's end
+// and which moved the fade's tick lattice (leg 20's first exit let go two frames early). What costs is a POLL of the
+// SPC's ports (g_tapePoll: the token's C7/09E0, the counted C7/0635 / C7/0A71 -- they must time out where the
+// cartridge's do --, the spins): the SPC's answer is the one thing the tape does not hold. Each store then waits for
+// its cycle; one that still comes late (the SPC answered later than the cartridge's) is made at once and counted
+// (`aputape: .. late` at the exit). The SPC so gets the cartridge's inputs at the cartridge's times and stays on its
+// tick lattice, which the port's own C7 pricing cannot hold to the cycle (battle_exit_fade_poll.md: the timing class
+// the game does not reproduce). A store the tape does not have next (another port or value) ends the mode with a
+// report: the two sides no longer send the same commands.
 typedef struct { uint8_t port, val; uint32_t apuc; } ApuTapeE;
 static ApuTapeE* g_tape; static long g_tapeN, g_tapePos, g_tapeLate, g_tapeLateMax, g_tapeLateSum;
 static long g_tapeResendCart, g_tapeResendPort; static int g_tapeDup; extern int g_ctAudioTraceFrame;
 static long long g_tapeWaited, g_tapeCredited;   // CT_APUTAPE_TRACE: master cycles waited / credited inside the JSL
+// A JSL that begins before the cartridge's did waits for its first store. That wait is the tape's alignment, not the
+// JSL's own time: the vblanks it crosses stall nobody (a host parked for them would leave its NMI's counters running on
+// -- a fight's menu pass a frame out of phase) and its cycles are not the JSL's cost.
+static int g_tapeJslStored, g_tapeAlignNmis; static long g_tapeAlignMaster;
 static void tapeReport(void) {
   if (g_tapeN) fprintf(stderr, "aputape: %ld of %ld store(s) made, %ld late (max %ld, mean %.1f APU cycles), a counted poll's resend on one "
                        "side only: the cartridge %ld, the port %ld%s\n", g_tapePos, g_tapeN,
@@ -522,10 +530,20 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
   if ((e->port != k || e->val != v) && k == 3 && tapeCmdBefore(g_tapePos) && g_tape[g_tapePos - 4].val == v) {
     g_tapeDup = 3; g_tapeResendPort++; return;
   }
-  while ((e->port != k || e->val != v) && tapeCmdBefore(g_tapePos) && g_tapePos + 4 < g_tapeN &&
-         e[0].port == 3 && e[0].val == e[-4].val && e[1].port == 2 && e[1].val == e[-3].val &&
-         e[2].port == 1 && e[2].val == e[-2].val && e[3].port == 0 && e[3].val == e[-1].val &&
-         (uint32_t)(e[0].apuc - e[-1].apuc) < 4000u) {
+  // (The port may be `j` stores into its next command when the cartridge's resend shows: a command that begins with
+  // the same bytes -- $7E:377E's `F2 00 00 0D` again and again before `F2 01 00 0D`, leg 95 -- matched them.)
+  // (...or at its first store of something that is no four-store command at all: the upload's `$2140 = 11` after a
+  // song command the cartridge sent twice -- j = 0.)
+  for (int pass = 0, j = 3 - k; (e->port != k || e->val != v) && pass < 64; pass++) {
+    if (!(g_tapePos - j >= 4 && g_tapePos - j + 8 < g_tapeN)) { if (j) { j = 0; continue; } break; }
+    const ApuTapeE* g = &g_tape[g_tapePos - j];
+    if (!(tapeCmdBefore(g_tapePos - j) &&
+          g[0].port == 3 && g[0].val == g[-4].val && g[1].port == 2 && g[1].val == g[-3].val &&
+          g[2].port == 1 && g[2].val == g[-2].val && g[3].port == 0 && g[3].val == g[-1].val &&
+          (uint32_t)(g[0].apuc - g[-1].apuc) < 4000u)) { if (j) { j = 0; continue; } break; }
+    int head = 1;                                           // (...and what follows the resend begins with them too)
+    for (int t = 0; t < j; t++) if (g[4 + t].port != g[t].port || g[4 + t].val != g[t].val) head = 0;
+    if (!head) { if (j) { j = 0; continue; } break; }
     g_tapePos += 4; g_tapeResendCart++; e = &g_tape[g_tapePos];
   }
   if (e->port != k || e->val != v) {
@@ -534,6 +552,7 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
     g_tapeState = 2; return;
   }
   g_tapePos++;
+  if (!ld.active) return;                                   // a store outside a clocked JSL (CtAudioPortWrite): in order only
   uint32_t cur = machineRuns(a) ? (uint32_t)SndMachineCycles(a->mach) : a->apu->cycles;
   int32_t d = (int32_t)(e->apuc - cur);
   { static int tt = -1; if (tt < 0) tt = getenv("CT_APUTAPE_TRACE") ? 1 : 0;      // CT_APUTAPE_TRACE=1: a command's lead / lag
@@ -547,12 +566,15 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
   double lead = (double)d - ld.owed;                        // APU cycles from the clock to the tape's cycle
   if (lead >= 1.0) {                                        // early: the CPU waits (nothing is stolen from a wait)
     long w = (long)(lead / LD_APU_PER_MASTER + 0.5);
+    int n0 = ld.nmis;
     ldWalk(w); ld.stolen = 0; ld.irqPending = 0; g_tapeWaited += w;
     ldCatch(a);
+    if (!g_tapeJslStored) { g_tapeAlignNmis += ld.nmis - n0; g_tapeAlignMaster += w; }
   } else if (lead <= -1.0) {                                // late: made at once, and the lateness is the CPU's to win back
     g_tapeLate++; g_tapeLateSum += -d; if (-d > g_tapeLateMax) g_tapeLateMax = -d;
-    g_tapeCredit = (long)(-lead / LD_APU_PER_MASTER); g_tapeCredited += g_tapeCredit;
+    g_tapeCredited += (long)(-lead / LD_APU_PER_MASTER);    // (nothing to win back: code is free, the SPC's echo was late)
   }
+  g_tapeJslStored = 1;
 }
 static void    Wc(CtAudio* a, int k, uint8_t v) {   // snes_cpuWrite -> writeBBus $2140+k
   ldCatch(a);
@@ -593,10 +615,11 @@ static int ldStartRule(CtAudio* a) {
   return 1;
 }
 // the $400-poll loops the ROM uses outside the token (C7/0A6E, C7/0603, C7/062F): CMP $2140, BEQ, DEX, BNE
+static int ldPoll400Body(CtAudio* a, uint8_t want);
 static int ldPoll400(CtAudio* a, uint8_t want) {
-  // (The tape's credit is for code, not for a wait on the SPC: a poll loop that ran free would time out where the
-  // cartridge's saw the echo, and resend. What is left of it is dropped here: the echo is the next common point.)
-  g_tapeCredit = 0;
+  int r; g_tapePoll++; r = ldPoll400Body(a, want); g_tapePoll--; return r;
+}
+static int ldPoll400Body(CtAudio* a, uint8_t want) {
   for (int px = 0; px < 0x400; px++) { ldRun(I_CMP_BB); if (Rc(a, 0) == want) {
       { static int pt = -1; if (pt < 0) pt = getenv("CT_AUDIO_PORTTRACE") ? 1 : 0;
         if (pt && a->apu) fprintf(stderr, "porttrace ECHO %02X seen apuc=%llu after %d polls\n", want,
@@ -961,11 +984,13 @@ static uint8_t sndTok(CtAudio* a, uint8_t t) {
   ldRun(I_PHP + I_SEP);                               // 09DA PHP / 09DB SEP #20
   ldRun(I_STA_BB); Wc(a, 0, t);                       // 09DD STA $2140 -- the write lands at the end of its B-bus cycle
   long guard = 0x200000; long p0 = ld.polls;
+  g_tapePoll++;
   for (;;) {
     ldRun(I_CMP_BB); if (Rc(a, 0) == t) break;        // 09E0 CMP $2140 -- the read at the end of its B-bus cycle
     ldRun(I_BR_T); ld.polls++;                        // 09E3 BNE taken
     if (--guard == 0) break;                          // a dead driver: leave, do not spin the raster forever
   }
+  g_tapePoll--;
   { long k = ld.polls - p0; ldHist[k > 64 ? 64 : k]++; }
   ldRun(I_BR_NT + I_IMPL + I_IMM8 + I_PLP + I_RTS);   // 09E3 not taken / 09E5 INC A / 09E6 AND #7F / 09E8 PLP / 09E9 RTS
   return (uint8_t)((t + 1) & 0x7F);
@@ -992,10 +1017,12 @@ static void sndResync(CtAudio* a, uint8_t* m) {
   uint8_t t = M8(m, 0x1E84);
   if (!ld.active) { sndTok(a, t); SM8(m, 0x1E84, 0xE0); return; }   // (the unclocked callers' poll-quantum model)
   ldRun(I_PHP + I_SEP + I_LDA_DP + I_STA_BB); Wc(a, 0, t);          // 09EA PHP / SEP #20 / LDA $84 / STA $2140
+  g_tapePoll++;
   for (long guard = 0x200000; guard > 0; guard--) {                 // 09F2 CMP $2140 / 09F5 BNE
     ldRun(I_CMP_BB); if (Rc(a, 0) == t) break;
     ldRun(I_BR_T); ld.polls++;
   }
+  g_tapePoll--;
   ldRun(I_BR_NT + I_IMM8 + I_LDA_DP + I_PLP + I_RTS);               // 09F7 LDA #E0 / STA $84 / PLP / RTS
   SM8(m, 0x1E84, 0xE0);
 }
@@ -1104,11 +1131,13 @@ static void sndPercBlock(CtAudio* a, uint8_t* m, const uint8_t* src) {
 // `CMP $2140 / B?? ->itself`: poll out-port `k` until (read == want) is `untilEqual`. The ROM's loops are
 // unbounded; this one stops at SPIN_LIMIT. Clocked, each poll is charged; unclocked, the SPC is stepped.
 static int sndSpin(CtAudio* a, int k, uint8_t want, int untilEqual) {
+  g_tapePoll++;
   for (long i = 0; i < SPIN_LIMIT; i++) {
     ldRun(I_CMP_BB);
-    if ((Rc(a, k) == want) == (untilEqual != 0)) { ldRun(I_BR_NT); return 1; }
+    if ((Rc(a, k) == want) == (untilEqual != 0)) { ldRun(I_BR_NT); g_tapePoll--; return 1; }
     ldRun(I_BR_T); if (ld.active) ld.polls++; else step(a);
   }
+  g_tapePoll--;
   return 0;
 }
 // $C7:0922: the $2F00 SFX-set upload, with two callers: the song loader's mode swap (C7/04D8 `JSR C7/0922`, when $1E10
@@ -1605,6 +1634,7 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
   if (master) *master = 0; if (frames) *frames = 0;
   if (!a || (!a->rom && !a->snd)) return 0;
   ldStart(2, 0);
+  g_tapePoll++;                                        // (the reset's upload is priced whole: it is on no tape)
   ldRun(I_PHP + 28 + I_PHP + 2 * I_SEP + 3 * 28 + I_SEP + I_IMM8 + I_PHP + 26 + I_IMM16 + 28 + 34 + I_IMM16);  // 0038-004D prologue
   int ok = 0;
   for (long i = 0; i < SPIN_LIMIT; i++) {
@@ -2086,6 +2116,10 @@ int CtAudioService(CtAudio* a, uint8_t* mem7E) {
     fprintf(stderr, "aputape: f%d JSL cmd=%02X clk %lld master (%d NMIs), SPC ran %ld APU = %.0f master; waited %lld, credited %lld\n", g_ctAudioTraceFrame, cmd,
             ld.clk - ld.clk0, ld.nmis, (long)ld.ran, (double)ld.ran / LD_APU_PER_MASTER, g_tapeWaited, g_tapeCredited);
   g_tapeWaited = g_tapeCredited = 0;
+  if (g_tapeAlignNmis || g_tapeAlignMaster) {                      // (the tape's alignment wait: not the JSL's)
+    a->lastFrames -= g_tapeAlignNmis; if (a->lastFrames < 0) a->lastFrames = 0;
+    a->lastCode -= g_tapeAlignMaster; if (a->lastCode < 0) a->lastCode = 0; }
+  g_tapeJslStored = 0; g_tapeAlignNmis = 0; g_tapeAlignMaster = 0;
   ld.active = 0; ld.ifast = 0;
   // The caller freezes for lastFrames; debit the SPC time this JSL ran from CtAudioFrame's budget so
   // the SPC is not advanced twice, here and once per frozen frame.
@@ -2102,11 +2136,13 @@ int CtAudioWaitReplyNibble(CtAudio* a, int* frames) {
   unsigned fifoAt = a->fifoLen;
   ldStart(a->engineMode, a->postLine);
   int got = 0;
+  g_tapePoll++;
   for (long i = 0; i < SPIN_LIMIT; i++) {
     ldRun(I_LDA_BB + I_IMM8);                          // 5AAA LDA $2143 / 5AAD AND #$0F
     if (Rc(a, 3) & 0x0F) { ldRun(I_BR_NT); got = 1; break; }
     ldRun(I_BR_T);                                     // 5AAF BEQ ->5AAA
   }
+  g_tapePoll--;
   ldCatch(a);
   a->lastMaster = ld.clk; a->lastCode = ld.clk - ld.clk0; a->lastFrames = ld.nmis; a->lastEndLine = ld.vPos; a->lastPolls = ld.polls;
   ld.active = 0;
@@ -2252,7 +2288,7 @@ void CtAudioSeedMailboxPage(const CtAudio* a, uint8_t* mem7E) {
 const uint8_t* CtAudioAram(const CtAudio* a) { return !a ? NULL : machineRuns(a) ? a->mach->d.m : a->apu->ram; }
 struct Apu* CtAudioApu(CtAudio* a) { return a ? a->apu : NULL; }
 struct SndMachine* CtAudioMachine(CtAudio* a) { return a ? a->mach : NULL; }
-void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) W(a, k & 3, v); }
+void CtAudioPortWrite(CtAudio* a, int k, uint8_t v) { if (a) { if (tapeOn()) tapeHold(a, k & 3, v); W(a, k & 3, v); } }
 int CtAudioRunCycles(CtAudio* a, int cycles) { return a ? apuRun(a, cycles) : 0; }
 // CtAudioFrameOrigin: the frame grid starts `master` cycles before this point, so the next slices run that much less
 // SPC (none is run here).

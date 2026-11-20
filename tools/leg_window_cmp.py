@@ -136,6 +136,26 @@ WINDOWS = {
                              cells=[('7E0380', 4), ('7E0388', 1), ('7E0008', 1), ('7E00B0', 1), ('7E00B2', 1), ('7E004E', 2),
                                     ('7E0051', 4), ('7E0076', 4), ('7E0A20', 2), ('7E0A00', 2), ('7E0A04', 2),
                                     ('7E0A0C', 2)]),
+    # The ATB's handler C1/8461 while a PC's turn is pending (`$B188` bit 7): `$B186` bit 0 stays set (C1/860D), so the
+    # WHOLE handler runs on every odd pass, and its entry check C1/847E reads the combatant at the cursor - 1 again
+    # (`$AEC7 - 1` once the cursor pass has walked off the end). Leg 51's second fight (loc 0E5, f5190-): enemy 6 sits
+    # ready behind the arrival gate C1/84B8; its walk's C1/3833 sets `$9826,X` on f7072 and the next odd pass, f7074,
+    # gives it its turn (`$982C` = 00 by C1/84C0, `$986F` = 06 by C1/A712) -- the port gave it when the cursor came
+    # round, f7082, and every position after was eight frames behind. The cells: the enemy's arrival latch and mode
+    # request, its move target and angle, and three position words. Not graded: the way into the fight (to f5235).
+    'enemy-turn-behind-the-arrival-gate': dict(leg='51_', start=5100, frames=2320, free=[(5101, 5235)],
+                                               cells=[('7E982C', 1), ('7E986F', 1), ('7E974D', 1), ('7E9789', 1),
+                                                      ('7E9760', 2), ('7E9776', 2), ('7E98B2', 2)]),
+    # The touch latch `$01EB` is not consumed by the touch and is rewritten only by C0/881E's head (`LDA #80 / STA
+    # $01EB`). The End of Time's pillar of light, obj24 of loc 1D0 (leg 55): its fn2 `E5`s a tile block, C0/1770 arms the
+    # camera's align (`$0138` = 1) and for ten frames the main loop runs the align entry C0/885A instead of C0/881E; on
+    # the frame C0/88D8 clears `$0138` (f212) the lead's op 0xB0 calls the touch with the hit of f202, fn2 is installed
+    # (`$11B0` = 10CA, `$1031` = 00) and the copy's four frames follow, so its E8 runs on f217 with the countdown
+    # reloaded and its `00` four frames on. The port's one-shot latch was empty on f212: the call landed on f217 after
+    # the queue's build, the `00` ran a frame later and the pillar chimed once more in the cycle. The cells: obj24's
+    # script pointer and cadence pair, and `$0138`.
+    'touch-latch-stands-through-the-camera-align': dict(leg='55_', start=150, frames=600,
+                                                        cells=[('7E11B0', 2), ('7E1030', 2), ('7E0138', 1)]),
     'fight-poses': dict(leg='119_', start=16200, frames=5900, free=[(16201, 16420), (21440, 21449)],
                         cells=[('7E968C', 3), ('7E9922', 3), ('7EA098', 1), ('7E96DB', 3)]),
     # The 2300 A.D. map, world 1F2: the Epoch sets down (`$0294` = F3, the BG3 visit skipped) with the lead's velocity

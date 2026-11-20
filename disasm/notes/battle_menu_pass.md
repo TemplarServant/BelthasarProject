@@ -247,3 +247,13 @@ cartridge distance from the action.
   rule (battleBootBandArm), left to that migration.
 * C1/10E3's caller.
 * The end-of-battle write-back of the cursor memory (`$2C7C..`, `$2C98/99`) is not checked.
+
+## 13. The ATB's handler runs whole while a PC's turn is pending (2026-11-20)
+
+C1/860D keeps `$B186` bit 0 while `$B188 | $B189 | $B18A` is non-zero (a PC's record: 81 from the ready moment, 00 at the
+action's reload), so C1/8461 is dispatched on every odd pass and C1/847E re-reads the entry at the cursor - 1 (`$AEC7 - 1`
+when the cursor pass walked off the end). Measured on route leg 51's second fight: enemy 6 refused by the arrival gate
+C1/84B8 on f7070, `INC $9829,X` (C1/3836) on f7072, its turn on f7074 (`$982C` = 00 by C1/84C0 / C1/8D34, `$986F` = 06 by
+C1/A712). The port ran only C1/883D on such a pass and gave the turn 8 frames late. The cartridge's `$93EE,X` over a PC's
+turn, for the record: 81 ready, 41 command confirmed (`$99D4` FIFO), 01 dispatched, 00 at the reload; the port keeps 81 and
+its own `pcInTurn` (sec. 7, still open). Check: `leg-window-enemy-turn-behind-the-arrival-gate-vs-cartridge`.

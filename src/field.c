@@ -2537,6 +2537,7 @@ static void fieldArrivalTileMode(const Coll* c, double px, double py, CtScene* v
 // the lead (a script-locked lead while the camera pans, e.g. the knockdown fall-pan). outReqX/Y, when given, get the
 // clamped scroll request $1D2E/$1D30 (1/16 px, signed) that the VM camera consumes (field_camera_unification.md
 // G.1.2); a wall zeroes it, so camera and lead stop together.
+static int g_touchLatchSeq = 0;   // the touch latch was written by this host's C0/881E (fieldPlayerCollide)
 static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz, double* px, double* py, int dx, int dy, int run, int applyMove, int* outReqX, int* outReqY) {
   uint8_t* ram = g_collRam; uint8_t* d = ram + 0x1D00;
   if (outReqX) *outReqX = 0; if (outReqY) *outReqY = 0;
@@ -2650,6 +2651,7 @@ static int fieldPlayerCollide(const Coll* c, CtScene* vm, int playerObj, int* pz
   if (applyMove && vm) {
     int hit = ram[0x01EB];
     CtSceneSetTouchHit(vm, (hit & 0x80) ? -1 : hit / 2);
+    g_touchLatchSeq++;
   }
   if (outReqX) *outReqX = (int8_t)d[0x2E];                  // the camera scroll request (post-8A6D, pre-99DE);
   if (outReqY) *outReqY = (int8_t)d[0x30];                  //   nonzero at a map edge (9175 zeroes velocity, not
@@ -5646,6 +5648,11 @@ static int g_loadSpcBaseOn = 0, g_loadSpcBaseF = 0;
 // poll's exit (`7E:37A5 RTS`) to C0/1B73's `JSL C7:0004` via 303B's `JML C0:0000`, C0/0B5A and C0/0B86 (measured with
 // --cputrace on the attract's first title exit). The teardown's posts leave the SPC at that exit.
 #define STAGE_TEARDOWN_SPC_LEAD 4148L
+// The Gate warp's exit (FD's tail -- FD/EAB7's restore, FD/EAC8's blank -- then `JML $C0:0000`, C0/0B5A, C0/0B86): the
+// load's first `JSL C7:0004` (C0/1B73) makes its first store 63,866 master cycles past the vblank on the rule's cartridge
+// (MEASURED, route leg 29's arrival in loc 008: `$2143 = FF at C7/0623` on line 9 h 1122, PEEK_APUTRACE); the lead is that
+// less the JSL's own way to its first store.
+#define GATE_WARP_SPC_LEAD 63090L
 // Ops DF / E1's reboot (C0/3B71's spin -> C0/3B79-3B8F -> C0/0B4E -> `BRL C0:0000` -> C0/0B5A -> C0/0B86): the field
 // NMI's pad latch, the NMI-off stretch to C0/0B86 (line 229 h 190, 5,646 past the vblank), then C0/0B86 -> the JSL as in
 // LOAD_SPC_LEAD (measured with --cputrace on the attract's hub DF and on the staff roll's E1 05B -> 05C).
@@ -5748,6 +5755,20 @@ static void owExitSoundPosts(uint8_t* m) {
 // While the race opens (g_raceOpening) its posts are inside the setup's NMI-off stretch (song $2C's `JSR $375F` at
 // $7E:3B51), so their SPC time (the C7 code's real cycles) is summed into that stretch.
 static int g_raceOpening = 0; static long long g_raceOpenPostMaster = 0;
+// A $C3 stage's opening is one NMI-off stretch from C3:0014, and its driver reset ($7E:3177, the first $7E:377E) comes
+// after the overlay's decompression and the common init: TITLE_RESET_LEAD master cycles from C3:0014, itself
+// TITLE_OPEN_AT past the vblank -- the same code for every entry (the title's constants, measured there with --cputrace;
+// MEASURED again on the rule's cartridge for the race, route leg 47: `$0384 = 00 by C3/003B` on f337 and the reset's
+// first store `$2143 = FF at 7E/3789` on f353, 5,950,345 master past f337's vblank by the SPC's cycle count). The port
+// makes the stage's posts when it opens it, with the iteration's SPC slice already run: the SPC first runs what is left
+// of that lead (owed by the black frames that follow, CtAudioAdvance), so the song the field left plays on through the
+// decompression and the new one starts where the cartridge's does -- it started sixteen frames early.
+#define STAGE_OPEN_RESET_LEAD (TITLE_OPEN_AT + TITLE_RESET_LEAD - LD_FRAME_MASTER)
+static void stageOpenSpcLead(CtAudio* audio, int seqId) {
+  if (!audio || !g_ruleAudio || hostSyncFree() || hostSoundInstant()) return;
+  if (seqId & 0xA0) return;                       // $0384 bit 5 / bit 7: no driver reset in the init (30BD / 30E9)
+  CtAudioAdvance(audio, STAGE_OPEN_RESET_LEAD);
+}
 // ...but the posts of the setup's last NMI ($7E:3013 JSL C3/08D0, seq_race.h g_ctRaceOpenNmi) the cartridge sends at the
 // stretch's end, after the black frames: kept here ($1E00-$1E03 as written) and posted as the hold runs out. (The
 // attract's second race posts its curtain sound in that NMI; at the opening it would sound 45 frames early.)
@@ -12678,9 +12699,14 @@ int main(int argc, char** argv) {
           // vblank (TITLE_OPEN_AT, below at the open), so its slice is owed like a load's.
           int tlOpen = f.vm && CtSceneSequence(f.vm) == 2 && !seqOpen &&
                        (ffPro == 2 || (ffPro == 0 && !CtSceneFfFading(f.vm)));
+          const int stKind = g_stageRebootLoad;     // 1 an overlay machine's END, 2 its teardown's, 3 the Gate warp's
           g_loadSpcLead = 0; g_owExitPosted = 0; g_stageRebootLoad = 0; g_dfRebootLoad = 0; g_titleOpenSpc = 0;
+          // (A teardown's END -- kind 2 -- takes the plain END's lead: STAGE_TEARDOWN_SPC_LEAD was never applied -- the flag
+          // was read here after it had been cleared -- and with it the demo's last scenes come a frame off the cartridge's
+          // (attract-1b0-cockpit, the two 1F0 Epoch checks: measured 2026-11-20), so the measured figure is not the whole
+          // of that stretch. Left as it ran.)
           if (audio && ((rf && fb <= 0 && pendKind == 1) || owLoad || stLoad || dfLoad) && !hostSyncFree()) {
-            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? (g_stageRebootLoad == 2 ? 5 : 3) : dfLoad ? 4 : 1; }
+            owed += ticks; ticks = 0; g_loadSpcLead = owLoad ? 2 : stLoad ? (stKind == 3 ? 6 : 3) : dfLoad ? 4 : 1; }
           else if (audio && g_ruleAudio && tlOpen && !hostSyncFree()) { owed += ticks; ticks = 0; g_titleOpenSpc = 1; }
           else if (owed) { ticks += owed; owed = 0; } }
         if (ticks != 1) paceIrregular++;
@@ -12823,7 +12849,8 @@ int main(int argc, char** argv) {
           if (g_loadSpcBaseOn) { g_loadSpcBase = CtAudioApuCycles(audio); g_loadSpcBaseF = frameNo; }
           if (g_loadSpcLead && audio)
             CtAudioAdvance(audio, g_loadSpcLead == 2 ? OW_EXIT_SPC_LEAD : g_loadSpcLead == 3 ? STAGE_END_SPC_LEAD :
-                                  g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : g_loadSpcLead == 5 ? STAGE_TEARDOWN_SPC_LEAD : LOAD_SPC_LEAD);
+                                  g_loadSpcLead == 4 ? REBOOT_SPC_LEAD : g_loadSpcLead == 5 ? STAGE_TEARDOWN_SPC_LEAD :
+                                  g_loadSpcLead == 6 ? GATE_WARP_SPC_LEAD : LOAD_SPC_LEAD);
           else if (coldResetCyc && audio) CtAudioAdvance(audio, RESET_LOAD_SPC_LEAD);   // a reset's load: the scan and C0/005D first
           g_loadSpcLead = 0;
           if (!fieldLoad(&assets, &f, pendDest, gm)) running = 0;
@@ -17706,6 +17733,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;
         g_raceOpening = 1; g_raceOpenPostMaster = 0; g_raceDeferredN = 0;
+        stageOpenSpcLead(audio, seqId);
         int opened = CtRaceStageOpen(w, (uint8_t)seqId, &rio) == 0;
         g_raceOpening = 0;
         if (opened) {
@@ -17732,6 +17760,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         if (CtEndingPicHas((uint8_t)seqId)) { stagePicOpen(); rio.pic = &g_stagePic; }
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEndingStageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 1; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17754,6 +17783,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry3pic.c)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEntry3StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 2; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17775,6 +17805,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry4pic.c)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEntry4StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 3; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17800,6 +17831,7 @@ int main(int argc, char** argv) {
         memcpy(g_e5Hold, fb, sizeof g_e5Hold);                     // (the opening's picture: the field's last)
         uint8_t e5List[13]; const int e5Enemies = fieldEnemyList0617(f.vm, e5List);   // (C0/024C's, on the field's WRAM)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEntry5StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 6; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17826,6 +17858,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry7pic.c)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEntry7StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 4; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -17847,6 +17880,7 @@ int main(int argc, char** argv) {
         CtRaceIo rio = raceIoFor(w);
         stagePicOpen(); rio.pic = &g_stagePic;                      // its picture (stage 2, seq_entry6pic.c)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
+        stageOpenSpcLead(audio, seqId);
         if (CtEntry6StageOpen(w, (uint8_t)seqId, &rio) == 0) {
           seqOpen = seqEntry + 1; endOn = 5; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
@@ -18314,6 +18348,7 @@ int main(int argc, char** argv) {
     // the $0117 transfer's -- keep the clear: not measured, and this host moves the lead itself; leg 113 parted when they
     // kept the bytes too.)
     if (f.vm && !CtSceneMainLoopParked(f.vm)) { uint8_t* lw0 = CtSceneMem7E(f.vm); lw0[0x1D32] = lw0[0x1D33] = 0; }
+    const int touchSeq0 = g_touchLatchSeq;          // (the touch latch: written below when this frame's C0/881E runs)
     if (!battlePhase && !ctlLocked && !(tbActive && isChoice) && nameId < 0 && !atbGate && !gameOver && !fieldResume && mlBody) {   // movement frozen while the naming
                                                     // screen / the ATB selector is up / after a game-over (input freeze)
       dx = cdx; dy = cdy; prun = crun;
@@ -18454,6 +18489,11 @@ int main(int argc, char** argv) {
         CtSceneSetActorPosF(f.vm, pObj, px, py);
       }
     }
+    // The touch latch `$01EB`: C0/881E's head writes 80 on every iteration that runs it (C0/00A7), whether or not a scan
+    // follows, so a frame of the main loop's body on which this host ran no scan leaves no hit; a frame that is not the
+    // body's (the camera's align loop C0/1781, a transfer, a parked loop) leaves the latch as it stood (ct_vm.c, the
+    // lead's op 0xB0).
+    if (f.vm && mlBody && g_touchLatchSeq == touchSeq0) CtSceneSetTouchHit(f.vm, -1);
     if (f.vm) CtSceneCameraInput(f.vm, camReqX, camReqY, leadStartX, leadStartY, 1);   // hand the request + lead foot to the VM camera
     if (!battlePhase && f.vm && ctlLocked && CtSceneActorCount(f.vm) > 1) {   // the script drives Crono: follow
       int pl, sp, ax, ay, fa;                                 // PC1's position/facing while a
@@ -21132,6 +21172,7 @@ int main(int argc, char** argv) {
       printf("gatewarp: op-0xFF %02X ran %d frames -> JML C0:0000\n", gwOp, gwN->frames);
       gwN = NULL; gwNState = 0;
       CtSceneGateWarpDone(f.vm); gwPhase = 0;
+      g_stageRebootLoad = 3;                                         // (its load's posts lead by GATE_WARP_SPC_LEAD)
       FIELD_REBOOT_PEND(w);
     }
     if (!selftest && !g_noPace) hostPace();         // the engine logic (VM delays, anim ticks, the validated px/frame

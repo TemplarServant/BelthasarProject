@@ -3734,6 +3734,12 @@ WRAM-seeded checks with the OAM renderer: a WRAM image carries no VRAM, so every
 capture) also has the same frame's oracle state passes it as CT_SEED_VRAM (Belthasar reads a `.vram` or a CTLS state's
 VRAM, only with the switch on); the tools that seed through Python do it with `ctlib.lake.seed_vram_env`.
 
+`leg-window-enemy-turn-behind-the-arrival-gate-vs-cartridge`: leg 51's second fight: C1/8461 runs whole on every odd pass
+while a PC's turn is pending (`$B186` bit 0 kept by C1/860D), so an enemy behind C1/84B8's arrival gate takes its turn on
+the first odd pass after C1/3833 sets `$9826,X` (f7074; the port: f7082). One mutation.
+`leg-window-touch-latch-stands-through-the-camera-align-vs-cartridge`: leg 55, the End of Time's pillar: `$01EB` is
+written only by C0/881E's head, which the camera's align loop (`$0138`) does not run; the lead's B0 calls the touch with
+the standing hit on the frame the align ends (f212). One mutation.
 `leg-window-enemy-slot-store-is-a-word-vs-cartridge`: the enemy loader's OBJ slot store `$0D00,X` is 16-bit (C0/47C6),
 so `$0D01,X` -- the attribute half of every piece -- loses the last room's value. Playthrough leg 45, `$0D24-$0D27`
 across the load into loc 0D9 (its black frames a free span). One mutation. Found by field_objdata_cmp.py.

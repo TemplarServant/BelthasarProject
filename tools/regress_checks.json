@@ -13357,7 +13357,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "  [wmask] first masked divergence at frame 121; 3 address(es) over 130 frames",
+        "  [wmask] first masked divergence at frame 123; 2 address(es) over 130 frames",
         "  [wmask] mask 420 addr / excluded 21 / oracle-changed 500 / unmodelled 370 / dropped 0"
       ],
       "pin": [
@@ -13400,7 +13400,7 @@
       "expect": [
         "  [wmask] f74   $7E0F41 m=FF ours=FF oracle=07 seed=FF",
         "  [wmask] f74   $7E1B40 m=FF ours=00 oracle=80 seed=00",
-        "  [wmask] first masked divergence at frame 2; 41 address(es) over 130 frames",
+        "  [wmask] first masked divergence at frame 2; 40 address(es) over 130 frames",
         "  [wmask] mask 457 addr / excluded 21 / oracle-changed 509 / unmodelled 318 / dropped 0"
       ],
       "pin": [
@@ -44585,8 +44585,8 @@
       ],
       "expect": [
         "loctrace: -> loc 10F tile(8,8) facing=0 style=0",
+        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10141572 cycles = 73 black frame(s)",
         "loctrace: -> loc 0DF tile(39,14) facing=0 style=0",
-        "sequence: entry 0 (the race) opening at f66 -- 5728360 + 49152 + 9521394 + the song's 10183319 cycles = 73 black frame(s)",
         "sequence: op-0xFF 00 -> JML $C3:0000 ($0384=0) = sequence-table entry 0, and the overlay's machine plays it. (at f66)",
         "sequence: entry 0 (native) ended after 2811 frames from C3:0000",
         "sequence: the race ended ($7E:0000=1) -> reboot into loc 10F",
@@ -51672,6 +51672,76 @@
         }
       ],
       "notes": "2026-11-10, playthrough leg 119 (disasm/notes/playthrough_leg_ledger.md): after a Form exchange the port restored each slot's position in whole pixels into the new object, so Lucca's object stood at $1886 = 0DF0 where the cartridge's stands at 0DFF, and the leg's control hand-off at f15560 came a frame early. The window starts both sides from the cartridge's state at f20 of the leg (made from the route, cached in build/_legwin), opens the menu with the leg's pad, exchanges, returns and walks to the elevator and into the fight's staging; the menu (cartridge f36-f1524) is not graded, the walk after it is, every frame a step. Re-pin only when the route's pad for leg 119 changes; a differing count is a divergence to derive, never to re-pin."
+    },
+    {
+      "name": "leg-window-enemy-turn-behind-the-arrival-gate-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "enemy-turn-behind-the-arrival-gate"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: enemy-turn-behind-the-arrival-gate leg 51 f5100+2320: 423 steps compared, 0 differing",
+        "free:  cartridge f5101-f5235: both come back on 00 07 FF 00 7895 7C99 0000, the port +0 frame(s)"
+      ],
+      "pin": [
+        "^legwindow: enemy-turn-behind-the-arrival-gate ",
+        "^  free:  cartridge f5101-f5235"
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an enemy that sat ready behind the arrival gate takes its turn on the first odd pass after its walk sets the latch, while a PC's turn is pending -- leg 51's second fight, step for step through 2000 frames",
+      "notes": "THE ATB'S HANDLER RUNS WHOLE WHILE A PC'S TURN IS PENDING (2026-11-20). C1/8461 (the status dispatch's array 12) leaves by C1/860D: `LDA $B188 / ORA $B189 / ORA $B18A / BNE` keeps `$B186` bit 0 while any PC's record is pending (bit 7 from the ready moment to the action's reload), so C1/8318's dispatch calls the handler on EVERY odd pass, cursor or no cursor, and its entry check C1/847E reads the combatant at the cursor - 1 again (`LDA $B185 / BNE / LDA $AEC7`, `DEC`, `$B163,X`). An enemy at ATB 0 whose mode request is not one of 0 / 4 / 6 / 0A-10 is refused by C1/84B8 (`LDA $9826,X / BEQ`) until its walk's C1/3833 `INC $9829,X` sets the latch. MEASURED on the rule's cartridge, route leg 51's second fight (PEEK_WRITEWATCH; seat 0 ready, `$B188` = 81, from f7066): enemy 6 = `$B163[0A]`, refused on the pass of f7070 (`$982C` = 00); `$982C` = 01 by C1/3836 on f7072; on the next odd pass (`$0027` = FD, f7074; `$B185` = 00, the cursor wrapped) `$982C` = 00 by C1/84C0 and C1/8D34 and `$986F` = 06 by C1/A712 -- its turn. The port ran only the exit's sweep C1/883D on such a pass (it keeps no `$B188`) and gave the turn when the cursor came round to the enemy again, f7082: eight frames late, every position after it eight frames behind (the pan of a sound a pixel or sixteen off -- the cartridge's tape: `18 51 98` for the port's `18 51 88`). Now the dispatch runs the handler itself. The window grades the enemy's arrival latch, mode request, move target and angle and three position words from the fight's start (f5236) to f7420: 423 steps. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "        battleTurnHandler12(h); if (h->stActOpenAt >= 0) { h->stResumeX = -1; return; }",
+          "replace": "        battleDisabledSweep883D(h); if (battleH12Tail(h, LL_CONT_DISPATCH, -1)) { h->stResumeX = -1; return; }  /* MUT */",
+          "why": "only the exit's sweep on a pass the cursor did not arm: the enemy's turn waits for the cursor"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-touch-latch-stands-through-the-camera-align-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "touch-latch-stands-through-the-camera-align"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: touch-latch-stands-through-the-camera-align leg 55 f150+600: 596 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: touch-latch-stands-through-the-camera-align "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the touch latch keeps its hit while the camera aligns for a tile copy, and the lead's op 0xB0 calls the touch with it on the frame the align ends -- the End of Time's pillar, step for step through 600 frames",
+      "notes": "THE TOUCH LATCH `$01EB` STANDS UNTIL C0/881E WRITES IT AGAIN (2026-11-20). C0/881E opens `LDA #80 / STA $01EB`; the scan C0/9923 stores the hit object's index; the lead's op 0xB0 reads it (C0/304C `JSR C0/5B8D`: carry = bit 7 clear) and C0/3054 calls C0/3154 on every visit -- the touch does not consume it. C0/881E is not every frame's: while the camera aligns for a tile copy (C0/1770 `$0138` = 1; C0/1781's loop calls the align entry C0/885A, which counts `$0138` 1 -> 2 at C0/88BF and clears it at C0/88D8) the latch keeps the hit of the last free frame, and C0/3002's `LDA $38 / BEQ` holds the lead's B0 off until the frame `$0138` is cleared. MEASURED on the rule's cartridge, route leg 55 (loc 1D0, the End of Time's pillar, obj24; PEEK_WRITEWATCH=01EB:1 / 0138:1, --hookpc C03154): `$01EB` = 30 by C0/99A4 on f202 and not written again before f218; `$0138` = 01 by C0/1781 and 02 by C0/88C2 on f203, 00 by C0/88DB on f213; C0/3154 reached on f200, f201, f212 and from f217 on; `$11B0` = 10CA and `$1031` = 00 on f212, the copy's four frames f213-f216, the E8 on f217 with `$1031` = 04, the `00` on f221. The port's latch was one-shot (cleared by the touch) and its host only wrote it on a frame it ran the scan: empty on f212, the call landed on f217 after the queue's build, the E8 ran with the countdown left at 0, the `00` a frame later and the next call two frames on -- one `18 A7` more (the cartridge's tape: `18 A8` where the port sent a third `18 A7`). Now the VM leaves the latch alone and the host writes it on every frame of the main loop's body (the hit, or none) and on no other; C0/319A's `STA $1180,X` is in WRAM at the call. One mutation.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "      CtSceneTouch(sc, sc->touchHit);",
+          "replace": "      { int hit = sc->touchHit; sc->touchHit = -1; CtSceneTouch(sc, hit); }  /* MUT */",
+          "why": "a one-shot latch: nothing to call the touch with when the align ends"
+        }
+      ]
     },
     {
       "name": "leg-window-fight-poses-vs-cartridge",

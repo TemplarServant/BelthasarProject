@@ -593,3 +593,21 @@ countdown reloaded to 4; the port's call lands on f217, the E8 runs in that same
 the `00` on f218 and the next call on f219: one cycle of three frames, one sound more. So it is the frames the main
 loop spends on the E5's transfer (no event pass in them, `$0117` bit 5) against the caller's op -- which of them comes
 first -- not the sound. Not fixed.
+
+**Fixed 2026-11-20 (legs 54, 55).** It was the touch latch, not the scheduling: `$01EB` is written only by C0/881E's
+head (`LDA #80 / STA $01EB`) and by the scan; while the camera aligns for the `E5`'s copy (`$0138` = 1 / 2, C0/1781's loop
+runs C0/885A, not C0/881E) the hit of f202 stands, and on f212 -- `$0138` cleared by C0/88D8 -- the lead's op 0xB0 calls
+the touch with it. The port's latch was one-shot. Check: `leg-window-touch-latch-stands-through-the-camera-align-vs-
+cartridge`.
+
+## The cartridge's clock, redone (2026-11-20)
+
+`cmp --clock` now charges the CPU nothing for its own code (the tape holds it) and real time only for polls of the SPC's
+ports; every store waits for the tape's cycle (leg 20: 293,093 of 293,093 stores, none late). The earlier mode priced C7
+itself and was late by its own error, which moved the fade's lattice: most of what it reported was the harness's (the
+menu blip beside a ready chime on legs 24 / 25 / 35 / 42 / 63 -- leg 24's fight is the cartridge's frame for frame in
+plain mode). On the tape legs 20, 24, 25 and 33 -- DIFFERENT in plain mode -- are SAME: with the SPC fed at the
+cartridge's cycles the port plays them as the cartridge does, so what plain mode shows there is the SPC lattice's timing
+class and nothing else. Real differences the tape found: a song command's record left in the mailbox for a load's queued
+JSLs (leg 29), $7E:317E's 8-bit STZ (leg 47), the ATB handler's whole run while a PC's turn is pending (leg 51: an
+enemy's turn 8 frames late), the touch latch (legs 54 / 55), a $C3 stage's driver reset sixteen frames early (leg 47).

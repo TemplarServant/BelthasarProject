@@ -1006,3 +1006,20 @@ them to +207 / +172 / +5,228, and the attract then runs one to three frames late
 `10` lands 172 APU cycles before a driver tick and its `11` follows at once; the port's, 172 later, misses that tick and
 waits 3,193 for the next, and the load is a frame longer. An in-load post has to stand within about a line (the walk is
 good to two or three) wherever the cartridge's falls that close to a tick; 53 legs graded the same with and without.
+
+## 20. Two more places a stretch's first sound JSL stands (2026-11-20, from the cartridge's tape)
+
+- **The Gate warp's arrival** (FD's tail -> `JML $C0:0000` -> the load): the load's C0/1B73 JSL makes its first store
+  63,866 master cycles past the vblank (leg 29, loc 008: `$2143 = FF at C7/0623`, line 9 h 1122). The port gave that
+  load no lead (its posts came after the iteration's SPC slice, 0.82 frame late): `GATE_WARP_SPC_LEAD` (field.c).
+  (Seen while there: `STAGE_TEARDOWN_SPC_LEAD` was never applied -- the flag was read after it had been cleared, so a
+  teardown's END took the plain END's lead. Applying it moves the demo's last scenes a frame off the cartridge's
+  (attract-1b0-cockpit, the two 1F0 Epoch checks), so it stays as it ran.)
+- **A $C3 stage's opening** (`FF 00` / `FF 09` and the other entries without `$0384` bit 5 / 7): the driver reset
+  $7E:3177 comes after the overlay's decompression and the common init, `TITLE_OPEN_AT + TITLE_RESET_LEAD` past the
+  vblank -- the title's constants, the same code (leg 47's race: `$0384 = 00 by C3/003B` on f337, `$2143 = FF at 7E/3789`
+  on f353 line 133, 5,950,345 master past f337's vblank by the SPC's count). The port made the posts at the open:
+  sixteen frames early, so the song it starts led the picture by that much. `stageOpenSpcLead` (field.c) runs the SPC
+  that lead first, owed by the black frames. NOT done: the open's posts on the quiet background (the port prices the
+  race song's upload with the field's HDMA mean, 4% long, +0.83 frame) -- the race's hold formula only gives the
+  cartridge's 65 black frames (decompression f336-f352, C7 f353-f372, setup f373-f400) with that error in it.

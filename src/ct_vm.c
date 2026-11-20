@@ -2823,9 +2823,15 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     if (op != 0xB2 && sc->touchHit >= 0 && sc->touchHit < sc->nobj
         && r8(sc->mem, 0x7E0138) == 0                      // C0/3002's $0138 early-out
         && CtSceneActorMode((const CtScene*)sc, obj) == 0) { // state 0 = the lead PC only
-      int hit = sc->touchHit;
-      sc->touchHit = -1;                                     // one shot: the ROM's latch is re-armed
-      CtSceneTouch(sc, hit);                                 //   to 0x80 by the next frame's C0/881E
+      // The latch is not consumed: `$01EB` keeps the scan's verdict until C0/881E's head writes 80 again (C0/881E `LDA
+      // #80 / STA $01EB`), and that head does not run on every frame -- while the camera aligns for a tile copy
+      // (`$0138` != 0, C0/1781's loop calls the align entry C0/885A, not C0/881E) the hit of the last free frame stands,
+      // and on the frame C0/88D8 clears `$0138` the lead's op 0xB0 passes C0/3002's test and C0/3054 calls the touch
+      // with it. MEASURED on the rule's cartridge, route leg 55 (the End of Time, obj24's fn2): `$01EB` = 30 by C0/99A4
+      // on f202, no write of it to f218 (`$0138` = 01 by C0/1781 and 02 by C0/88C2 on f203, 00 by C0/88DB on f213); the
+      // lead reaches C0/3154 on f212 -- `$11B0` = 10CA, `$1031` = 00 -- and the copy's four frames follow. The host
+      // writes the latch whenever its C0/881E runs (CtSceneSetTouchHit: the hit, or none).
+      CtSceneTouch(sc, sc->touchHit);
     }
     if (op == 0xAF) s->addr = nxt;                           // C0/2FFD's INX
     return 1;
@@ -6798,6 +6804,8 @@ void CtSceneTouch(CtScene* sc, int obj) {
     if (fn >= 0 && fn < sc->blen) {
       if (st->addr >= 0) st->ret[st->prio] = ssPushAddr(st);   // push the running fn ($1180) to its return slot
       st->addr = fn; st->prio = 2; st->tb = 0;              // C0/319F: fn2 at priority 2
+      { uint32_t ipw = (uint32_t)(fn + sc->header);         // C0/319A STA $1180,X, in WRAM now (as a CALL's, above)
+        w8(sc->mem, 0x7E1180 + (uint32_t)obj * 2, ipw & 0xFF); w8(sc->mem, 0x7E1181 + (uint32_t)obj * 2, (ipw >> 8) & 0xFF); }
       ctSetDc(sc, obj, 0);                                  // 31AA STZ $1001,X (beside the 1A80/1A01 zeroes below)
       vmTicketStop(sc, obj);                               // the touch stops the actor's in-flight move
     }

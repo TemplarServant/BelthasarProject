@@ -16845,9 +16845,16 @@ static void battleStatusDispatch(CtBattleHost* h, int from) {
       // C1/883D run on every odd pass then. The port clears the bit on its own pass (it keeps no $B188 for a live PC),
       // so that pass's sweep is made here.
       if (x == 12 && h->schedN > 0) { battleTurnHandler12(h); if (h->stActOpenAt >= 0) { h->stResumeX = -1; return; } continue; }
+      // ...and it is the WHOLE handler that runs then, its entry check included: C1/847E reads the combatant at the
+      // cursor - 1 again (`$AEC7 - 1` once the cursor pass has walked off the end), so an enemy that sat ready behind
+      // the arrival gate C1/84B8 takes its turn on the first odd pass after its walk's C1/3833 set `$9826,X` -- not
+      // twelve frames on, when the cursor comes round to it. MEASURED on the rule's cartridge, route leg 51's second
+      // fight (seat 0 ready, `$B188` = 81, from f7066): enemy 6 (`$B163[0A]`) refused on the pass of f7070 with
+      // `$982C` = 00, `INC $9829,X` by C1/3836 on f7072, and on the next odd pass, f7074 -- `$B185` = 00, the cursor
+      // wrapped -- `$982C` = 00 by C1/84C0 and C1/8D34, `$986F` = 06 by C1/A712: its turn. The port ran only the
+      // exit's sweep here and gave the turn at f7082.
       if (x == 12 && (h->pcInTurn[0] || h->pcInTurn[1] || h->pcInTurn[2])) {
-        battleDisabledSweep883D(h);                                // C1/860A JSR C1/883D
-        if (battleH12Tail(h, LL_CONT_DISPATCH, -1)) { h->stResumeX = -1; return; }   // C1/860D-883C (a revive: it waits)
+        battleTurnHandler12(h); if (h->stActOpenAt >= 0) { h->stResumeX = -1; return; }
       }
       continue;
     }
