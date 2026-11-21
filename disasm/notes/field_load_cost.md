@@ -1023,3 +1023,27 @@ good to two or three) wherever the cartridge's falls that close to a tick; 53 le
   that lead first, owed by the black frames. NOT done: the open's posts on the quiet background (the port prices the
   race song's upload with the field's HDMA mean, 4% long, +0.83 frame) -- the race's hold formula only gives the
   cartridge's 65 black frames (decompression f336-f352, C7 f353-f372, setup f373-f400) with that error in it.
+
+## 21. The menu open: its prelude's place and its two frames of SPC (2026-11-20)
+
+The menu shell (C2/8000 mode 3; the naming screen too) opens with the NMI off at C0/0B5D and posts its prelude C2/8096
+after 251,806 master cycles of the stash's work: first store 263,564 past the vblank (line 156 h 312). The iteration
+that opens it runs through two vblanks before its next wait, so by the SPC's clock the open is one frame longer than its
+iterations count: leg 55's f2890 / f2891 / f2892 end on line 47 / 139 / 225 and take 39,696 / 23,058 / 5,595 SPC cycles.
+The port gave it three frames and posted at the frame's start; after any menu its sounds were sent a frame early by the
+SPC's clock and the driver's lattice stood a frame off the game (the cartridge's tape showed it as a constant 17,120-
+cycle lead on every later post: legs 55, 82). `menuPreludeSpc` (field.c). The menu's return (f2896-f2898: 19,913 / 17,319
+/ 14,032) is three frames in three. Check: `leg-sound-menu-open-keeps-the-spc-with-the-cartridge-vs-cartridge`.
+
+## 22. A menu's sound JSL meets the menu's HDMA (2026-11-20)
+
+The menu NMI C2/8420 writes `$420C` = `$0D13 & 7F` on a frame the main thread finished (`$0D01` >= 0: C2/843C `STZ $420C`,
+`JSR C2/85D6`, C2/8442-8446) and nothing on a frame it did not (`$0D01` = FF: C2/8436 BPL not taken) -- as every NMI
+inside a sound JSL. So an upload posted from a menu runs with the HDMA the last full NMI left. The party exchange's song
+task (C2/CBBF, `14 3E` + `81 01 FF`): `$0D13` = 00 from C2/940D's fill to C2/CE86 at P, `$0D01` = FF through the upload
+(recipe gato_wait, Y at f20: f52-f83) -- no HDMA. On the rule's cartridge the upload takes 552,353 SPC cycles (first
+store 202,950,867, the `81` at 203,503,220); with the field's mean (14,310 master a frame) the port took 567,099 and,
+once the menu open's SPC time was the cartridge's (sec. 21), ended a vblank late: the cursor at f87 for f86. With no
+HDMA the port's block markers stand 7 to 385 cycles from the cartridge's over the 66 blocks. Not derived: the cost of a
+menu's own channels (`$0D13` != 0, the exchange's 11 after P); the field's mean stands for them. Check:
+`menu-exchange-vs-oracle` (one mutation).

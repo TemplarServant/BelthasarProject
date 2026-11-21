@@ -644,3 +644,7 @@ Found with the cartridge's tape (every CPU store to $2140-$2143, `tools/playthro
 - **$7E:317E `STZ $1E02` is 8-bit** (the $C3 stage's driver reset): `85 00 00 FF` on leg 47, not `.. 00`.
 Checks: `leg-sound-song-command-leaves-its-record-in-the-mailbox-vs-cartridge`, `leg-sound-stage-driver-reset-keeps-the-
 fourth-byte-vs-cartridge` (`bytes=4` cases of tools/leg_sound_cmp.py).
+
+- **A corpse's death sound** (`18 95`, CD/0043) comes after its frame's menu pass: its wait is CD/3E75, which runs the
+  pass (CD/3E78 -> C1/10E3) before the routine goes on (leg 100: `19 00 80`, then `18 95 A1`, one frame). Check:
+  `leg-sound-death-sound-after-the-menu-pass-vs-cartridge`.

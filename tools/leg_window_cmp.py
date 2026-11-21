@@ -156,6 +156,25 @@ WINDOWS = {
     # script pointer and cadence pair, and `$0138`.
     'touch-latch-stands-through-the-camera-align': dict(leg='55_', start=150, frames=600,
                                                         cells=[('7E11B0', 2), ('7E1030', 2), ('7E0138', 1)]),
+    # The End of Time's Gate (loc 1D0, op FF 8x -> the $FD warp): the warp's program takes over on the jump's own frame,
+    # and that frame's head NMI was still the field's -- the play clock `$0400` ticks once more (38 -> 39 at the frame
+    # FD/EAA6 saves the flags in, `$7F:74B3`); and FD/DB97's setup writes its WRAM on the frame its CPU reaches each
+    # store -- the mode-7 map over the scratch `$7F:0000` three frames after the flags' copy. The port stopped the clock a
+    # tick short (every later load seeded `$01F8` one short: leg 84's idle blink on another PC, 280 px) and wrote the
+    # map in the hand-off's frame (legs 54, 56, 84: the story byte three frames early).
+    # Op 0xFF's own fade (C0/3FBB, the Proto Dome's Gate): the visit never returns, so the iteration that began the fade
+    # runs nothing after the runner -- no C0/00C7 table set, no `$0153` flip -- and the field IRQ steps the tile animation
+    # (`$051D`) on every frame of the fade. The port flipped `$0153` in the op's frame and the tiles stood still: 15 steps
+    # behind for the rest of the route (the End of Time's pillar flame, 133 px at leg 54's end).
+    # Scene 0AC's `FF 9B` after Magus: C0/21E1's entry 0B (C0/260E) waits on two C0/EC60 and C0/024C's regroup before its
+    # `LDA #85 / JML C3:0000` -- three frames of the field's NMI, whose C2/85AE ticks the play clock `$0400`. The port
+    # opened the vortex on the first and stopped the clock there: every later load seeded `$01F8` three short. (`$010F` = 80
+    # at C0/263D and `$0384` at C3/0038 come after the waits too.)
+    'vortex-opens-after-three-field-frames': dict(leg='95_', start=83960, frames=40, cells=[('7E0400', 1), ('7E0384', 1), ('7E010F', 1)]),
+    'op-ff-fade-keeps-the-table-set': dict(leg='54_', start=30800, frames=60,
+                                           cells=[('7E0153', 1), ('7E051D', 1), ('7E0119', 1)]),
+    'gate-warp-takes-over-on-the-fields-nmi': dict(leg='56_', start=1650, frames=120,
+                                                    cells=[('7E0400', 1), ('7F0000', 1), ('7F74B3', 1)]),
     'fight-poses': dict(leg='119_', start=16200, frames=5900, free=[(16201, 16420), (21440, 21449)],
                         cells=[('7E968C', 3), ('7E9922', 3), ('7EA098', 1), ('7E96DB', 3)]),
     # The 2300 A.D. map, world 1F2: the Epoch sets down (`$0294` = F3, the BG3 visit skipped) with the lead's velocity

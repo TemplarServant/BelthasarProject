@@ -445,3 +445,21 @@ longer builds gwarp_fd.c (CMake `CT_XLAT_NO_GWARP`); ct.exe keeps it for the `se
 and in the host, unchanged from the translated program's: field-scene8-gate-warp-flow (880 frames, loc 071, the selftest's hash
 1F8E6191), gwarp_cmp 880 / 880, gate_transition_cmp 0 / 116 + 0 / 912 + 0 / 300, gate_arrival_cmp 0 px. The SPC now runs its
 frame with the field's (CtAudioFrame) through the warp -- the warp never touches it -- where the translated stage's bus ran it.
+
+## The hand-off frame: the field's NMI and the setup's stores (2026-11-20)
+
+The warp's program opens on the jump's own frame (C0/3FD3 `JSR C0/0B4E`, the JML, FD/DB97), and that frame's head NMI was
+the field's: the play clock `$0400` ticks once more before the 112 frames of NMI-off setup. The setup's WRAM stores land
+on the frame its CPU reaches them: FD/EAA6's copy of the flags (`$7F:74B3`) in the hand-off's frame, FD/F1ED's map over
+the scratch `$7F:0000` three frames later (after DBD7-DBF0's 16,384 character words). Route leg 56, the rule's cartridge:
+`$0119` = 00 f1699; `$0400` +1 and `$7F:74B3` = 4D f1700; `$7F:0000` = 40 f1703. The port lost the tick (the next load's
+C0/0C70 seeded `$01F8` one short -- leg 84's idle blink on another PC) and built the map at once (the story byte three
+frames early on legs 54, 56, 84). field.c `gwOpenF`, seq_gwarp.c `GW_MAP_FRAME` / `setupMap`. Check:
+`leg-window-gate-warp-takes-over-on-the-fields-nmi-vs-cartridge` (two mutations).
+
+## The op's own fade holds the main loop (2026-11-20)
+
+C0/3FBB's fade loop (`3FC1 DEC $19 / JSR C0/881E / JSL FD/FFF7 / JSR C0/EC60`) is inside the op's visit: the iteration
+that began it never reaches C0/00C7, so FD/C2C1 does not flip `$0153` and the field IRQ steps the tile animation on every
+frame of the fade (leg 54: `$051D` BD -> CC over f30829-f30843, `$0153` = 01 throughout). ct_vm.c CtSceneTick ends after the
+runner on that tick (FD/FFF7 only). Check: `leg-window-op-ff-fade-keeps-the-table-set-vs-cartridge`.

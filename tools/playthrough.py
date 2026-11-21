@@ -3,7 +3,7 @@ r"""The playthrough: one route from power-on to "The End", played on the rule's 
 
     python tools/playthrough.py try  <leg> "<pad>"     play <pad> on the cartridge from the leg's start (authoring)
     python tools/playthrough.py play <leg>|all          play the route's legs on the cartridge, writing their end states
-    python tools/playthrough.py cmp  <leg>|all [-v] [-jN] each leg on both sides from its start state, compared (-jN: N legs at a time)
+    python tools/playthrough.py cmp  <leg>[,<leg>..]|all [-v] [-jN] each leg on both sides from its start state (-jN: N at a time)
     python tools/playthrough.py scene <leg> "<pad>"     authoring: the pad, then a scene played by its boxes (A when one waits)
 
 The route (tools/playthrough/route.txt) is the cartridge's pad, frame by frame, in the --btnscript grammar (`hexbtn:frames`,
@@ -37,6 +37,10 @@ printed (the offset, informational). One line a leg:
 fight's exit release follow the SPC driver's tick lattice, which follows C7's pace to a few hundred cycles -- timing the
 game does not reproduce (CLAUDE.md, the 2026-11-07 decision); on the tape they are the cartridge's, so what still differs
 is behaviour. The plain `cmp` stays the port's own clock.
+
+The cartridge's side of a compare (its tape, its timeline, its last picture: three replays of the leg) is kept in
+build/_playthrough_cart/, keyed by the start state's bytes, the pad, the oracle and the CT_ORACLE* / PEEK_* environment:
+a second `cmp` of a leg runs the port alone. PT_NOCACHE=1 plays the cartridge again.
 """
 import hashlib
 import os
@@ -409,9 +413,48 @@ def oracle_play(start, pad, out_state, png=None):
     return os.path.exists(out_state)
 
 
+# The cartridge's side of a leg's compare never changes while the route, the start state and the oracle stand, and it
+# is three replays of the leg (the tape, the timeline, the last picture): `cmp all` spent hours on them every time. They
+# are kept in build/_playthrough_cart/<key>, the key made of the run's kind, the start state's bytes, the pad, the
+# oracle (as key_of takes it) and the CT_ORACLE* / PEEK_* environment the cartridge runs under. PT_NOCACHE=1 plays them again.
+CART_CACHE = os.path.join(ROOT, 'build', '_playthrough_cart')
+_SHA = {}
+
+
+def _cart_key(kind, start, pad, extra=''):
+    if os.environ.get('PT_NOCACHE') == '1' or start == 'boot' or not os.path.exists(start):
+        return None
+    if 'oracle' not in _SHA:
+        _SHA['oracle'] = _oracle_sha()
+    st = (start, os.path.getsize(start), os.path.getmtime(start))
+    if st not in _SHA:
+        with open(start, 'rb') as f:
+            _SHA[st] = hashlib.sha1(f.read()).hexdigest()
+    h = hashlib.sha1()
+    for part in (kind, btnscript(pad), extra, _SHA['oracle'], _SHA[st],
+                 repr(sorted((k, v) for k, v in RULE.items() if k.startswith(('CT_ORACLE', 'PEEK_'))))):
+        h.update(part.encode() + b'|')
+    return os.path.join(CART_CACHE, h.hexdigest() + '.' + kind)
+
+
+def _cart_put(path, data):
+    if not path:
+        return
+    os.makedirs(CART_CACHE, exist_ok=True)
+    tmp = '%s.%d.tmp' % (path, os.getpid())
+    with open(tmp, 'wb') as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
 def oracle_timeline(start, pad, mon=None):
     mon = mon or MON
     frames = sum(n for _, n in pad)
+    ck = _cart_key('timeline', start, pad, repr(mon))
+    if ck and os.path.exists(ck):
+        import json
+        with open(ck, 'r') as f:
+            return [(f_, d) for f_, d in json.load(f)]
     r = subprocess.run([CT, ROM, '--monitor', ','.join('%s:%d' % (a, n) for _, a, _, n in mon), '--from', start,
                         '--input', btnscript(pad), '--frames', str(frames), '--diff'], cwd=ROOT, env=RULE,
                        capture_output=True, text=True, errors='replace')
@@ -423,6 +466,9 @@ def oracle_timeline(start, pad, mon=None):
         kv = dict(re.findall(r'\b([0-9A-F]{6})=([0-9A-F]+)', m.group(2)))
         if all(a in kv for _, a, _, _ in mon):
             out.append((int(m.group(1)), {k: kv[a] for k, a, _, _ in mon}))
+    if ck and out and r.returncode == 0:
+        import json
+        _cart_put(ck, json.dumps(out).encode())
     return out
 
 
@@ -431,6 +477,11 @@ def oracle_tape(start, pad, out):
     """The cartridge's clock for a leg (cmp --clock): every store its CPU makes to $2140-$2143, `port value apuc` a line,
     in order -- the port's CT_APUTAPE (src/audio.c). Read off `--peek` PEEK_APUTRACE; nothing of the oracle changes."""
     frames = sum(n for _, n in pad)
+    ck = _cart_key('tape', start, pad)
+    if ck and os.path.exists(ck):
+        shutil.copyfile(ck, out)
+        with open(out, 'rb') as f:
+            return f.read().count(bytes((10,)))
     raw = os.path.join(TMP, 'tape.raw')
     pr = subprocess.Popen([CT, '--peek', start, raw, '--frames', str(frames), '--btnscript', btnscript(pad) or '0:0'], cwd=ROOT,
                           env=dict(RULE, PEEK_APUTRACE='0:%d' % frames), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -444,6 +495,9 @@ def oracle_tape(start, pad, out):
             if m:
                 fh.write('%s %s %s' % m.groups() + chr(10)); n += 1
     pr.wait()
+    if ck and n and pr.returncode == 0:
+        with open(out, 'rb') as f:
+            _cart_put(ck, f.read())
     return n
 
 
@@ -519,14 +573,24 @@ def port_timeline(start, pad, first=0):
         m = re.match(r'fmemmon f(\d+) loc=\S+\s+(.*)', line)
         if not m:
             continue
+        # The port runs on past the leg's end for its pictures (SHOTS); the cartridge's timeline stops at the leg's last
+        # frame, and the port's keys are the cartridge's one frame later. A value the next leg's first frames set is not
+        # this leg's (leg 56: story 4E three frames into leg 57 on both sides, read as a difference of 56).
+        if int(m.group(1)) > end + 1:
+            continue
         kv = {k: v.rstrip('*') for k, v in re.findall(r'\b([0-9A-F]+)=([0-9A-F*]+)', m.group(2))}
         if all(p in kv for _, _, p, _ in MON):
             out.append((int(m.group(1)), {k: kv[p] for k, _, p, _ in MON}))
     return out, pics
 
 
-def oracle_picture(start, pad):
-    """The cartridge's picture on the leg's last frame (256x224 rgb)."""
+def oracle_picture(start, pad, cache=False):
+    """The cartridge's picture on the leg's last frame (256x224 rgb). It leaves the run's end.raw (+ .wram / .vram / .oam)
+    in TMP, which other tools read -- so only `cmp` (cache=True) takes it from the cache, which keeps the picture alone."""
+    ck = _cart_key('picture', start, pad) if cache else None
+    if ck and os.path.exists(ck):
+        with open(ck, 'rb') as f:
+            return f.read()
     oracle_play(start, pad, os.path.join(TMP, 'cmp_end.state'))
     o = open(os.path.join(TMP, 'end.raw'), 'rb').read()
     px = bytearray()
@@ -535,6 +599,7 @@ def oracle_picture(start, pad):
         for x in range(256):
             i = (r + x * 2) * 4
             px += bytes((o[i + 3], o[i + 2], o[i + 1]))
+    _cart_put(ck, bytes(px))
     return bytes(px)
 
 
@@ -583,6 +648,7 @@ def cmp_leg(legs, i, verbose):
         return None
     if not os.path.exists(start):
         sys.exit('playthrough: %s has no start state (%s): run `play all` first' % (lg['name'], start))
+    os.makedirs(TMP, exist_ok=True)                          # (a cached cartridge side makes no file of its own here)
     if CLOCK:                                                # the cartridge's clock: its SPC stores, replayed (CT_APUTAPE)
         tape = os.path.join(TMP, 'aputape.txt')
         oracle_tape(start, lg['pad'], tape)
@@ -598,7 +664,7 @@ def cmp_leg(legs, i, verbose):
         os.environ['CT_LITTAPE'] = lit
     ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
     o, p = chains(otl), chains(ptl)
-    k, npx = picture_grade(oracle_picture(start, lg['pad']), pics)
+    k, npx = picture_grade(oracle_picture(start, lg['pad'], cache=True), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0
     if CLOCK:
         m = re.search(r'^aputape: MISMATCH.*$', PORT_STDERR, re.M)
@@ -723,7 +789,7 @@ def main():
             if not ok:
                 sys.exit(1)
     elif a[0] == 'cmp':
-        todo = range(len(legs)) if a[1] == 'all' else [find(legs, a[1])]
+        todo = range(len(legs)) if a[1] == 'all' else [find(legs, n) for n in a[1].split(',')]   # (a leg, or a,b,c)
         ensure_states(legs, max(todo) - 1) if max(todo) > 0 else None
         jobs = [int(x[2:] or os.cpu_count() or 1) for x in a if x.startswith('-j')]
         if jobs and jobs[0] > 1 and len(todo) > 1:

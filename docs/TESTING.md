@@ -3711,6 +3711,20 @@ object visited once op 0xFF < $90 has the frame. One mutation each.
 `10 1B` (C7/0A39-0A51's record in `$1E02` / `$1E03`, kept by a load's queued JSLs).
 `leg-sound-stage-driver-reset-keeps-the-fourth-byte-vs-cartridge`: leg 47's race: $7E:317E's `STZ $1E02` is 8-bit,
 the reset's commands go out `.. .. .. FF`. One mutation each.
+`leg-sound-all-party-target-has-no-cursor-vs-cartridge`: leg 122: C1/209A sets `$960C` = 80 for a whole-party target,
+so C1/15F4 skips the navigation and its blip. One mutation.
+`leg-sound-death-sound-after-the-menu-pass-vs-cartridge`: leg 100: CD/0043 posts the death's `18 95` after its wait
+CD/3E75, which runs the frame's menu pass first. One mutation.
+`leg-sound-menu-open-keeps-the-spc-with-the-cartridge-vs-cartridge`: leg 55: the menu shell's prelude stands 263,564
+master cycles past the vblank and its open is two frames of SPC; the check sets the two SPC clocks side by side
+(`apuc=True`). One mutation.
+`leg-window-gate-warp-takes-over-on-the-fields-nmi-vs-cartridge`: leg 56 f1650+120: the play clock ticks on the Gate
+warp's hand-off frame (the field's NMI) and FD/DB97's map over `$7F:0000` lands three frames after the flags' copy.
+Two mutations.
+`leg-window-op-ff-fade-keeps-the-table-set-vs-cartridge`: leg 54 f30800+60: op 0xFF's own fade never returns to the
+main loop, so `$0153` is not flipped and the field IRQ steps the tile animation `$051D` every frame of the fade. One mutation.
+`leg-window-vortex-opens-after-three-field-frames-vs-cartridge`: leg 95 f83960+40: C0/260E's three waits before entry 5's
+JML tick the play clock, and `$010F` / `$0384` land on the last. One mutation.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles

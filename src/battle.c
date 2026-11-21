@@ -829,6 +829,17 @@ static void battleScriptSfxFlush(CtBattleHost* h) {
   for (int k = 0; k < gScriptSfxN; k++) battleSfxPost(h, gScriptSfxQ[k].cmd, gScriptSfxQ[k].id, gScriptSfxQ[k].pan);
   gScriptSfxN = 0;
 }
+// ...and a corpse's death sound the same way. CD/0043 is the death routine's wait: `JSR CD/3E75 / JSL CD/04AA` until `$CCEA`
+// is 0, and CD/3E75 is the frame's wait WITH the menu pass (CD/3E78 `JSL C1/0012` -> C1/10E3 when `$993A` asks), so the
+// `LDA #95 / JSR CD/3B71` that follows comes after that frame's pass and its blip. MEASURED on the rule's cartridge,
+// route leg 100 (the Lair's grind, the fight of f28753): `19 00 80` and then `18 95 A1` in one frame; the port's death
+// tick runs with the frame's service, ahead of the pass, and posted the 95 first.
+static struct { uint8_t pan; } gDeathSfxQ[8];
+static int gDeathSfxN;
+static void battleDeathSfxFlush(CtBattleHost* h) {
+  for (int k = 0; k < gDeathSfxN; k++) battleSfxPost(h, 0x18, 0x95, gDeathSfxQ[k].pan);
+  gDeathSfxN = 0;
+}
 // The same post without a pan write. C1/40D3-40DD is `LDA #FF / STA $1E01 / LDA #18 / STA $1E00 /
 // JSL $C7:0004` with no $1E02 store, so the driver sees whatever pan the previous post left.
 static int battleSfxPostNoPan(CtBattleHost* h, uint8_t cmd, uint8_t id) {
@@ -5585,7 +5596,14 @@ static void battleTargetCancel(CtBattleHost* h) {
 // C1/1F8F-1F9B + the group handler: `$99C0` (the eligible list) and `$A62D` (the lit targets) FF-filled, then the list,
 // and `$A62D[0] := $99C0[$9614]` for a single group (C1/1FF8's arity, law 6), the whole list for an all-targets group.
 static void battlePcTargetPublish(uint8_t* s, const int* list, int n, int idx) {
+  s[0x960F] = s[0x95D5]; s[0x9610] = 0;                                 // C1/1F79 LDA $95D5 / TAX / STX $960F (16-bit X)
   s[0x960C] = 0;                                                        // C1/1F83 (a radius select may have left 80)
+  // ...and the every-PC handler sets it again: C1/209A (groups 01 and 04) `LDX #0003 / STX $80 / LDX #0000 / LDA #80 / STA
+  // $960C / BRA C1/2045` -- no cursor to move, so C1/15F4 `LDA $960C / BMI` skips the navigation and its blip (C1/1602 /
+  // C1/1611). MEASURED on the rule's cartridge, route leg 122 (the Golem Twins, an item on the whole party, `$960D` = 81):
+  // `$960C` = 80 through the select, and the Down of f3369 (`$EF` = 04, the pass of f3371) posts nothing; the port kept
+  // 00 and blipped.
+  { int g = s[0x960D] & 0x7F; if (g == 0x01 || g == 0x04) s[0x960C] = 0x80; }
   for (int i = 0; i < 12; i++) { s[0x99C0 + i] = 0xFF; s[0xA62D + i] = 0xFF; }
   for (int i = 0; i < n; i++) s[0x99C0 + i] = (uint8_t)list[i];
   if (battleGroupAll(s[0x960D])) { for (int i = 0; i < n; i++) s[0xA62D + i] = (uint8_t)list[i]; }
@@ -14693,7 +14711,8 @@ static void battleDeathSfxTick(CtBattleHost* h) {
       continue;
     }
     uint8_t pan = h->mvInited ? (uint8_t)BT_LIVEX(h, cmb) : s[0x1D0C + cmb];   // $1D0C[$CD00]
-    battleSfxPost(h, 0x18, 0x95, pan);                           // CD/3B71: $1E01=95, $1E00=$18, $1E02=pan
+    if (gBattleSndOn && gDeathSfxN < 8) gDeathSfxQ[gDeathSfxN++].pan = pan;   // CD/3B71: $1E01=95, $1E00=$18, $1E02=pan --
+                                                                 //   after this frame's menu pass (battleDeathSfxFlush)
     // CD/00A0 `$CD01 = 7`, then CD/00A5: with `$99D2 == 0` the death's fade record -- CE:EFE1-EFE9 into $CCD9..$CCE1
     // (`40 C0 0F 10 00 01 01 00 FF`: mode 4 sub-mode 1 over CGRAM $C0 + 15, OBJ palette 4) and `$CCE5 |= 80`; the NMI's
     // CD/0C4F makes it record 10 ($0598) the next frame and FD/E39C pulls every colour's red toward 31 over 16 frames
@@ -21335,6 +21354,7 @@ int CtBattleTick(CtBattleHost* h, int endRequest, int input) {
   CtBattlePictureTables(h, 0);                                  // (a compose that did not hand the page back)
   int r = battleTickBody(h, endRequest, input);
   if (h && h->mem) battleTypeStepAfterPass(h);                 // (a frame that left before its pass: the step all the same)
+  if (h && h->mem && gDeathSfxN) battleDeathSfxFlush(h);       // (...and a death's post: this frame's, pass or no pass)
   battleIrqFrame(h);                                           // D1/FE97, at the bottom of the frame's picture
   // (a frame whose path made no compose of its own -- the boot, a blocked exit, a stalled main thread: the service ran
   //  it all the same, with the state the frame leaves)
@@ -22016,6 +22036,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   }
   battleOamPosesBefore(h);                                         // (the action's script is the main loop's: below)
   if (gScriptSfxN) battleScriptSfxFlush(h);                        // (a frame that left before its pass)
+  if (gDeathSfxN) battleDeathSfxFlush(h);
   gScriptSfxDefer = wasFrozen ? 1 : 0;                             // an action's frame: the script's sounds after C1/10FA
   battleAdvanceAction(h);
   if (!wasFrozen) battleScriptSfxFlush(h);
@@ -22123,6 +22144,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
     if (!h->menuPassHold && s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }   // C1/10FA
     battleTypeStepAfterPass(h);                                  // 11110 `JSL CD0009`: the step, after the pass
     battleScriptSfxFlush(h);                                     // ...and the script goes on: its sound ops (above)
+    battleDeathSfxFlush(h);                                      // ...and CD/0043's post, after its wait's pass
     if (!s[0xA013]) {                                           // C1/41BA STZ $A013 ran this frame: the handler returns,
       h->iterPh = 0; s[0x00E5] = 0;                             //   the next head runs here ($E5 still C1/4062's 0)
       // ...into a status timer's handler, whose dispatch loop (C1/8339 INX) goes on with the next arrays and the ATB's
@@ -22180,6 +22202,7 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // timers (C1/8129 `JSR C1/0003` runs the iteration first). Consumes the $993A the NMI raised, on this frame or on the
   // frame A before it, then `STZ $EE`.
   if (s[0x993A]) { s[0x993A] = 0; battleMenuPass(h, masha, "live"); s[0x00EE] = 0; }
+  battleDeathSfxFlush(h);                                        // (CD/0043's post, after the frame's pass)
   BT_MV_FLUSH();                                                // C1/10DC JSR C1/3714 / C1/10DF JSR C1/283D (frame B)
 #undef BT_MV_FLUSH
 

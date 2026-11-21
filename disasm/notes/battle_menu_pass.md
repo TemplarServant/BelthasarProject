@@ -257,3 +257,10 @@ C1/84B8 on f7070, `INC $9829,X` (C1/3836) on f7072, its turn on f7074 (`$982C` =
 C1/A712). The port ran only C1/883D on such a pass and gave the turn 8 frames late. The cartridge's `$93EE,X` over a PC's
 turn, for the record: 81 ready, 41 command confirmed (`$99D4` FIFO), 01 dispatched, 00 at the reload; the port keeps 81 and
 its own `pcInTurn` (sec. 7, still open). Check: `leg-window-enemy-turn-behind-the-arrival-gate-vs-cartridge`.
+
+## 14. A whole-party target has no cursor (2026-11-20)
+
+C1/1FF8's handlers that set `$960C` = 80: C1/209A (groups 01, 04: every PC), C1/20B6 (08, 0A) and C1/20C6 (09) on the
+enemy side, C1/27E8 (the radius builds). C1/15F4 `LDA $960C / BMI` then skips the direction arms and their blip. The
+port's PC-side publish did not set it for 01 / 04 (leg 122: a Down in an item's whole-party select blipped). Check:
+`leg-sound-all-party-target-has-no-cursor-vs-cartridge`.

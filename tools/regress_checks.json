@@ -21789,10 +21789,16 @@
           "find": "                                          menuFormPickTask = 1; }          // ... C2/C6B0 JMP C2/8A31: the Form's slot-6 task",
           "replace": "                                          menuFormPickTask = 0; }   /* MUT */",
           "why": "the exchange's first pick starts C2/8A45's blink task"
-        }
+        },
+          {
+            "file": "src/field.c",
+            "find": "            if (menuHdmaOff) CtAudioSetRuleHdma(g_fieldAudio, s7, 1, 0, 0, -1);",
+            "replace": "            (void)menuHdmaOff;  /* MUT: the field's mean HDMA */",
+            "why": "the song's upload meets the field's mean HDMA: 14,746 SPC cycles longer, the cursor a frame late"
+          }
       ],
       "note_pass": "the party exchange (menu mode 5, screen $07) is the cartridge's frame for frame: Y on the field at storyline 0x49, the song task, the cursor on the two columns, Robo picked from the reserve and swapped for Marle, the close and the field's return -- every byte the screen owns equal over 2267 frame-fields",
-      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0. | 2026-10-18: + the BG3 wave's bytes ($0F10-$0F1D, $0D0C-$0D0F, $9240-$925F) from P: C2/CE86's FF/F677 and C2/CE9D at P, FF/F716 every second frame to the close's `11` post (menu.c CtMenuExchWaveInit / Tick); 2852 frame-fields, 0 differing. | 2026-10-18: + $0DA0, the picked hand's blink, f146-230: the exchange's pick runs the Form's slot-6 task (C2/C6B0 JMP C2/8A31 -> C2/8A45 / C2/8B6E); 2937 frame-fields."
+      "notes": "Roadmap G1a item 2 (2026-10-14). disasm/notes/menu2_form_screen.md 2.14. The recipe gato_wait on both sides (its state on the cartridge under the rule, its WRAM dump on the port with its SPC: CT_AUDIO_SEEDSTATE + CT_AUDIO_LOCKSTEP), `7F0000=49, 2982=02, 2983=03, 0126=00` poked on both. The cartridge's milestones are printed on the second line, so a recipe that changed under the check is visible. The picture is not graded here (its BG3 wave, prompt text and hooded figure are OPEN). Re-pin only with both sides read again; the 0 must stay 0. | 2026-10-18: + the BG3 wave's bytes ($0F10-$0F1D, $0D0C-$0D0F, $9240-$925F) from P: C2/CE86's FF/F677 and C2/CE9D at P, FF/F716 every second frame to the close's `11` post (menu.c CtMenuExchWaveInit / Tick); 2852 frame-fields, 0 differing. | 2026-10-18: + $0DA0, the picked hand's blink, f146-230: the exchange's pick runs the Form's slot-6 task (C2/C6B0 JMP C2/8A31 -> C2/8A45 / C2/8B6E); 2937 frame-fields. | 2026-11-20: the song task's upload runs with the menu's HDMA, which is none here (C2/8420 writes $420C = $0D13 & 7F on a frame the main thread finished and nothing inside a JSL; $0D13 = 00 from the fill to P): with the menu open's SPC time on the cartridge's (menuPreludeSpc) the field's mean HDMA made the upload 14,746 SPC cycles longer than the cartridge's 552,353 and the cursor a frame late; now within 400."
     },
     {
       "name": "menu-exchange-picture-vs-oracle",
@@ -22503,9 +22509,9 @@
         "saves/field_re/shop90_lake.state"
       ],
       "expect": [
-        "dspkon s=143557 f=268 val=80 v7:srcn=02",
-        "dspkon s=144396 f=270 val=80 v7:srcn=02",
-        "dspkon s=145405 f=272 val=40 v6:srcn=05"
+        "dspkon s=144068 f=269 val=80 v7:srcn=02",
+        "dspkon s=144901 f=271 val=80 v7:srcn=02",
+        "dspkon s=145909 f=273 val=40 v6:srcn=05"
       ],
       "pin": [
         "^dspkon "
@@ -27909,11 +27915,11 @@
       ],
       "expect": [
         "menusfx-menu: loader prelude 5 -> 70/00, 18/FF, 19/FF, 82/01, 83/01 (C2/8096, unthrottled)",
-        "menusfx: cmd=18 id=00 pan=80 posted (throttle $0D76 -> 3)",
         "menusfx-loader: stereo -> cmd=F3 param=00 (C2/E694)",
+        "menusfx: cmd=18 id=00 pan=80 posted (throttle $0D76 -> 3)",
         "loader: screen $0E open, 1 slot(s), cursor row 0",
         "loader: LOAD slot 0 -> 2100 bytes unpacked (FF/FAA3), loc=1F1",
-        "audiosilence: f465-1464 sounding 954/1000 frames, longest silent run 32"
+        "audiosilence: f465-1464 sounding 952/1000 frames, longest silent run 33"
       ],
       "pin": [
         "^menusfx",
@@ -50469,17 +50475,17 @@
         "mixer: nuns-battle: reads 51721 identical / 51721, sound RAM identical at 2 / 2 segment ends",
         "mixer: magus-battle: 545033 samples identical / 545033",
         "mixer: magus-battle: reads 53314 identical / 53314, sound RAM identical at 2 / 2 segment ends",
-        "mixer: save-screen: 171235 samples identical / 171235",
-        "mixer: save-screen: reads 18125 identical / 18125, sound RAM identical at 2 / 2 segment ends",
-        "mixer: shop: 171235 samples identical / 171235",
-        "mixer: shop: reads 17416 identical / 17416, sound RAM identical at 2 / 2 segment ends",
-        "mixer: menu-jingle: 138661 samples identical / 138661",
-        "mixer: menu-jingle: reads 11066 identical / 11066, sound RAM identical at 1 / 1 segment ends",
+        "mixer: save-screen: 171769 samples identical / 171769",
+        "mixer: save-screen: reads 18183 identical / 18183, sound RAM identical at 2 / 2 segment ends",
+        "mixer: shop: 171769 samples identical / 171769",
+        "mixer: shop: reads 17448 identical / 17448, sound RAM identical at 2 / 2 segment ends",
+        "mixer: menu-jingle: 139195 samples identical / 139195",
+        "mixer: menu-jingle: reads 11125 identical / 11125, sound RAM identical at 1 / 1 segment ends",
         "mixer: world-song: 158419 samples identical / 158419",
         "mixer: world-song: reads 13134 identical / 13134, sound RAM identical at 1 / 1 segment ends",
-        "mixer: all: 3315944 samples identical / 3315944",
-        "mixer: all: reads 342282 identical / 342282, sound RAM identical at 12 / 12 segment ends, live chunks 815 / 815",
+        "mixer: all: reads 342431 identical / 342431, sound RAM identical at 12 / 12 segment ends, live chunks 815 / 815",
         "mixer: verdict: SAMPLE-EXACT",
+        "mixer: all: 3317546 samples identical / 3317546",
         "mixfuzz: 1875277 samples identical / 1875277 (200 cases, seed 1)",
         "mixfuzz: reads 1875277 identical / 1875277, sound RAM identical after 200 / 200 cases"
       ],
@@ -51288,9 +51294,9 @@
         "playthrough: 51_security DIFFERENT -- locs 0E7 0E4 0E5 0E6 | story 3C | party 000302 | gold 2039 | hp 99 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 52_factory_floor SAME -- locs 0E6 0EB | story 3C | party 000302 | gold 2199 | hp 67 (3) | ctrl 7 | end picture 0 px at port -1",
         "playthrough: 53_lasers_and_zabie SAME -- locs 0EB 0E6 0EB | story 3C 3F | party 000302 | gold 2339 | hp 94 (2) | ctrl 9 | end picture 0 px at port -2",
-        "playthrough: 54_r_series DIFFERENT -- locs 0EB 0E6 1F2 0E2 0E3 1D0 | story 3F 40 42 45 40 45 48 | party 000302 008002 000302 000102 | gold 2939 | hp 104 (4) | ctrl 23 | end picture 133 px at port -2",
+        "playthrough: 54_r_series SAME -- locs 0EB 0E6 1F2 0E2 0E3 1D0 | story 3F 40 42 45 40 45 48 | party 000302 008002 000302 000102 | gold 2939 | hp 104 (4) | ctrl 23 | end picture 0 px at port -2",
         "playthrough: 55_spekkio SAME -- locs 1D0 1D1 | story 48 49 4A 4B 4C 4D | party 000102 | gold 2939 | hp 187 (4) | ctrl 9 | end picture 0 px at port -1",
-        "playthrough: 56_medina_gate DIFFERENT -- locs 1D1 1D0 024 | story 4D 40 4D | party 000102 | gold 2939 | hp 187 (1) | ctrl 5 | end picture 0 px at port +0",
+        "playthrough: 56_medina_gate SAME -- locs 1D1 1D0 024 | story 4D 40 4D | party 000102 | gold 2939 | hp 187 (1) | ctrl 5 | end picture 0 px at port +0",
         "playthrough: 57_medina_inn SAME -- locs 024 1F0 023 | story 4D 4E | party 000102 | gold 2994 | hp 187 (1) | ctrl 7 | end picture 0 px at port -2",
         "playthrough: 58_heckran_cave SAME -- locs 023 1F0 030 031 02F 031 02F | story 4E | party 000102 | gold 3264 | hp 159 (3) | ctrl 15 | end picture 0 px at port +0",
         "playthrough: 59_heckran SAME -- locs 02F 1F0 00C | story 4E 51 | party 000102 | gold 4764 | hp 1 (3) | ctrl 5 | end picture 0 px at port -2",
@@ -51318,23 +51324,23 @@
         "playthrough: 81_lair_to_121 SAME -- locs 122 120 121 | story 7B | party 000501 | gold 3629 | hp 180 (2) | ctrl 5 | end picture 0 px at port +0",
         "playthrough: 82_nizbel SAME -- locs 121 113 | story 7B 7C 7D | party 000501 000102 | gold 3629 | hp 240 (2) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 83_gate_home SAME -- locs 113 1F3 112 111 110 1D0 | story 7D 7E 40 7E | party 000102 | gold 3629 | hp 240 (1) | ctrl 15 | end picture 0 px at port -2",
-        "playthrough: 84_masamune_reforged DIFFERENT -- locs 1D0 024 1F0 028 029 028 | story 7E 40 7E 81 | party 000102 000182 000102 | gold 3629 | hp 240 (1) | ctrl 9 | end picture 280 px at port +0",
-        "playthrough: 85_frog_joins DIFFERENT -- locs 028 1F0 024 1D0 071 070 1F1 087 1F1 08C 08D 0CE 0CC 0CD 08D 10F 08D | story 81 40 81 40 81 84 | party 000102 008282 000482 000401 | gold 3629 | hp 262 (3) | ctrl 23 | end picture 53928 px at port +0",
+        "playthrough: 84_masamune_reforged SAME -- locs 1D0 024 1F0 028 029 028 | story 7E 40 7E 81 | party 000102 000182 000102 | gold 3629 | hp 240 (1) | ctrl 9 | end picture 0 px at port -2",
+        "playthrough: 85_frog_joins DIFFERENT -- locs 028 1F0 024 1D0 071 070 1F1 087 1F1 08C 08D 0CE 0CC 0CD 08D 10F 08D | story 81 40 81 40 81 84 | party 000102 008282 000482 000401 | gold 3629 | hp 262 (3) | ctrl 23 | end picture 53977 px at port +0",
         "playthrough: 86_magic_cave SAME -- locs 08D 08C 1F1 0A3 077 087 0CD 08E 0A3 1F1 0A3 0A4 | story 84 87 | party 000401 | gold 3629 | hp 262 (1) | ctrl 9 | end picture 0 px at port -2",
         "playthrough: 87_magus_lair SAME -- locs 0A4 1F1 0A5 | story 87 | party 000401 | gold 3629 | hp 262 (1) | ctrl 3 | end picture 0 px at port -2",
         "playthrough: 88_porre_shopping SAME -- locs 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 | story 87 | party 000401 | gold 309 | hp 262 (1) | ctrl 5 | end picture 0 px at port -1",
         "playthrough: 89_castle_door SAME -- locs 0A5 0A6 | story 87 88 | party 000401 | gold 309 | hp 262 (1) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 90_castle_wings SAME -- locs 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 | story 88 | party 000401 | gold 1249 | hp 226 (2) | ctrl 3 | end picture 0 px at port -1",
         "playthrough: 91_flea SAME -- locs 0A6 1D5 0A9 | story 88 | party 000401 | gold 3199 | hp 262 (4) | ctrl 5 | end picture 0 px at port -2",
-        "playthrough: 92_slash DIFFERENT -- locs 0A9 1D5 0A6 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 0AA | story 88 | party 000401 | gold 1909 | hp 277 (3) | ctrl 21 | end picture 39204 px at port +3",
+        "playthrough: 92_slash SAME -- locs 0A9 1D5 0A6 0A5 1F1 0A4 1B3 1F1 09C 1F1 09D 1F1 1B3 0A4 1F1 0A5 0A6 0AB 07D 0AD 07D 0AB 0A6 1D5 0A9 1D5 0A6 0AA | story 88 | party 000401 | gold 1909 | hp 277 (3) | ctrl 21 | end picture 0 px at port +0",
         "playthrough: 93_ozzie_way DIFFERENT -- locs 0AA 0A7 0B0 0A8 1D7 0A8 1BE 0AF | story 88 | party 000401 | gold 7134 | hp 155 (13) | ctrl 57 | end picture 39657 px at port +6",
         "playthrough: 94_ozzie_barrier DIFFERENT -- locs 0AF 1D6 0AE 1BF | story 88 89 | party 000401 | gold 9154 | hp 307 (4) | ctrl 23 | end picture 54016 px at port +0",
-        "playthrough: 95_magus DIFFERENT -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 11 px at port -1",
+        "playthrough: 95_magus SAME -- locs 1BF 0AC 10F 002 113 | story 89 8A 8D | party 000401 | gold 12154 | hp 322 (4) | ctrl 13 | end picture 0 px at port -2",
         "playthrough: 96_laruba SAME -- locs 113 1F3 124 | story 8D 8E | party 000401 | gold 12154 | hp 322 (1) | ctrl 5 | end picture 0 px at port -1",
         "playthrough: 97_dactyl_nest SAME -- locs 124 1F3 125 126 127 1F3 147 | story 8E 90 93 | party 000401 008181 000581 000501 | gold 12154 | hp 164 (3) | ctrl 13 | end picture 0 px at port +0",
         "playthrough: 98_tyrano_lair_door SAME -- locs 147 1F3 12B | story 93 | party 000501 | gold 12154 | hp 164 (1) | ctrl 1 | end picture 0 px at port -2",
         "playthrough: 99_kino DIFFERENT -- locs 12B 1AE 12E 1AE 12B | story 93 96 97 98 | party 000501 | gold 12154 | hp 237 (3) | ctrl 9 | end picture 33153 px at port +0",
-        "playthrough: 100_lair_grind DIFFERENT -- locs 12B 12E 12A 131 12E 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 | story 98 | party 000501 | gold 12154 | hp 301 (8) | ctrl 57 | end picture 54407 px at port +0",
+        "playthrough: 100_lair_grind DIFFERENT -- locs 12B 12E 12A 131 12E 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 12F 12A 130 | story 98 | party 000501 | gold 12154 | hp 301 (8) | ctrl 57 | end picture 54016 px at port +0",
         "playthrough: 101_ioka_rest SAME -- locs 130 12A 12E 131 12A 12E 12B 1F3 113 1F3 116 1F3 115 | story 98 | party 000501 | gold 2954 | hp 415 (2) | ctrl 9 | end picture 0 px at port -2",
         "playthrough: 102_nizbel SAME -- locs 115 1F3 12B 12E 12A 131 12E 12A 130 | story 98 | party 000501 | gold 2954 | hp 172 (5) | ctrl 7 | end picture 0 px at port -1",
         "playthrough: 103_lever_rest SAME -- locs 130 12E 12A 12F 12A 12E 130 12A 12E 131 12A 12E 12B 1F3 12B 1F3 116 | story 98 | party 000501 | gold 2954 | hp 415 (3) | ctrl 11 | end picture 0 px at port +0",
@@ -51347,16 +51353,16 @@
         "playthrough: 110_mt_woe_summit SAME -- locs 188 189 18B 18D 18B | story B4 | party 000105 | gold 7434 | hp 457 (3) | ctrl 17 | end picture 0 px at port +0",
         "playthrough: 111_mt_woe_chests SAME -- locs 18B 189 | story B4 | party 000105 | gold 8934 | hp 376 (2) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 112_mt_woe_189 SAME -- locs 189 188 | story B4 | party 000105 | gold 11934 | hp 310 (2) | ctrl 7 | end picture 0 px at port +0",
-        "playthrough: 113_algetty_shop DIFFERENT -- locs 188 18A 1F4 184 17C 180 | story B4 | party 000105 | gold 1034 | hp 271 (10) | ctrl 21 | end picture 54016 px at port +0",
-        "playthrough: 114_giga_gaia DIFFERENT -- locs 180 17C 184 1F4 18A 188 189 18B 18D 17E 184 1F4 17E 17C 182 1F4 151 1F4 161 1F5 150 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 | story B4 B7 BA BB | party 000105 | gold 9334 | hp 348 (5) | ctrl 35 | end picture 54011 px at port +0",
-        "playthrough: 115_dalton SAME -- locs 191 149 14E 1F4 194 | story BB BD | party 000105 | gold 11834 | hp 129 (3) | ctrl 9 | end picture 0 px at port -2",
-        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 43609 px at port +1",
+        "playthrough: 113_algetty_shop SAME -- locs 188 18A 1F4 184 17C 180 | story B4 | party 000105 | gold 1034 | hp 271 (10) | ctrl 21 | end picture 0 px at port +0",
+        "playthrough: 114_giga_gaia SAME -- locs 180 17C 184 1F4 18A 188 189 18B 18D 17E 184 1F4 17E 17C 182 1F4 151 1F4 161 1F5 150 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 | story B4 B7 BA BB | party 000105 | gold 9334 | hp 348 (5) | ctrl 35 | end picture 0 px at port -2",
+        "playthrough: 115_dalton SAME -- locs 191 149 14E 1F4 194 | story BB BD | party 000105 | gold 11834 | hp 129 (3) | ctrl 9 | end picture 0 px at port +0",
+        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 48594 px at port +0",
         "playthrough: 117_kajar_restock SAME -- locs 195 196 195 196 195 194 14E 149 191 1F5 185 1F5 185 1F5 165 | story C6 | party 000105 | gold 35384 | hp 301 (2) | ctrl 19 | end picture 0 px at port +0",
-        "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 54016 px at port +0",
+        "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 0 px at port -2",
         "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 1978 px at port -1",
         "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
-        "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 37427 px at port +0",
+        "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 34 px at port -2",
         "playthrough: 123_last_village_blackbird SAME -- locs 1A9 1F6 1A8 10F 173 16C 16E 16C | story CD CF | party 010205 | gold 0 | hp 646 (1) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 124_blackbird_decks DIFFERENT -- locs 16C 173 170 172 170 175 | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 17 | end picture 14 px at port +0",
         "playthrough: 125_blackbird_wing SAME -- locs 175 170 1BB 170 171 176 171 178 1BC 178 171 176 1DE | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 31 | end picture 0 px at port +0",
@@ -51373,7 +51379,7 @@
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit SAME -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 0 px at port -2",
         "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
-        "playthrough: 111/138 legs SAME"
+        "playthrough: 118/138 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -51740,6 +51746,114 @@
           "find": "      CtSceneTouch(sc, sc->touchHit);",
           "replace": "      { int hit = sc->touchHit; sc->touchHit = -1; CtSceneTouch(sc, hit); }  /* MUT */",
           "why": "a one-shot latch: nothing to call the touch with when the align ends"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-gate-warp-takes-over-on-the-fields-nmi-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "gate-warp-takes-over-on-the-fields-nmi"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: gate-warp-takes-over-on-the-fields-nmi leg 56 f1650+120: 52 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: gate-warp-takes-over-on-the-fields-nmi "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the Gate's warp takes over on the field's own NMI: the play clock ticks on the hand-off's frame and the setup's map is written three frames after the flags' copy",
+      "notes": "THE GATE WARP'S HAND-OFF FRAME (2026-11-20). Op FF 8x's fade (C0/3FBB) ends on the frame whose head finds `$0119` at 0; C0/3FD3's quiesce, the `JML $FD:FFxx` and FD/DB97's setup run in that frame, whose head NMI was still the field's (C0/EC15 `JSL C2/8002` -> C2/85AE): the play clock ticks once more. And the setup is 112 frames of NMI-off work whose stores land on the frame the CPU reaches them. MEASURED on the rule's cartridge, route leg 56 (the End of Time's Gate; `--monitor 7E0400:1,7E0119:1,7F74B3:1,7F0000:1`): `$0119` = 00 at f1699, `$0400` ticks and `$7F:74B3` = 4D (FD/EAA6, the flags' copy) at f1700, `$7F:0000` = 40 (FD/F1ED, the mode-7 map over the scratch) at f1703. The port (1) stopped the clock a tick short -- the native warp owns a copy of the WRAM from its hand-off and the field's tick was gated off it -- so every later load's C0/0C70 seeded `$01F8` one short and the rolls moved (leg 84: the lead's idle blink C0/A22A on another PC 8,500 frames later, 280 px in the leg's last picture); (2) wrote the map in the hand-off's frame (legs 54, 56, 84: the story byte, which is that scratch, three frames early). Now the hand-off frame ticks the warp's image (field.c gwOpenF) and the map is built on frame GW_MAP_FRAME (seq_gwarp.c setupMap). Legs 56 and 84 are the cartridge's on both clocks. Two mutations.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "(gwPhase != 3 || gwOpenF == frameNo) && !loadFadeEntry && !stageExit)",
+          "replace": "gwPhase != 3 && !loadFadeEntry && !stageExit)  /* MUT */",
+          "why": "no tick on the hand-off's frame: the clock a frame short from the warp on"
+        },
+        {
+          "file": "src/seq_gwarp.c",
+          "find": "#define GW_MAP_FRAME 4",
+          "replace": "#define GW_MAP_FRAME 2  /* MUT */",
+          "why": "the map over $7F:0000 two frames early"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-op-ff-fade-keeps-the-table-set-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "op-ff-fade-keeps-the-table-set"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: op-ff-fade-keeps-the-table-set leg 54 f30800+60: 44 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: op-ff-fade-keeps-the-table-set "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "op 0xFF's own fade holds the CPU in its visit: no table set is built, `$0153` keeps its bit and the field IRQ steps the tiles every frame of the fade",
+      "notes": "OP 0xFF'S OWN FADE NEVER RETURNS TO THE MAIN LOOP (2026-11-20). C0/3FBB (`FF` < $90, a $C3 sequence or the $FD warp): with `$0119` lit the visit loops `3FC1 DEC $19 / JSR C0/881E / JSL FD/FFF7 / JSR C0/EC60` until the jump, so the iteration that began it runs nothing after the runner -- not C0/00C7's FD/C2C1 (the table set and its `$0153` flip), not the drain, not the draw. `$0153` keeps the bit the frame before set, and the field IRQ (C0/ECDB `LDA $0153 / AND #01 / BNE` -> FD/E022) steps the tile animation on every frame of the fade. MEASURED on the rule's cartridge, route leg 54 (the Proto Dome's Gate at f30829): `$0153` = 01 from f30828 to the jump, `$051D` BD -> CC one a frame f30829-f30843. The port flipped `$0153` in the op's frame (its VM tick ran the main loop's rest) and the tiles stood still: `$051D` 15 steps behind for the rest of the route, the End of Time's pillar flame on another frame at leg 54's end (133 px). Now CtSceneTick ends after the runner on the tick whose pass began the fade, with FD/FFF7 only. Legs 37, 47, 54, 56, 84, 105 are the cartridge's on its clock. One mutation.",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (gFfFadeBegan) { ctObjSlotFrame(sc); return; }",
+          "replace": "  (void)0;  /* MUT */",
+          "why": "the op's frame runs the main loop's rest: `$0153` flips and the tiles stand still through the fade"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-vortex-opens-after-three-field-frames-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "vortex-opens-after-three-field-frames"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: vortex-opens-after-three-field-frames leg 95 f83960+40: 25 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: vortex-opens-after-three-field-frames "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "C0/260E's three waits before the vortex's JML are the field's frames: the play clock ticks through them, and `$010F` / `$0384` land on the last",
+      "notes": "ENTRY 5 OPENS AFTER C0/260E'S WAITS (2026-11-21). Scene 0AC's `FF 9B` after Magus sets `$0139 = 0B`; C0/21E1's entry 0B (C0/260E) rebuilds BG1, arms `$46 = 1`, waits on C0/EC60, calls C0/024C (no enemy: the regroup's C0/00EB, another frame), waits on C0/EC60 again, then `263D LDA #80 / STA $010F` and `LDA #85 / JML C3:0000` (C3/0038 `STA $0384`). Those three frames run the field's NMI, whose C2/85AE ticks the play clock. MEASURED on the rule's cartridge, route leg 95: `$0400` 11 -> 12 / 13 / 14 on f83982-f83984, `$010F` = 80 and `$0384` = 85 on f83984. The port opened the stage on the first wait (its frames priced as seqHold) and stopped the clock there -- three ticks short, so every later load's C0/0C70 seeded `$01F8` three short (the leg's last picture: a blink on another frame, 11 px) -- and wrote `$010F` / `$0384` up to three frames early. Now field.c e5FieldWaits ticks the clock on those frames and writes the two bytes on the last. Leg 95 is the cartridge's on its clock. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "    const int e5Tick = e5FieldWaits > 0 && seqOpen > 0;",
+          "replace": "    const int e5Tick = 0;  /* MUT */",
+          "why": "no tick on C0/260E's waits: the clock three short from the vortex on"
         }
       ]
     },
@@ -55615,7 +55729,7 @@
       ],
       "env": {},
       "expect": [
-        "fieldpicture: blackbird-stands-in-the-map-packet leg 115 +10200 frames of the leg's pad: 0 px differ at port -3"
+        "fieldpicture: blackbird-stands-in-the-map-packet leg 115 +10200 frames of the leg's pad: 0 px differ at port -1"
       ],
       "pin": [
         "^fieldpicture: blackbird-stands-in-the-map-packet "
@@ -56453,6 +56567,110 @@
           "find": "    if (k == 0) r->w[0x1E02] = 0;                                    // 317E STZ $1E02, 8-bit: $1E03 keeps what it had",
           "replace": "    if (k == 0) { r->w[0x1E02] = 0; r->w[0x1E03] = 0; }  /* MUT */",
           "why": "a 16-bit clear: the reset's commands go out with 00"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-all-party-target-has-no-cursor-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "all-party-target-has-no-cursor"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: all-party-target-has-no-cursor leg 122 +3500: 89 commands on the cartridge, 89 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: all-party-target-has-no-cursor "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a target select on the whole party moves no cursor and blips for no direction key",
+      "notes": "AN ALL-PARTY TARGET HAS NO CURSOR (2026-11-20). The target handler C1/1561 calls C1/1F79, whose group handler for groups 01 and 04 of C1/1FF8 is C1/209A: `LDX #0003 / STX $80 / LDX #0000 / LDA #80 / STA $960C / BRA C1/2045` -- every eligible PC listed and lit, `$960C` bit 7 set. C1/15F4 `LDA $960C / BMI ->C1/1617` then skips the Down|Right and Up|Left arms with their `INC $A4EE / JSR C1/1B55`. The port's PC-side publish cleared `$960C` (C1/1F83) and did not set it again, so a direction key in the select blipped. MEASURED on the rule's cartridge, route leg 122 (the Golem Twins; an item on the party, `$960D` = 81): `$960C-$960F` = 80 81 00 01 through the select, the Down of f3369 (`$EF` = 04, the pass of f3371) posts nothing; the port sent `19 00`. C1/1F7D's `STX $960F` (the caster, 16-bit) is in WRAM too. The leg's 89 commands to f3500 are the cartridge's. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  { int g = s[0x960D] & 0x7F; if (g == 0x01 || g == 0x04) s[0x960C] = 0x80; }",
+          "replace": "  /* MUT */",
+          "why": "the select keeps a cursor: a direction key blips"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-death-sound-after-the-menu-pass-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "death-sound-after-the-menu-pass"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: death-sound-after-the-menu-pass leg 100 +32700: 646 commands on the cartridge, 646 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: death-sound-after-the-menu-pass "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fallen enemy's death sound comes after its frame's menu pass, as the cartridge posts it",
+      "notes": "THE DEATH SOUND COMES AFTER THE FRAME'S MENU PASS (2026-11-20). CD/0043 is one corpse's death routine: `JSR CD/3E75 / JSL CD/04AA` until `$CCEA` is 0, then `LDA #95 / JSR CD/3B71` (pan `$1D0C[$CD00]`). CD/3E75 is the main thread's frame wait with the menu pass in it (CD/3E78 `JSL C1/0012` -> C1/10E3 when `$993A` asks), so on a frame that has a pass the pass's blip (C1/1B55) is posted before the 95. The port's death tick runs with the frame's service (battleAdvanceAction), ahead of the pass, and posted at once. MEASURED on the rule's cartridge, route leg 100 (the Reptite Lair's grind, the fight of f28753, the cartridge's tape): `19 00 80` and then `18 95 A1` on one frame (f32591); the port sent the 95 first. Now the post waits for the frame's pass (battleDeathSfxFlush: after C1/10FA's in an action frame, after the idle loop's, and at the tick's end on a frame without one). The leg's 646 commands to f32700 are the cartridge's. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (gBattleSndOn && gDeathSfxN < 8) gDeathSfxQ[gDeathSfxN++].pan = pan;   // CD/3B71: $1E01=95, $1E00=$18, $1E02=pan --",
+          "replace": "    battleSfxPost(h, 0x18, 0x95, pan);  /* MUT */",
+          "why": "the death sound posted with the frame's service, ahead of the pass's blip"
+        }
+      ]
+    },
+    {
+      "name": "leg-sound-menu-open-keeps-the-spc-with-the-cartridge-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "menu-open-keeps-the-spc-with-the-cartridge"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: menu-open-keeps-the-spc-with-the-cartridge leg 55 +3100: 17 commands on the cartridge, 17 on the port, 0 differing",
+        "spc: the port sends each command -5 to 95 SPC cycles from the cartridge's cycle"
+      ],
+      "pin": [
+        "^legsound: menu-open-keeps-the-spc-with-the-cartridge ",
+        "^  spc: "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "through a menu's open and close every sound is sent on the cartridge's SPC cycle, to within a hundred",
+      "notes": "THE MENU OPEN'S SPC TIME (2026-11-20). The menu shell opens with the NMI off (C0/0B5D) and its five-post prelude (C2/8096: `70 00`, `18 FF 80`, `19 FF`, `82 01 FF`, `83 01`) comes after the stash's work, and the iteration that opens it runs through two vblanks before it waits again. MEASURED on the rule's cartridge, route leg 55 (the End of Time, an A on the save point at f2860; CT_ORACLE_LOGICAL_TRACE and PEEK_APUTRACE's END lines): `NMI off at C0:0B5D, 4126 cycles into the frame`, `stretch-end C00B5D -> C70635 C=251806 crossed=0`; the prelude's first store on line 156 h 312 (263,564 master cycles past the vblank); the iterations f2890 / f2891 / f2892 end on line 47 / 139 / 225 and take 39,696 / 23,058 / 5,595 SPC cycles -- four frames of the SPC in three iterations (17,088 each before and after). The port posted the prelude at its frame's start (12,400 SPC cycles early) and gave the open three frames of SPC, so every sound after a menu was sent 17,120 cycles -- a frame -- early by the SPC's clock, and the driver's tick and fade lattice stood a frame off the game for the rest of the leg (a fight's exit poll reads that lattice). Now menuShellPrelude leads its posts by MENU_PRELUDE_SPC_LEAD and the open runs one more frame of SPC. The check sets the two SPC clocks side by side (`apuc=True`: the cycle count at each command's $2140 store, both from the leg's state): 17 commands to f3100, the port's less the cartridge's -5 to 95 cycles. One mutation.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "  else CtAudioFrame(g_fieldAudio);",
+          "replace": "  else { /* MUT */ }",
+          "why": "the open keeps three frames of SPC: every later sound a frame early"
         }
       ]
     },

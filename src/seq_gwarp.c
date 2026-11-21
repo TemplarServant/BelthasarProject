@@ -195,7 +195,7 @@ static void ecd5(CtGwarp* g, uint8_t* w, uint16_t ret) {
   rts(g);
 }
 
-// ---- FD/DB97: the setup, up to FD/EADA's RDNMI poll ----
+// ---- FD/DB97: the setup, up to FD/EADA's RDNMI poll: to the mode-7 characters (DBF0) ----
 static void setup(CtGwarp* g, uint8_t* w, CtSeqStagePic* sp) {
   jsr(g, w, kR[g->entry].jSetup);                                               // DA00 JSR DB97 (and the others')
   g->x = 0x0500; push(g, w, 0x05); push(g, w, 0x00); g->s += 2;                 // DB9C LDX #0500 / PHX / PLD
@@ -229,6 +229,14 @@ static void setup(CtGwarp* g, uint8_t* w, CtSeqStagePic* sp) {
   // DBD7-DBF0: the mode-7 characters -- VMAIN $80, the high bytes of words 0-3FFF: character n is 64 pixels of colour n
   setA(g, 0x80); sp->vmain = 0x80; g->y = 0; sp->vaddr = 0;
   for (; g->y < 0x100; g->y++) { setA(g, g->y); for (g->x = 0x40; g->x; g->x--) CtSeqStagePicVramWrite(sp, 1, A8); }
+}
+// ...and from FD/F1ED on. The setup is 112 frames of NMI-off work and the WRAM it writes is written on the frame its CPU
+// reaches each store: FD/EAA6's copy of the flags in the hand-off's own frame, FD/F1ED's map over $7F:0000 three frames
+// later, after the 16,384 character words (DBD7-DBF0). MEASURED on the rule's cartridge, route leg 56 (the End of
+// Time's Gate, `--monitor 7F0000:1,7F74B3:1,7F0001:3`): `$7F:74B3` = 4D at f1700, `$7F:0000` = 40 and `$7F:0001` =
+// 41 42 43 at f1703. (Legs 54, 56 and 84 showed the scratch byte three frames early.)
+#define GW_MAP_FRAME 4
+static void setupMap(CtGwarp* g, uint8_t* w, CtSeqStagePic* sp) {
   // FD/F1ED: the mode-7 map into $7F:0000 through the port (D = $2100): 128 rows twice, row n starts at the sine's
   // ($F800[4n] + $80) / 2 and steps by one
   jsr(g, w, 0xDBF4);
@@ -462,7 +470,8 @@ int CtGwarpFrame(CtGwarp* g, uint8_t* w, CtSeqStagePic* sp, uint8_t* rgb) {
   if (g->done) return 1;
   g->frames++;
   const Routine* R = &kR[g->entry];
-  if (g->frames == 1) setup(g, w, sp);                                          // the hand-off's frame: DB97 to the poll
+  if (g->frames == 1) setup(g, w, sp);                                          // the hand-off's frame: DB97 to DBF0
+  else if (g->frames == GW_MAP_FRAME) setupMap(g, w, sp);                       // ...and on to the poll
   else if (g->frames == GW_SETUP_FRAMES + 1) {
     // FD/EADA met the vblank's flag: the NMI on, INIDISP 0, CLI; DCB8 STZ $1B / $1C; [DB20 STZ $35 / $36]; the loop's first
     // wait (STZ $1E, the spin) -- the flags at the spin: Z (LDA $1E), C = 1 from ED89's last CPX, V from its last EF23's ADC

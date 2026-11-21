@@ -380,10 +380,11 @@ PICTURES = {
     'magic-cave-beam-is-a-window-circle': dict(leg='86_magic_cave', at=0, frames=15104, own=True, lag=-1),
     # Leg 115, the Blackbird over 1F4 after Dalton: the ship is BG1 -- blocks 71-C4 of the world's own map packet
     # (C6:FF20[header +11], C2/298C), which the loader decompresses at every load; a script takes it out when the story
-    # has no Blackbird. TS 01, CGADSUB 12: BG1 on the sub screen added to the clouds. (The port's world runs three
-    # frames ahead here: the Golem fight's exit releases on another frame -- f8493, `$0153`'s parity opposite from there --
-    # and the room's scripts leave two frames early; the battle-exit class. So it is graded at port -3.)
-    'blackbird-stands-in-the-map-packet': dict(leg='115_dalton', at=0, frames=10200, own=True, lag=-3),
+    # has no Blackbird. TS 01, CGADSUB 12: BG1 on the sub screen added to the clouds. (On its own clock the port's world
+    # is a frame or two off here: the Golem fight's exit releases on another frame -- the battle-exit class, the SPC's fade
+    # lattice. It ran three frames ahead until the menu open got the cartridge's SPC time (2026-11-20, field.c
+    # menuPreludeSpc); now one behind, the picture the same at every port frame from -1 on. So it is graded at port -1.)
+    'blackbird-stands-in-the-map-packet': dict(leg='115_dalton', at=0, frames=10200, own=True, lag=-1),
     # Leg 105, the Blackbird's deck after Dalton's Golem beats the party (a fight the story loses: `$7F01EC` = 1 with
     # `$2A1F` bit 5): C0/0298 `BIT #20 / BNE ->0304` joins the won fight's tail, whose C0/0715 dead-marks the Golem's
     # object and puts the party back on its battle cells in its last battle frames before C0/0738 stages the fallen pose.

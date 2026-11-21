@@ -4356,6 +4356,18 @@ static int fieldRuleIfast(void) {
 // matches). $18 id $FF is stop-all-SFX (audio_commands.md). Not derived: what $82/$83 (raw Akao commands) do; they
 // change no DSP master/echo volume and no voice count. The prelude belongs to the shell: the naming screen opens through
 // the same `JSL $C2:8000` (op 0xC8 -> C0/0CF2 -> C2/8000), so both callers use this function.
+// The prelude's place in SPC time. The shell opens with the NMI off (C0/0B5D, 4,126 master cycles into its frame) and
+// works 251,806 cycles before C2/80AA's JSL reaches its first poll: the prelude's first store stands 263,564 master
+// cycles past the vblank (line 156 h 312), not at the frame's start. And the open's frame is two of the SPC's: the
+// cartridge's iteration there runs through two vblanks before it waits again -- MEASURED on the rule's cartridge, route
+// leg 55 (the End of Time, an A on the save point at f2860; CT_ORACLE_LOGICAL_TRACE, PEEK_APUTRACE's END lines): the
+// three iterations f2890-f2892 end on line 47, line 139 and line 225 and take 39,696 / 23,058 / 5,595 SPC cycles, four
+// frames' worth, where the iterations before and after take 17,088 each. The port posted the prelude at its frame's
+// start and gave the open three frames of SPC, so every sound after a menu came a frame early by the SPC's clock (and
+// the driver's fade lattice stood a frame off for the rest of the room). menuPreludeSpc: the lead before the posts
+// (owed by the frame's slice, CtAudioAdvance), one more frame of SPC after them.
+#define MENU_PRELUDE_SPC_LEAD 263500L
+static void menuPreludeSpc(int phase);
 static void menuShellPrelude(uint8_t* m, const char* who) {
   if (!m) return;
   const struct { uint8_t cmd, id, pan; int wid, wpan; } P[5] = {
@@ -4365,6 +4377,7 @@ static void menuShellPrelude(uint8_t* m, const char* who) {
     { 0x82, 0x01, 0xFF, 1, 1 },   // C2/80D2-80E1
     { 0x83, 0x01, 0xFF, 0, 0 },   // C2/80E5-80EA   (operands carried)
   };
+  menuPreludeSpc(0);
   for (int i = 0; i < 5; i++) {
     m[0x1E00] = P[i].cmd;
     if (P[i].wid)  m[0x1E01] = P[i].id;
@@ -4372,6 +4385,7 @@ static void menuShellPrelude(uint8_t* m, const char* who) {
     fieldSoundFlush(m);
     g_mnSfxPosts++; g_mnSfxEvents++; g_mnSfxSeen = 1;
   }
+  menuPreludeSpc(1);
   if (getenv("CT_MENUSFX"))
     printf("menusfx-menu: %s prelude 5 -> 70/00, 18/FF, 19/FF, 82/01, 83/01 (C2/8096, unthrottled)\n", who);
 }
@@ -5233,6 +5247,11 @@ static void fieldFree(Field* f) {
 // Returns the song id, or -1 when the record's bit7 is set: the location declines to set a song (C0/1B7D's BMI skips
 // both the store and the play), as the bedroom (loc 2) does, whose $29AE comes from op $EA.
 static CtAudio* g_fieldAudio = NULL;
+static void menuPreludeSpc(int phase) {          // the menu open's SPC time (menuShellPrelude)
+  if (!g_fieldAudio || !g_ruleAudio || hostSyncFree() || hostSoundInstant()) return;   // (not under the sync / upload mods)
+  if (phase == 0) CtAudioAdvance(g_fieldAudio, MENU_PRELUDE_SPC_LEAD);
+  else CtAudioFrame(g_fieldAudio);
+}
 // The VM's `JSL $C7:0004` and its two APU out-port polls ($ED waits on $2141, $EE on $2143), routed to the sound
 // module. ct_vm.c stages the mailbox in its own WRAM and knows nothing about audio; with no sink installed the polls
 // read 0, so a headless run never waits on an absent APU.
@@ -12256,7 +12275,9 @@ int main(int argc, char** argv) {
                                                               //    or entry 4 (seq_entry4.h: 3)
   CtGwarp* gwN = NULL;                                        // the gate warp ($FD), native (seq_gwarp.c)
   int gwNState = 0;
+  int gwOpenF = -0x7FFFFFF;                      // the frame the native warp took over on (its head's NMI was still the field's)
   int seqHold = 0;                                            // frames of the setup still to run
+  int e5FieldWaits = 0, e5Seq = 0, e5TickFrame = -0x7FFFFFF;                                       // entry 5: C0/260E's waits still on the field's NMI (the clock)
                                                               //   before the machine's first NMI
                                                               //   (>0 = its index + 1, -1 = not ported)
                                                               //   is printed once, on its first draw
@@ -14918,6 +14939,15 @@ int main(int argc, char** argv) {
                                                                                        //   JSR C2/821E, a frame
           else {
             int fr = 0, fw = 0;
+            // The background the two JSLs meet is the menu's, not the field's: the menu NMI C2/8420 writes $420C = $0D13 &
+            // 7F on a frame the main thread finished ($0D01 >= 0, C2/843C-8446) and nothing when it did not ($0D01 = FF:
+            // C2/8436 BPL not taken, as inside a JSL), so the upload runs with the HDMA the last full NMI left. MEASURED on
+            // the rule's cartridge (recipe gato_wait, Y at f20: --monitor 7E0D13 / 7E0D01): $0D13 = 00 from C2/940D's fill
+            // (f37) to C2/CE86 at P (f86, 11), $0D01 = FF f52-f83 -- no HDMA through the upload, where the field's mean
+            // (14,310 master a frame) made it 14,746 SPC cycles longer than the cartridge's 552,353. Not derived: the
+            // cost of a menu's own channels ($0D13 != 0); the field's mean stands for them.
+            const int menuHdmaOff = g_ruleAudio && g_fieldAudio && !(s7[0x0D13] & 0x7F);
+            if (menuHdmaOff) CtAudioSetRuleHdma(g_fieldAudio, s7, 1, 0, 0, -1);
             s7[0x1E00] = 0x14; s7[0x1E01] = 0x3E; s7[0x1E02] = 0x80; s7[0x1E03] = 0x80;   // C2/CBCC-CBF0
             fieldSoundFlush(s7);                             // C2/CBF3 JSL C7/0004
             if (g_fieldAudio) { int f1 = 0; CtAudioLastPostRaster(g_fieldAudio, &f1, NULL, NULL); fr += f1; }
@@ -14925,6 +14955,7 @@ int main(int argc, char** argv) {
             fieldSoundFlush(s7);                             // C2/CC09 JSL C7/0004
             if (g_fieldAudio) { int f2 = 0; CtAudioLastPostRaster(g_fieldAudio, &f2, NULL, NULL); fr += f2;
                                 if (priced) CtAudioWaitReplyNibble(g_fieldAudio, &fw); }   // C2/CBE0-CBE6
+            if (menuHdmaOff) CtAudioSetRuleHdma(g_fieldAudio, NULL, 0, 0, 0, -1);
             // The JSLs hold the CPU, so substate 0's two scans come after them (P = the posts' end + 2). (A post a busy
             // driver delayed past S0 + 2 would find C2/C649 already run and hold only the fade-in, C2/C7CB's wait on
             // $00C0: not measured, taken as P.)
@@ -17643,7 +17674,7 @@ int main(int argc, char** argv) {
               gwN = &g_gwarp;
               printf("gatewarp: the native program takes over at f%d (JML $FD:%04X)\n", frameNo,
                      gwOp == 0x80 ? 0xFFF1 : gwOp == 0x81 ? 0xFFEB : gwOp == 0x82 ? 0xFFE8 : 0xFFE5);
-              gwPhase = 3; gwNState = 0;
+              gwPhase = 3; gwNState = 0; gwOpenF = frameNo;
             }
           }
           if (!gwN && gw) memcpy(gw + 0x10000 + 0x74B3, gw + 0x10000, 0x200);   // FD/EAA6, inside DB97's setup
@@ -17672,7 +17703,7 @@ int main(int argc, char** argv) {
       // The ramp stops itself on the frame after the op (C0/2848's branch above); this is the same stop for a request
       // that meets no ramp.
       if (loadRamp) { loadRamp = 0; fade = 0; }
-      w[0x0384] = (uint8_t)seqId;                           // C3/0038 STA $0384
+      if (!CtEntry5StageHas((uint8_t)seqId)) w[0x0384] = (uint8_t)seqId;   // C3/0038 STA $0384 (entry 5's: after C0/260E's waits)
       // $7E:3003 `AND #$1F / ASL A / TAX / JSR ($3043,X)`: the operand is masked to a table index, so `FF 61` is
       // entry 1 (the staff credits) and `FF 02` entry 2 (the title); sequence_table.md is the map.
       int seqEntry = seqId & 0x1F;
@@ -17832,7 +17863,9 @@ int main(int argc, char** argv) {
         uint8_t e5List[13]; const int e5Enemies = fieldEnemyList0617(f.vm, e5List);   // (C0/024C's, on the field's WRAM)
         g_raceDeferredN = 0;                         // (its setup NMI's posts: raceSndPost)
         stageOpenSpcLead(audio, seqId);
+        const uint8_t e5Was0384 = w[0x0384];
         if (CtEntry5StageOpen(w, (uint8_t)seqId, &rio) == 0) {
+          w[0x0384] = e5Was0384;                    // (C3/0038's store comes after C0/260E's waits: e5FieldWaits)
           seqOpen = seqEntry + 1; endOn = 6; endEnded = 0;
           long orl = 0; const uint8_t* orb = CtBattleRom(&orl);
           if (orb && orl > 0x3E0005) {
@@ -17845,6 +17878,7 @@ int main(int argc, char** argv) {
             // master cycles, 027E -> 0281 404532 of them), `$46 = 1` on row f83981 and the stage's `$08 = 2` on f83987; the
             // port's was on f83986. (With an enemy the call stages the fight and returns at once: 0257-027D.)
             seqHold = 2 + (e5Enemies == 0 ? 1 : 0) + 2;
+            e5FieldWaits = 2 + (e5Enemies == 0 ? 1 : 0); e5Seq = seqId;   // (the open frame and the next: the field's NMI, the clock ticks)
             printf("sequence: entry %d (the vortex after Magus) opening at f%d -- %ld + %ld + %ld cycles = %d black frame(s)\n",
                    seqEntry, frameNo, oc, od, os, seqHold);
           }
@@ -18584,8 +18618,21 @@ int main(int argc, char** argv) {
     //  - the reboot out of a $C3 stage or a gate warp (stageExit). The stage's last frame ended in its own NMI (no
     //    C2/8002), and `JML $C0:0000` -> C0/005D `JSR C0/0B4E` (`SEI / STZ $4200`) leaves the NMI off until 286C's.
     //    seqOpen / gwPhase are already cleared on this frame, so they cannot say it.
-    if (!battlePhase && f.vm && fade != 3 && !coldResetHold && seqOpen <= 0 && gwPhase != 3 && !loadFadeEntry && !stageExit)
-      CtMenuClockTick(CtSceneMem7E(f.vm));
+    // (The warp opens on the jump's own frame -- C0/3FD3's quiesce and FD/DB97 run in the frame whose head found `$19` at
+    // 0 -- and that head's NMI was the field's: it ticks. MEASURED on the rule's cartridge, route leg 84 (the End of Time's
+    // Gate, `--monitor 7E0400:1,7E0119:1,7F74B3:1`): `$0119` = 00 at f372 with `$0400` = 38, `$0400` = 39 at f373, the
+    // frame FD/EAA6 saves the flags in. The port stopped at 38, the next load's C0/0C70 seeded `$01F8` one short and the
+    // lead's idle blink (C0/A22A's roll) fell to another PC 8,500 frames later.)
+    // (...and C0/260E's waits before entry 5's JML -- two C0/EC60 and C0/024C's regroup C0/00EB -- are the field's frames:
+    // its NMI and so its tick, the port's first seqHold frames. MEASURED on the rule's cartridge, route leg 95 (scene 0AC's
+    // `FF 9B` after Magus): `$0400` 11 -> 12 / 13 / 14 on f83982-f83984, `$010F` = 80 and `$0384` = 85 on f83984; the port's
+    // clock stopped at 11 on the open and every later load seeded `$01F8` three short (the leg's last picture, a blink).)
+    const int e5Tick = e5FieldWaits > 0 && seqOpen > 0;
+    if (e5Tick) e5TickFrame = frameNo;
+    if (e5FieldWaits > 0 && --e5FieldWaits == 0 && f.vm) {         // the last wait over: C0/263D and the JML's C3/0038
+      uint8_t* ew = CtSceneMem7E(f.vm); ew[0x010F] = 0x80; ew[0x0384] = (uint8_t)e5Seq; }
+    if (!battlePhase && f.vm && fade != 3 && !coldResetHold && (seqOpen <= 0 || e5Tick) && (gwPhase != 3 || gwOpenF == frameNo) && !loadFadeEntry && !stageExit)
+      CtMenuClockTick(gwPhase == 3 ? g_gwWram : CtSceneMem7E(f.vm));   // (the warp's own image from its hand-off on)
     // The field's legs do not run on the overworld (the CPU spends the frame in bank $C2, the world's engine).
     // The VM tick below is gated rather than the world relocated: the overworld owns $7E:0B30..$1B2F (its 64
     // object blocks), which contains the field's $0E00..$0EFF draw list, and the ROM never runs the field engine
@@ -19365,7 +19412,15 @@ int main(int argc, char** argv) {
         if (tr && getenv("CT_TILEANIMTRACE")[0] == '2')
           printf("tileanim irq f%d fade %d bri %d pend %d $0100=%02X%02X $0112=%02X%02X $0117=%02X $010F=%02X $0153=%02X\n", frameNo, fade,
                  (int)fadeBri, pendKind, bw[0x0101], bw[0x0100], bw[0x0113], bw[0x0112], bw[0x0117], bw[0x010F], bw[0x0153]); }
-      if (!dbg.noAnim && !irqLoad && !fieldIrqLoadWas)
+      // (Not while a $C3 program or the warp owns the machine: their vectors are their own, and the field's C0/ECCC never
+      // runs -- `$051D` stands still on the cartridge through the attract's stages. Until op 0xFF's own fade kept `$0153`
+      // as the frame before left it, the bit was 0 there and the question never came up. C0/260E's waits before entry 5's
+      // JML are the field's frames.)
+      // The jump's own frame (ffPro 2: C0/3FD3's C0/0B4E and the JML land before line 211) and a stage's reboot frame
+      // (`JML $C0:0000` -> C0/005D's C0/0B4E) have none either. MEASURED from power-on on the rule's cartridge: the title's
+      // `FF 02` fades f61-f65 with `$051D` 0B..0F one a frame, and 0F stands from f66 through the title.)
+      const int irqStage = (seqOpen > 0 && e5TickFrame != frameNo) || gwPhase == 3 || ffPro == 2 || stageExit;
+      if (!dbg.noAnim && !irqLoad && !fieldIrqLoadWas && !irqStage)
         bgDirty |= fieldIrqTiles(f.sd, bw, frameNo);                  // C0/ECDB-ED08: the IRQ's `LDA $0153 / AND #01 / BNE`
       else if (dbg.noAnim && !irqLoad && !fieldIrqLoadWas && !(bw[0x010F] & 0x80) && !(bw[0x0153] & 0x01))
         bgDirty |= fieldIrqMapJobs(f.sd, bw);                         // (CT_NOANIM stills the tiles, not the doors)

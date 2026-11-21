@@ -600,6 +600,7 @@ void CtSceneSetRomImage(const uint8_t* rom, long len) { gRomImg = rom; gRomImgLe
 // `JSL FD/C2C1`, the field's HDMA table builder (src/hdma_table.c, disasm/notes/field_hdma_tables.md): writes one
 // of the two table sets from the WRAM and flips $0153 bit 0. With no ROM image only the flip is done.
 static int gHdmaBuilt;                                  // the tables in $7F are a builder's (CtScenePubCounter)
+static int gFfFadeBegan;   // this tick's pass took op 0xFF's first `DEC $19` (a static: CtScene's layout is the .state's)
 void CtHdmaTableBuild(uint8_t* wram128) {
   if (!wram128) return;
   if (!gRomImg || CtHdmaBuildNative(wram128, gRomImg, gRomImgLen) != 0) wram128[0x0153] ^= 0x01;
@@ -2985,7 +2986,7 @@ static int step(CtScene* sc, int obj) {            // 1 = yield, 0 = continue
     if (B[addr + 1] < 0x90 && !sc->seqHas && !sc->warpReq) {
       uint8_t b19 = r8(sc->mem, 0x7E0119);
       sc->ffFade = (b19 != 0 && !(b19 & 0x80));
-      if (sc->ffFade) { w8(sc->mem, 0x7E0119, (uint8_t)(b19 - 1)); CtSceneSyncBright(sc); }
+      if (sc->ffFade) { w8(sc->mem, 0x7E0119, (uint8_t)(b19 - 1)); CtSceneSyncBright(sc); gFfFadeBegan = 1; }
     }
     if (B[addr + 1] < 0x80) { sc->seqReq = B[addr + 1]; sc->seqHas = 1; return 1; }
     if (B[addr + 1] < 0x90) { sc->warpReq = B[addr + 1]; return 1; }
@@ -5613,6 +5614,7 @@ void CtSceneTick(CtScene* sc) {
   if (!sc->loadFadeIn && body && !parked) tbMachineTick(sc);
 
   gVmTick++;
+  gFfFadeBegan = 0;                              // (op 0xFF's own fade begun by this tick's pass: see the runner's end)
   // The song-upload freeze, decided first (the sndWait fields; song_load_freeze.md sec. 6). While the main
   // loop is parked inside `JSL $C7:0004` only the NMI's work happens (the upload flush below, the fade
   // counter's INIDISP, the deferred copies); no main-loop leg runs: not the camera, the $0117 drain or the
@@ -5720,7 +5722,7 @@ void CtSceneTick(CtScene* sc) {
       ctXferReorigin(sc, 0);                                                 // 261B JSR C0/74D4
       ctXferUpload(sc->mem->s, 0x1D7C);                                      // (2625 C0/EC60: the NMI's $46 = 1 arm)
       w8(sc->mem, 0x7E0146, 0x01);                                           // 2621 LDA #01 / STA $46 (D = $0100)
-      w8(sc->mem, 0x7E010F, 0x80);                                           // 263D LDA #80 / STA $00010F
+      // (263D `LDA #80 / STA $00010F` comes after the waits: the host writes it on the last one, field.c e5FieldWaits)
       sc->seqReq = 0x85; sc->seqHas = 1;                                     // 2649 LDA #85 / JML C3:0000
     }
     if (st39 == 1 || st39 == 2) ctIrisFrame(sc);
@@ -5837,6 +5839,15 @@ void CtSceneTick(CtScene* sc) {
       if (!vmRuleIfast() && sc->rasterLine + SND_TAIL_LINES >= 225) sc->sndPostResumeFreeze = 1;   // same frame, but the tail will overrun the NMI
     }
   }
+  // A visit that began op 0xFF's own fade (C0/3FBB, `< $90`: a $C3 sequence or the $FD warp) never returns: its loop
+  // `3FC1 DEC $19 / JSR C0/881E / JSL FD/FFF7 / JSR C0/EC60` holds the CPU until the jump, so nothing after the runner
+  // runs in that iteration -- not C0/00C7's FD/C2C1 (the table set and its `$0153` flip), not the drain, not the draw --
+  // only the loop's FD/FFF7. With `$0153` left as the frame before set it, the field IRQ (C0/ECDB) steps the tile
+  // animation on every frame of the fade. MEASURED on the rule's cartridge, route leg 54 (the Proto Dome's Gate, op FF 8x
+  // at f30829): `$0153` = 01 from f30828 to the jump and `$051D` BD -> CC one a frame f30829-f30843; the port flipped
+  // `$0153` in the op's frame and the tiles stood still -- `$051D` 15 steps behind for the rest of the route, the End of
+  // Time's pillar flame on another frame (133 px).
+  if (gFfFadeBegan) { ctObjSlotFrame(sc); return; }
   // The party trail, in the ROM's slot: it is the PCs' op 0xB0 (C0/3002 -> 9E29 / A26B / A2CE), part of the runner
   // above; its $1900/$1980/$1600/$1680 stores are consumed by C0/A810 below (AAFD integrate, the C98A anim leg)
   // and by the drain.
