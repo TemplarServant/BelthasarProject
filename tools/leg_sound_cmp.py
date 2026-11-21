@@ -72,6 +72,9 @@ CASES = {
     # pass CD/3E78 `JSL C1/0012` when `$993A` asks) until `$CCEA` is 0 and only then `LDA #95 / JSR CD/3B71`. Leg 100,
     # the fight of f28753: `19 00 80` and then `18 95 A1` on one frame (f32591); the port posted the 95 first.
     'death-sound-after-the-menu-pass': dict(leg='100_lair_grind', frames=32700),
+    # ...and an action's own end, C1/40D3's `18 FF`: the action loop is the script's thread, so on its exit frame the pass's
+    # blip (C1/1B58 `19 00`) goes first. Leg 116, the Ocean Palace's fight of f52324: `19 00 80` then `18 FF` on f52728.
+    'action-end-after-the-menu-pass': dict(leg='116_ocean_palace_halls', frames=52800),
     # A $C3 stage's driver reset, $7E:3177: `STZ $1E02` is 8-bit ($7E:3181 writes `$1E02` alone), so the five commands go
     # out with the `$1E03` the field left: leg 47's race, `85 00 00 FF` / `89 00 00 FF` (the port sent 00).
     'stage-driver-reset-keeps-the-fourth-byte': dict(leg='47_race', frames=420, bytes=4),

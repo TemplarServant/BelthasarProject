@@ -15621,7 +15621,10 @@ int main(int argc, char** argv) {
                     s7[0x19E1] = ctTechCastPoseByte(menuStatChar);            // $C2:B519[charId]
                     CtMenuSprRequest7(0x90, s7[0x19E1]);                      // (block 7: anim 10, looping at it)
                     menuTechPre = 10;                                         // C2/B4F7 LDA #0A / JSR C2/822B
-                    menuSfx(s7, 0x00, "tech-cast");
+                    // (No sound here: C2/B4DE-B4FC is `LDA $0DBC / BNE / JMP C2/EACC` -- the buzz only when nothing is to be
+                    // spent -- then the pose and the wait; the cast's sound is C2/EAF9's `19 06` ten frames on. MEASURED on the
+                    // rule's cartridge, route leg 116 (f18144's A on the target): no post until `19` by C2/EAFE on f18156;
+                    // the port blipped `18 00` on the A.)
                   } else {
                     menuSfx(s7, 0x01, "tech-target-invalid");
                   }

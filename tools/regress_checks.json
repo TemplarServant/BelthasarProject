@@ -51898,6 +51898,46 @@
       ]
     },
     {
+      "name": "leg-sound-action-end-after-the-menu-pass-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_sound_cmp.py",
+        "action-end-after-the-menu-pass"
+      ],
+      "env": {},
+      "expect": [
+        "legsound: action-end-after-the-menu-pass leg 116 +52800: 722 commands on the cartridge, 722 on the port, 0 differing"
+      ],
+      "pin": [
+        "^legsound: action-end-after-the-menu-pass "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_sound_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an action's own end sound comes after its frame's menu blip, and a Tech cast on the field menu makes no blip of its own",
+      "notes": "TWO SOUND ORDERS (2026-11-21). (1) C1/40D3's `18 FF`, an action loop's exit, is the script's thread: on that frame the menu pass's blip (C1/1B58 `19 00`) is posted first. MEASURED on the rule's cartridge, route leg 116 (the Ocean Palace's fight of f52324): `$1E00` = 19 by C1/1B5D, then `$1E01` = FF / `$1E00` = 18 by C1/40D8 / 40DD on f52728; the port posted the FF first and the tape left the cartridge's clock there (battleSfxPostScriptNoPan, the script queue). (2) The field menu's Tech: the A on the target (C2/B4DE-B4FC: `LDA $0DBC / BNE / JMP C2/EACC`, the pose, the wait) posts nothing; the sound is C2/EAF9's `19 06` ten frames on. Leg 116 f18144 / f18230: no post until `19` by C2/EAFE; the port blipped `18 00` on each A. 722 commands to f52800 are the cartridge's. Two mutations.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      if (battleSfxPostScriptNoPan(h, 0x18, 0xFF /* C1/40D3 */) || !gBattleSndOn)",
+          "replace": "      if (battleSfxPostNoPan(h, 0x18, 0xFF /* C1/40D3 */) || !gBattleSndOn)  /* MUT */",
+          "why": "the action's end posted ahead of the frame's menu blip"
+        },
+        {
+          "file": "src/field.c",
+          "find": "                    menuTechPre = 10;                                         // C2/B4F7 LDA #0A / JSR C2/822B",
+          "replace": "                    menuTechPre = 10; menuSfx(s7, 0x00, \"tech-cast\");  /* MUT */",
+          "why": "a blip on the Tech cast's A"
+        }
+      ]
+    },
+    {
       "name": "leg-window-fight-poses-vs-cartridge",
       "argv": [
         "python",

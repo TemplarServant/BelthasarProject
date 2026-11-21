@@ -648,3 +648,7 @@ fourth-byte-vs-cartridge` (`bytes=4` cases of tools/leg_sound_cmp.py).
 - **A corpse's death sound** (`18 95`, CD/0043) comes after its frame's menu pass: its wait is CD/3E75, which runs the
   pass (CD/3E78 -> C1/10E3) before the routine goes on (leg 100: `19 00 80`, then `18 95 A1`, one frame). Check:
   `leg-sound-death-sound-after-the-menu-pass-vs-cartridge`.
+
+- **An action's end** (`18 FF`, C1/40D3) is the script's thread: after its frame's menu blip (leg 116 f52728). The field
+  menu's **Tech cast** posts nothing on the A (C2/B4DE-B4FC); its sound is C2/EAF9's `19 06` ten frames on. Check:
+  `leg-sound-action-end-after-the-menu-pass-vs-cartridge`.

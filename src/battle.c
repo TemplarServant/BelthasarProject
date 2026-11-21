@@ -814,19 +814,23 @@ static int battleSfxPost(CtBattleHost* h, uint8_t cmd, uint8_t id, uint8_t pan) 
 // (battleTickBody, the `wasFrozen` branch). MEASURED, the rule's cartridge, playthrough leg 42 f2249: `$1E00` = 19 by
 // C1/1B5D (line 64), then `$1E00` = 18 / `$1E01` = 04 by C1/61B0 / C1/61A4 (line 68); the port posted the 04 first (ten
 // legs of the route have the pair).
-static struct { uint8_t cmd, id, pan; } gScriptSfxQ[8];
+static int battleSfxPostNoPan(CtBattleHost* h, uint8_t cmd, uint8_t id);   // (below)
+static struct { uint8_t cmd, id, pan, nopan; } gScriptSfxQ[8];
 static int gScriptSfxN, gScriptSfxDefer;
 static int battleSfxPostScript(CtBattleHost* h, uint8_t cmd, uint8_t id, uint8_t pan) {
   if (!gBattleSndOn) return 0;
   if (gScriptSfxDefer && gScriptSfxN < 8) {
-    gScriptSfxQ[gScriptSfxN].cmd = cmd; gScriptSfxQ[gScriptSfxN].id = id; gScriptSfxQ[gScriptSfxN].pan = pan; gScriptSfxN++;
+    gScriptSfxQ[gScriptSfxN].cmd = cmd; gScriptSfxQ[gScriptSfxN].id = id; gScriptSfxQ[gScriptSfxN].pan = pan;
+    gScriptSfxQ[gScriptSfxN].nopan = 0; gScriptSfxN++;
     return 1;
   }
   return battleSfxPost(h, cmd, id, pan);
 }
 static void battleScriptSfxFlush(CtBattleHost* h) {
   gScriptSfxDefer = 0;
-  for (int k = 0; k < gScriptSfxN; k++) battleSfxPost(h, gScriptSfxQ[k].cmd, gScriptSfxQ[k].id, gScriptSfxQ[k].pan);
+  for (int k = 0; k < gScriptSfxN; k++)
+    if (gScriptSfxQ[k].nopan) battleSfxPostNoPan(h, gScriptSfxQ[k].cmd, gScriptSfxQ[k].id);
+    else battleSfxPost(h, gScriptSfxQ[k].cmd, gScriptSfxQ[k].id, gScriptSfxQ[k].pan);
   gScriptSfxN = 0;
 }
 // ...and a corpse's death sound the same way. CD/0043 is the death routine's wait: `JSR CD/3E75 / JSL CD/04AA` until `$CCEA`
@@ -848,6 +852,18 @@ static int battleSfxPostNoPan(CtBattleHost* h, uint8_t cmd, uint8_t id) {
   s[0x1E01] = id; s[0x1E00] = cmd;
   battleSndPostJsl(h, s);
   return 1;
+}
+// ...and C1/40D3's own: the action loop's exit is the script's thread too, so on an action's frame it comes after the
+// frame's menu pass and its blip. MEASURED on the rule's cartridge, route leg 116 (the Ocean Palace, f52728): `$1E00` = 19
+// by C1/1B5D, then `$1E01` = FF / `$1E00` = 18 by C1/40D8 / 40DD; the port posted the FF first.)
+static int battleSfxPostScriptNoPan(CtBattleHost* h, uint8_t cmd, uint8_t id) {
+  if (!gBattleSndOn) return 0;
+  if (gScriptSfxDefer && gScriptSfxN < 8) {
+    gScriptSfxQ[gScriptSfxN].cmd = cmd; gScriptSfxQ[gScriptSfxN].id = id; gScriptSfxQ[gScriptSfxN].pan = 0;
+    gScriptSfxQ[gScriptSfxN].nopan = 1; gScriptSfxN++;
+    return 1;
+  }
+  return battleSfxPostNoPan(h, cmd, id);
 }
 // ---- Battle UI blip (battle_ui_sfx_sites.md). `C1/1B55: STZ $1E01 / LDA #19 / STA $1E00 / LDA #80 /
 // STA $1E02 / JSL C7/0004` -- id 00, cmd $19, pan $80. It is the whole cursor/confirm/cancel sound of the
@@ -14861,7 +14877,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
   // written on its end-action frame.
   if ((h->actEndByScript || h->actScriptEnd) && h->actEndRel > 0) {
     if (rel == h->actEndRel) {
-      if (battleSfxPostNoPan(h, 0x18, 0xFF /* C1/40D3 */) || !gBattleSndOn)
+      if (battleSfxPostScriptNoPan(h, 0x18, 0xFF /* C1/40D3 */) || !gBattleSndOn)
         if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battlesfx f%d act-end id=FF (C1/40D3, no pan; the script's own end)\n", h->frames);
       // The tail: C1/40E1 `JSR C1/007E` then `LDA $5D9B / BNE ->40E1` (one frame, more while the programs run),
       // C1/4116 `JSR C1/007E` + CC/F06B + the C1/305C loop (no wait in it), then C1/4138 walks the target list $AC5C:
@@ -15195,7 +15211,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
     // C1/40D3 posts `$1E01 = FF / $1E00 = 18` with no pan write, then tears the action down. (What id $FF means to the
     // sound driver is not derived.)
     if (!h->actEndByScript && !h->actScriptEnd) {             // (a script-ended window posted it on its own exit frame)
-      if (battleSfxPostNoPan(h, 0x18, 0xFF) || !gBattleSndOn)
+      if (battleSfxPostScriptNoPan(h, 0x18, 0xFF) || !gBattleSndOn)
         if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battlesfx f%d act-end id=FF (C1/40D3, no pan)\n", h->frames);
     }
     h->actEndByScript = 0; h->actEndRel = 0; h->actScriptEnd = 0; h->actEndHold = 0;
