@@ -1843,6 +1843,11 @@ static int battleAiTarget(CtBattleHost* h, int value, int atk) {
       return (bestSeat == atk) ? -1 : bestSeat;
     if (!(bestSeat & 0x80) && !(s[0xAEFF + bestSeat] & 0x80)) // C1/A4CC LDA $AEFF,X / BMI -> unresolved
       return bestSeat;
+    // ...and unresolved is no target: A4C9 / A4CF `BMI ->A4DF` (RTS) with A4B0's `$AECB` = 0. MEASURED on the rule's
+    // cartridge, route leg 124 (the Blackbird's deck, seats 0/1 left out, `$AEFF` = FF): after enemy 1's attack on seat 2,
+    // its 06 at f27755 leaves `$AECB` = 00 and the walk home starts on f27763 (C1/374D `$9753` = FF); the port's lead-PC
+    // fallback named the absent seat 0 and the enemy stood 64 frames until the player's command.
+    if (value == 6) return -1;
   }
   return battleLeadPc(s);                                     // no staged position / any other value -> lead PC
 }
@@ -5276,14 +5281,20 @@ static void battleCombatStart(CtBattleHost* h) {
   // (min-1) from every present, nonzero slot in place. $B158 is the reload (FD/B7EF..B85B, battleReload). Pinned by
   // the check field-battle-atb-initial-load.
   int atbMin = 0x100;
+  // "Present" is the normaliser's own test, `$AEFF,X != FF` (FD/B90B / B923), for the PCs too: a seat the fight leaves
+  // out (its $AEFF = FF while the roster has it) keeps C1/FBDD's FF and never fills. MEASURED on the rule's cartridge,
+  // route leg 124 (the Blackbird's deck, f27191): `$AEFF` = FF FF 05 -- only seat 2 fights -- and `$AFAB` / `$AFAC` = FF
+  // from C1/FBE0 to the fight's end; the port loaded them 22 and the seat's turn order moved (an enemy's move 64 frames
+  // late, the swing 13 frames early, control back 14 early).
   for (int i = 0; i < 11; i++) {                          // MIN over present, nonzero $B158 (FD/B8FD scan)
-    if (!battlePresent(s, i)) continue;
+    if (!battlePresent(s, i) || s[0xAEFF + i] == 0xFF) continue;
     int rel = s[0xB158 + i];
     if (rel != 0 && rel < atbMin) atbMin = rel;
   }
   int atbBase = (atbMin >= 0x100) ? 0 : atbMin - 1;       // (min-1); no present combatant -> nothing to load
   for (int i = 0; i < 11; i++) {
     if (!battlePresent(s, i)) continue;
+    if (s[0xAEFF + i] == 0xFF) { s[0xAFAB + i] = 0xFF; if (battleIsPc(i)) s[0x9F22 + i] = 0xFF; continue; }   // (left out: C1/FBDD's FF)
     int rel  = s[0xB158 + i];
     int load = (rel > atbBase) ? rel - atbBase : 0;        // FD/B92F `SEC / SBC $00` -- clamp keeps it >= 0
     s[0xAFAB + i] = (uint8_t)load;
@@ -10131,10 +10142,13 @@ static void battleMoveArm(CtBattleHost* h, int slot, int mode, int tgtCmb) {
   // The arm is a request. $5E0D,X (mvReq) is what every arm site writes -- C1/9833 / C1/9891 (the AI decode,
   // mode 0 included), C1/3793 (class 0) -- and the live mode $974A,X (mvMode) has one writer, the idle-tick walk's
   // commit C1/3364 (battle_enemy_move_modes.md V19), 1..6 frames later at the next visit of the slot's group.
-  // (mvTarget is written here: $5E15 -> $9752 is copied by the mode machine's own pass, C1/3742-374A, before any
+  // (mvTarget is not written here: $5E15 -> $9752 is copied by the mode machine's own pass, C1/3742-374A, before any
   // handler reads it.)
   // $5E15,X itself is kept too: the attack's turn reads its target there (C1/99CE, battleAiTurn).
-  BT_MVREQ(h, slot) = mode; BT_MVTARGET(h, slot) = tgtCmb;
+  // (Not `$9752,X` itself: the mode machine's own pass copies `$5E15` -> `$9752` (C1/3742-374A, battleModeMachine3714),
+  // and until then the byte keeps the last target. MEASURED on the rule's cartridge, route leg 124: enemy 1's arm at
+  // f27755 (`$5E16` = FF) leaves `$9753` = 02 until C1/374D's FF on f27762; the port wrote its lead-PC stand-in, 00.)
+  BT_MVREQ(h, slot) = mode; (void)tgtCmb;
   h->mem[0x5E15 + slot] = (uint8_t)tgtCmb;                          // C1/9833 / C1/9894 STA $5E15,X
 }
 

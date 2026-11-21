@@ -3725,6 +3725,8 @@ Two mutations.
 main loop, so `$0153` is not flipped and the field IRQ steps the tile animation `$051D` every frame of the fade. One mutation.
 `leg-window-vortex-opens-after-three-field-frames-vs-cartridge`: leg 95 f83960+40: C0/260E's three waits before entry 5's
 JML tick the play clock, and `$010F` / `$0384` land on the last. One mutation.
+`leg-window-left-out-seats-are-no-targets-vs-cartridge`: leg 124 f27100+800: seats a fight leaves out (`$AEFF` = FF)
+keep ATB FF, resolver 06 names no target when its winner is one, and the move arm leaves `$9752` to C1/3742. Two mutations.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles

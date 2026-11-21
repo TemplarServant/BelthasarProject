@@ -51858,6 +51858,46 @@
       ]
     },
     {
+      "name": "leg-window-left-out-seats-are-no-targets-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "left-out-seats-are-no-targets"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: left-out-seats-are-no-targets leg 124 f27100+800: 142 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: left-out-seats-are-no-targets "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "seats a fight leaves out keep their ATB at FF, an enemy's nearest-PC target that falls on one is no target, and the arm leaves $9752 to the mode machine's copy",
+      "notes": "SEATS A FIGHT LEAVES OUT (2026-11-21). On the Blackbird's deck (route leg 124, f27178) only seat 2 fights: `$AEFF` = FF FF 05. (1) The initial ATB normaliser FD/B8F8 tests `$AEFF,X` (B90B / B923), so the left-out seats keep C1/FBDD's FF to the end -- the port loaded them from `$B158` (22). (2) Resolver 06, the nearest living PC (C1/A4AF): a winner with `$9873` or `$AEFF,X` bit 7 set is no target (A4C9 / A4CF `BMI ->A4DF`, `$AECB` = 0); the port fell back on the lead PC, the absent seat 0. (3) The move arm (C1/9833 / 9894) writes `$5E15` only; the mode machine copies it to `$9752` (C1/3742-374A). MEASURED on the rule's cartridge: enemy 1 attacks seat 2, its 06 at f27755 leaves `$AECB` = 00 and `$9753` = 02 until C1/374D's FF on f27762, and it walks home from f27763. The port's enemy stood 64 frames (to the player's command), the next swing (C1/6200 `18 E8`) came 13 frames early with another pan, and control came back 14 frames early. Leg 124 is the cartridge's on its clock. Two mutations.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    if (value == 6) return -1;",
+          "replace": "    (void)0;  /* MUT */",
+          "why": "an unresolved nearest PC falls back on the lead PC: the enemy names the absent seat and stands"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "    if (s[0xAEFF + i] == 0xFF) { s[0xAFAB + i] = 0xFF; if (battleIsPc(i)) s[0x9F22 + i] = 0xFF; continue; }   // (left out: C1/FBDD's FF)",
+          "replace": "    (void)0;  /* MUT */",
+          "why": "the left-out seats' ATB is loaded from $B158"
+        }
+      ]
+    },
+    {
       "name": "leg-window-fight-poses-vs-cartridge",
       "argv": [
         "python",

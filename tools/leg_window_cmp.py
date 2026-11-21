@@ -170,6 +170,12 @@ WINDOWS = {
     # `LDA #85 / JML C3:0000` -- three frames of the field's NMI, whose C2/85AE ticks the play clock `$0400`. The port
     # opened the vortex on the first and stopped the clock there: every later load seeded `$01F8` three short. (`$010F` = 80
     # at C0/263D and `$0384` at C3/0038 come after the waits too.)
+    # The Blackbird's deck (leg 124's fight): seats 0/1 are left out (`$AEFF` = FF) and only seat 2 fights. Their ATB
+    # keeps C1/FBDD's FF (the normaliser FD/B8F8 tests `$AEFF,X`), and an enemy's resolver 06 (the nearest PC, C1/A4AF)
+    # whose winner is unresolved names no target -- the enemy walks home 8 frames after its attack (C1/374D `$9753` = FF).
+    # The port loaded the absent seats' ATB and fell back on the lead PC: the enemy stood 64 frames and the swing came early.
+    'left-out-seats-are-no-targets': dict(leg='124_', start=27100, frames=800, free=[(27101, 27280)],
+                                         cells=[('7EAFAB', 3), ('7E9753', 1), ('7EAECB', 1), ('7E1D10', 1)]),
     'vortex-opens-after-three-field-frames': dict(leg='95_', start=83960, frames=40, cells=[('7E0400', 1), ('7E0384', 1), ('7E010F', 1)]),
     'op-ff-fade-keeps-the-table-set': dict(leg='54_', start=30800, frames=60,
                                            cells=[('7E0153', 1), ('7E051D', 1), ('7E0119', 1)]),
