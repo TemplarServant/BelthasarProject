@@ -339,3 +339,11 @@ steps `$CCFE` every four frames from f8974; on f9000 its cells 40-4E (tiles 40-5
 pixels cleared and the others not. The port drew the corpse at the level the last packet completed (33-44 px a picture,
 f8972-f9100); field.c battleDissolveBlitCells now takes the packets the NMI shipped (h->dissolvePktShown). Check
 field-picture-corpse-level-ships-in-packets-vs-cartridge.
+
+## C1/B762: the death scan before the counters (2026-11-21)
+
+C1/863D `JSR C1/B762` runs before C1/8640's counter test: a fallen victim (`$AEFF,X` = FF) not yet scanned (`$AE82,X`,
+= the killed latch `$AE85,slot`), without `$AF12,X` bit 7, whose block 2 does not open with condition 20, is marked and
+C1/B7D5 runs CF/FE20 at once -- its whole CD/0043 before the counter loop. Only a corpse with a death counter waits for
+C1/881C's scan. Leg 116: kill f120987, CD/0043 f120988, 95 f121011, counter loop + 881C + 8C09 + head f121051.
+battle.c battleEarlyDeathB762. Check: `leg-window-death-routine-before-the-counters-vs-cartridge`.

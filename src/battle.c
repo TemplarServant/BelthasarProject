@@ -8750,16 +8750,80 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
 // C1/0003` -> C1/006D `JSL CF/FE20`), and its caller is C1/881C -- the end of the counter loop C1/8671-8819, after every
 // victim's counter turn C1/8780 `JSR C1/8CF9` has played its whole action. So a corpse's routine starts only once the
 // counters the action provoked are over, the fallen enemy's own block-2 counter included (C1/8694-86C6).
+// C1/863D `JSR C1/B762`, before the counter test C1/8640: every victim of the action ($B3AC, the $AD8E copy) that is an
+// enemy now fallen (`$AEFF,X` = FF), not yet scanned (`$AE82,X`), without `$AF12,X` bit 7, and whose block 2 does NOT open
+// with condition 20 (C1/B488, `$CC0000,X` != 20) is marked dying (`$AEB0,X` = `$AE82,X` = `$AEB2` = 1, `STZ $AE62,X`), and
+// with any marked (and no demo) the death scan runs right there (C1/B7D5 `LDA #06 / JSR C1/0003` -> CF/FE20): each such
+// corpse's whole CD/0043 -- the `$CCEA` wait, the 95, the dissolve -- holds the main thread before the counter loop
+// starts. Only a corpse with a death counter (condition 20) waits for C1/881C's scan, after the counters. MEASURED on the
+// rule's cartridge, route leg 116 (the Ocean Palace's last fight, f120987): CF/FE20 and CD/0043 on f120988, the `18 95`
+// on f121011, the counter loop C1/8671 (`$26` D0 -> D2, `$B264` 00 -> 02) only on f121051; the port evaluated the counter
+// on the kill's frame and never ran the death routine before the counter's own action.
+static void battleReactiveCounterTick(CtBattleHost* h, int decodeOnly);   // (below)
+static int gEarlyDeath[8], gEarlyScan, gCtrStashed;
+static int gCtrStash[4][8];
+static void battleEarlyDeathB762(CtBattleHost* h) {
+  uint8_t* s = h->mem; long romLen = 0; const uint8_t* rom = CtBattleRom(&romLen);
+  int any = 0;
+  for (int k = 0; k < 8; k++) {                                          // C1/B776-B7C7 over $B3AC
+    int v = s[0xAD8E + k];
+    if (v < 3 || v == 0xFF || v >= 11) continue;                         // B780-B786
+    int slot = v - 3;
+    if (s[0xAE82 + v]) continue;                                         // B78B
+    if (s[0xAEFF + v] != 0xFF || !h->dissolveActive[slot]) continue;     // B790 (fallen, with a routine to run)
+    if (s[0xAF12 + v] & 0x80) continue;                                  // B797-B79C
+    if (rom) {                                                           // B79E-B7AD: block 2's first condition
+      int fid = s[0xAF0A + v];
+      long p = aiFlat(CtRomByte(rom, 0x400000L, (long)(ROM_AI_PTR_TABLE + fid * 2)) | (CtRomByte(rom, 0x400000L, (long)(ROM_AI_PTR_TABLE + fid * 2 + 1)) << 8));
+      for (int g = 0; g < 0x2000 && p < romLen && CtRomByte(rom, 0x400000L, (long)(p)) != 0xFF; p++, g++) {}
+      if (p + 1 < romLen && CtRomByte(rom, 0x400000L, (long)(p + 1)) == 0x20) continue;
+    }
+    s[0xAEB0 + v] = 1; s[0xAE82 + v] = 1; s[0xAEB2] = 1; s[0xAE62 + v] = 0;   // B7AF-B7BC
+    gEarlyDeath[slot] = 1; any = 1;
+  }
+  if (!any || (s[0x2989] & 0x20)) { for (int k = 0; k < 8; k++) gEarlyDeath[k] = 0; return; }   // B7C9-B7D3
+  // B7D5: the scan, now. The counters the action armed wait for it (C1/8640 comes after the JSR returns).)
+  gEarlyScan = 1;
+  for (int k = 0; k < 8; k++) {
+    gCtrStash[0][k] = h->enCounterDelay[k]; gCtrStash[1][k] = h->enCounterBy[k];
+    gCtrStash[2][k] = h->enCounterK[k]; gCtrStash[3][k] = h->enCounterWait[k]; h->enCounterDelay[k] = 0;
+  }
+  // (A corpse C1/B762 scans has no counter to give: the loop passes a fallen victim without condition 20 at once,
+  //  C1/8694-86C8 -> C1/8809. The port armed one for every enemy victim and refused it at the decode, after its delay.)
+  for (int k = 0; k < 8; k++) if (gEarlyDeath[k]) gCtrStash[0][k] = 0;
+  gCtrStashed = 1;
+  if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "earlydeath f%d C1/B762: the scan before the counters\n", h->frames);
+}
 static int battleCounterPhase(const CtBattleHost* h) {
   if (h->actCounter || h->ctrPendSlot >= 0 || h->ctrMsgHold > 0) return 1;
   for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
   return 0;
 }
 static void battleDeathScanNext(CtBattleHost* h) {
-  if (h->dissolveRunning >= 0 || battleCounterPhase(h)) return;  // C1/881C not reached yet
+  if (h->dissolveRunning >= 0) return;
+  if (gEarlyScan) {                                               // C1/B762's scan: its marked corpses only, counters held
+    int left = 0;
+    for (int k = 0; k < 8; k++) if (gEarlyDeath[k] && h->dissolveActive[k]) left = 1;
+    if (!left) {                                                  // B7DA: back into C1/8640 -- the counters go on
+      gEarlyScan = 0; for (int k = 0; k < 8; k++) gEarlyDeath[k] = 0;
+      h->mem[0xAEB2] = 0;                                         // B7DC STZ $AEB2
+      if (gCtrStashed) {
+        for (int k = 0; k < 8; k++) {
+          h->enCounterDelay[k] = gCtrStash[0][k]; h->enCounterBy[k] = gCtrStash[1][k];
+          h->enCounterK[k] = gCtrStash[2][k]; h->enCounterWait[k] = gCtrStash[3][k];
+        }
+        gCtrStashed = 0;
+        // C1/B762 returns into C1/8640 on this very frame: the counter loop runs now (its decode, C1/881C), not on the
+        // next frame's pass -- the frame's own pass ran before this routine ended (battleDeathHold).
+        battleReactiveCounterTick(h, 1);
+      }
+    }
+  }
+  if (!gEarlyScan && battleCounterPhase(h)) return;               // C1/881C not reached yet
   uint8_t* s = h->mem;
   for (int slot = 7; slot >= 0; slot--) {                         // CF/FE20's loop goes on: highest combatant index first,
     if (!h->dissolveActive[slot]) continue;                       //   the next routine on this frame
+    if (gEarlyScan && !gEarlyDeath[slot]) continue;               // (C1/B762's scan: the marked ones only)
     // The gates are read as the scan reaches the corpse, after the counters: a fallen enemy's own block-2 counter can
     // set `$9FF7,X` (leg 113: the Bantam Imp's 7C, $9FFA = 81 at f1395) and then the corpse has no routine at all.
     int cmb = 3 + slot;
@@ -8781,6 +8845,7 @@ static void battleDeathScanNext(CtBattleHost* h) {
     }
     battleDeathRoutineStart(h, slot); return;
   }
+  if (gEarlyScan) return;                                         // (the early scan returns into C1/8640, not the head)
   if (h->headPend) {                                              // the scan returns into the loop: C1/8120's head
     h->headPend = 0; h->deathHeadF = h->frames;                   //   (`$A0FD = 00` and `$0027`++ on the frame of the
     battleIterHead(h);                                            //   last `$96F5` clear)
@@ -15092,6 +15157,7 @@ static void battleAdvanceAction(CtBattleHost* h) {
       // all three sets, then clears them (ED84 FD/ACFD). EC7F is called only from C1/8B0C and C1/AC85, and AC85 is every
       // action's. The when-hit counter is armed first, per victim.
       battleApplySlotsEC7F(h);
+      if (!h->actStatusFx && !h->actEndByScript && !wasCounter && !h->actDropTech) battleEarlyDeathB762(h);   // C1/863D
       if (h->actItemId > 0)
         for (int vi = 0; vi < h->actTgtN && vi < 8; vi++) battleItemFxTrace(h, h->actTgtList[vi], h->actItemId);
       // The charm roll (C1/E9D5 at the physical hit tail 1D34C; battle_drop_charm.md): a PC physical hit rolls to steal
@@ -16272,6 +16338,7 @@ void CtBattleBegin(CtBattleHost* h) {
   memset(h->dissolvePktShown, 0, sizeof h->dissolvePktShown);
   h->deathFxSlot = -1; h->deathFxId = 0; h->deathFxT = 0; h->deathFxW = 0; h->deathFxTd = 0;
   h->headPend = 0; h->deathHeadF = -1;
+  gEarlyScan = 0; gCtrStashed = 0; for (int k = 0; k < 8; k++) gEarlyDeath[k] = 0;   // (C1/B762's scan: none pending)
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.

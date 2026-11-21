@@ -174,6 +174,13 @@ WINDOWS = {
     # keeps C1/FBDD's FF (the normaliser FD/B8F8 tests `$AEFF,X`), and an enemy's resolver 06 (the nearest PC, C1/A4AF)
     # whose winner is unresolved names no target -- the enemy walks home 8 frames after its attack (C1/374D `$9753` = FF).
     # The port loaded the absent seats' ATB and fell back on the lead PC: the enemy stood 64 frames and the swing came early.
+    # C1/863D's C1/B762, before the counter loop: a fallen victim without a death counter (its block 2 not opening with
+    # condition 20) has its whole CD/0043 -- the `$CCEA` wait, the 95, the dissolve -- on the main thread first, and the loop
+    # (the RNG `$26` of its evals, `$B263,X`'s count) only after. Leg 116's last fight: the kill at f120987, CD/0043 on f120988, the
+    # counter loop on f121051; the fight of f115617 the same (the loop on f115681, the next eval f115729). The port evaluated
+    # the counters on the kill's frame.
+    'death-routine-before-the-counters': dict(leg='116_', start=109900, frames=5900, free=[(109901, 110080)],
+                                             cells=[('7E0026', 1), ('7EB264', 1)]),
     'left-out-seats-are-no-targets': dict(leg='124_', start=27100, frames=800, free=[(27101, 27280)],
                                          cells=[('7EAFAB', 3), ('7E9753', 1), ('7EAECB', 1), ('7E1D10', 1)]),
     'vortex-opens-after-three-field-frames': dict(leg='95_', start=83960, frames=40, cells=[('7E0400', 1), ('7E0384', 1), ('7E010F', 1)]),

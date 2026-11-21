@@ -51356,7 +51356,7 @@
         "playthrough: 113_algetty_shop SAME -- locs 188 18A 1F4 184 17C 180 | story B4 | party 000105 | gold 1034 | hp 271 (10) | ctrl 21 | end picture 0 px at port +0",
         "playthrough: 114_giga_gaia SAME -- locs 180 17C 184 1F4 18A 188 189 18B 18D 17E 184 1F4 17E 17C 182 1F4 151 1F4 161 1F5 150 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 | story B4 B7 BA BB | party 000105 | gold 9334 | hp 348 (5) | ctrl 35 | end picture 0 px at port -2",
         "playthrough: 115_dalton SAME -- locs 191 149 14E 1F4 194 | story BB BD | party 000105 | gold 11834 | hp 129 (3) | ctrl 9 | end picture 0 px at port +0",
-        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 48594 px at port +0",
+        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 49351 px at port +0",
         "playthrough: 117_kajar_restock SAME -- locs 195 196 195 196 195 194 14E 149 191 1F5 185 1F5 185 1F5 165 | story C6 | party 000105 | gold 35384 | hp 301 (2) | ctrl 19 | end picture 0 px at port +0",
         "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 0 px at port -2",
         "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 1978 px at port -1",
@@ -51934,6 +51934,46 @@
           "find": "                    menuTechPre = 10;                                         // C2/B4F7 LDA #0A / JSR C2/822B",
           "replace": "                    menuTechPre = 10; menuSfx(s7, 0x00, \"tech-cast\");  /* MUT */",
           "why": "a blip on the Tech cast's A"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-death-routine-before-the-counters-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "death-routine-before-the-counters"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: death-routine-before-the-counters leg 116 f109900+5900: 21 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: death-routine-before-the-counters "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a fallen victim without a death counter runs its whole death routine before the counter loop evaluates (C1/863D's C1/B762)",
+      "notes": "C1/B762, THE DEATH SCAN BEFORE THE COUNTERS (2026-11-21). C1/863D `JSR C1/B762`, just before the counter test C1/8640: every victim of the action ($B3AC, the $AD8E copy) that is a fallen enemy (`$AEFF,X` = FF), not yet scanned (`$AE82,X`), without `$AF12,X` bit 7 and whose block 2 does not open with condition 20, is marked dying (`$AEB0,X` = `$AE82,X` = `$AEB2` = 1, `STZ $AE62,X`), and with any marked (no demo) C1/B7D5 runs the death scan CF/FE20 there: each corpse's whole CD/0043 -- the `$CCEA` wait, the 95, the dissolve -- holds the main thread; only then C1/8640's counter loop (its decode on the routine's last frame), C1/881C, C1/8C09 and the head, on one frame. MEASURED on the rule's cartridge, route leg 116: the last fight's kill at f120987, CF/FE20 and CD/0043 on f120988, the 95 on f121011, C1/8671 / 8780 / 881C / 8C09 / 8120 all on f121051 (`$26` D0 -> D2, `$B264` 00 -> 02); the fight of f115617 the same (counter loop f115681). The port evaluated the counters on the kill's frame and ran the routine after them: a counter fired before the 95, which never came. Now battleEarlyDeathB762 (after battleApplySlotsEC7F) marks the corpses and holds the armed counters until their routines end, dropping the scanned corpses' own; the loop then runs on that frame. Leg 116 is the cartridge's on its clock through its last fight. Two mutations.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      if (!h->actStatusFx && !h->actEndByScript && !wasCounter && !h->actDropTech) battleEarlyDeathB762(h);   // C1/863D",
+          "replace": "      (void)0;  /* MUT */",
+          "why": "no early scan: the counters are evaluated on the kill's frame, before the death routine"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "        battleReactiveCounterTick(h, 1);\n      }",
+          "replace": "      }  /* MUT */",
+          "why": "the counter loop a frame after the routine's end"
         }
       ]
     },

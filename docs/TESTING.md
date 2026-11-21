@@ -3729,6 +3729,8 @@ JML tick the play clock, and `$010F` / `$0384` land on the last. One mutation.
 keep ATB FF, resolver 06 names no target when its winner is one, and the move arm leaves `$9752` to C1/3742. Two mutations.
 `leg-sound-action-end-after-the-menu-pass-vs-cartridge`: leg 116 +52800: C1/40D3's `18 FF` after the frame's menu blip,
 and no blip on the field Tech's cast A (C2/B4DE). Two mutations.
+`leg-window-death-routine-before-the-counters-vs-cartridge`: leg 116 f109900+5900: C1/B762 runs a fallen victim's whole
+CD/0043 before the counter loop (no death counter, condition 20). Two mutations.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
