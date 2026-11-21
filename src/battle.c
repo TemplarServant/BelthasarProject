@@ -8799,6 +8799,7 @@ static int battleCounterPhase(const CtBattleHost* h) {
   for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
   return 0;
 }
+static void battleTail881C(CtBattleHost* h);                   // (below)
 static void battleDeathScanNext(CtBattleHost* h) {
   if (h->dissolveRunning >= 0) return;
   if (gEarlyScan) {                                               // C1/B762's scan: its marked corpses only, counters held
@@ -8815,8 +8816,13 @@ static void battleDeathScanNext(CtBattleHost* h) {
         gCtrStashed = 0;
         // C1/B762 returns into C1/8640 on this very frame: the counter loop runs now (its decode, C1/881C), not on the
         // next frame's pass -- the frame's own pass ran before this routine ended (battleDeathHold).
+        int armed = 0;
+        for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) armed = 1;
         battleReactiveCounterTick(h, 1);
+        if (!armed) battleTail881C(h);                             // no victim to walk: C1/881C's tail at once
       }
+      // ...and with no counter left to play, C1/881C's own scan (below) returns into the loop: the action's head.
+      if (!battleCounterPhase(h)) h->headPend = 1;
     }
   }
   if (!gEarlyScan && battleCounterPhase(h)) return;               // C1/881C not reached yet
@@ -11124,6 +11130,7 @@ int CtBattleModeMachineProbe(uint8_t* mem) {
 // C1/881C only at its end -- the eval (and its RNG draws) waits for every counter, decoded or acted (leg 109: enemy 9's
 // eval drew before enemy 7's counter picked its target, and the counter hit Marle instead of Crono).
 static int battleCountersPending(const CtBattleHost* h) {
+  if (gEarlyScan) return 1;                                        // C1/B762's scan first: C1/881C after it (below)
   for (int k = 0; k < 8; k++) if (h->enCounterDelay[k] > 0) return 1;
   return 0;
 }
@@ -22249,7 +22256,12 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
       // sweep is stopped on a lifeline revive, nothing returns yet: battleLifelineResume runs the head.)
       if (h->llSeat >= 0) { /* inside C1/B223 */ }
       else if (h->demoPass && h->schedN == 0) battleDemoEnd(h);  // the demo's pass returns: C1/85D1 -> C1/83AE (G0)
-      else if (h->stResumeX < 0) { if (!battleCounterPhase(h)) battleIterHead(h); }   // (a counter the action provoked
+      // (While C1/B762's scan runs the handler stands ahead of C1/8640: its counter loop and C1/881C are still to come, so the
+      // action's return into C1/8120 is too (leg 116 f118290's last fight: Gato's tech fells enemy 3 at f2697 and provokes two
+      // counters; the cartridge runs ONE head, after the second counter's end at f3876 -- the port ran the close's head, parked
+      // it behind the corpse's routine, and then the counter loop's own: `$0027` 3F -> 41 against 40, the ATB handler's parity
+      // flipped and the next enemy acted two frames early).
+      else if (h->stResumeX < 0) { if (!battleCounterPhase(h) && !gEarlyScan) battleIterHead(h); }   // (a counter the action provoked
                                                                   //   plays first: C1/881C, then the head -- below)
       else {
         battleStatusResume(h);

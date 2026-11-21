@@ -347,3 +347,11 @@ C1/863D `JSR C1/B762` runs before C1/8640's counter test: a fallen victim (`$AEF
 C1/B7D5 runs CF/FE20 at once -- its whole CD/0043 before the counter loop. Only a corpse with a death counter waits for
 C1/881C's scan. Leg 116: kill f120987, CD/0043 f120988, 95 f121011, counter loop + 881C + 8C09 + head f121051.
 battle.c battleEarlyDeathB762. Check: `leg-window-death-routine-before-the-counters-vs-cartridge`.
+
+## C1/B762's scan and the action's one head (2026-11-21)
+
+While the early scan runs, the handler has not reached C1/8640: the counter loop, C1/881C's tail and the return into
+C1/8120 all follow the corpse's CD/0043. Leg 116's last fight: the kill at f120988 provokes two counters and `$0027`
+steps once, 3F -> 40 at f122167, after the second counter's end. The port's close ran a head during the scan (parked
+behind the routine) and the counter loop's return another (3F -> 41). The main loop itself keeps running its CD/0009
+teardown through the scan (CD/0043's `$CCEA` wait needs it). Check: `leg-window-one-head-after-the-early-scan-vs-cartridge`.

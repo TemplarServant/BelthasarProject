@@ -51356,7 +51356,7 @@
         "playthrough: 113_algetty_shop SAME -- locs 188 18A 1F4 184 17C 180 | story B4 | party 000105 | gold 1034 | hp 271 (10) | ctrl 21 | end picture 0 px at port +0",
         "playthrough: 114_giga_gaia SAME -- locs 180 17C 184 1F4 18A 188 189 18B 18D 17E 184 1F4 17E 17C 182 1F4 151 1F4 161 1F5 150 1F5 150 1F4 162 1F4 164 1F4 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 160 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 185 1F5 191 | story B4 B7 BA BB | party 000105 | gold 9334 | hp 348 (5) | ctrl 35 | end picture 0 px at port -2",
         "playthrough: 115_dalton SAME -- locs 191 149 14E 1F4 194 | story BB BD | party 000105 | gold 11834 | hp 129 (3) | ctrl 9 | end picture 0 px at port +0",
-        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 49351 px at port +0",
+        "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 48594 px at port +0",
         "playthrough: 117_kajar_restock SAME -- locs 195 196 195 196 195 194 14E 149 191 1F5 185 1F5 185 1F5 165 | story C6 | party 000105 | gold 35384 | hp 301 (2) | ctrl 19 | end picture 0 px at port +0",
         "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 0 px at port -2",
         "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 1978 px at port -1",
@@ -51974,6 +51974,40 @@
           "find": "        battleReactiveCounterTick(h, 1);\n      }",
           "replace": "      }  /* MUT */",
           "why": "the counter loop a frame after the routine's end"
+        }
+      ]
+    },
+    {
+      "name": "leg-window-one-head-after-the-early-scan-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/leg_window_cmp.py",
+        "one-head-after-the-early-scan"
+      ],
+      "env": {},
+      "expect": [
+        "legwindow: one-head-after-the-early-scan leg 116 f118200+4100: 158 steps compared, 0 differing"
+      ],
+      "pin": [
+        "^legwindow: one-head-after-the-early-scan "
+      ],
+      "tier": "full",
+      "timeout_s": 2400,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/leg_window_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "an action whose kill C1/B762 scans returns into the loop once, after the counters it provoked",
+      "notes": "ONE HEAD AFTER C1/B762's SCAN (2026-11-21). While C1/B762's death scan (C1/B7D5 -> CF/FE20) runs, the action's handler stands ahead of C1/8640: its counter loop, C1/881C's tail (`JSR C1/8C09`, the evals) and its return into C1/8120 (`INC $0027`, the parity the ATB handler runs on) all come after the corpse's CD/0043. MEASURED on the rule's cartridge, route leg 116's last fight (begins f118290): Gato's tech fells enemy 3 at f120988 and provokes two counters (victims 5 and 9); `$0027` stands at 3F through the routine and both counters and steps to 40 ONCE, at f122167, after the second counter's end. The port's close ran the head while the scan held the counters stashed (battleCounterPhase read none), parked it behind the corpse's routine, and the counter loop's return ran another: 3F -> 41, the ATB handler's parity flipped, the next enemy thought two frames early and leg 116's tape parted at store 277624. Now the close's head waits while gEarlyScan, battleCountersPending reads 1 then (C1/881C's tail after the scan), and the scan's end runs C1/881C's tail when no counter was armed and the head when no counter is left. (gEarlyScan must NOT enter battleCounterPhase itself: that gates the main loop's CD/0009 teardown CD/0043 waits on.) Cells `$0027` and the RNG cursor `$26` through the fight. Leg 116 is the cartridge's on its clock, tape included. One mutation.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "if (!battleCounterPhase(h) && !gEarlyScan) battleIterHead(h); }",
+          "replace": "if (!battleCounterPhase(h)) battleIterHead(h); }",
+          "why": "the close's head runs during the early scan: `$0027` one ahead after the counters"
         }
       ]
     },

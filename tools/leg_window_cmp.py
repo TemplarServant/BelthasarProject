@@ -181,6 +181,12 @@ WINDOWS = {
     # the counters on the kill's frame.
     'death-routine-before-the-counters': dict(leg='116_', start=109900, frames=5900, free=[(109901, 110080)],
                                              cells=[('7E0026', 1), ('7EB264', 1)]),
+    # ...and the action's return into the loop waits for the counters it provoked: the same fight's kill at f120988 (Gato's
+    # tech, enemy 3 falls) provokes two counters, and C1/8120's head -- `$0027`++, the ATB handler's parity -- runs once,
+    # after the second counter's end (cartridge f122167). The port ran the close's head behind the corpse's routine and the
+    # counter loop's again: `$0027` one ahead, the next enemy's think two frames early.
+    'one-head-after-the-early-scan': dict(leg='116_', start=118200, frames=4100, free=[(118201, 118380)],
+                                         cells=[('7E0027', 1), ('7E0026', 1)]),
     'left-out-seats-are-no-targets': dict(leg='124_', start=27100, frames=800, free=[(27101, 27280)],
                                          cells=[('7EAFAB', 3), ('7E9753', 1), ('7EAECB', 1), ('7E1D10', 1)]),
     'vortex-opens-after-three-field-frames': dict(leg='95_', start=83960, frames=40, cells=[('7E0400', 1), ('7E0384', 1), ('7E010F', 1)]),
