@@ -51359,8 +51359,8 @@
         "playthrough: 116_ocean_palace_halls DIFFERENT -- locs 194 19F 194 195 196 195 197 195 198 199 19F 199 19A 19B 19A 199 198 195 | story BD C3 C6 | party 000105 | gold 31234 | hp 458 (22) | ctrl 47 | end picture 48594 px at port +0",
         "playthrough: 117_kajar_restock SAME -- locs 195 196 195 196 195 194 14E 149 191 1F5 185 1F5 185 1F5 165 | story C6 | party 000105 | gold 35384 | hp 301 (2) | ctrl 19 | end picture 0 px at port +0",
         "playthrough: 118_ocean_palace_return DIFFERENT -- locs 165 1F5 185 1F5 185 1F5 191 149 14E 1F4 194 195 196 195 198 199 19A 19B | story C6 | party 000105 | gold 28234 | hp 231 (6) | ctrl 21 | end picture 0 px at port -2",
-        "playthrough: 119_elevator DIFFERENT -- locs 19B 1A0 | story C6 | party 000105 000102 | gold 31334 | hp 577 (5) | ctrl 4 | end picture 1978 px at port -1",
-        "playthrough: 120_scouts DIFFERENT -- locs 1A0 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (4) | ctrl 10 | end picture 54016 px at port +0",
+        "playthrough: 119_elevator SAME -- locs 19B 1A0 1A2 | story C6 | party 000105 000102 | gold 35884 | hp 217 (6) | ctrl 5 | end picture 0 px at port +0",
+        "playthrough: 120_scouts SAME -- locs 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (3) | ctrl 9 | end picture 0 px at port -2",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
         "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 34 px at port -2",
         "playthrough: 123_last_village_blackbird SAME -- locs 1A9 1F6 1A8 10F 173 16C 16E 16C | story CD CF | party 010205 | gold 0 | hp 646 (1) | ctrl 5 | end picture 0 px at port -2",
@@ -51379,7 +51379,7 @@
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit SAME -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 0 px at port -2",
         "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
-        "playthrough: 118/138 legs SAME"
+        "playthrough: 120/138 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
