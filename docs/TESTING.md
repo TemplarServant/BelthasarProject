@@ -3733,6 +3733,8 @@ and no blip on the field Tech's cast A (C2/B4DE). Two mutations.
 CD/0043 before the counter loop (no death counter, condition 20). Two mutations.
 `leg-window-one-head-after-the-early-scan-vs-cartridge`: leg 116 f118200+4100: the action whose kill C1/B762
 scans returns into C1/8120 once, after the counters it provoked (`$0027`, `$26`). One mutation.
+`playthrough-leg-122-vs-rule-cartridge-on-its-clock`: route leg 122 whole on the cartridge's clock (`cmp --clock`): its
+chains and end picture -- the exchange's close placing each slot (C0/1A6F-1A97), the reboot's load on the clock tape. One mutation.
 `rom-free-picture-reward-names` (tools/rom_free_picture_cmp.py): leg 51's results without the dump against with it -- the
 VWF's name pointers C2:5FD8 are in the pack (issue #11). One mutation.
 

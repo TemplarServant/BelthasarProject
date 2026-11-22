@@ -51362,7 +51362,7 @@
         "playthrough: 119_elevator SAME -- locs 19B 1A0 1A2 | story C6 | party 000105 000102 | gold 35884 | hp 217 (6) | ctrl 5 | end picture 0 px at port +0",
         "playthrough: 120_scouts SAME -- locs 1A2 19C 1A2 19C 196 | story C6 | party 000102 | gold 35884 | hp 617 (3) | ctrl 9 | end picture 0 px at port -2",
         "playthrough: 121_switches_bridge SAME -- locs 196 19C 196 19C 19D | story C6 | party 000102 | gold 37384 | hp 617 (1) | ctrl 15 | end picture 0 px at port -2",
-        "playthrough: 122_golem_twins_lavos DIFFERENT -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 34 px at port -2",
+        "playthrough: 122_golem_twins_lavos SAME -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 0 px at port -2",
         "playthrough: 123_last_village_blackbird SAME -- locs 1A9 1F6 1A8 10F 173 16C 16E 16C | story CD CF | party 010205 | gold 0 | hp 646 (1) | ctrl 5 | end picture 0 px at port -2",
         "playthrough: 124_blackbird_decks DIFFERENT -- locs 16C 173 170 172 170 175 | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 17 | end picture 14 px at port +0",
         "playthrough: 125_blackbird_wing SAME -- locs 175 170 1BB 170 171 176 171 178 1BC 178 171 176 1DE | story CF | party 010205 | gold 41384 | hp 646 (1) | ctrl 31 | end picture 0 px at port +0",
@@ -51379,7 +51379,7 @@
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit SAME -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 0 px at port -2",
         "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
-        "playthrough: 120/138 legs SAME"
+        "playthrough: 121/138 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -52008,6 +52008,42 @@
           "find": "if (!battleCounterPhase(h) && !gEarlyScan) battleIterHead(h); }",
           "replace": "if (!battleCounterPhase(h)) battleIterHead(h); }",
           "why": "the close's head runs during the early scan: `$0027` one ahead after the counters"
+        }
+      ]
+    },
+    {
+      "name": "playthrough-leg-122-vs-rule-cartridge-on-its-clock",
+      "argv": [
+        "python",
+        "tools/playthrough.py",
+        "cmp",
+        "122_golem_twins_lavos",
+        "--clock"
+      ],
+      "env": {},
+      "expect": [
+        "playthrough: 122_golem_twins_lavos SAME -- locs 19D 19E 19F 1D3 1A7 19F 1F4 1F5 1EE 1F5 165 1F4 182 1ED 10F 1A9 | story C6 C9 CB CC CD | party 000102 010282 010203 010205 | gold 41384 | hp 646 (5) | ctrl 7 | end picture 0 px at port -2"
+      ],
+      "pin": [
+        "^playthrough: 122_golem_twins_lavos SAME",
+        "^playthrough: 122_golem_twins_lavos DIFFERENT"
+      ],
+      "tier": "full",
+      "timeout_s": 4800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "route leg 122 (the Golem Twins, Lavos, the fall of Zeal, the Last Village's exchange) is the cartridge's on its clock: chains and the end picture",
+      "notes": "THE EXCHANGE'S CLOSE PLACES THE SLOTS (2026-11-22). C0/1A03's reconcile, after C0/01A5 restored the page: with the party changed every PC object is respawned (C0/597D, its PC loader picks its slot), then C0/1A6F-1A97 store each slot's stashed words (`$7F1D09,X` / `$7F1D0F,X` / `$7F1D15,X`) into `$1800,Y` / `$1880,Y` / `$0C00,Y` of the object `$0197,X` names now -- whatever it held. Route leg 122's `C8 00` (open f85609, close f107717): Robo leaves, Ayla joins in slot 2 and her object 6 is respawned; its page words already read the restored stash (1780 19FF), and the port took words equal to the stash for an object already placed, leaving the VM's own position at 0000 FFFF: the cartridge's Ayla (four 16x16 entries behind the lead) was never drawn -- the 34 px of leg 122's end picture on the cartridge's clock. Now the VM takes the words unless it already stands on them. Leg 122 is SAME on the cartridge's clock. One mutation. The leg on the cartridge's clock (`cmp --clock`: its SPC tape, lit tape and clock-resume tape -- the DF reboot into 1A9 at f82353 ends on the cartridge's clock, 19b5e45) is the check: a window seeded inside the room cannot see it (a fresh seed gives object 6 no stale position).",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "                        && ((int)lround(vx * 16.0) & 0xFFFF) == wx && ((int)lround(vy * 16.0) & 0xFFFF) == wy;",
+          "replace": "                        && 1;   /* MUT: placed = never moved */",
+          "why": "a respawned object that holds a position of any kind is left there: Ayla stays at 0000 FFFF"
         }
       ]
     },

@@ -17116,8 +17116,13 @@ int main(int argc, char** argv) {
               int sv = s7[0x0197 + x];
               if (sv & 0x80) continue;                                              // C0/1A74-1A76
               int wx = s7[0x11D09 + x] | (s7[0x11D0A + x] << 8), wy = s7[0x11D0F + x] | (s7[0x11D10 + x] << 8);
-              int had = (s7[0x1800 + sv] | (s7[0x1801 + sv] << 8)) == wx && (s7[0x1880 + sv] | (s7[0x1881 + sv] << 8)) == wy;
-              if (had && !CtSceneLeadScriptPlaced(f.vm, sv / 2, NULL, NULL)) had = 0;
+              // The store is the object's position whatever it held: the VM's own takes the words unless it already
+              // stands on them. (Leg 122's exchange, `C8 00` f85609-f107717: Ayla's object 6 is respawned for slot 2
+              // with its VM position at 0000 FFFF while its page words, the restored stash's, already read 1780 19FF;
+              // a test on the words alone left it there and the cartridge's Ayla was never drawn: 34 px of the end.)
+              double vx = 0, vy = 0;
+              int had = CtSceneLeadScriptPlaced(f.vm, sv / 2, &vx, &vy)
+                        && ((int)lround(vx * 16.0) & 0xFFFF) == wx && ((int)lround(vy * 16.0) & 0xFFFF) == wy;
               if (!had && sv / 2 < CtSceneActorCount(f.vm))
                 CtSceneSetActorPosF(f.vm, sv / 2, (int16_t)wx / 16.0, (int16_t)wy / 16.0);
               s7[0x1800 + sv] = (uint8_t)wx; s7[0x1801 + sv] = (uint8_t)(wx >> 8);    // C0/1A7B-1A7F
