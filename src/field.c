@@ -5705,17 +5705,26 @@ static long loadSinkWall(int sp) {
   return 0;
 }
 // CT_LITTAPE=<file> (tools/playthrough.py cmp --clock): the cartridge's lit frames, one decimal a line, ascending.
-static int fieldLitTapeNext(int frame) {
-  static int* t; static int n = -1;
+// CT_CLKTAPE=<file> (the same harness mode): the frames the cartridge's play clock `$0400` ticks again after a pause of
+// two frames or more -- where an NMI-off load ends. A room entered by op DE / DF / E1 (`$011E` = 1) runs no loader ramp
+// and lights itself from its script, so its lit frame is not its load's end (route leg 122's reboot into 1A9: the
+// cartridge's clock pauses f82353-82381, its `$0119` leaves 00 at f82387); the clock's resume is.
+static int fieldTapeNext(const char* env, int frame) {
+  static int* tt[2]; static int nn[2] = { -1, -1 };
+  int w = env[3] == 'C';                                   // CT_CLKTAPE / CT_LITTAPE
+  int* t = tt[w]; int n = nn[w];
   if (n < 0) {
-    n = 0; const char* f = getenv("CT_LITTAPE"); FILE* fp = (f && *f) ? fopen(f, "r") : NULL;
+    n = 0; const char* f = getenv(env); FILE* fp = (f && *f) ? fopen(f, "r") : NULL;
     if (fp) { int cap = 256, v; t = (int*)malloc(sizeof(int) * (size_t)cap);
               while (t && fscanf(fp, "%d", &v) == 1) { if (n == cap) { cap *= 2; t = (int*)realloc(t, sizeof(int) * (size_t)cap); if (!t) break; } t[n++] = v; }
               fclose(fp); if (!t) n = 0; }
+    tt[w] = t; nn[w] = n;
   }
   for (int k = 0; k < n; k++) if (t[k] > frame) return t[k];
   return -1;
 }
+static int fieldLitTapeNext(int frame) { return fieldTapeNext("CT_LITTAPE", frame); }
+static int fieldClkTapeNext(int frame) { return fieldTapeNext("CT_CLKTAPE", frame); }
 // C7/0A39-0A51, what a song command leaves in the mailbox's third and fourth bytes (ct_vm.h CtSoundSink.songBytes): only
 // a command the dispatch takes to C7/01A1 ($10, $11, $14, $15 with the driver latch up) with a song id under the count.
 static int fieldSoundSongBytes(void* ctx, const uint8_t* mem7E, uint8_t out[2]) {
@@ -13095,7 +13104,10 @@ int main(int argc, char** argv) {
       // A load whose own count ends within three frames of one ends on it -- the NMI-off load clock is the timing class
       // the game does not reproduce (CLAUDE.md), and a leg graded on the cartridge's clock takes its loads' lengths too.
       { int L = fieldLitTapeNext(frameNo);
-        if (L >= 0 && !inWorld) { int want = L - frameNo; if (want >= 1 && want - loadHold <= 3 && loadHold - want <= 3) loadHold = want; } }
+        int lit = 0;
+        if (L >= 0 && !inWorld) { int want = L - frameNo; if (want >= 1 && want - loadHold <= 3 && loadHold - want <= 3) { loadHold = want; lit = 1; } }
+        int R = lit ? -1 : fieldClkTapeNext(frameNo);           // ...else the cartridge's clock resumes where its load ended
+        if (R >= 0 && !inWorld) { int want = R - frameNo; if (want >= 1 && want - loadHold <= 3 && loadHold - want <= 3) loadHold = want; } }
       if (--loadHold <= 0) {
         if (inWorld) { fade = 0; fadeBri = 15; }        // C2's first NMI: the world's own fade object takes the screen
         else { fade = 2; fadeBri = 0; loadFadeEntry = 1; loadRamp = 1; loadFadeF0 = frameNo; }

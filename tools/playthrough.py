@@ -472,6 +472,29 @@ def oracle_timeline(start, pad, mon=None):
     return out
 
 
+CLOCK_MON = [('clk', '7E0400', '0400', 2)]                             # the play clock (C2/85AE ticks it in the field's NMI)
+
+
+def load_tapes(start, pad, otl):
+    """cmp --clock: where the cartridge's loads end, for the port's NMI-off loads (src/field.c fieldTapeNext). CT_LITTAPE: the
+    frames its `$0119` leaves 00 on (a loader ramp's first step); CT_CLKTAPE: the frames its play clock `$0400` ticks again
+    after a pause of two frames or more -- the load's end where the room lights itself (op DE / DF / E1, `$011E` = 1)."""
+    lit = os.path.join(TMP, 'littape.txt'); prev = None
+    with open(lit, 'w') as fh:
+        for f, d in otl:
+            if prev == '00' and d['bri'] != '00':
+                fh.write('%d' % f + chr(10))
+            prev = d['bri']
+    os.environ['CT_LITTAPE'] = lit
+    clk = os.path.join(TMP, 'clktape.txt'); last = None
+    with open(clk, 'w') as fh:
+        for f, d in oracle_timeline(start, pad, CLOCK_MON):
+            if last is not None and f - last >= 3:
+                fh.write('%d' % f + chr(10))
+            last = f
+    os.environ['CT_CLKTAPE'] = clk
+
+
 # --------------------------------------------------------------------------------------------------------------- the port
 def oracle_tape(start, pad, out):
     """The cartridge's clock for a leg (cmp --clock): every store its CPU makes to $2140-$2143, `port value apuc` a line,
@@ -655,13 +678,7 @@ def cmp_leg(legs, i, verbose):
         os.environ['CT_APUTAPE'] = tape
     otl = oracle_timeline(start, lg['pad'])
     if CLOCK:                                                # ...and its lit frames: a load's black ends on the cartridge's
-        lit = os.path.join(TMP, 'littape.txt'); prev = None
-        with open(lit, 'w') as fh:
-            for f, d in otl:
-                if prev == '00' and d['bri'] != '00':
-                    fh.write('%d' % f + chr(10))
-                prev = d['bri']
-        os.environ['CT_LITTAPE'] = lit
+        load_tapes(start, lg['pad'], otl)
     ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
     o, p = chains(otl), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad'], cache=True), pics)
@@ -756,6 +773,12 @@ def main():
         if i > 0:
             ensure_states(legs, i - 1)
         start = start_of(legs, i)
+        if CLOCK:                                            # (diff <leg> --clock: the port on the cartridge's clock, as cmp)
+            os.makedirs(TMP, exist_ok=True)
+            tape = os.path.join(TMP, 'aputape.txt')
+            oracle_tape(start, legs[i]['pad'], tape)
+            os.environ['CT_APUTAPE'] = tape
+            load_tapes(start, legs[i]['pad'], oracle_timeline(start, legs[i]['pad']))
         _, pics = port_timeline(start, legs[i]['pad'], last_key(legs, i))
         c = oracle_picture(start, legs[i]['pad'])
         k, n = picture_grade(c, pics)
