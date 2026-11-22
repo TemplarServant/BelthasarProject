@@ -349,6 +349,10 @@ def menu_tables(rom):
     # the VWF's font and tables: FF:2060 + code x 24 (left eight) and FF:3860 + (code >> 1) x 24 (right four), the
     # code 8-bit; C2:5FE6 / C2:6066 column offsets (x = 2 * (pen >> 3) + 4 at most), C2:60E6 advances (code - A0)
     t('VWF font ($FF:2060, $FF:3860)', FF + 0x2060, FF + 0x3860 + 0x80 * 24)
+    # ...and the seven name pointers in front of them, C2:5FD8 + 2 x id (C2/5A26 / 5B15 / 5B70: the codes 11, 13-19,
+    # 1B+ read a party name from $7E:2C23 + 6 x id through them). Missing from the pack, every name in a VWF line was
+    # read from $7E:0000 without a dump: "o  learns Lase" for "Robo learns Laser Spin!" (issue #11).
+    t('VWF name pointers ($C2:5FD8, ids 0-6)', C2 + 0x5FD8, C2 + 0x5FE6)
     t('VWF column offsets and advances ($C2:5FE6-61E5)', C2 + 0x5FE6, C2 + 0x60E6 + 0x100)
     # the portraits and element plaques (C2/EC38, C2/A273), for the eight ids
     tiles = [rom[FF + 0xCE70 + i] for i in range(8)]

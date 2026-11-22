@@ -51077,7 +51077,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "tab-data: 378 tables, 1032681 bytes identical"
+        "tab-data: 378 tables, 1032695 bytes identical"
       ],
       "pin": [
         "^tab-data: "
@@ -52008,6 +52008,40 @@
           "find": "if (!battleCounterPhase(h) && !gEarlyScan) battleIterHead(h); }",
           "replace": "if (!battleCounterPhase(h)) battleIterHead(h); }",
           "why": "the close's head runs during the early scan: `$0027` one ahead after the counters"
+        }
+      ]
+    },
+    {
+      "name": "rom-free-picture-reward-names",
+      "argv": [
+        "python",
+        "tools/rom_free_picture_cmp.py",
+        "reward-names"
+      ],
+      "env": {},
+      "expect": [
+        "romfree: reward-names leg 51 f10100,f10300: 0 px differ (the port without the dump vs with it)"
+      ],
+      "pin": [
+        "^romfree: reward-names "
+      ],
+      "tier": "full",
+      "timeout_s": 1800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/rom_free_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "without the dump the results' names are the ones the dump gives (the pack holds the VWF name pointers C2:5FD8)",
+      "notes": "THE VWF'S NAME POINTERS IN THE PACK (GitHub issue #11, 2026-11-22). The VWF's name codes (11, 13-19, 1B+; C2/5A26 / 5B15 / 5B70, src/vwf.c nameAt) read a name's address from C2:5FD8 + 2 x id (seven words, the party's names at $7E:2C23 + 6 x id). assets/rom_closure.py's VWF table began at C2:5FE6, 14 bytes later, so with no dump CtRomByte read 0 and the name came from $7E:0000: v0.26.0's \"o  learns Lase\" / \"r Spin!\" and \"o  's level up!\". Every other check runs with the dump in the tree and could not see it (CT_ROMVIEW_MISSLOG did not report this read either). tools/rom_free_picture_cmp.py plays a leg's pad on the port with and without the dump (CT_NO_ROM=1) and compares the pictures: leg 51's results, f10100 \"Robo learns Laser Spin!\" and f10300 \"Lucca's level up!\". The pack gains the table 'VWF name pointers ($C2:5FD8, ids 0-6)' (players re-run the setup). One mutation: the table is not consulted for those 14 bytes.",
+      "mutations": [
+        {
+          "file": "src/romview.c",
+          "find": "  if (t) return t->bytes[off - t->start];",
+          "replace": "  if (t && (off < 0x025FD8 || off >= 0x025FE6)) return t->bytes[off - t->start];   /* MUT: no name pointers in the pack */",
+          "why": "the name pointers read as the image's without a dump (0): the names come from $7E:0000"
         }
       ]
     },

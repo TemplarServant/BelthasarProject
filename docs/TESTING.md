@@ -3733,6 +3733,8 @@ and no blip on the field Tech's cast A (C2/B4DE). Two mutations.
 CD/0043 before the counter loop (no death counter, condition 20). Two mutations.
 `leg-window-one-head-after-the-early-scan-vs-cartridge`: leg 116 f118200+4100: the action whose kill C1/B762
 scans returns into C1/8120 once, after the counters it provoked (`$0027`, `$26`). One mutation.
+`rom-free-picture-reward-names` (tools/rom_free_picture_cmp.py): leg 51's results without the dump against with it -- the
+VWF's name pointers C2:5FD8 are in the pack (issue #11). One mutation.
 
 `field-objdata-*-vs-cartridge` (tools/field_objdata_cmp.py): the field's sprite DATA against the cartridge's, frame by
 frame -- the OAM mirror `$7E:0700-$091F` and the OBJ tiles the visible entries use -- on four windows: leg 12's sparkles
