@@ -12950,13 +12950,17 @@ int main(int argc, char** argv) {
           if (wd.wram) { wd.wram[0x1C] = 0x80; wd.wram[0x1D] = 0x00; }
           { long rl = 0; const uint8_t* rimg = CtBattleRom(&rl); if (rimg) CtWorldSetRom(rimg, rl); CtWorldSetIrisCircle(CtIrisCircleImage); }   // bank-$C2 VM scripts
           if (ngIntro) {                               // --newgame 496-pan only: swap the base (sparse,
-            worldOverlayIntroSeed(&wd);
-            // ...and the camera of the same instant (start_scene.state f0: $20 = 0178, $26 = 014B, $E3 = 2F, $E7 = 29).
-            // From here the pan is the cutscene's own object scripts -- C2/066C / C2/0568 scroll $20/$26 and keep
-            // the cells $E3/$E7 (see the ngIntro frame below) -- so the cells must be the camera's, as the ROM's are.
-            wd.cam.bg1h = wd.cam.bg2h = NG_PAN_START_X; wd.cam.bg1v = wd.cam.bg2v = NG_PAN_START_Y;
-            wd.cam.pendDx = wd.cam.pendDy = 0;
-            CtWorldTilemapBuild(&wd.stm, wd.wram, &wd.cam);
+            if (!owBootstrapObjects()) {               // (the snapshot path: the capture's objects and camera)
+              worldOverlayIntroSeed(&wd);
+              // ...and the camera of the same instant (start_scene.state f0: $20 = 0178, $26 = 014B, $E3 = 2F, $E7 = 29).
+              // From here the pan is the cutscene's own object scripts -- C2/066C / C2/0568 scroll $20/$26 and keep
+              // the cells $E3/$E7 (see the ngIntro frame below) -- so the cells must be the camera's, as the ROM's are.
+              wd.cam.bg1h = wd.cam.bg2h = NG_PAN_START_X; wd.cam.bg1v = wd.cam.bg2v = NG_PAN_START_Y;
+              wd.cam.pendDx = wd.cam.pendDy = 0;
+              CtWorldTilemapBuild(&wd.stm, wd.wram, &wd.cam);
+            }
+            // The cells follow the camera the entry placed (the bootstrap path: the op's tile, CtWorldEnter); left at the
+            // loader's zero-fill, the first frame read them as a script's move to tile (0,0).
             for (int b = 0; b < 2; b++) {
               wd.wram[0xE3 + b * 2] = (uint8_t)wd.stm.e3[b]; wd.wram[0xE4 + b * 2] = (uint8_t)(wd.stm.e3[b] >> 8);
               wd.wram[0xE7 + b * 2] = (uint8_t)wd.stm.e7[b]; wd.wram[0xE8 + b * 2] = (uint8_t)(wd.stm.e7[b] >> 8);
@@ -13151,6 +13155,12 @@ int main(int argc, char** argv) {
           if (selftest || getenv("CT_LOADCOST")) printf("loadfade: C0/2848 ramp done -- $0119 01->0F, main loop resumes at f%d"
                                " (entry f%d, %d frames)\n", frameNo, loadFadeF0, frameNo - loadFadeF0);
         }
+        // The loop's C0/00BF can make a script's `JSL $C7:0004` whose handshake holds the CPU in C7's poll for frames: the
+        // iteration has not come back round to 284D. MEASURED, route leg 00 (power-on, the title's exit into loc 000): the
+        // ramp's first pass re-posts song `10 00` (C0/3C3C-3C41) while the SPC still takes the load's own, and the CPU sits
+        // in C7/0A74-0A77 three frames -- `$0119` 01 at f324, 02 at f328. The port stepped every frame.
+        // ...and on the frame it returns C0/EC60 still waits (`INC $0152`, the NMI clears it): 284D is the next frame's.
+        else if (CtSceneMainLoopParked(f.vm)) { }       // (still inside that iteration's C0/00BF: no INC)
         else { b = (b + 1) & 0xFF;                      // 284D INC $19
                if (rwi) rwi[0x0119] = (uint8_t)b;
                CtSceneSyncBright(f.vm);                 // one byte: an init `F0 00` is ramped up by this INC,
@@ -13957,7 +13967,7 @@ int main(int argc, char** argv) {
         // NMI's part per frame: CtWorldStreamFrame flushes the columns/rows the steppers staged and runs the BG3
         // tick (C2/75C3).
         CtWorldStreamFrame(&wd.stm, &wd.cam, wd.wram, 0, 0);
-        if (++ngIntroT >= NG_PAN_END && !fade) {       // pan complete -> loc 271, the new-game wake-up intro router
+        if (++ngIntroT >= NG_PAN_END && !fade && !owBootstrapObjects()) {   // pan complete -> loc 271 (the snapshot path)
           ngIntro = 0;                                 // (oracle: 496->271 auto @f1533). 271 plays the 3-page "Crono...
           // Note: g_owNoMarker stays 1 here. The ROM suppresses the era OBJ whenever the overworld is in cutscene mode
           // ($027C=0), which includes the post-pan fade-out to loc 271, not just the pan. It is cleared on the next
@@ -14294,8 +14304,8 @@ int main(int argc, char** argv) {
           }
         }
         if (wr[0x1E00] && getenv("CT_OWSONG"))
-          printf("owsong: switch cmd=%02X p=%02X region=%02X shadow=%02X\n",
-                 wr[0x1E00], wr[0x1E01], wr[0x00EB], wr[0x02AE]);
+          printf("owsong: switch cmd=%02X p=%02X region=%02X shadow=%02X req=%02X %02X %02X %02X f%d\n",
+                 wr[0x1E00], wr[0x1E01], wr[0x00EB], wr[0x02AE], wr[0x1BE8], wr[0x1BE9], wr[0x1BEA], wr[0x1BEB], frameNo);
       }
       if (dbg.worldDbg && worldTick % 30 == 0) {
         printf("t%d cam(%d,%d):", worldTick, wd.cam.bg1h, wd.cam.bg1v);
@@ -19238,7 +19248,10 @@ int main(int argc, char** argv) {
           if (haveWorld) {                                         // `E0 F0 03 3F 28`)
             pendKind = 2;
             if (newGame && !ngIntroDone) { ngIntroDone = 1;              // the boot's one cinematic entry (see the decl)
-              pendWX = 568; pendWY = 564; ngIntro = 1; ngIntroT = 0; }   // new-game: the scripted 1000 AD
+              pendWX = 568; pendWY = 564; ngIntro = 1; ngIntroT = 0;     // new-game: the scripted 1000 AD
+              // ...entered as every other world: at the op's tile (scene 0's `E0 F0 81 3F 38`), the cutscene's own
+              // objects from the world's bootstrap (owBootstrapObjects). The (568,564) above is the snapshot path's.
+              if (owBootstrapObjects()) { pendWX = lx * 8; pendWY = ly * 8; } }
             else { pendWX = lx * 8; pendWY = ly * 8; ngIntro = 0; }   // intro pan (568,564). Else: the arrival tile
             if (f.vm) { CtSceneGetFlags(f.vm, flagsBuf); haveFlagsBuf = 1; }   // -> ow px. (A ferry pay is one of these:
                                                                                 // the world's bootstrap plays the ride.)

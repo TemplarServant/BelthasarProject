@@ -37,19 +37,27 @@ def main():
         m = re.match(r'owcam t\d+ .*\$20=([0-9A-F]{4}) \$26=([0-9A-F]{4}) .* ng=(\d+)', line)
         if m:
             P[int(m.group(3))] = (int(m.group(1), 16), int(m.group(2), 16))
-        elif line.startswith('ngintro:') or line.startswith('changeloc:') or line.startswith('ow-script-cam:'):
+        elif line.startswith(('ngintro:', 'changeloc:', 'ow-script-cam:', 'ow-op05:')):
             print('newgame-pan-cmp: port ' + line)
+    # The port enters the world as the cartridge does (the op's tile, the cutscene's objects from the world's bootstrap) and
+    # counts `ng` from its first frame there; start_scene.state was captured some frames into the pan. The capture's f1 is
+    # matched with the port's first frame on the same camera, and every frame after it compared at that offset.
+    # (a camera value holds over a few frames, so the offset is the one whose frames agree most, from the first matches)
+    cands = [k - 1 for k in sorted(P) if O.get(1) and P[k] == O[1]][:8] or [0]
+    off = max(cands, key=lambda d: sum(1 for k in range(1, FRAMES) if k + d in P and P[k + d] == O.get(k)))
+    k0 = off + 1
     same = total = 0
     first = None
     for k in range(1, FRAMES):
-        if k in P and k in O:
+        if k + off in P and k in O:
             total += 1
-            if P[k] == O[k]:
+            if P[k + off] == O[k]:
                 same += 1
             elif first is None:
                 first = k
+    print("newgame-pan-cmp: the capture's f1 is the port's ng=%s" % (k0 if k0 is not None else 'none'))
     print('newgame-pan-cmp: camera $20/$26 port vs cartridge -> %d / %d frames identical%s' %
-          (same, total, '' if first is None else ' (first difference ng=%d port=%s cartridge=%s)' % (first, P[first], O[first])))
+          (same, total, '' if first is None else ' (first difference f%d port=%s cartridge=%s)' % (first, P[first + off], O[first])))
     for k in (1, 500, 1000, 1532):
         if k in O:
             print('newgame-pan-cmp: cartridge f%d $20=%d $26=%d' % (k, O[k][0], O[k][1]))

@@ -106,15 +106,35 @@ def route():
         lg['frames'] = sum(n for _, n in lg['pad'])
         m = re.search(r'\[branch of (\S+)\]', lg['note'])
         lg['branch'] = m.group(1) if m else None
+        # `[from <state>]`: a SEGMENT that starts from a cartridge state outside the chain (a path under the repository, as
+        # the oracle wrote it) -- a stretch of the game whose way there is not cut into legs yet. The legs after it chain
+        # from it; like the branches it goes after the chain's last leg, so the chain's keys and states do not move.
+        m = re.search(r'\[from (\S+)\]', lg['note'])
+        lg['startfile'] = os.path.join(ROOT, m.group(1)) if m else None
         if lg['branch']:
             branch = True
+        elif lg['startfile']:
+            branch = False
         elif branch:
             sys.exit('playthrough: %s comes after a branch leg -- the branches go after the last leg of the chain' % lg['name'])
     return legs
 
 
+def seg_start(legs, i):
+    """The `[from]` leg whose segment leg i is in (it or an earlier one, with no branch between), or -1."""
+    k = i
+    while k >= 0 and not legs[k].get('branch'):
+        if legs[k].get('startfile'):
+            return k
+        k -= 1
+    return -1
+
+
 def prev_of(legs, i):
-    """The leg whose end state leg i starts from: the one before it, or the one a branch leg names. -1 = power-on."""
+    """The leg whose end state leg i starts from: the one before it, or the one a branch leg names. -1 = power-on, -2 = a
+    `[from]` leg's own state."""
+    if legs[i].get('startfile'):
+        return -2
     return find(legs, legs[i]['branch']) if legs[i].get('branch') else i - 1
 
 
@@ -156,6 +176,8 @@ def state_of(name):
 
 def start_of(legs, i):
     j = prev_of(legs, i)
+    if j == -2:
+        return legs[i]['startfile']
     return 'boot' if j < 0 else state_of(legs[j]['name'])
 
 
@@ -172,8 +194,15 @@ def key_of(legs, i):
     """What leg i's end state is made of: every pad from power-on through it, and the oracle that played them."""
     h = hashlib.sha1()
     j = prev_of(legs, i)
-    for lg in legs[:j + 1] + [legs[i]]:
-        h.update(btnscript(lg['pad']).encode() + b'|')
+    k = seg_start(legs, i)
+    if k >= 0:                                           # a `[from]` segment: its start state and its own pads
+        with open(legs[k]['startfile'], 'rb') as f:
+            h.update(hashlib.sha1(f.read()).digest())
+        for lg in legs[k:i + 1]:
+            h.update(btnscript(lg['pad']).encode() + b'|')
+    else:
+        for lg in legs[:j + 1] + [legs[i]]:
+            h.update(btnscript(lg['pad']).encode() + b'|')
     # The oracle that played them: build/ct_oracle.exe (the oracle alone: main.c's modes, snes/*.c, the state loader), hashed
     # without its link identity (tools/ctlib/oracle_cache.py _exe_sha) -- a port fix rebuilds ct.exe but leaves these
     # states the cartridge's, so it no longer replays the chain from power-on (2 h for 96 legs).
@@ -559,10 +588,12 @@ def seed_in_load_fade(start, w):
 def port_timeline(start, pad, first=0):
     """The port's graded bytes on change, and its pictures around the leg's last frame ({offset: rgb bytes}).
     `first` is the pad of the frame before `pad` begins (walkscript)."""
-    w = wram_of(start)
-    lw = os.path.join(TMP, 'seed.lakewram')
-    open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)
-    loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
+    boot = start == 'boot'                                   # the route's first leg: power-on, an erased cartridge
+    if not boot:
+        w = wram_of(start)
+        lw = os.path.join(TMP, 'seed.lakewram')
+        open(lw, 'wb').write(b'#lakewram\nRAM:131072:' + w)
+        loc = (w[0x100] | (w[0x101] << 8)) & 0x1FF
     end = sum(n for _, n in pad)
     at = [end + k for k in SHOTS if end + k > 0]
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', CT_NOPACE='1', CT_AUDIO_LOCKSTEP='1',
@@ -572,12 +603,15 @@ def port_timeline(start, pad, first=0):
                # left in the tree's ct_sram.srm would change the port's legs), and a save a leg makes lands in its own
                # scratch, never over the player's file
                CT_SRAM_FRESH='1', CT_SRAM=os.path.join(TMP, 'port.srm'))
-    if seed_in_load_fade(start, w):
+    if boot:
+        env.pop('CT_AUDIO_SEEDSTATE', None)              # (the port's own power-on: its SPC boots as the cartridge's does)
+    if not boot and seed_in_load_fade(start, w):
         env['CT_SEED_LOADFADE'] = '1'                    # (a leg cut inside C0/2848's ramp: the port goes on with it)
-    if os.environ.get('CT_OAMRENDER', '1') != '0':          # (the OAM renderer, stage 2: the seed's OBJ tiles, which a WRAM
-        env['CT_SEED_VRAM'] = os.path.join(TMP, 'seed.raw.vram')   #  image does not carry; test surface only)
-    r = subprocess.run([FIELD, '--assets', 'ct_assets.dat', '--scene', str(loc), '--loadwram', lw,
-                        '--walkscript', walkscript(pad, first) if first else walkscript(pad)], cwd=ROOT, env=env,
+    if not boot and os.environ.get('CT_OAMRENDER', '1') != '0':   # (the OAM renderer, stage 2: the seed's OBJ tiles,
+        env['CT_SEED_VRAM'] = os.path.join(TMP, 'seed.raw.vram')   #  which a WRAM image does not carry; test surface only)
+    where = ['--boot'] if boot else ['--scene', str(loc), '--loadwram', lw]   # (--boot: the port's own power-on)
+    r = subprocess.run([FIELD, '--assets', 'ct_assets.dat'] + where +
+                       ['--walkscript', walkscript(pad, first) if first else walkscript(pad)], cwd=ROOT, env=env,
                        capture_output=True, text=True,
                        errors='replace')
     global PORT_STDOUT, PORT_STDERR
@@ -666,10 +700,10 @@ def fmt(ch, k):
 def cmp_leg(legs, i, verbose):
     lg = legs[i]
     start = start_of(legs, i)
-    if lg['oracle_only'] or start == 'boot':
+    if lg['oracle_only']:
         print('playthrough: %s oracle-only (%s)' % (lg['name'], lg['note']))
         return None
-    if not os.path.exists(start):
+    if start != 'boot' and not os.path.exists(start):
         sys.exit('playthrough: %s has no start state (%s): run `play all` first' % (lg['name'], start))
     os.makedirs(TMP, exist_ok=True)                          # (a cached cartridge side makes no file of its own here)
     if CLOCK:                                                # the cartridge's clock: its SPC stores, replayed (CT_APUTAPE)
@@ -680,6 +714,20 @@ def cmp_leg(legs, i, verbose):
     if CLOCK:                                                # ...and its lit frames: a load's black ends on the cartridge's
         load_tapes(start, lg['pad'], otl)
     ptl, pics = port_timeline(start, lg['pad'], last_key(legs, i))
+    if start == 'boot':
+        # The power-on leg: before its first lit frame the cartridge's RAM is the power-on fill (the emulator's, not the
+        # game's) until the reset's own stores -- C2/956E's wipe after the driver upload, f23 on the rule's cartridge --
+        # and the screen is black; the port holds those frames black with its state already made. Graded from the first
+        # picture on, on both sides (each side's values as they stand there).
+        lit = next((f for f, d in otl if d['bri'] != '00'), 0)
+        def from_lit(tl):
+            last = None
+            for f, d in tl:
+                if f > lit:
+                    break
+                last = d
+            return ([(lit, last)] if last else []) + [(f, d) for f, d in tl if f > lit]
+        otl, ptl = from_lit(otl), from_lit(ptl)
     o, p = chains(otl), chains(ptl)
     k, npx = picture_grade(oracle_picture(start, lg['pad'], cache=True), pics)
     same = all([v for _, v in o[k2]] == [v for _, v in p[k2]] for k2 in o) and npx == 0

@@ -5629,7 +5629,10 @@ void CtSceneTick(CtScene* sc) {
            // the NMI; the frames lost are the JSL's own, vmRuleIfast)
            sc->sndPostResumeFreeze = !vmRuleIfast() && (sc->sndEndLine + SND_TAIL_LINES >= 225);
            if (sc->sndResumeN > 0) sc->st[sc->sndResumeObj].addr = sc->sndSavedAddr; }   // the JSL returned: the visit ends, the ip commits
-  } else sc->rasterLine = 12;   // the runner's start line on the early queue (measured with `--hookpc 3C43`)
+  } else sc->rasterLine = sc->loadFadeIn ? 228 : 12;   // the runner's start line on the early queue (measured with `--hookpc 3C43`)
+  // ...and in C0/2848's ramp the runner follows C0/EC60's wait with only `INC $19` and C0/881E before it, so under the rule
+  // it begins where that wait left the beam: MEASURED, route leg 00's ramp into loc 000, the song op's JSL (C0/3C43) on
+  // line 228 (`--hookpc C03C43`), and the attract's ramp after the title the same.
   sc->sndPosted = 0; sc->sndFreezeFrames = 0;
   // C0/EB8C, the NMI's upload flush, first. C0/CA76's prologue `LDA $09A0 / BEQ / RTS` refuses the whole drain
   // while the VRAM upload queue holds work, and only C0/B1B2 clears $09A0. It runs from the NMI, at the top of the

@@ -1,6 +1,6 @@
 # The playthrough route: the cartridge's pad from power-on (erased cartridge) to "The End". See tools/playthrough.py.
 
-## 00_newgame -- power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F [oracle-only]
+## 00_newgame -- power-on, the title, New Game: Battle Mode Active, the name Crono, the opening over 1F0, into 10F (the port from its own power-on, --boot)
 # Start at the title; A on ACTIVE; Start closes the name prompt, Start accepts "Crono"; the pan to 10F (f2447).
 0:300,8:2,0:198,100:2,0:200,8:2,0:100,8:2,0:1794
 

@@ -412,6 +412,8 @@ static long ldHdmaLine(LdHdma* hd) {
 static void ldCatch(CtAudio* a);
 static int g_tapeState;              // CT_APUTAPE, the cartridge's clock (a harness mode, below): 0 untried, 1 on, 2 off
 static int g_tapePoll;               // ...inside a poll of the SPC's ports: the one thing the CPU's time is charged for there
+static int g_tapeAnyVal;            // a store whose VALUE the port does not share with the cartridge (the cold boot's driver
+                                    //   bytes the container zeroes): the tape is matched by its port and place
 static int g_tapeBehind;             // ...the last store came late: the code is priced until the port waits again
 static int g_tapeWatch;              // CT_APUTAPE_WATCH=1: the tape is only read against -- the port keeps its own clock
 static int32_t g_tapeLast;           // ...the last store's lead
@@ -599,7 +601,7 @@ static void tapeHold(CtAudio* a, int k, uint8_t v) {       // the SPC is level w
     if (!head) { if (j) { j = 0; continue; } break; }
     g_tapePos += 4; g_tapeResendCart++; e = &g_tape[g_tapePos];
   }
-  if (e->port != k || e->val != v) {
+  if (e->port != k || (e->val != v && !g_tapeAnyVal)) {
     fprintf(stderr, "aputape: MISMATCH at store %ld of %ld: the cartridge's $214%d = %02X, the port's $214%d = %02X -- the tape is off from here\n",
             g_tapePos, g_tapeN, e->port, e->val, k, v);
     g_tapeState = 2; return;
@@ -1727,7 +1729,8 @@ int CtAudioColdBoot(CtAudio* a, long long* master, int* frames) {
           I_IMM8 + I_LDA_DP + I_IMPL + I_LDA_DPIY_ROM + I_IMM8 + I_LDA_DP + I_IMPL);
     idx = 0;
     for (uint16_t y = 0; y < a->size[b]; y++) {
-      ldRun(I_LDA_DPIY_ROM); Wc(a, 1, src[y]);                        // 00A2 LDA [$12],Y / STA $2141
+      g_tapeAnyVal = (b == 0 && a->src[0] == 0);                      // (the container's block 0: its code zeroed)
+      ldRun(I_LDA_DPIY_ROM); Wc(a, 1, src[y]); g_tapeAnyVal = 0;     // 00A2 LDA [$12],Y / STA $2141
       ldRun(I_STA_BB + I_XBA); Wc(a, 0, idx);                         // 00A7 XBA / STA $2140
       ldRun(I_STA_BB);
       for (;;) { ldRun(I_CMP_BB); if (Rc(a, 0) == idx) { ldRun(I_BR_NT); break; } ldRun(I_BR_T); ld.polls++; }   // 00AB

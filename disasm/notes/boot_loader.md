@@ -817,3 +817,15 @@ Result, PEEK_APUTRACE against CT_AUDIO_PORTTRACE from power-on: the upload's 13,
 0's `81` / `10` +16 / +29, its song's GO -40, 1B1's load `81` +12, its refused `10` and the token +5 / +9, the script's
 `10 00` +8. The title's opening (sequence_table / field_load_cost.md sec. 12) then puts the attract's loads on the
 cartridge's frames from power-on to f7324 (tools: the commit -> first ramp INC of every load, off 0).
+
+## The new game's opening over 1F0, on the world's own script (2026-11-22)
+
+Scene 0's `E0 F0 81 3F 38` enters world 0 at tile (3F,38) like any other entry: the loader's zero-fill, the camera from
+the entry cell (376,331 is (504,448) less the screen's half), the cutscene's objects from the world's bootstrap. Its own
+script plays the song (C2/18F1 at f894 on route leg 00), pans the camera (C2/066C / C2/0568) and ends with op 05 (C2/1100):
+`$0100` = 010F and `$027C` = 02, then the world's state 2 (C2/24D5: the `82` / `83` posts, the JML). The port used to seed
+the objects and the camera from a capture (start_scene.state) and end the pan after a counted 1533 frames with a fade of
+its own: 10F 22 frames early on leg 00. With the bootstrap the port's pan matches the capture's camera on all 1532 frames
+(newgame-pan-camera-vs-oracle, aligned on the capture's first frame: 22 frames after the entry) and leg 00 reaches 10F on
+f2447 and control on f2459 on both sides. The WRAM cells `$E3`/`$E7` must follow the camera the entry placed: left at the
+zero-fill, the port's script-camera poll read them as a move to tile (0,0).
