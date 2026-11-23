@@ -54,8 +54,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CT = os.path.join(ROOT, 'build', 'ct.exe')
 FIELD = os.environ.get('PT_FIELD') or os.path.join(ROOT, 'build', 'Belthasar.exe')   # PT_FIELD: another build's port
 ROM = os.path.join(ROOT, 'Chrono_Trigger_USA_SNES.sfc')
-ROUTE = os.path.join(ROOT, 'tools', 'playthrough', 'route.txt')
-STATES = os.path.join(ROOT, 'saves', 'playthrough')
+ROUTE = os.environ.get('PT_ROUTE') or os.path.join(ROOT, 'tools', 'playthrough', 'route.txt')   # (PT_ROUTE / PT_STATES:
+STATES = os.environ.get('PT_STATES') or os.path.join(ROOT, 'saves', 'playthrough')        #  another route, e.g. a scratch one)
 TMP = os.environ.get('PT_TMP') or os.path.join(ROOT, 'build', '_playthrough')   # PT_TMP: a second run's own scratch
 RULE = dict(os.environ, CT_ORACLE_LOGICAL='1')
 # What is graded: the location, the storyline, the party. (The port's memmon names $7F:xxxx as 1xxxx.)

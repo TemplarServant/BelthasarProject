@@ -2730,6 +2730,21 @@ static int owBoxHit(unsigned ax, unsigned ay, unsigned abox, unsigned bx, unsign
   else r = ((0x10000 - d) & 0xFFFF) - owRomW(bbox + 6) - owRomW(abox + 4);
   return (r & 0x8000) != 0;
 }
+// Class $49CF -- the Black Omen's marker (an object of the world's, every pass; CLC either way): with the party riding
+// (`$027E` = 2) and no time gauge (`$0294` bit 4), the Epoch's box (C2:4946 at $0290/$0292) against the Omen's (C2:4956 at
+// $02A2/$02A4), C2/2345: inside, `$0294` |= 08 (A lands on it: C2/4510's arm, the Omen's entry C2/4C8F), `$1B58` = 4C
+// (its name) and `$0282` |= 02; outside, the three cleared. MEASURED, the ending's route (e01): the cartridge flew in at
+// f3453 and the port, with no handler for the class, never set the bit and flew on.
+static int obOmenMarker(uint8_t* ram) {
+  if (ram[0x027E] != 0x02 || (ram[0x0294] & 0x10)) return 0;          // 49CF-49DB
+  if (owBoxHit(ram[0x0290] | (ram[0x0291] << 8), ram[0x0292] | (ram[0x0293] << 8), 0x4946,
+               ram[0x02A2] | (ram[0x02A3] << 8), ram[0x02A4] | (ram[0x02A5] << 8), 0x4956)) {   // 49DD-4A08
+    ram[0x0294] |= 0x08; ram[0x1B58] = 0x4C; ram[0x0282] |= 0x02;      // 4A0A-4A16
+  } else {
+    ram[0x0294] &= (uint8_t)~0x08; ram[0x1B58] = 0; ram[0x0282] &= (uint8_t)~0x02;   // 4A1B-4A25
+  }
+  return 0;                                                            // 4A19 / 4A28 CLC
+}
 // The boarding manager, class $309E (block $0E30 on 1F6). Only in free roam or a cutscene ($027C 0 / 1) and with no entry
 // pending ($0280 = 0); `$027F = $027E` first (the lead and the followers zero their phase when the two differ), then the
 // module's arm (C2:30C1).
@@ -4114,6 +4129,11 @@ void CtWorldAmbientFrame(uint8_t* ram, CtWorldCam* c, CtWorldStream* st) {
         int n = g_owJsl(ram);
         if (n > 0) { g_owSuspendNmis = n; g_owResumeBlock = b + OWOBJ_STRIDE; return; }
       }
+      continue;
+    }
+    if (cls == 0x49CF) {                                         // the Black Omen's marker (CLC)
+      obOmenMarker(ram);
+      { int v = (B[3] | (B[4] << 8)) + 1; B[3] = (uint8_t)v; B[4] = (uint8_t)(v >> 8); }
       continue;
     }
     if (cls == 0x309E || cls == 0x42DD || cls == 0x495E) {      // the boarding manager, the Epoch, its shadow (CLC / SEC)

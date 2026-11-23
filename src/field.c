@@ -919,7 +919,9 @@ static void worldEnterSong(World* w, int cell8x, int cell8y) {
   uint8_t song = host[0x29AE];                                  // C2/2C50-2C54: seed from the field shadow
   host[0x02AE] = song;
   { uint8_t scripted;                                           // the dispatch, before the zoning arm
-    if (worldIntroLoaderSong(host, &scripted)) {
+    // (Under the bootstrap the loader script runs and plays its `3D <song>` itself, in the world's first pass: MEASURED,
+    // route leg 00, the opening's `10 11 FF FF` on f894 only. Posting it here too sent it twice, the first 41 frames early.)
+    if (!owBootstrapObjects() && worldIntroLoaderSong(host, &scripted)) {
       CtWorldScriptPlaySong(host, scripted);                    // C2/18F1, the loader's own `3D <song>`
       { static int mt = -1; if (mt < 0) { const char* e = getenv("CT_MAILTRACE"); mt = (e && *e) ? 1 : 0; }
         if (mt) fprintf(stderr, "mailtrace   ENTRY loader-script song %02X ($0104=%02X) $1E00=%02X %02X %02X %02X\n",
@@ -18607,23 +18609,33 @@ int main(int argc, char** argv) {
     // and `ctlLocked` for "the player controller is not running": C0/9C5C is reached from the player's own step
     // (C0/881E -> 8A6D -> 9C5C), closed whenever the d-pad gate is ($011F / $0162 / $0138, or the lead's own fn
     // running). A lead the script walks is moved by the VM mover (op 0x96 -> C0/A810), which never tests a door.
-    if (!battlePhase && !ctlLocked && !(w17 && (w17[0x0117] & 0x80)) && mlBody && (dx || dy) && (px != doorFromX || py != doorFromY)) {
-      for (int i = 0; i < f.nexits; i++) {
-        const uint8_t* p = f.exits + 1 + (size_t)i * 16;
-        int ex = p[0] | (p[1] << 8), ey = p[2] | (p[3] << 8), ew = p[4] | (p[5] << 8), eh = p[6] | (p[7] << 8);
-        // A door triggers per tile: 9CA1 checks the door/trigger plane at the tile the foot steps onto (the
-        // move's destination cell), with no pixel margin. Fire only when the player's foot is inside the
-        // exit's own tile span.
-        int ftx = ((int)px) >> 4, fty = ((int)py) >> 4;         // foot tile = the high bytes $1801/$1881
-        if (ftx < (ex >> 4) || ftx > ((ex + ew - 1) >> 4) ||
-            fty < (ey >> 4) || fty > ((ey + eh - 1) >> 4)) continue;
-        // An exit only stages: C0/9CF5-9D29 writes the destination into $0112/$0114/$0116 and raises the
-        // $0117 latch. The drain commits at black and the one handler below (CtScenePollLocChange) reads
-        // $0100/$0102/$0104 and decides field vs overworld for every trigger alike. p[8]'s scene-or-world byte
-        // is not consulted: $0100 >= 0x1F0 says which, the ROM's own test (C0/0066 LDX $0100 / CPX #01F0).
-        fieldStageExit(scene, i);
-        break;
-      }
+    // (...and no $C3 stage: a stage runs instead of the field's main loop -- the race's bikes cross 10F's exit cells, MEASURED
+    // on route leg 47b, and the cartridge stays in the race.)
+    if (!battlePhase && !ctlLocked && seqOpen <= 0 && !(w17 && (w17[0x0117] & 0x80)) && mlBody && (dx || dy) && (px != doorFromX || py != doorFromY)) {
+      // 9CAB-9CE3: the step's cell in the exit plane C0/A66B built ($7E:7080, the tile word & the map's masks $1D1E/$1D1F),
+      // bit 7 = no exit; then the record ($E5, seven bytes) is taken when its x is the cell's x (and its y within 3F,
+      // 9CE5-9CF3) or else its y is the cell's y (9CDB-9CE1). The compares are against the UNMASKED cell, the plane's index
+      // against the masked one: on a map narrower than the record's coordinate (loc 134, 16 wide, the bottom exit at
+      // record x 27 = masked 07-08) only the y compare takes it. MEASURED, the ending's route (e10, loc 134 -> 1C1): the
+      // lead steps into row 2F on f9713 and the cartridge's `$0117` rises there; the port compared the asset's unmasked
+      // span (tiles 39-40) and never left.
+      { uint8_t* s7x = CtWramSys(fieldWram()); long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+        int ftx = ((int)px) >> 4, fty = ((int)py) >> 4;         // the cell = the high bytes $1801/$1881 ($67 / $69)
+        int msk = s7x ? (s7x[0x1D1E] | (s7x[0x1D1F] << 8)) : 0;
+        int k = s7x ? s7x[0x7080 + ((((fty & 0xFF) << 8) | (ftx & 0xFF)) & msk & 0xFFFF)] : 0x80;   // 9CB7 LDA $7E7080,X
+        if (!(k & 0x80) && rom && scene >= 0 && scene <= 511) {                                     // 9CBB BMI ->9D35
+          const long BASE = 0x250000L;
+          long rec = BASE + (FR(BASE + scene * 2) | (FR(BASE + scene * 2 + 1) << 8)) + (long)k * 7;
+          int rx = FR(rec), ry = FR(rec + 1), take = 0;
+          if (rx == (ftx & 0xFF)) {                                                                 // 9CD3 CMP $67
+            int d = ry - (fty & 0xFF); if (d < 0) d = -d;                                           // 9CE5-9CF0
+            take = d < 0x3F;                                                                        // 9CF1 CMP #3F / BCS
+          } else take = (ry == (fty & 0xFF));                                                       // 9CDB CMP $69
+          // An exit only stages: C0/9CF5-9D29 writes the destination into $0112/$0114/$0116 and raises the $0117 latch.
+          // The drain commits at black and the one handler below (CtScenePollLocChange) reads $0100/$0102/$0104 and
+          // decides field vs overworld for every trigger alike ($0100 >= 0x1F0, C0/0066 LDX $0100 / CPX #01F0).
+          if (take) fieldStageExit(scene, k);
+        } }
     } }
 
     if (getenv("CT_LOCALDBG") && f.vm) {                 // the intra-frame order probe: the script local

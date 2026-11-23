@@ -58,3 +58,14 @@ chains the three warps at f18/f23/f28 where the oracle takes until f70 for the s
 
 Check `field-stairs-run-three-flights`, two mutations killed (the old blind window; the latch replaced by
 the `!fade` proxy).
+
+## The door test is the exit plane's, not the asset's spans (2026-11-23)
+
+C0/9CAB-9CF3: the step's cell `($67,$69)` indexes the exit plane `$7E:7080` that C0/A66B builds (the record's tile word
+masked by the map's `$1D1E`/`$1D1F`); bit 7 means no exit. The record ($E5, seven bytes, by the plane's index) is taken when
+its x byte equals the cell's x and its y is within 3F of the cell's (9CD3, 9CE5-9CF3), or else when its y equals the cell's
+y (9CDB-9CE1) -- both compares against the UNMASKED cell. The port compared the lead's foot tile with the asset's exit
+spans, unmasked: on a map narrower than a record's coordinate it never matched. MEASURED, the ending's route (eot10 +
+qTHE_END, leg e10): loc 134 is 16 wide and its bottom exit's record is x 27, y 2F (masked cells 07-08); the lead steps into
+row 2F at f9713 and the cartridge's `$0117` rises there; the port walked on. field.c now reads the plane and the record.
+A $C3 stage (the race on 10F, route leg 47b) runs instead of the field's main loop, so no door is tested while one is open.
