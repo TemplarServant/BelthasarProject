@@ -6454,6 +6454,15 @@ void CtSceneReinitObj(CtScene* sc, int obj) {
   if (stopOp == 0x00) s->addr = stopAddr + 1;
   else if (stopOp == 0xAF || stopOp == 0xB0 || stopOp == 0xB1 || stopOp == 0xB2) s->addr = stopAddr;
   else s->addr = -1;
+  // C0/59A5-59AB `INX / TXA / LDX $6D / STA $1180,X`: the walk's end is the object's script pointer in WRAM at once --
+  // a respawned object the runner then skips (dead, `$1100` bit 7: C0/58F6) keeps it. MEASURED, the ending's leg e16
+  // (1D3, the exchange's C0/1A03): Marle's object 1 reads 04F9 on the cartridge from f403; the port's kept the 0500 of
+  // its last visit before the menu.
+  if (s->addr >= 0) {
+    uint32_t ipw = (uint32_t)(s->addr + CTW_IPOFF(sc));
+    w8(sc->mem, 0x7E1180 + (uint32_t)obj * 2, ipw & 0xFF);
+    w8(sc->mem, 0x7E1181 + (uint32_t)obj * 2, (ipw >> 8) & 0xFF);
+  }
   sc->mspd[obj] = sc->actors[obj].moveSpeed; sc->cycles[obj] = 0; sc->hasTask[obj] = 0;
   sc->coll[obj] = sc->actors[obj].coll; sc->collMap[obj] = sc->actors[obj].collMap;
   sc->b00[obj] = 0; sc->c1C81[obj] = sc->actors[obj].snap; sc->moveAngle[obj] = -1;
@@ -6463,6 +6472,11 @@ void CtSceneReinitObj(CtScene* sc, int obj) {
   // (C0/426A's output).
   w8(sc->mem, 0x7E1100 + (uint32_t)obj * 2, sc->mode[obj] & 0xFF);
   if (sc->mode[obj] >= 0 && sc->mode[obj] <= 2) w8(sc->mem, 0x7E0197 + (uint32_t)sc->mode[obj] * 2, obj * 2);
+  // ...and the lead is that slot-0 object (C0/426A's `$0197`, the rule CtSceneCreate and the seed apply): an exchange
+  // that puts another character first hands the controls to its object. MEASURED, the ending's leg e16 (1D3, `C8 00`:
+  // Marle, Crono, Ayla -> Robo, Frog, Ayla): the cartridge's Robo (object 4) walks up at f917; the port kept steering
+  // Marle's object 1, dead since the exchange, and nobody moved.
+  if (sc->mode[obj] == 0) { sc->playerObj = obj; sc->playerLoaded = 1; }
 }
 
 // C0/1A03's party reconcile: when $7E:2980-82 differ from the shadow $0194-0196, it walks the per-character object

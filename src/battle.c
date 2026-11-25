@@ -8715,6 +8715,8 @@ static int battleDeathFxFrame(CtBattleHost* h) {
   return s[0x5D9B] ? 1 : 0;                                       // CD/0E14-0E17
 }
 static void battleDeathScanNext(CtBattleHost* h);              // (below: C1/881C -> C1/AC5E)
+static void battleTail881C(CtBattleHost* h);
+static int gTailPend = 0;                                       // C1/881C's tail waits for its scan's routines
 static void battleKilledLatchAC5E(uint8_t* s);                // (below, with the scan's stores)
 static void battleAdvanceDissolves(CtBattleHost* h) {
   uint8_t* s = h->mem;
@@ -8745,6 +8747,7 @@ static void battleAdvanceDissolves(CtBattleHost* h) {
     h->mem[0x96F5 + 3 + slot] = 0;                                // CF/FE7B STZ $96F5,X once CD/0024 returns (writer CF:FE7E)
   }
   battleDeathScanNext(h);
+  if (gTailPend && h->dissolveRunning < 0) battleTail881C(h);     // C1/AC5E returned: C1/881F-8832 (or it queues again)
 }
 // The scan waits for the counters. The post-action death scan is C1/AC5E (`LDA $AEB2 / BEQ`, then `LDA #06 / JSR
 // C1/0003` -> C1/006D `JSL CF/FE20`), and its caller is C1/881C -- the end of the counter loop C1/8671-8819, after every
@@ -11139,6 +11142,13 @@ static int battleCountersPending(const CtBattleHost* h) {
 // (a PC's physical attack `$AD8E` alone, C1/BA75-BA7A), so the FF behind it is this clear's (leg 100: a tech's victims
 // 04 05 06 stayed behind the attack's 05, and the counter arm C1/8629 copied slot 6 into `$B3AC`).
 static void battleTail881C(CtBattleHost* h) {
+  // C1/881C opens with `JSR C1/AC5E` -- the death scan, each corpse's whole CD/0043 holding the main thread -- and only
+  // then tests `$24` and evaluates: with a routine queued or running (and not C1/B762's early scan, whose corpses are
+  // gone before the counter loop) the tail waits for the last one's return (battleAdvanceDissolves). MEASURED, the
+  // ending's leg e13 (1D3, the fourth replica fight, f13782): C1/881C and C1/AC75 on the kill's close, C1/8C09 only on
+  // f13845, after the dissolve, with its draw on `$26`; the port evaluated on the close's frame.
+  if (!gEarlyScan) for (int k = 0; k < 8; k++) if (h->dissolveActive[k]) { gTailPend = 1; return; }
+  gTailPend = 0;
   if (!h->mem[0x24]) battleAiEvalAll(h);                           // C1/8822-8826
   battleAiTargetClear(h->mem);                                     // C1/8832 JSR C1/AC46
 }
@@ -12017,6 +12027,11 @@ static int battleCounterDecode(CtBattleHost* h, int slot) {
         battleTrace(h, evbuf); return 2;
       }
     } else h->aiTurnMsg = prevMsg;
+    // C1/8780 `JSR C1/8CF9` returned with no action: C1/8787 `JSR C1/B223` all the same -- the sweep takes the fallen
+    // enemy 86C3 listed again off the roster (C1/B2C3) on this frame, before C1/881C's scan and eval. MEASURED, the
+    // ending's leg e13 (f13782): `$AF06` DE by C1:86C6, FF by C1:B2C3; the port's stayed DE through the death routine and
+    // C1/8C09 then chose the survivor's section with its partner still listed. (The seats were swept at C1/8626.)
+    battleDeadFlagSweep(h, 3, LL_CONT_H12);
     snprintf(evbuf, sizeof evbuf, "counter-nofire id%02X#%d", id, slot);
     battleTrace(h, evbuf); return 0;
   }
@@ -14759,9 +14774,11 @@ static void battleDeathScanStores(CtBattleHost* h, int cmb) {
   uint8_t* s = h->mem;
   battleKilledLatchAC5E(s);                                      // C1/AC5E ran before CF/FE20's loop
   if (s[0x9FF7 + cmb]) return;                                   // CF/FE28-FE2B -> FE7B
-  // Not ported here: CF/FE2D `INC $A0A8,X`. The port's C1/2FBD store (battleStatusScanStore) already sets $A0A8 to 1 on
-  // the death's frame, a scan earlier than the ROM, and the INC would leave 02. It belongs here once that store runs at
-  // its own frame.
+  // CF/FE2D `INC $A0A8,X`: the corpse leaves the target lists (C1/1F79 skips a set $A0A8). The icon dispatch C1/308C
+  // cleared it on the death's own state change (C1/30A4 `STZ $A0A8,X`), so this INC is what holds. MEASURED, the ending's
+  // leg e13 (the 1D3 replicas, f3818): `$A0AB` 00 by C1:30A7, then 01 by CF:FE30; the port's stayed 0, the next PC's cursor
+  // landed on the dead seat 3 and its attack re-rolled the target seven times on $26 (C1/D677).
+  s[0xA0A8 + cmb]++;                                             // CF/FE2D
   s[0xAEB0 + cmb] = 0;                                           // CF/FE30
   s[0x98A4 + cmb] = 0;                                           // CF/FE33
 }
@@ -15713,6 +15730,18 @@ static void battleResultLinePost(CtBattleHost* h, int line) {
   battleMsgVwfRun(h, 0x40);                                      // CD/01D5 JSR CD/027F
 }
 void CtBattleResultLineText(CtBattleHost* h, int line) { if (h && h->mem) battleResultLinePost(h, line); }
+// CD/01C1-01CE, ahead of every line's build (the first one's as well): `PLA / TAX / LDA D1:EE99,X / CMP #FF / BEQ` and
+// `LDX #0080 / JSR CD/3B71` -- the message's sound (ids 4-7: level up 89, learns / dual / triple 88), cmd 18, pan 80.
+static void battleResultLineSfx(CtBattleHost* h, int line) {
+  if (line < 0 || line >= h->resultN) return;
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  int id = h->resultKind[line];
+  int snd = (rom && id >= 0 && rl > (long)(ROM_MSG_SND_TBL + id)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_SND_TBL + id)) : 0xFF;
+  if (snd == 0xFF) return;
+  battleSfxPost(h, 0x18, (uint8_t)snd, 0x80);                                  // CD/01CB LDX #0080 / JSR CD/3B71
+  if (getenv("CT_BATTLE_TRACE"))
+    fprintf(stderr, "battlesfx f%d result-line msg=%d cmd=18 id=%02X pan=80 (CD/01CB)\n", h->frames, id, snd);
+}
 static void battleResultsTick(CtBattleHost* h, int aHeld) {
   uint8_t* s = h->mem;
   // the 3+64+7 hold -- without the 64 when C1/35A9 returned early ($2989 bit 0: no celebration)
@@ -15727,7 +15756,10 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
       battleTrace(h, "victory-dismiss"); battleModuleTail(h, 0); battleFbe5Begin(h); return; }
     // CD/01B3 on that frame: CD/01D2 `JSR CD/025E` and CD/027F's render, the line's text in the strip two waits before
     // the window is asked for (below).
-    if (h->victoryHold == hold - 4) battleResultLinePost(h, h->resultLine);
+    if (h->victoryHold == hold - 4) {
+      battleResultLineSfx(h, h->resultLine);                     // CD/01C3-01CE: the first line's sound too
+      battleResultLinePost(h, h->resultLine);
+    }
   }
   // The first line's dwell takes a held A from post + 19, as every later line's does (CD/01B3: the post on frame 0, the box
   // on 2, CD/020A on 3-18): the model below counts 17 frames from the box's frame to the first A test, so the first box is
@@ -15769,14 +15801,7 @@ static void battleResultsTick(CtBattleHost* h, int aHeld) {
           // CD/0209 RTL -> FD/AD17's next `JSL CD/0021` -> CD/01B3, in the frame CD/020A's 16th wait returned: the
           // line's sound goes out first (CD/01C3-01CE), ahead of CD/025E's build and CD/027F's open: 16 frames after the
           // previous line's `STZ $CCEC`.
-          long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
-          int id = h->resultKind[h->resultLine + 1];
-          int snd = (rom && id >= 0 && rl > (long)(ROM_MSG_SND_TBL + id)) ? CtRomByte(rom, 0x400000L, (long)(ROM_MSG_SND_TBL + id)) : 0xFF;
-          if (snd != 0xFF) {
-            battleSfxPost(h, 0x18, (uint8_t)snd, 0x80);                                // CD/01CB LDX #0080 / JSR CD/3B71
-            if (getenv("CT_BATTLE_TRACE"))
-              fprintf(stderr, "battlesfx f%d result-line msg=%d cmd=18 id=%02X pan=80 (CD/01CB)\n", h->frames, id, snd);
-          }
+          battleResultLineSfx(h, h->resultLine + 1);                                 // CD/01C3-01CE
           battleResultLinePost(h, h->resultLine + 1);                                // CD/01D2 JSR CD/025E, CD/027F's render
         }
         else { h->resultPhase = 3;                                                    // the last line: hand off
@@ -16346,6 +16371,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->deathFxSlot = -1; h->deathFxId = 0; h->deathFxT = 0; h->deathFxW = 0; h->deathFxTd = 0;
   h->headPend = 0; h->deathHeadF = -1;
   gEarlyScan = 0; gCtrStashed = 0; for (int k = 0; k < 8; k++) gEarlyDeath[k] = 0;   // (C1/B762's scan: none pending)
+  gTailPend = 0;
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.
@@ -17681,8 +17707,11 @@ void CtBattleVictoryRewards(CtBattleHost* h) {      // C1/83D2-83F2
   // A flee leaves $7F01EC = 0 as a victory does (C1/81F8), but its chain C1/8212-821E never calls the reward routine
   // (endReason 3, battleFleeStageTick). A demo battle (C1/83D2, $2989 bit 5) takes no reward, and $2880 != 0 (C1/83D9)
   // skips the items, gold, XP, TP and techs.
-  if (h->glb[0x1EC] == 0 && h->endReason != 3 && !(s[0x2989] & 0x20) && s[0x2880] == 0 &&
-      (h->rewXp || h->rewTp || h->rewGp || h->rewDropN)) {
+  // No gate on the rewards themselves: C1/83E0-83F2 (`JSL FD/B201 / ... / JSR C1/F93E`) runs whatever they are, and a
+  // fight with no XP, gold, TP or drop still makes its tech pass. MEASURED, the ending's leg e13 (the 1D3 replicas, all
+  // rewards 0): the first fight's triple 69 sets `$2850` = 80 on the cartridge; the port skipped the routine, so the
+  // second fight learned it again (its results box, 115 frames, and every frame after it late).
+  if (h->glb[0x1EC] == 0 && h->endReason != 3 && !(s[0x2989] & 0x20) && s[0x2880] == 0) {
     long rl = 0; const uint8_t* rr = CtBattleRom(&rl);   // ROM growth tables for the level-up (CC bank)
     for (int seat = 0; seat < 3; seat++) {
       // C1/F945 / F97B / F9B1 `LDA $AEFF,seat / BMI`: the seated characters only -- an empty seat, or one C1/FB06 left
@@ -20777,6 +20806,27 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0x8F: *pp = (int)battleFxOp8F(h, rom, p); break;          // CD/253B the line wave
     case 0x97: *pp = (int)battleFxOp97(h, rom, X, p); break;       // CD/30BE the rotating half-plane
     case 0xC9: *pp = (int)battleFxOpC9(h, p); break;               // CD/1B78 OBJ palettes n <-> n^4
+    case 0xC8: {                                                   // CD/1B9F `LDA #6F / SEC / SBC $1D26 / TAX / STX $45 /
+      unsigned d = (0x6F - s[0x1D26]) & 0xFF;                      //   JMP CD/2E13`: the slot's word `$CA60,X` += 6F - the
+      unsigned w = (s[0xCA60 + X] | (s[0xCA61 + X] << 8)) + d;     //   first enemy's Y (`LDX $43 / REP #21 / ADC $45`); one
+      s[0xCA60 + X] = (uint8_t)w; s[0xCA61 + X] = (uint8_t)(w >> 8);   // operand byte passed over (no `DEC $40`)
+      break; }
+    case 0xC7: {                                                   // CD/1BAB: `LDA [$40] / TAX`, `$CAD6,X -= 6F - $1D26` (8 bits)
+      int x = PB(0);
+      s[0xCAD6 + x] = (uint8_t)(s[0xCAD6 + x] - ((0x6F - s[0x1D26]) & 0xFF));
+      break; }
+    case 0xC6: {                                                   // CD/1BCE `C6 x a b c d e f` ($40 += 6, then the operand's own)
+      // `$CAE4,X += a / $CAE6,X += b / $CAE8,X += c` (the three angles, 8 bits), then each one's CD/3C00 product with the
+      // amplitude 20 / 20 / 24 (CD/1BC0: `LDY $45 / JSR CD/3C00`) plus d / e / f into `$CAF6,X / $CAF8,X / $CAFA,X`.
+      int x = PB(0);
+      s[0xCAE4 + x] = (uint8_t)(s[0xCAE4 + x] + PB(1));
+      s[0xCAE6 + x] = (uint8_t)(s[0xCAE6 + x] + PB(2));
+      s[0xCAE8 + x] = (uint8_t)(s[0xCAE8 + x] + PB(3));
+      s[0xCAF6 + x] = (uint8_t)(battleFxTrig(rom, s[0xCAE4 + x], 0x20) + PB(4));
+      s[0xCAF8 + x] = (uint8_t)(battleFxTrig(rom, s[0xCAE6 + x], 0x20) + PB(5));
+      s[0xCAFA + x] = (uint8_t)(battleFxTrig(rom, s[0xCAE8 + x], 0x24) + PB(6));
+      *pp = (int)p + 6; break; }
+    case 0xE2: s[0xCD2E] = PB(0); break;                           // CD/1907 `LDA [$40] / STA $CD2E`
     case 0xE1: *pp = (int)battleFxOpE1(h, p); break;               // CD/1B9A -> D1/E70A OBJ rows 1-3 <-> 5-7
     case 0x85: case 0x86: case 0xA1: case 0xA3: case 0xA4: case 0xAC: case 0xBD: case 0xC3: case 0xD2: case 0xDA: case 0xE0:
       return battleFxOpsQuadTri(h, X, op, PBP(7), pp);             // (above: CD/2EC8 2EDE 2952 2717 26E0 2460 1E36 1D4D 1AB2 1937 190D)
@@ -20792,6 +20842,11 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
     case 0xA8: battleFxOpA8(h, PBP(9)); *pp = (int)p + 8; break;   // CD/27CA: object stepped + rotated, CD/283F $40 += 8
     case 0xBC: battleFxOpBC(s, PBP(4)); *pp = (int)p + 4; break;   // CD/1E45: rotation steps, CD/1E73-1E79 $40 += 4
     case 0xBA: battleFxOpBA(h, PB(0)); break;                      // CD/1E91: spin model o<<4, drawn into window o&1
+    case 0xBB: {                                                   // CD/1E7C: object o&1 around model o<<4 (`ASL` x4 -> $4F),
+      int o = PB(0);                                               //   `$51 := $CAD8,X`, no rotation step; JMP CD/1EAA (the spin)
+      s[0x4F] = (uint8_t)(o << 4); s[0x51] = s[0xCAD8 + (o & 1)];
+      battleFxSpin(h, o & 1, o);
+      break; }
     case 0xBE: battleFxOpBE(h, PB(0)); break;                      // CD/1E27: spin model 20, drawn into window o&1
     case 0xEA:                                                     // CD/1864 `REP #20 / LDA [$40] / STA $2000 / STA $2200 /
       s[0x2000] = s[0x2200] = PB(0); s[0x2001] = s[0x2201] = PB(1);   //   INC $40`: colour 0 of both pages := the word

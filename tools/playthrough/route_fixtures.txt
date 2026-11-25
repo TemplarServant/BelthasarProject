@@ -1,0 +1,2 @@
+## fx_exchange_lead_1d3 -- the party exchange puts another character first, then the new lead walks  [from saves/lavos_re/lavos_1d3_wait.state]
+0:20,2:2,0:102,80:2,0:20,100:2,0:20,40:2,0:20,100:2,0:40,1:2,0:126,10:30,0:70

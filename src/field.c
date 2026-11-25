@@ -1033,7 +1033,11 @@ static long owBlackOmenArt(World* w, const uint8_t* rom, long romLen, long* cyc)
     memcpy(w->wram + base, buf, n);
     if (k == 0 && w->vram) memcpy(w->vram + 2u * (loc == 0x1F6 ? 0x0000u : 0x0C00u), w->wram + 0x19000, 0x800);   // C2/2D70
   }
-  if (cyc) *cyc = c + 0x800L * 8;                                                         // + C2/2D70's DMA, 8 cycles a byte
+  // + C2/2D70's DMA, 8 cycles a byte, and the path's own code: C2/2D91's tests and branch, C2/7B5A / 7B7F / 7B9F's pointer
+  // setup, their JSL / RTL / RTS and C2/2D70's registers -- 1,652 cycles over the story < D4 path's (whose 102 the fixed part
+  // carries), measured on 1F0 (playthrough ending leg e01, the beam trace C2/2D91 -> C2/2D6D: 304,078 cycles, of which the
+  // three decompressions and the DMA are this walk's 302,324). The 1F1 / 1F2 / 1F6 branches are priced with 1F0's code.
+  if (cyc) *cyc = c + 0x800L * 8 + 1652;
   return cyc ? *cyc : 0;
 }
 static long owBlackOmenCyc(World* w) {
@@ -1818,10 +1822,10 @@ static int owNmiOffFrames(long cyc, int* early) {
 // C2/03EF + C2/2C93, the world rebuilt after a screen of its own (the time gauge's C2/2665, the world map's C2/25F0): C2/03EF's
 // 7,338 cycles (`--callrom`), C2/2C93's decompressions by ct_lz_world_return_cost, and the rest of C2/2C93 as measured on
 // world 0 (`--callrom C2/2C93`: 11,766,764 cycles less 345,080 of refresh and 9,688,210 of decompression), less C2/2D91's
-// 302,324 (owBlackOmenArt's price): that state (saves/epoch_re/epoch_user.state) is 1F0 at story D6, so its rebuild ran the
+// 303,976 (owBlackOmenArt's price): that state (saves/epoch_re/epoch_user.state) is 1F0 at story D6, so its rebuild ran the
 // Black Omen's packets, which the callers now add for the worlds and stories that run them (owBlackOmenCyc).
 #ifndef CT_OW_2C93_REST
-#define CT_OW_2C93_REST (1733474L - 302324L)
+#define CT_OW_2C93_REST (1733474L - 303976L)
 #endif
 static long owRebuildCycles(int world) {
   long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
@@ -12406,6 +12410,7 @@ int main(int argc, char** argv) {
   // and fade (C2:2EC7, 34 NMIs), 2 the NMI-off load (the stash + C2/631F's half), 3 the map live (a check after each NMI),
   // 4 its last 17 NMIs, 5 the NMI-off return (the stash back, C2/03EF, C2/2C93), 6 the world coming back (C2:2ED0, 41 NMIs).
   int owMapPh = 0, owMapT = 0, owMapEarly = 0;
+  int owEntryEarly = 0;                                 // the world loader's NMI taken at once (C2/23CC in a vblank)
   static uint8_t owMapStash[0xF0 + 0x1000];
   int owPassHold = 0;   // frames the overworld stands still inside its pass's inline JSL (world.c obNative)
   int owPassResume = 0;  // ...and the suspended pass resumes on the frame after them
@@ -12676,6 +12681,8 @@ int main(int argc, char** argv) {
         // eighteen waits are C2/0346's alone (a request staged then is never posted: the exit's `82` overwrites it)
         if (gated && owMainStall > 0) { gated = 2; if (--owMainStall == 0) mm[0x1BEC] = 0x00; }   // 20466, the JSL back
         else if (gated && (mm[0x027C] == 3 || owExitWait || owExit3Pend)) gated = 2;
+        // ...nor after the world's first NMI when the loader turned the NMI on inside a vblank (owEntryEarly, above)
+        if (gated == 1 && owEntryEarly && fade != 3) { owEntryEarly = 0; gated = 2; }
         if (gated == 2) {}
         else if (!gated || mm[0x1BEC]) {
           if (gated) mm[0x1BEC] = 0xFF;                 // 2045D
@@ -13062,10 +13069,18 @@ int main(int argc, char** argv) {
               owW += (long)((double)owExitW * (double)CT_LOAD_FRAME_CYCLES / 357368.0);   // (a world left for another)
               lcCyc = owW;
               loadHold = ct_nmi_wait_frames(owW) - 1;
+              // ...and when C2/23CC lands inside that vblank the NMI is taken at once, before C2/23CF's `JSR C2/046E` reads
+              // `$4B`: C2/0346 waits for the NEXT change, so the main loop's first look at `$1BEC` (C2/23EF) follows the
+              // second NMI, and a request the first pass staged (the Epoch's `86`, C2/4387) is overwritten unposted by the
+              // second pass's own (the world's song `10`, C2/18F9) -- the ROM's C2/0454 rule (owNmiOffFrames' *early).
+              owEntryEarly = ct_nmi_wait_frames(owW) == (int)(owW / 346886L);
+              if (getenv("CT_LOADCOST")) printf("loadwalk: world NMI at C2/23CC %s (%ld into its frame)\n",
+                                                owEntryEarly ? "taken at once" : "at the next vblank", owW % 346886L);
               if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- %ld cycles, %d packet(s), cells %02X/%02X %02X/%02X\n",
                                                 haveWorld ? wd.world : 0, owW, owN, e3[0], e7[0], e3[1], e7[1]);
             } else {
               if (getenv("CT_LOADCOST")) printf("loadwalk: world %d -- NOT WALKED: %s\n", haveWorld ? wd.world : 0, owWhy ? owWhy : "?");
+              owEntryEarly = 0;
               lcCyc = ct_lz_world_cost(rimg, (size_t)rl, haveWorld ? wd.world : 0, &owN) + CT_OW_LOAD_REST + owBlackOmenCyc(&wd);
               loadHold = (int)((lcCyc + CT_LOAD_FRAME_CYCLES - 1) / CT_LOAD_FRAME_CYCLES);
               // Under the rule (NMI-on work never costs frames; CLAUDE.md, see docs/DECISIONS.md) the window's last frame
@@ -17217,6 +17232,11 @@ int main(int argc, char** argv) {
         if (menuPhase == 4) s7[0x0D10] = (uint8_t)menuBri;  // C2/83F5 / C2/83E5 (the RTL frame leaves it to C0/0905)
       } else if (menuPhase == 5) {                           // the reload: black, NMI off, no input, no clock
         memset(fb, 0, (size_t)CAMW * CAMH * 3);
+        // The cartridge's clock (the HARNESS mode, CT_LITTAPE; never the game's), as a location load's black takes it
+        // (fade == 3, above): a reload whose own count ends within three frames of the cartridge's first lit frame ends on it.
+        if (!inWorld) { int L = fieldLitTapeNext(frameNo);
+          if (L >= 0) { int want = L - frameNo, left = menuReloadW - menuReloadT;
+            if (want >= 1 && want - left <= 3 && left - want <= 3) menuReloadW = menuReloadT + want; } }
         if (++menuReloadT >= menuReloadW || hostSyncFree()) {   // (free: no reload black)   // C0/2824's first INC is the next frame's
           menuPhase = 3; menuT = 0;
           // C0/286C's tail, `28A1 JSR C0/0B28 / 28A4 JSR C0/EC60`: C0/0B28's `JSL FD/C124 / JSL FD/C2C1 / JSL FD/C1EE`

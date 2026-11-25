@@ -45485,7 +45485,7 @@
       ],
       "expect": [
         "walkmap: port says owmap: f520 load, 24313210 cycles = 69 frame(s)",
-        "walkmap: port says owmap: f777 return, 10805394 cycles = 31 frame(s)",
+        "walkmap: port says owmap: f777 return, 10803742 cycles = 31 frame(s)",
         "walkmap: the cartridge lost 1 picture(s) to a long DMA (monitor f95)",
         "walkmap: timeline same -- 90 changes from `$027C = 6` (cartridge f61, port f486; 90 in the port)",
         "walkmap: `$027C = 7` at +274 on the cartridge, +274 in the port; `$027C = 1` at +363 / +363",
@@ -50075,6 +50075,130 @@
       "notes": "THE BOSS DEATH (disasm/notes/battle_boss_death_0e05.md; battle_sim_census.md family 5). CD/0043 after its $CCEA wait: `$99D2` (CC/EC90, the arena kind from E1:DE00 by the enemy's id) not 0/2 and `$A08C,X` (CC/EBA4, E4:F600 byte +4 bit 2) -> the dissolve (CD/00A0, no #95, no red record) then `LDA #40 / JSL CD0E05`; else `$A01D,X` bit 0 (FD/B121, the stat record's byte 21 & 3) -> `LDA #38 / JMP CD/0E05` -- the effect load, the programs, the teardown CD/0453 inside its loop. Each enemy alone at 1 HP from f600, A mashed, from gato_wait. Pins, all against the rule's cartridge: the whole monitored WRAM plus $CCEA / $5D9B / $96F5 (`mon=`) the same values in the same order, +0 on every change, the deaths, and the OBJ palette 4 page: Yakra 190 states (program 3F: three flashes of colour 0x10, the 80 0F priority store, the fade to white), Lavos's core 1 (the copy, no fade: $99D2 = 01; its 75-frame routine, CD/3ED2's two $400 packets a level for cell type 2), Giga Gaia and the Guardian 2 (the dissolve, then effect 40 / program 4A with its 80 11 cut). Before this, all four took D0093: 18 / 17 / 18 / 18 states and the fights ended after the dissolve. Byte-for-byte: re-pin only with an oracle-verified reason."
     },
     {
+      "name": "battle-sim-results-first-line-sound-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "fight",
+        "94",
+        "hp=1",
+        "poke=284D:00",
+        "frames=1290",
+        "mon=1E00:3,2848:12"
+      ],
+      "env": {},
+      "expect": [
+        "sim e94 [94 Grinder]: wram same values in the same order on both sides",
+        "sim e94 [94 Grinder]: port frame - cartridge frame per change: +0 x37",
+        "sim e94 [94 Grinder]: deaths cartridge [817] port [817]"
+      ],
+      "pin": [
+        "^sim e94 .*: wram ",
+        "^sim e94 .*: port frame ",
+        "^sim e94 .*: deaths "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "a victory whose first results line has a sound (a Grinder gives no XP, gold or TP; the triple 66 unlearned, so the lines are the dual and triple techs): CD/01C3-01CE posts D1:EE99[id] = 88 before the first line too, as before every later one; and the victory's C1/F93E runs with every reward 0 -- its tech pass sets the triple's $284D = 80 (C1/83E0-83F2 has no reward gate)",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "      battleResultLineSfx(h, h->resultLine);                     // CD/01C3-01CE: the first line's sound too",
+          "replace": "      /* MUT: the first line posts no sound */",
+          "why": "the first line's 18 88 80 is missing: the first sound goes out with the second line, 40 frames late"
+        },
+        {
+          "file": "src/battle.c",
+          "find": "  if (h->glb[0x1EC] == 0 && h->endReason != 3 && !(s[0x2989] & 0x20) && s[0x2880] == 0) {",
+          "replace": "  if (h->glb[0x1EC] == 0 && h->endReason != 3 && !(s[0x2989] & 0x20) && s[0x2880] == 0 && (h->rewXp || h->rewTp || h->rewGp || h->rewDropN)) {   /* MUT */",
+          "why": "a fight with no rewards skips the tech pass: the triple is never learned ($284D stays 0) and the next fight shows its line again"
+        }
+      ]
+    },
+    {
+      "name": "battle-sim-dead-enemy-leaves-the-target-list-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "fight",
+        "3E,3F",
+        "hp=1",
+        "frames=1900",
+        "mon=A0A8:11,0026:1"
+      ],
+      "env": {},
+      "expect": [
+        "sim e3E_3F [3E Blue Shield 3F Yodu De]: wram same values in the same order on both sides",
+        "sim e3E_3F [3E Blue Shield 3F Yodu De]: port frame - cartridge frame per change: +0 x81",
+        "sim e3E_3F [3E Blue Shield 3F Yodu De]: deaths cartridge [817, 1029] port [817, 1029]"
+      ],
+      "pin": [
+        "^sim e3E_3F .*: wram ",
+        "^sim e3E_3F .*: port frame ",
+        "^sim e3E_3F .*: deaths "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "the first enemy's death scan CF/FE2D `INC $A0A8,X` takes the corpse out of the target lists (C1/1F79), after the icon dispatch's C1/30A4 clear; the next PC's cursor and C1/D63F then find the living enemy with no re-roll on $26",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "  s[0xA0A8 + cmb]++;                                             // CF/FE2D",
+          "replace": "  /* MUT: no CF/FE2D INC */",
+          "why": "the corpse stays in the target lists: $A0A8 never rises, and the cursor can land on the dead seat (the ending's e13: seven re-rolls on $26)"
+        }
+      ]
+    },
+    {
+      "name": "battle-sim-eval-after-the-death-routine-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/battle_sim.py",
+        "fight",
+        "C4,DE",
+        "hp=1",
+        "frames=1700",
+        "mon=0026:1,AF02:8,B1D4:2"
+      ],
+      "env": {},
+      "expect": [
+        "sim eC4_DE [C4 Lavos DE ]: wram same values in the same order on both sides",
+        "sim eC4_DE [C4 Lavos DE ]: port frame - cartridge frame per change: +0 x73",
+        "sim eC4_DE [C4 Lavos DE ]: deaths cartridge [1274, 1450] port [1274, 1450]"
+      ],
+      "pin": [
+        "^sim eC4_DE .*: wram ",
+        "^sim eC4_DE .*: port frame ",
+        "^sim eC4_DE .*: deaths "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "saves/battle_re/gato_wait.state",
+        "Chrono_Trigger_USA_SNES.sfc"
+      ],
+      "note_pass": "a kill's close on the cartridge's order: the counter loop's C1/8787 sweep takes the fallen enemy off the roster again (C1/B2C3) even when its counter turn had no action, so C1/881C's eval (C1/8C09) picks the survivor's section and its $26 draw on the cartridge's frames. (The eval's wait for the death scan's routine, C1/AC5E first, is graded by the ending's private leg e13 only.)",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "    battleDeadFlagSweep(h, 3, LL_CONT_H12);\n    snprintf(evbuf, sizeof evbuf, \"counter-nofire id%02X#%d\", id, slot);",
+          "replace": "    /* MUT: no C1/8787 sweep after a counter turn with no action */\n    snprintf(evbuf, sizeof evbuf, \"counter-nofire id%02X#%d\", id, slot);",
+          "why": "the fallen enemy 86C3 listed again stays on the roster through its death routine: C1/8C09 chooses the survivor's section with its partner still listed (+45 frames apart)"
+        }
+      ]
+    },
+    {
       "name": "battle-sim-walk-path-dry-last-wave-vs-rule-cartridge",
       "argv": [
         "python",
@@ -51274,7 +51398,7 @@
         "playthrough: 22_cathedral SAME -- locs 081 | story 12 15 | party 000280 000204 | gold 1015 | hp 35 (2) | ctrl 3 | end picture 0 px at port -2",
         "playthrough: 23_organ SAME -- locs 081 082 | story 15 | party 000204 | gold 1015 | hp 35 (1) | ctrl 3 | end picture 0 px at port -1",
         "playthrough: 24_sanctum_hall DIFFERENT -- locs 082 083 | story 15 | party 000204 | gold 1415 | hp 67 (3) | ctrl 7 | end picture 51171 px at port +0",
-        "playthrough: 25_sanctum_switches DIFFERENT -- locs 083 084 | story 15 | party 000204 | gold 3335 | hp 57 (4) | ctrl 25 | end picture 35050 px at port +0",
+        "playthrough: 25_sanctum_switches DIFFERENT -- locs 083 084 | story 15 | party 000204 | gold 3335 | hp 57 (4) | ctrl 25 | end picture 35143 px at port +0",
         "playthrough: 26_yakra SAME -- locs 084 0C6 078 | story 15 1B | party 000204 | gold 4635 | hp 1 (4) | ctrl 14 | end picture 0 px at port +0",
         "playthrough: 27_castle_return SAME -- locs 078 1D4 07A | story 1B 1C 21 | party 000204 000284 000201 | gold 4635 | hp 1 (1) | ctrl 6 | end picture 0 px at port +0",
         "playthrough: 28_castle_out SAME -- locs 07A 1D4 078 1F1 077 1F1 070 | story 21 | party 000201 | gold 4635 | hp 1 (1) | ctrl 1 | end picture 0 px at port -1",
@@ -51418,7 +51542,7 @@
         "tools/third_party_saves.json"
       ],
       "expect": [
-        "input-provenance: 649 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
+        "input-provenance: 653 check(s) read 242 state file(s): 231 made by recipes, 11 third-party, 0 private capture(s) read by 0 check(s); 0 unclassified, 0 stale"
       ],
       "pin": [
         "^input-provenance: \\d+ check"
@@ -52095,6 +52219,43 @@
           "find": "          if (take) fieldStageExit(scene, k);",
           "replace": "          if (take && (rx >> 4) == (ftx >> 4)) fieldStageExit(scene, k);   /* MUT */",
           "why": "the door is taken only where the record's unmasked x is the cell's (the asset spans' old test): a y-matched exit is missed"
+        }
+      ]
+    },
+    {
+      "name": "playthrough-fixture-exchange-lead-vs-rule-cartridge-on-its-clock",
+      "argv": [
+        "python",
+        "tools/playthrough.py",
+        "cmp",
+        "fx_exchange_lead_1d3",
+        "--clock"
+      ],
+      "env": {
+        "PT_ROUTE": "tools/playthrough/route_fixtures.txt",
+        "PT_STATES": "build/_pt_fixtures"
+      },
+      "expect": [
+        "playthrough: fx_exchange_lead_1d3 SAME -- locs 1D3 | story D5 | party 000506 010506 | gold 332682 | hp 999 (1) | ctrl 1 | end picture 0 px at port -1"
+      ],
+      "pin": [
+        "^playthrough: fx_exchange_lead_1d3 "
+      ],
+      "tier": "full",
+      "timeout_s": 900,
+      "inputs": [
+        "ct_assets.dat",
+        "Chrono_Trigger_USA_SNES.sfc",
+        "saves/lavos_re/lavos_1d3_wait.state",
+        "tools/playthrough/route_fixtures.txt"
+      ],
+      "note_pass": "the party exchange at 1D3 (Y: Marle in for Crono, slot 0) hands the controls to the new slot-0 object ($0197, C0/426A): Marle walks up 30 frames on both sides",
+      "mutations": [
+        {
+          "file": "src/ct_vm.c",
+          "find": "  if (sc->mode[obj] == 0) { sc->playerObj = obj; sc->playerLoaded = 1; }",
+          "replace": "  /* MUT: the lead stays the scene's first */",
+          "why": "the port keeps steering Crono's object, out of the party since the exchange: nobody walks and the end picture differs"
         }
       ]
     },
