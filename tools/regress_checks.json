@@ -51180,7 +51180,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "lz-data: 1464 streams identical (bytes and both costs)"
+        "lz-data: 1470 streams identical (bytes and both costs)"
       ],
       "pin": [
         "^lz-data: "
@@ -51210,7 +51210,7 @@
         "Chrono_Trigger_USA_SNES.sfc"
       ],
       "expect": [
-        "tab-data: 378 tables, 1032695 bytes identical"
+        "tab-data: 384 tables, 1033723 bytes identical"
       ],
       "pin": [
         "^tab-data: "

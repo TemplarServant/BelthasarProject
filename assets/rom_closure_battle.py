@@ -371,9 +371,40 @@ def misc_tables(rom):
     t('boss arenas ($E1:DE00, 4-byte records to bit 15, read whole)', E1 + 0xDE00, a + 4 - (E1 + 0xDE00))
     return out
 
+# ---- the last form's own data (src/battle.c battleBgSwapFrame / battleLastFormNmi, CD/0973, D1/ECF3) -----------------
+D1X, CE = 0x110000, 0x0E0000
+ERAS = 6                                    # D1:ECCF's six words, D1:ECDB's six rows of four
+
+
+def last_form_tables(rom):
+    """The era backgrounds' colours and map pointers, the body's colour stages and rows, the per-frame table."""
+    out = []
+    t = lambda name, a, n: out.append((name, a, a + n))
+    pal = max(_w(rom, D1X + 0xECCF + 2 * n) for n in range(ERAS))
+    t('era background colours ($D0:FA00 + $D1:ECCF[n], 0x60 bytes)', D0 + 0xFA00, pal + 0x60)
+    t('era background map pointers ($D0:E000, n x 3)', D0 + 0xE000, ERAS * 3)
+    stage = max(_w(rom, D1X + 0xE9EF + 2 * k) for k in range(9))
+    t('body colour stages ($D0:FBE2 + $D1:E9EF[stage], 14 words)', D0 + 0xFBE2, stage + 0x1C)
+    t('era flash colours ($D0:FD00, 0x60 bytes: D1/E98E)', D0 + 0xFD00, 0x60)
+    t('body colour stage offsets ($D1:E9EF, stages 0-8)', D1X + 0xE9EF, 18)
+    t('body colour rows ($D1:EA21 / EA2F / EA3D, $CDC9 < 14)', D1X + 0xEA21, 3 * 14)
+    t('last form frame table ($CE:E08E + 4 * (0..1F), 0x80 bytes: CE/E1A6)', CE + 0xE08E, 0x1F * 4 + 0x80)
+    return out
+
+
+def last_form_streams(rom):
+    """The era backgrounds' tilemap packets (D1/ED94: $D0:E000[n * 3])."""
+    got = set()
+    for n in range(ERAS):
+        at = D0 + 0xE000 + n * 3
+        if rom[at + 2] >= 0xC0:
+            got.add((rom[at + 2] - 0xC0) << 16 | _w(rom, at))
+    return {'era background maps ($D0:E000)': got}
+
+
 def battle_tables(rom):
     """Every battle closure (assets/extract_assets.py rom_tables)."""
-    return anim_tables(rom) + stage_tables(rom) + record_tables(rom) + effect_tables(rom) + small_tables(rom) + misc_tables(rom)
+    return anim_tables(rom) + stage_tables(rom) + record_tables(rom) + effect_tables(rom) + small_tables(rom) + misc_tables(rom) + last_form_tables(rom)
 
 
 # ---- the battle's records and small tables (the reading code's own index ranges) -------------------------------------

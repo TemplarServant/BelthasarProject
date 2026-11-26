@@ -8666,6 +8666,17 @@ static int battleDissolvePackets(const CtBattleHost* h, int slot) {
 //   CD/0E14-0E20          `LDA $5D9B / BEQ ->RTL`, then `JSR CD/3E75 / JSL CD04AA` -- a frame, and CD/04AA's CD/0453 (the
 //                         teardown, battleFxTeardown) once the runner's end raised `$CCEA`
 // Returns 1 while CD/0E05 runs, 0 on the frame its RTL is reached.
+static void battleRoleVictims(uint8_t* s);
+static void battleRolesAtOpen(uint8_t* s) {                      // CC/F156-F1C9, in the action's open
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  int actor = s[0xAE91];
+  s[0xA014] = (uint8_t)actor; s[0xA015] = s[0xAE97]; s[0xA016] = s[0xAE98];
+  if (actor < 3 && rom) {                                        // CF16C: a party actor's negative co-actors, from CC/FBC8
+    if (s[0xA015] & 0x80) s[0xA015] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2));
+    if (s[0xA016] & 0x80) s[0xA016] = CtRomByte(rom, 0x400000L, (long)(ROM_ROLE_COACTOR_TBL + actor * 2 + 1));
+  }
+  battleRoleVictims(s);
+}
 static int battleFxTeardownDue(const CtBattleHost* h);           // CD/04B5-04C2 (with CD/0453, below)
 static int battleFxTeardown(CtBattleHost* h);
 static int battleFxTeardownAtOpen(CtBattleHost* h);              // C1/4058's C1/10FA -> CD/0009 (a counter's window)
@@ -8716,6 +8727,7 @@ static int battleDeathFxFrame(CtBattleHost* h) {
 }
 static void battleDeathScanNext(CtBattleHost* h);              // (below: C1/881C -> C1/AC5E)
 static void battleTail881C(CtBattleHost* h);
+static void battleBgSwapReset(void);
 static int gTailPend = 0;                                       // C1/881C's tail waits for its scan's routines
 static void battleKilledLatchAC5E(uint8_t* s);                // (below, with the scan's stores)
 static void battleAdvanceDissolves(CtBattleHost* h) {
@@ -10315,6 +10327,11 @@ static void battleArrive(CtBattleHost* h, int atk) {
   // Note: $95DB is not an action gate but the command sub-mode (0 command level / 1 Tech / 2 Item); the confirm
   // clears it and it stays 0 through the action span. The action gate is $A013 (C1/40A6).
   s[0xA013] = 1;                                                    // freeze (C1/40A6): the span begins adjacent
+  // ...and CC/F156 stages the roles in the same open, not at the script's load: `$A014 = $AE91`, `$A015/$A016 =
+  // $AE97/$AE98`, the victims from the masks (battleRoleVictims). The effect load reads them before the script is
+  // loaded: CD/0EBD picks effect 88 / 89 / 8A by `$A018 == 7` / `$A017 == 7`. MEASURED on the rule's cartridge, Lavos's
+  // last form's revive (AI op 16, header 09 02 7A 00): `$A013` 01 with `$A014` 09 and `$A017` 07 on the same frame.
+  battleRolesAtOpen(s);
   battleTrace(h, "enemy-arrive");
 }
 
@@ -11148,7 +11165,7 @@ static void battleTail881C(CtBattleHost* h) {
   // ending's leg e13 (1D3, the fourth replica fight, f13782): C1/881C and C1/AC75 on the kill's close, C1/8C09 only on
   // f13845, after the dissolve, with its draw on `$26`; the port evaluated on the close's frame.
   if (!gEarlyScan) for (int k = 0; k < 8; k++) if (h->dissolveActive[k]) { gTailPend = 1; return; }
-  gTailPend = 0;
+  gTailPend = 0; battleBgSwapReset();
   if (!h->mem[0x24]) battleAiEvalAll(h);                           // C1/8822-8826
   battleAiTargetClear(h->mem);                                     // C1/8832 JSR C1/AC46
 }
@@ -11688,6 +11705,7 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
   else if (!battleIsPc(atk)) { int one = tgt; battleEnemyExecute(h, atk, 1, &one); }   // (no non-counter enemy opens here)
   else {
     s[0xAE92] = 1;                                                 // C1/BFDA-BFDC: the physical, before C1/D523 (D6AE)
+    s[0xAE99] = s[0xAE9A] = 0;                                     // C1/BFBF-BFC2
     h->actValue  = battleComputeDamage(h, atk, &tgt);             // deferred damage (RNG advance $26 here) + crit roll
     h->actTgtN = 1; h->actTgtList[0] = tgt; h->actTgtVal[0] = h->actValue;
     h->actTgtApply[0] = 1;
@@ -11720,6 +11738,7 @@ static void battleOpenAction(CtBattleHost* h, int atk, int reactive) {
   h->menuPassHold = 0;                                          // the new action's loops pass again (C1/10FA)
   s[0xA013] = 1;   // C1/40A6 INC $A013: the action routine owns the frame, so the battle tick C1/10E3 does not
                    //   run and the whole ATB freezes for the span, in every ATB mode (battle_loop.md sec. E/F).
+  battleRolesAtOpen(s);                                         // CC/F156 (see battleArrive's)
 }
 // The animate half (battle_confirm_queue.md sec. C.2): pop the oldest committed PC action and run the dispatch body
 // battleOpenAction runs for a PC. The RNG damage draw happens here, at animate time, not at confirm time, as in the
@@ -11934,6 +11953,7 @@ static void battleDispatchScheduled(CtBattleHost* h) {
     // C1/BFDF-BFF0: `$AECC = $AD8E` (the target), `$AD8D = $AECB = 1`, C1/AD09 ($AE95), `STA $AE94` (0: AD09's TDC).
     if (itemId == 0) {
       s[0xAE92] = 1;                                           // C1/BFDA-BFDC, before C1/D523 reads it (D6AE)
+      s[0xAE99] = s[0xAE9A] = 0;                               // C1/BFBF-BFC2 `STZ $AE99 / STZ $AE9A`: no other victims
       s[0xAECC] = (uint8_t)tgt; s[0xAD8D] = 1; s[0xAECB] = 1;
       battleTargetMask(s);
       s[0xAE94] = 0;
@@ -11981,6 +12001,7 @@ static void battleDispatchOpen(CtBattleHost* h) {
   battleFxStageCfg(h);                                         // C1/4693 / C1/45BB / C1/476F: $987A..$9886
   // $95DB is the command sub-mode, not an action gate (see battleOpenAction).
   s[0xA013] = 1;                                                // action freeze on (C1/40A6): the committed action animates
+  battleRolesAtOpen(s);                                         // CC/F156 (see battleOpenAction's)
   const char* ev = itemId > 0 ? "pc-act-item" : techId > 0 ? "pc-act-tech" : "pc-act";
   if (techId > 0 && getenv("CT_BATTLE_TRACE"))                 // the whole tech dispatch in one greppable line
     fprintf(stderr, "techact: seat=%d tech=%02X tgt=%d n=%d dmg=%d mp=%d/%d/%d 9877=%02X span=%d demo=%d\n",
@@ -16162,6 +16183,12 @@ void CtBattleBegin(CtBattleHost* h) {
     m[0xCD0C] = 0; m[0xCE11] = 0; m[0xCD1D] = m[0xCD1E] = 0; m[0xCAD3] = 0; m[0xCA92] = 0; m[0x007C] = m[0x007D] = 0;   // D1/F242-F256
                                                                    // ($CA92, D1/F250: CD/06B4's variant)
     m[0xCD44] = m[0xCD45] = 0; m[0xCDC7] = m[0xCDC8] = 0; m[0xCD3C] = 0; m[0xCD43] = 0;
+    m[0xCE0A] = m[0xCE0B] = m[0xCE0D] = 0; m[0xCE0E] = 0; m[0xCE10] = 0; m[0xCE0C] = 0x08;   // D1/F262-F271 (X = 0), D1/F27A-F27F `LDA #08 / STA $CE0C`
+    { long rl2 = 0; const uint8_t* rom2 = CtBattleRom(&rl2); int y = 0;       // D1/F2D5 JSR D1/EA01: `$CDC9` = the first of
+      if (rom2) { int w0 = CtRomByte(rom2, 0x400000L, 0x10FBE2L) | (CtRomByte(rom2, 0x400000L, 0x10FBE3L) << 8);   // the 14
+        for (y = 0; y < 14; y++) if ((m[0x20A2 + y * 2] | (m[0x20A3 + y * 2] << 8)) == w0) break;   // words at $20A2 equal to
+        if (y == 14) y = 0; }                                                 // D0:FBE2's first, 0 with none
+      m[0xCDC9] = (uint8_t)y; m[0xCE13] = 0x07; }                             // D1/F2D8-F2DA
     for (int x = 0; x < 0x380; x += 2) { m[0xC161 + x] = 0xFF; m[0xC162 + x] = 0x00; m[0xC4E1 + x] = 0xFF; m[0xC4E2 + x] = 0x00; }
     memset(m + 0xBB05, 0, 0x180);
     memcpy(m + 0xCCEE, m + 0x2030, 0x10);
@@ -16371,7 +16398,7 @@ void CtBattleBegin(CtBattleHost* h) {
   h->deathFxSlot = -1; h->deathFxId = 0; h->deathFxT = 0; h->deathFxW = 0; h->deathFxTd = 0;
   h->headPend = 0; h->deathHeadF = -1;
   gEarlyScan = 0; gCtrStashed = 0; for (int k = 0; k < 8; k++) gEarlyDeath[k] = 0;   // (C1/B762's scan: none pending)
-  gTailPend = 0;
+  gTailPend = 0; battleBgSwapReset();
   h->dissolveRunning = -1;                                     // no corpse animating yet (serial queue)  // battle_dissolve.md + D.2 latch
   // C1/FCFE-FD24, the staging tail, in its order: FD/B0D5 (the timer flags and counts), FD/B4E7 (the timer bases and
   // timers), FD/B7EB (the ATB reloads, below), ... and C1/B093 for the three seats (the low-HP bit). battleStatusTimerStage.
@@ -17179,6 +17206,7 @@ static void battleForcedPhysicalOpen(CtBattleHost* h) {
   h->actSpan = battleActionSpan(h, y, 0);
   battleFxStageCfg(h);                                             // C1/4693: $987A..$9886
   s[0xA013] = 1;                                                   // C1/40A6
+  battleRolesAtOpen(s);                                            // CC/F156
   h->stForcedAtk = h->stForcedTgt = -1; h->actForced = 1;
   battleTrace(h, "cantact-open");
 }
@@ -20441,6 +20469,138 @@ static void battleFxOpB3(CtBattleHost* h) {
 // One negative op of a program slot (CD/16A6 -> the CD/16B5 table). `p` = $40 after the runner's pre-INY (the first
 // operand); a handler that consumes operands moves it, and the runner's post-INY follows. Returns 1 to stop on an op
 // the port has not derived (nothing is guessed).
+// The era background a program asks for (op F2, CD/180A: `$CD45 = n / INC $CD44`), served by the main thread's CD/04AA
+// (CD/04C7-04D8: `$CD44 != 0`, `$CD43 == 0` -> `LDA $CD45 / JSL D1ECF3 / STZ $CD44`; all of it behind CD/04B5's `$CE11`).
+// D1/ECF3: `INC $CD43`, `$CD42 = n`; four packets F6:2220[D1:ECDB[n*4+k]] (FF: none) decompressed to $7E:D000 (C3/0002)
+// and shipped by CD/3ECE, $1000 bytes each to VRAM $2000 + k*$800; the 0x60 bytes D0:FA00[D1:ECCF[n*2]..] to $2040;
+// the packet D0:E000[n*3] to $7E:D000 and its $800 bytes to VRAM $6800; `STZ $CD43`.
+// CD/3ED2 ships a packet in chunks of $400 (`$CE0F` clear) or $1000 (set), `INC $CA26` and a frame (CD/3E75) until the
+// NMI's DMA clears it: a chunk a frame, each on the screen from the NMI that ships it. `$CE11` is 1 inside CD/3ED2.
+// MEASURED on the rule's cartridge (Lavos's last form, n = 3): `$CD43`/`$CD44` 01 for 18 frames, $2040 on the 17th.
+// (Transient: a state saved inside the 18 frames resumes without the rest of the swap.)
+static struct { int on, step, nstep, palStep; struct { int vw, n, pkt, off; } st[24]; } gBgSwap;
+static uint8_t gBgSwapPkt[5][0x1000];
+static struct { int vw, n; const uint8_t* b; } gBgDmaQ[4];
+static int gBgDmaQn;
+static int gBgSwapGate;                                         // 1: only the caller's own CD/04AA serves (it sets 2)
+int CtBattleBgDmaTake(int* vw, const uint8_t** bytes, int* n) {
+  if (!gBgDmaQn) return 0;
+  *vw = gBgDmaQ[0].vw; *bytes = gBgDmaQ[0].b; *n = gBgDmaQ[0].n;
+  gBgDmaQn--; memmove(gBgDmaQ, gBgDmaQ + 1, sizeof gBgDmaQ[0] * (size_t)gBgDmaQn);
+  return 1;
+}
+static struct { int on, which, ph, t, sw; } gLastEnd;
+static void battleBgSwapReset(void) { gBgSwap.on = 0; gBgDmaQn = 0; gBgSwapGate = 0; gLastEnd.on = 0; }
+static void battleBgSwapFrame(CtBattleHost* h) {
+  uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  static uint8_t scratch[1 << 17];
+  if (!gBgSwap.on) {
+    if (gBgSwapGate == 1) return;                                  // (the exit's own CD/04AA calls: battleExitLastForm)
+    if (!rom || s[0xCE11] || !s[0xCD44] || s[0xCD43]) return;      // CD/04B5, CD/04C7-04CF
+    int n = s[0xCD45], chunk = s[0xCE0F] ? 0x1000 : 0x400, ns = 0;
+    s[0xCD43]++; s[0xCD42] = (uint8_t)n;                           // D1/ECF3-ECF6
+    for (int k = 0; k < 5; k++) {
+      long ent; int size = k < 4 ? 0x1000 : 0x800;
+      memset(gBgSwapPkt[k], 0, sizeof gBgSwapPkt[k]);
+      if (k < 4) {
+        int idx = CtRomByte(rom, 0x400000L, (long)(0x11ECDB + ((n * 4 + k) & 0xFFFF)));   // D1/ED0B
+        if (idx == 0xFF) continue;                                 // D1/ED0F `CMP #FF / BEQ`
+        ent = 0x362220L + (long)idx * 3;
+      } else {
+        gBgSwap.palStep = ns;                                      // D1/ED69: the colours, before the map's packet
+        ent = 0x10E000L + (long)n * 3;
+      }
+      int a16 = CtRomByte(rom, 0x400000L, ent) | (CtRomByte(rom, 0x400000L, ent + 1) << 8), bank = CtRomByte(rom, 0x400000L, ent + 2);
+      size_t got = bank >= 0xC0 ? ct_lz_decompress(rom, scratch, ((size_t)(bank - 0xC0) << 16) | (size_t)a16) : 0;
+      if (got > sizeof gBgSwapPkt[k]) got = sizeof gBgSwapPkt[k];
+      memcpy(gBgSwapPkt[k], scratch, got);
+      for (int o = 0; o < size && ns < 24; o += chunk, ns++) {     // CD/3EF8-3F97
+        gBgSwap.st[ns].vw = (k < 4 ? 0x2000 + k * 0x800 : 0x6800) + o / 2; gBgSwap.st[ns].pkt = k; gBgSwap.st[ns].off = o;
+        gBgSwap.st[ns].n = size - o < chunk ? size - o : chunk;
+      }
+    }
+    gBgSwap.on = 1; gBgSwap.step = 0; gBgSwap.nstep = ns;
+    if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "bgswap f%d n=%d chunks=%d\n", h->frames, n, ns);
+  } else {
+    int d = gBgSwap.step - 1;                                      // this frame's NMI shipped the chunk and cleared $CA26
+    if (d >= 0 && d < gBgSwap.nstep && gBgDmaQn < 4) {
+      gBgDmaQ[gBgDmaQn].vw = gBgSwap.st[d].vw; gBgDmaQ[gBgDmaQn].n = gBgSwap.st[d].n;
+      gBgDmaQ[gBgDmaQn].b = gBgSwapPkt[gBgSwap.st[d].pkt] + gBgSwap.st[d].off; gBgDmaQn++;
+    }
+    s[0xCA26] = 0;
+  }
+  if (gBgSwap.step == gBgSwap.palStep) {                           // D1/ED69-ED85
+    int n = s[0xCD42];
+    int x = CtRomByte(rom, 0x400000L, (long)(0x11ECCF + n * 2)) | (CtRomByte(rom, 0x400000L, (long)(0x11ECD0 + n * 2)) << 8);
+    for (int y = 0; y < 0x60; y++) s[0x2040 + y] = CtRomByte(rom, 0x400000L, (long)(0x10FA00 + ((x + y) & 0xFFFF)));
+  }
+  if (gBgSwap.step < gBgSwap.nstep) {                              // the next chunk: `INC $CA26`, a frame
+    int k = gBgSwap.st[gBgSwap.step].pkt;
+    if (gBgSwap.st[gBgSwap.step].off == 0) memcpy(s + 0xD000, gBgSwapPkt[k], k < 4 ? 0x1000 : 0x800);   // C3/0002 -> $7E:D000
+    s[0xCE11] = 1; s[0xCA26] = 1; gBgSwap.step++;
+    return;
+  }
+  s[0xCE11] = 0; s[0xCD43] = 0; s[0xCD44] = 0; gBgSwap.on = 0;     // CD/3F9A, D1/EDC9, CD/04D8
+}
+// The last form's two NMI machines, CD/0973-0985: with `$2A21` bit 0, `JSL CEE18E` every frame and, on the frames
+// `$7C & $CE13` is 0, `JSL D1EA4B`.
+// CE/E18E: `$CDC8` set -> the 0x80 bytes at $CD47 cleared; else the 0x80 bytes at CE:E08E + ((`$CDC7` >> 2) & 1F) * 4
+// copied there (`MVN`, A = 007F), `INC $CDC7`.
+// D1/EA4B: nothing while a program runs or one of the records $0580 / $058C / $0598 / $05A4 is live. Idle (`$CE0A` 0,
+// D1/EB4C): the stage X = 1 + the eighths of the first enemy's max HP ($5FB2 >> 3) its HP ($5FB0) has reached, capped at
+// 8, or `$CE0E & 7F` when `$CE0E` bit 7 forces one; `$CE0B = X`; a stage other than `$CE0C` starts a fade: `INC $CE0A`,
+// `$CE0D = 20`, the 0x1C bytes D0:FBE2[D1:E9EF[old $CE0C * 2]..] into $CDCC, and `$CE0C` steps one toward X (or jumps,
+// forced), `$CE0B = $CE0C`. Fading (D1/EA65): each of the 14 colours steps one toward D0:FBE2[D1:E9EF[$CE0B * 2]..] --
+// red on the low byte (+-1), green on the word (+-0020), blue on the high byte (+-4) -- `DEC $CE0D` (0: `STZ $CE0A`),
+// $CDCC copied behind itself at $CDE8, and three rows of 14 words go to $20A2 / $22A2, + 0, 20, 40, each from $CDCC +
+// 2 * r, r = the row's table byte D1:EA21 / EA2F / EA3D[`$CDC9`] (`$CE10` set) or 0E minus it.
+// CD/0ADE, the service's tail (CD/09C3, every fight): `$0524` 0 -> `DEC $CDC9`, 0D after 0.
+static void battleLastFormNmi(uint8_t* s) {
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  if (!(s[0x2A21] & 1) || !rom) return;
+  #define RB1(o) CtRomByte(rom, 0x400000L, (long)(o))
+  #define RW1(o) (RB1(o) | (RB1((o) + 1) << 8))
+  if (s[0xCDC8]) memset(s + 0xCD47, 0, 0x80);                      // CE/E193-E19F
+  else { int o = ((s[0xCDC7] >> 2) & 0x1F) * 4; s[0xCDC7]++;       // CE/E1A6-E1BF
+    for (int k = 0; k < 0x80; k++) s[0xCD47 + k] = RB1(0x0EE08E + o + k); }
+  if (s[0x7C] & s[0xCE13]) return;                                 // CD/097E-0983
+  if (s[0x5D9B] | s[0x05A4] | s[0x0598] | s[0x058C] | s[0x0580]) return;   // D1/EA4B-EA5C
+  if (!s[0xCE0A]) {                                                // D1/EB4C
+    unsigned step = (unsigned)(s[0x5FB2] | (s[0x5FB3] << 8)) >> 3, v = step, hp = (unsigned)(s[0x5FB0] | (s[0x5FB1] << 8));
+    int x = 1;
+    while (hp >= v) { v = (v + step) & 0xFFFF; x++; if (x == 8) break; }
+    if (s[0xCE0E] & 0x80) x = s[0xCE0E] & 0x7F;
+    s[0xCE0B] = (uint8_t)x;
+    if (s[0xCE0B] == s[0xCE0C]) return;
+    s[0xCE0A]++; s[0xCE0D] = 0x20;
+    int ox = s[0xCE0C] * 2;
+    if (s[0xCE0E] & 0x80) s[0xCE0C] = s[0xCE0B];
+    else { if (s[0xCE0B] >= s[0xCE0C]) s[0xCE0C]++; else s[0xCE0C]--; s[0xCE0B] = s[0xCE0C]; }
+    int src = RW1(0x11E9EF + ox);
+    for (int y = 0; y < 0x1C; y++) s[0xCDCC + y] = RB1(0x10FBE2 + ((src + y) & 0xFFFF));
+    return;
+  }
+  int src = RW1(0x11E9EF + s[0xCE0B] * 2);
+  for (int y = 0; y < 0x1C; y += 2) {
+    int t = RW1(0x10FBE2 + ((src + y) & 0xFFFF));
+    int lo = s[0xCDCC + y];
+    if ((lo & 0x1F) != (t & 0x1F)) s[0xCDCC + y] = (uint8_t)((lo & 0x1F) > (t & 0x1F) ? lo - 1 : lo + 1);
+    int w = s[0xCDCC + y] | (s[0xCDCD + y] << 8);
+    if ((w & 0x3E0) != (t & 0x3E0)) { w = ((w & 0x3E0) > (t & 0x3E0) ? w - 0x20 : w + 0x20) & 0xFFFF;
+      s[0xCDCC + y] = (uint8_t)w; s[0xCDCD + y] = (uint8_t)(w >> 8); }
+    int hi = s[0xCDCD + y], tb = (t >> 8) & 0x7C;
+    if ((hi & 0x7C) != tb) s[0xCDCD + y] = (uint8_t)((hi & 0x7C) > tb ? hi - 4 : hi + 4);
+  }
+  if (--s[0xCE0D] == 0) s[0xCE0A] = 0;                             // D1/EAFE-EB03
+  memcpy(s + 0xCDE8, s + 0xCDCC, 0x1C);                            // D1/EB06-EB15
+  for (int k = 0; k < 3; k++) {                                    // D1/EB1A-EB48
+    int v = RB1(0x11EA21 + k * 14 + s[0xCDC9]);
+    int a = s[0xCE10] ? v : (0x0E - v) & 0xFF;
+    for (int i = 0; i < 0x1C; i++) s[0x20A2 + k * 0x20 + i] = s[0x22A2 + k * 0x20 + i] = s[(0xCDCC + a * 2 + i) & 0xFFFF];
+  }
+  #undef RB1
+  #undef RW1
+}
 static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp);
 // A raster wait of the NMI's service, CD/3B82 with A = the line (the line cuts above CtBattleFxLayerCompose). The wait
 // runs out of vblank, through one whole HBlank edge pair and on until `$213D >= $45`: it ends on line max(b, L + 1) for
@@ -20486,6 +20646,36 @@ static void battleFxWaveAdd(uint8_t* s) {
       }
   }
 }
+// D1/EEC4 (op ED), D1/EFD0 (op F3) and D1/EFE3 (op EB): the per-line scroll records $C15D.. bent by two sines, 106
+// lines (Y += 8 to $0350). `$CD3A += [$40]`, the amplitude `$4B = 60 - $CD3A`; per line the magnitude CE:F48E[i] times
+// the amplitude ($4217, the product's high byte), negated for an index with bit 7, sign-extended by its own bit 7 and
+// added to a base word: the first (index $47, amplitude $4B) into $C15D,Y and $C161,Y, the second (index $45, amplitude
+// $4D) into $C15F,Y and $C163,Y; both indices step a line. ED: indices $7C*2 / $7C*4, `$4D = $4B >> 1`, the first base
+// the line's own word $E500,Y; F3: indices from `$CD3B + A8` (`INC $CD3B`), EB: from $7C; `$4D = $4B`, the first base
+// `$CA5A + $CA5E`; the second base is `$CA5C + $CA60` in all three.
+static void battleFxScrollSines(uint8_t* s, int op, int arg) {
+  long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
+  int i47, i45;
+  if (op == 0xF3) { i47 = ((s[0xCD3B] + 0xA8) << 1) & 0xFF; i45 = (i47 << 1) & 0xFF; s[0xCD3B]++; }
+  else if (op == 0xEB) { i47 = (s[0x7C] << 1) & 0xFF; i45 = (i47 << 1) & 0xFF; }
+  else { i45 = (s[0x7C] << 2) & 0xFF; i47 = (s[0x7C] << 1) & 0xFF; }
+  s[0xCD3A] = (uint8_t)(s[0xCD3A] + arg);
+  int a4b = (0x60 - s[0xCD3A]) & 0xFF, a4d = op == 0xED ? a4b >> 1 : a4b;
+  int b4f = ((s[0xCA5A] | (s[0xCA5B] << 8)) + (s[0xCA5E] | (s[0xCA5F] << 8))) & 0xFFFF;
+  int b51 = ((s[0xCA5C] | (s[0xCA5D] << 8)) + (s[0xCA60] | (s[0xCA61] << 8))) & 0xFFFF;
+  for (int y = 0; y < 0x350; y += 8) {
+    int v = (CtRomByte(rom, 0x400000L, (long)(0x0EF48E + i47)) * a4b) >> 8;
+    if (i47 & 0x80) v = (-v) & 0xFF;
+    int base = op == 0xED ? (s[0xE500 + y] | (s[0xE501 + y] << 8)) : b4f;
+    int w = ((v & 0x80 ? v | 0xFF00 : v) + base) & 0xFFFF;
+    s[0xC15D + y] = s[0xC161 + y] = (uint8_t)w; s[0xC15E + y] = s[0xC162 + y] = (uint8_t)(w >> 8);
+    v = (CtRomByte(rom, 0x400000L, (long)(0x0EF48E + i45)) * a4d) >> 8;
+    if (i45 & 0x80) v = (-v) & 0xFF;
+    w = ((v & 0x80 ? v | 0xFF00 : v) + b51) & 0xFFFF;
+    s[0xC15F + y] = s[0xC163 + y] = (uint8_t)w; s[0xC160 + y] = s[0xC164 + y] = (uint8_t)(w >> 8);
+    i45 = (i45 + 1) & 0xFF; i47 = (i47 + 1) & 0xFF;
+  }
+}
 static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
   uint8_t* s = h->mem; long rl = 0; const uint8_t* rom = CtBattleRom(&rl);
   uint32_t p = (uint32_t)*pp;
@@ -20493,6 +20683,42 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
   #define PBP(n) CtRomPtr(rom, 0x400000L, (long)(ROM_BANK_D1 + (p & 0xFFFFu)), (n))   // the operands, a pointer (n read)
   switch (op) {
     case 0x80:                                                     // CD/2A4A `LDA [$40] / ASL / TAX / JMP ($2A51,X)`
+      if (PB(0) == 0x16) {                                         // CD/2AC6: three lines picked by C0:FE00[$CD3B++] (CD/2AAF,
+        for (int k = 0; k < 3; k++) {                              //   `INC $E850,X`, X = the byte * 4, a word), then every
+          int x = CtRomByte(rom, 0x400000L, (long)(0x00FE00 + s[0xCD3B])) << 2; s[0xCD3B]++;   // picked line's $E500,X -= 0010
+          int w = ((s[0xE850 + x] | (s[0xE851 + x] << 8)) + 1) & 0xFFFF; s[0xE850 + x] = (uint8_t)w; s[0xE851 + x] = (uint8_t)(w >> 8);
+        }
+        for (int x = 0; x < 0x350; x += 4)
+          if (s[0xE850 + x] | s[0xE851 + x]) {
+            int w = ((s[0xE500 + x] | (s[0xE501 + x] << 8)) - 0x10) & 0xFFFF; s[0xE500 + x] = (uint8_t)w; s[0xE501 + x] = (uint8_t)(w >> 8);
+          }
+        break; }
+      if (PB(0) == 0x1A) {                                         // CD/2A9C `JSL D1E899`: the words $2040-$20FF, $2120-$217F
+        for (int x = 0; x < 0xC0; x += 2) { s[0x2040 + x] = s[0x2240 + x] = 0xFF; s[0x2041 + x] = s[0x2241 + x] = 0x7F; }   // and
+        for (int x = 0; x < 0x60; x += 2) { s[0x2120 + x] = s[0x2320 + x] = 0xFF; s[0x2121 + x] = s[0x2321 + x] = 0x7F; }   // their
+        break; }                                                   //   live copies := 7FFF
+      if (PB(0) == 0x1C) {                                         // CD/2A97 `JSL D1E8C1`: $21A0-$21FF and $23A0.. := 7FFF
+        for (int x = 0; x < 0x60; x += 2) { s[0x21A0 + x] = s[0x23A0 + x] = 0xFF; s[0x21A1 + x] = s[0x23A1 + x] = 0x7F; }
+        break; }
+      if (PB(0) == 0x18) {                                         // CD/2AA5 `JSL D1E91A`: rows $2040.. move to $20A0 / $22A0 and
+        for (int x = 0; x < 0x60; x++) { s[0x20A0 + x] = s[0x22A0 + x] = s[0x2040 + x]; s[0x2040 + x] = s[0x2240 + x] = 0; }   // clear;
+        for (int x = 0; x < 0x24; x++) s[0x0520 + x] = s[0x0544 + x];   // the records $0544.. back to $0520.., dst + 30, mode 30
+        s[0x0521] = (uint8_t)(s[0x0521] + 0x30); s[0x052D] = (uint8_t)(s[0x052D] + 0x30); s[0x0539] = (uint8_t)(s[0x0539] + 0x30);
+        s[0x0520] = s[0x052C] = s[0x0538] = s[0xCD2F] = s[0xCD30] = s[0xCD31] = 0x30;
+        s[0xCD32] = s[0xCD33] = s[0xCD34] = 0; s[0xCDC8] = 0; s[0xCE12]++;
+        break; }
+      if (PB(0) == 0x17) {                                         // CD/2AAA `JSL D1E984`: `INC $CDC8 / INC $CE0F`, D0:FD00's 0x60
+        s[0xCDC8]++; s[0xCE0F]++;                                  //   bytes to $2040 / $2240, the records $0520.. to $0544.. with
+        for (int x = 0; x < 0x60; x++) s[0x2040 + x] = s[0x2240 + x] = CtRomByte(rom, 0x400000L, (long)(0x10FD00 + x));   // dst - 30,
+        for (int x = 0; x < 0x24; x++) s[0x0544 + x] = s[0x0520 + x];   // +4 := 0100, mode 30
+        s[0x0545] = (uint8_t)(s[0x0545] - 0x30); s[0x0551] = (uint8_t)(s[0x0551] - 0x30); s[0x055D] = (uint8_t)(s[0x055D] - 0x30);
+        s[0x0548] = s[0x0554] = s[0x0560] = 0x00; s[0x0549] = s[0x0555] = s[0x0561] = 0x01;
+        s[0x0544] = s[0x0550] = s[0x055C] = s[0xCD32] = s[0xCD33] = s[0xCD34] = 0x30;
+        s[0xCE12]++;
+        break; }
+      if (PB(0) == 0x19) { s[0xCE10]++; break; }                   // CD/2AA1 `INC $CE10`
+      if (PB(0) == 0x15) { memset(s + 0xE500, 0, 0x6A0); break; }    // CD/2AEF: `STZ $E500,X / STZ $E502,X` to $06A0
+      if (PB(0) == 0x14) { s[0xCD3A] = 0x60; s[0xCD3B] = 0; s[0x7C] = 0x40; s[0x7D] = 0; break; }   // CD/2B05 `LDX #0060 / STX $CD3A / LDX #0040 / STX $7C`
       if (PB(0) == 0x1B) { for (int k = 0; k < 8; k++) s[0x9FFA + k]++; break; }   // CD/2A8B: the hide flags
       if (PB(0) == 0x0F) { if (s[0xCD00] < 11) s[0x99B5 + s[0xCD00]] = 0; break; }   // CD/2B5C `LDX $CD00 / STZ $99B5,X`
       if (PB(0) == 0x11) {                                         // CD/2B27: the arena's records cut to its range --
@@ -20827,6 +21053,23 @@ static int battleFleeProgOp(CtBattleHost* h, int X, int op, int* pp) {
       s[0xCAFA + x] = (uint8_t)(battleFxTrig(rom, s[0xCAE8 + x], 0x24) + PB(6));
       *pp = (int)p + 6; break; }
     case 0xE2: s[0xCD2E] = PB(0); break;                           // CD/1907 `LDA [$40] / STA $CD2E`
+    case 0xED: case 0xF3: battleFxScrollSines(s, op, PB(0)); break;   // CD/1855 `JSL D1EEC4`, CD/184B `JSL D1EFD0`
+    case 0xEC: {                                                   // CD/185A `JSL D1EEA5`: `C0 - $CD3A`, times 4 = Y; words
+      int y = ((0xC0 - s[0xCD3A]) & 0xFF) << 2, v = 0;             //   0, 1, 2.. into $C15F,Y downwards (Y -= 4 to 0), then
+      for (; y >= 0; y -= 4, v++) { s[0xC15F + y] = (uint8_t)v; s[0xC160 + y] = (uint8_t)(v >> 8); }   // `INC $CD3A` (16-bit)
+      int w = ((s[0xCD3A] | (s[0xCD3B] << 8)) + 1) & 0xFFFF; s[0xCD3A] = (uint8_t)w; s[0xCD3B] = (uint8_t)(w >> 8);
+      break; }
+    case 0xF7: s[0xCE0E] = PB(0); break;                           // CD/17DF `LDA [$40] / STA $CE0E`: the last form's stage
+    case 0xF5: s[0xCD46] = PB(0); break;                           // CD/17FF `LDA [$40] / STA $CD46`
+    case 0xF6:                                                     // CD/17E5 `LDA $CE10 / BNE`, else `$40 -= [$40]`; `STZ $CE10`
+      if (!s[0xCE10]) *pp = (int)((p - PB(0)) & 0xFFFFu);
+      s[0xCE10] = 0;
+      break;
+    case 0xF2: s[0xCD45] = PB(0); s[0xCD44]++; break;              // CD/180A `LDA [$40] / STA $CD45 / INC $CD44`: the era
+                                                                   //   background asked of the main thread (CD/04C7)
+    case 0xF1:                                                     // CD/1813 `LDA $CD44 / BEQ ->RTS`, else `$40 -= [$40]`
+      if (s[0xCD44]) *pp = (int)((p - PB(0)) & 0xFFFFu);           //   (16-bit): back while the main thread has not served it
+      break;
     case 0xE1: *pp = (int)battleFxOpE1(h, p); break;               // CD/1B9A -> D1/E70A OBJ rows 1-3 <-> 5-7
     case 0x85: case 0x86: case 0xA1: case 0xA3: case 0xA4: case 0xAC: case 0xBD: case 0xC3: case 0xD2: case 0xDA: case 0xE0:
       return battleFxOpsQuadTri(h, X, op, PBP(7), pp);             // (above: CD/2EC8 2EDE 2952 2717 26E0 2460 1E36 1D4D 1AB2 1937 190D)
@@ -21110,7 +21353,7 @@ static void battleFleeProgramFrame(CtBattleHost* h) {
     s[0x5D9B] = 0; s[0xCCEA]++;
     if (battleFleeProgTraceOn()) fprintf(stderr, "fleeprog f%d done 5D9B=0 CCEA=%d stops=%d\n", h->frames, s[0xCCEA], g_fxProgStops);
   }
-  if (s[0xCD23]) {                                                 // CD/3B5F-3B6D: the staged sound
+  if (s[0xCD23] && !gBgSwapGate) {                                 // CD/3B5F-3B6D: the staged sound (the exit's loop posts its own)
     s[0xCD23] = 0;
     if (battleSfxPost(h, 0x18, s[0xCD24], s[0xCD25]) || !gBattleSndOn)
       if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battlesfx f%d program id=%02X pan=%02X (CD/1923 -> CD/3B71)\n", h->frames, s[0xCD24], s[0xCD25]);
@@ -21184,7 +21427,7 @@ static int battleFxTeardown(CtBattleHost* h) {
   // Stepping it here as well would run the exit's teardown two steps a frame.
   // Nor inside CF/FBE5's waits (h->fbe5St): the module's exit is a blocking chain the main loop never leaves for its
   // CD/0009, so an effect's sheets wait for CD/03B4's own CD/0453 (`LDA $CD0C / BEQ`).
-  if (h->exitCd0c || h->fbe5St) return 0;
+  if (h->exitCd0c || h->fbe5St || gLastEnd.on == 1) return 0;     // (...nor CD/0DD8's own `JSL CD04AA`: battleExitLastForm)
   if (!h->fxTeardownT) {
     if (!battleFxTeardownDue(h)) return 0;
     // (No end-of-fight skip: the main loop's C1/8120 runs C1/0003 #03, the idle tick and its CD/0009, before C1/8130's
@@ -21239,7 +21482,11 @@ static int battleFxTeardownStep(CtBattleHost* h) {
     if (g_fxTeardownPreNmi) g_fxTdPassDue = 1;
     else if (s[0x993A]) { s[0x993A] = 0; s[0x00E5] = 0; battleMenuPass(h, 0, "frozen"); }
   }
-  if (t == 4) {
+  // CD/0460's CD/3ED2 ships the $0F80 bytes in $400 packets, four frames -- or in one of $1000 when `$CE0F` is set
+  // (CD/3EF8; program op 80 17's `INC $CE0F`): P = its frames.
+  static int P = 4;
+  if (t <= 0) P = s[0xCE0F] ? 1 : 4;
+  if (t == P) {
     s[0xCD0C] = 0; s[0xCA92] = 0;                                   // CD/0463-0466
     if ((s[0x99D2] & 0x80) || s[0xCD07]) h->fxTeardownLong = 0;    // CD/0469-0471 -> CD/0497
     else {
@@ -21249,9 +21496,9 @@ static int battleFxTeardownStep(CtBattleHost* h) {
         { battleFxPalRecordArm(s, ROM_FX_PALREC_TEARDOWN); if (g_fxTeardownPreNmi && (s[0xCCE5] & 0x80)) g_fxPalArmedPreNmi = 1; }
     }
   }
-  if (h->fxTeardownLong && t == 5) battleShadowStage(s);           // CD/048F JSR CD/0CF6
-  if (t == (h->fxTeardownLong ? 20 : 4)) battleFxTeardownTail(s);  // CD/0497-04A1
-  if (t + 1 >= (h->fxTeardownLong ? 21 : 5)) {
+  if (h->fxTeardownLong && t == P + 1) battleShadowStage(s);       // CD/048F JSR CD/0CF6
+  if (t == (h->fxTeardownLong ? P + 16 : P)) battleFxTeardownTail(s);  // CD/0497-04A1
+  if (t + 1 >= (h->fxTeardownLong ? P + 17 : P + 1)) {
     h->fxTeardownT = 0;                                            // CD/04A2's frame done: CD/0009 returns
     if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-fx-teardown f%d done (%s path)\n", h->frames, h->fxTeardownLong ? "full" : "short");
     return 0;
@@ -21379,6 +21626,88 @@ static int battleDefeatStageTick(CtBattleHost* h) {
   }
   return 0;
 }
+// CD/03EE-040A, in the exit after CD/03EB's wait: `$2A21 & 11` -- bit 0 with `$7F01EC` 0 -> CD/0DB1, the last form's
+// end; either bit with `$7F01EC` set -> CD/0D93.
+//   CD/0DB1  CD/039E (`81 10 00`, fifteen waits), a wait until `$2141` reads 0, `$CE13 = 03`, `$CE0E = 80`, CD/0DD8,
+//            0x80 waits, `LDX #0084 / JSR CD/0D62`, and CD/0DD8 again.
+//   CD/0D93  `STZ $99D2`, CD/039E, the `$2141` wait, `LDX #0087 / JSR CD/0D62`, a wait while `$5D9B`.
+//   CD/0D62  `80 00 FF` posted, a wait, `10 3A` posted, CD/0EBD (the effect's load, on its frames), `STZ $5D9B`,
+//            CD/0D33, `INC $5D9B`.
+//   CD/0DD8  two waits, `JSL CD04AA`, again while `$CE0B >= 2` or `$CE0A | $CCEA | $A013 | $5D9B`.
+// Returns 1 while it runs.
+static int battleExitLastForm(CtBattleHost* h) {
+  uint8_t* s = h->mem;
+  if (gLastEnd.on == 2) return 0;
+  if (!gLastEnd.on) {
+    int f = s[0x2A21] & 0x11, ec = h->glb ? h->glb[0x1EC] : 0;
+    int which = !f ? 0 : ec ? 2 : (f & 1) ? 1 : 0;
+    if (!which) { gLastEnd.on = 2; return 0; }
+    gLastEnd.on = 1; gLastEnd.which = which; gLastEnd.ph = 0; gLastEnd.t = 0;
+    if (which == 2) s[0x99D2] = 0;                                 // CD/0D93
+    battleSfxPost(h, 0x81, 0x10, 0x00);                            // CD/039E
+    if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "exit-last-form f%d CD/%s\n", h->frames, which == 1 ? "0DB1" : "0D93");
+    return 1;
+  }
+  int t = ++gLastEnd.t;
+  switch (gLastEnd.ph) {
+    case 0:                                                        // CD/039E's fifteen waits, then one, then the poll
+      if (t < 16) return 1;
+      if (gBattleSnd.port && gBattleSnd.port(gBattleSnd.ctx, 1)) return 1;
+      if (gLastEnd.which == 2) { gLastEnd.ph = 3; gLastEnd.t = 0; goto post80; }
+      s[0xCE13] = 0x03; s[0xCE0E] = 0x80;                          // CD/0DBD-0DC4
+      gLastEnd.ph = 1; gLastEnd.t = 0; gBgSwapGate = 1;
+      return 1;
+    case 1: case 5:                                                // CD/0DD8
+      if (gBgSwap.on) { gLastEnd.t--; gLastEnd.sw = 1; return 1; } // (inside CD/04AA's D1/ECF3)
+      if (gLastEnd.sw) gLastEnd.sw = 0;                            // D1/ECF3 returned in this frame: the loop's test, its waits
+      else
+      if (h->fxTeardownT) { gLastEnd.t--; battleFxTeardownStep(h); if (h->fxTeardownT) return 1; }
+      else {
+        if (t < 2) return 1;
+        if (s[0xCD23]) { s[0xCD23] = 0; battleSfxPost(h, 0x18, s[0xCD24], s[0xCD25]); }   // CD/04AF JSR CD/3B5F: the staged sound
+        if (!s[0xCE11] && s[0xCCEA] && !s[0xA013]) {               // CD/04B5-04C4 JSR CD/0453
+          gLastEnd.t = 0; battleFxTeardownEnter(h); battleFxTeardownStep(h); if (h->fxTeardownT) return 1; }
+        gBgSwapGate = 2; battleBgSwapFrame(h); gBgSwapGate = 1;    // CD/04C7-04D8
+        if (gBgSwap.on) { gLastEnd.t = 0; gLastEnd.sw = 1; return 1; }
+      }
+      gLastEnd.t = 0;
+      if (s[0xCE0B] >= 2 || (s[0xCE0A] | s[0xCCEA] | s[0xA013] | s[0x5D9B])) return 1;
+      if (gLastEnd.ph == 5) { gBgSwapGate = 0; gLastEnd.on = 2; return 0; }
+      gLastEnd.ph = 2;
+      return 1;
+    case 2:                                                        // CD/0DCA-0DD0: 0x80 waits
+      if (t < 0x80) return 1;
+      gLastEnd.ph = 3; gLastEnd.t = 0;
+    post80:
+      battleSfxPost(h, 0x80, 0x00, 0xFF);                          // CD/0D63-0D70, then CD/0D74's wait
+      return 1;
+    case 3: {                                                      // CD/0D77-0D8F
+      // (The song's `JSL C7/0004` stalls the main thread for the frames it crosses: the load goes on from the tick after.
+      //  MEASURED on the rule's cartridge, the last form's end: `$1E00` = 10 from f104478 to f104482, `$CCA2` = 84 on f104483.)
+      if (t == 1) { battleSfxPostNoPan(h, 0x10, 0x3A); if (h->sndStall > 0) { h->sndStall--; return 1; } gLastEnd.t = t = 2; }   // (the JSL returns inside the last frame it crosses)
+      int fx = gLastEnd.which == 1 ? 0x84 : 0x87, f = t - 2;
+      int gfx = battleFxHasGraphics(battleFxLoadRemap(s, fx));
+      int w = !gfx ? 0 : (s[0x2A21] & 0x01) ? 31 : ((s[0x2C66] | s[0x2C67]) & 0x04) ? 15 : 0;
+      if (!gfx) { battleFxLoadBegin(h, fx); battleFxLoadHead(h, fx); battleFxArmSlots(h, fx); s[0x5D9B]++; }
+      else {
+        if (f == 0) { battleFxLoadBegin(h, fx); if (w) battleFxLoadPalArm(s); }
+        if (f == w) battleFxLoadRegs(h);
+        if (f == w + 1) battleFxLoadRegs2(h);
+        if (f == w + 2) battleFxLoadHead(h, fx);
+        if (f >= w + 2 && f <= w + 5) battleFxLoadSheet(h, f - w - 2);
+        if (f == w + 6) battleFxLoadFill(h);
+        if (f == w + 7) battleFxLoadMap2(h);
+        if (f < w + 8) return 1;
+        battleFxLoadEnd(h); battleFxArmSlots(h, fx); s[0x5D9B]++;
+      }
+      gLastEnd.ph = gLastEnd.which == 1 ? 5 : 4; gLastEnd.t = 0;
+      return 1; }
+    case 4:                                                        // CD/0DA8-0DAE: a wait while `$5D9B`
+      if (s[0x5D9B]) return 1;
+      gLastEnd.on = 2; return 0;
+  }
+  return 0;
+}
 static int battleFleeStageTick(CtBattleHost* h) {
   uint8_t* s = h->mem;
   h->fleeT++;
@@ -21477,6 +21806,7 @@ static int battleFleeStageTick(CtBattleHost* h) {
     return 0;
   }
   if (h->fleeStage == 3) {                                         // CD/03EB's wait, then CD/040D-0412
+    if (battleExitLastForm(h)) return 0;                           // CD/03EE-040A
     s[0xCA25] = 0x08; s[0xCA24]++;
     h->fleeStage = 4;                                              // CD/0415 JSR CD/3E7D: the frame's wait
     return 0;
@@ -22110,6 +22440,8 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   // CD/099B-09AC: during an action ($CD2E == 0, $A013 != 0, $A028 == 0) the NMI waits for line 64 (CD/3B82) before the
   // service below, and under the rule its writes land on line 64 (see docs/DECISIONS.md, 2026-09-30): the lines above
   // keep the per-line tables as they stand here, and the compositor reads this copy for them.
+  if (battleFightNmiOn(h) && h->frames >= battleBootBandArm(h) && !h->mem[0xCD02])   // (the service CD/088D: `$7E` 1 / 2)
+    battleLastFormNmi(h->mem);                                 // CD/0973-0985
   { static int on = -1; if (on < 0) { const char* e = getenv("CT_ORACLE_LINE64"); on = !(e && *e == '0'); }
     gBattleFxCutN = 0; gBattleLineAt = 0; gBattleLineCutOn = on;
     if (on && !h->mem[0xCD2E] && h->mem[0xA013] && !h->mem[0xA028]) battleLineCut(h, 0x40); }   // CD/09AA `LDA #40`
@@ -22119,7 +22451,9 @@ static int battleTickBody(CtBattleHost* h, int endRequest, int input) {
   battleFxPalClamp(h);                                         // CD/09B8 JSR CD/0B1E
   battleObjSlotPark(h);
   if (h->frames != 2) battleObjSlotFrame(h);                   // (tick 1: C0/00DE's FD/E39C; tick 2 runs none, battleNmiTail)
+  if (battleFightNmiOn(h) && !h->mem[0xCD02] && !h->mem[0x0524]) { h->mem[0xCDC9]--; if (h->mem[0xCDC9] & 0x80) h->mem[0xCDC9] = 0x0D; }   // CD/09C3 JSR CD/0ADE
   battleNmiTail(h);                                            // D1/E7DE-E7EA: $7C++
+  battleBgSwapFrame(h);                                        // CD/04C7 (the main thread, after the NMI)
   // (THE STAGER'S PALETTES) The boot's main thread goes on from the song's upload after this frame's NMI -- the colour
   // records above have stepped -- and its stager and CC/ED87 run before the next wait: battleBootPalettes.
   if (h->frames == battleBootResumeFrame(h)) battleBootPalettes(h);

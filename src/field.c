@@ -19498,6 +19498,16 @@ int main(int argc, char** argv) {
       // FD/E39C runs writes the page word by word (src/objslot.c), so a fade over CGRAM $10-$1F (CD/0E61's `50 10 10`
       // after the Frog Squash / the Ice Sword) lights only those colours from black, as on the cartridge.
       bgDirty |= CtFieldSceneSetCgram(f.sd, liveHost.fxCgram);
+      // ...and the characters and the tilemap a program's background swap ships (D1/ECF3, battle.c battleBgSwapFrame).
+      { int vw, bn; const uint8_t* bb;
+        while (CtBattleBgDmaTake(&vw, &bb, &bn)) {
+          for (int i = 0; i < bn / 2; i++) {
+            int a = (vw + i) & 0x7FFF;
+            g_fieldVram[a] = (uint16_t)(bb[2 * i] | (bb[2 * i + 1] << 8));
+            if (a >= 0x6000 && a < 0x7800) g_ringKnown[a - 0x6000] = 1;
+          }
+          if (vw >= 0x6000) bgDirty = 1; else bgDirty |= CtFieldSceneTileDma(f.sd, vw, bb, bn);
+        } }
       // ...with the field's tiles still animating: the battle's IRQ D1/FE97 runs FD/E022 on an odd $7C (fieldBattleIrqTiles).
       // Except on the module's tick 1 under the infinitely fast CPU: that frame is still the field's (C0/1895-18A4, its NMI
       // and its IRQ C0/ECCC; battle.c battleNmiTail), and C0:18A4's $0153 flip, free CPU after the frame's last wait, lands

@@ -42,6 +42,7 @@ SOURCES = [
     rom_closure.menu_streams,              # the menus' own streams (the exchange's BG3 characters)
     rom_closure.world_streams,             # the overworld's packets ($C6:FDF0-FFFF tables) and the time gauge's
     rom_closure_battle.stage_streams,      # the battle effects' frames (D1, through the anim configs' $987E)
+    rom_closure_battle.last_form_streams,  # the last form's era backgrounds' tilemaps ($D0:E000)
 ]
 SKIPPED = os.path.join('saves', 'lz_pack.skipped')   # the listed offsets that are not streams (the raw blocks)
 

@@ -882,6 +882,7 @@ const uint8_t* CtBattleDumpRom(long* lenOut);
 // none: what tools/gen/anim_oplen.py writes for the closure of the anim scripts (assets/rom_closure_battle.py).
 void CtBattleAnimOpLens(int out[256]);
 void CtBattleAscCensus(void);                 // --asccensus: every PC anim script's opcodes (debug)
+int CtBattleBgDmaTake(int* vw, const uint8_t** bytes, int* n);   // a chunk of the era background's swap (D1/ECF3), as its NMI shipped it
 const uint8_t* CtBattleRom(long* lenOut);        // the cached ROM (NULL if not loaded)
 // One staged results line's text into the window's strip $7E:B400 (FD/AD17's arguments, CD/025E, CD/027F): the machine
 // does it on the line's build; a render fixture that stages a line by hand calls it.
