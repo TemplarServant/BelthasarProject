@@ -19718,6 +19718,7 @@ int main(int argc, char** argv) {
     // line wave move each row of the field picture by that row's (dx, dy). The field picture is one canvas of both layers,
     // so a row whose two layers move apart cannot be drawn from it: such a row keeps the staged view and is reported once.
     static int16_t arenaD[CAMH * 4]; static uint8_t arenaRow[CAMH];
+    static int arenaApartOk = 0;
     // (the bottom lines drawn, a mod: the screen-fixed boxes keep their place in the taller picture -- fillBoxBegin. Where
     //  the V-IRQ blank would have run: the field and the fights, $010F bit 7 clear.)
     { const uint8_t* ib = f.vm ? CtSceneMem7E(f.vm) : NULL;
@@ -19731,13 +19732,25 @@ int main(int argc, char** argv) {
     if (arenaShift) {
       CtBattleArenaScrollDelta(CtSceneMem7E(f.vm), CAMH, arenaD, arenaRow);
       static int apartSaid = 0;
+      // ...unless the room is BG1 over BG2 with BG1's math against a sub screen of BG2 alone (the one setup measured): then a
+      // row is BG2's pixel at BG2's place and BG1's own pixel (the main screen before its math) at BG1's, mixed here
+      // (the base draw below). MEASURED on the rule's cartridge, the ending route's e17 f62999 (loc 1DF, Lavos's
+      // Core): TM 13 TS 02 CGADSUB 01, BG1 at (0,0) on every line while BG2's records wave by -2..2 in both axes
+      // (`--hdma`); the port kept such rows still (3771 px a picture).
+      { int be = 0, so = 0, hf = 0, both = 0, mt = 0, st = 0, me = 0;
+        arenaApartOk = 0;
+        if (f.sd && CtFieldSceneMainPre(f.sd, &be, &so, &hf) && CtFieldSceneScreenLayers(f.sd, &mt, &st, &me)
+            && (mt & 0x03) == 0x03 && !(mt & 0x04) && (me & 0x07) == 0x01 && (st & 0x07) == 0x02 && !g_bMosOn)
+          arenaApartOk = 1; }
       for (int y = 0; y < ch; y++)
-        if (arenaRow[y] != 3) arenaD[y * 4] = arenaD[y * 4 + 1] = 0;   // not the arena's records (the HUD band: drawn by the port itself)
+        if ((arenaRow[y] == 1 || arenaRow[y] == 2) && arenaApartOk   // one layer on the arena's records, the other on a program's table (the Core's
+                 && (arenaD[y * 4] != arenaD[y * 4 + 2] || arenaD[y * 4 + 1] != arenaD[y * 4 + 3])) arenaRow[y] = 4;   // waving halo: BG2's line records are the effect program's sines): apart too
+        else if (arenaRow[y] != 3) arenaD[y * 4] = arenaD[y * 4 + 1] = 0;   // not the arena's records (the HUD band: drawn by the port itself)
         else if (arenaD[y * 4] != arenaD[y * 4 + 2] || arenaD[y * 4 + 1] != arenaD[y * 4 + 3]) {
           if (!apartSaid) { apartSaid = 1;
             fprintf(stderr, "arena: f%d row %d BG1 moves (%d,%d) and BG2 (%d,%d) -- the field canvas holds both layers in one picture; "
                             "rows like it keep the staged view\n", frameNo, y, arenaD[y * 4], arenaD[y * 4 + 1], arenaD[y * 4 + 2], arenaD[y * 4 + 3]); }
-          arenaD[y * 4] = arenaD[y * 4 + 1] = 0;
+          if (!arenaApartOk) arenaD[y * 4] = arenaD[y * 4 + 1] = 0;
         }
       for (int y = 0; y < ch; y++) {                   // (the mod's lines: the nearest arena row's, towards the middle first)
         if (!fillArena[y] || arenaRow[y] == 3) continue;
@@ -19751,6 +19764,12 @@ int main(int argc, char** argv) {
       if (getenv("CT_BATTLE_SHAKETRACE")) {               // the rows the battle scroll moves this frame
         int nz = 0, fy = -1;
         for (int y = 0; y < ch; y++) if (arenaD[y * 4] | arenaD[y * 4 + 1]) { nz++; if (fy < 0) fy = y; }
+        if (frameNo % 60 == 0) { int mt = 0, st = 0, me = 0, ap = 0, r2 = 0, mn = 0, mx = 0;
+          if (f.sd) CtFieldSceneScreenLayers(f.sd, &mt, &st, &me);
+          for (int y = 0; y < ch; y++) { ap += arenaRow[y] >= 3 && (arenaD[y * 4] != arenaD[y * 4 + 2] || arenaD[y * 4 + 1] != arenaD[y * 4 + 3]);
+            r2 += arenaRow[y] == 2; if (arenaD[y * 4 + 2] < mn) mn = arenaD[y * 4 + 2]; if (arenaD[y * 4 + 2] > mx) mx = arenaD[y * 4 + 2]; }
+          fprintf(stderr, "arenarow f%d row100=%d d=(%d,%d,%d,%d) ok=%d TM=%X TS=%X math=%X apart=%d rows2=%d bg2dx=%d..%d\n", frameNo,
+                  arenaRow[100], arenaD[400], arenaD[401], arenaD[402], arenaD[403], arenaApartOk, mt, st, me, ap, r2, mn, mx); }
         if (nz) fprintf(stderr, "arenashift f%d rows=%d first=%d (%d,%d)\n", frameNo, nz, fy, arenaD[fy * 4], arenaD[fy * 4 + 1]);
       }
     } else memset(arenaD, 0, sizeof arenaD);
@@ -19762,6 +19781,37 @@ int main(int argc, char** argv) {
     for (int y = 0; y < ch; y++)
       for (int x = 0; x < cw; x++)
         memcpy(fb + ((size_t)y * g_fw + x) * 3, f.base + fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]) * 3, 3);
+    if (arenaShift && arenaApartOk) {                  // the rows whose two layers moved apart (above): mixed from each
+      int any = 0;
+      for (int y = 0; y < ch && !any; y++)
+        any = arenaRow[y] >= 3 && (arenaD[y * 4] != arenaD[y * 4 + 2] || arenaD[y * 4 + 1] != arenaD[y * 4 + 3]);
+      if (any) {
+        int be = 0, so = 0, hf = 0, both = 0, mw = 0, mh = 0, bw = 0, bh = 0;
+        const uint8_t* mainPre = CtFieldSceneMainPre(f.sd, &be, &so, &hf);
+        const uint8_t* mcov = CtFieldSceneCoverage(f.sd, &mw, &mh);
+        uint8_t* b2 = CtFieldSceneBakeLayersOff(f.sd, 0x05, &bw, &bh);          // BG2 alone
+        if (mainPre && mcov && b2 && mw == f.W && mh == f.H && bw == f.W && bh == f.H)
+          for (int y = 0; y < ch; y++) {
+            if (arenaRow[y] < 3 || (arenaD[y * 4] == arenaD[y * 4 + 2] && arenaD[y * 4 + 1] == arenaD[y * 4 + 3])) continue;
+            for (int x = 0; x < cw; x++) {
+              size_t p1 = fieldBaseAt(&f, camx + x + arenaD[y * 4], camy + y + arenaD[y * 4 + 1]);
+              size_t p2 = fieldBaseAt(&f, camx + x + arenaD[y * 4 + 2], camy + y + arenaD[y * 4 + 3]);
+              uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
+              const uint8_t* c2 = b2 + p2 * 3;
+              if (!(mcov[p1] & 1)) { memcpy(d, c2, 3); continue; }               // BG1 clear here: BG2's pixel
+              const uint8_t* c1 = mainPre + p1 * 3;
+              if (!(be & 0x01)) { memcpy(d, c1, 3); continue; }                  // no math on BG1
+              for (int k = 0; k < 3; k++) {
+                int m5 = c1[k] >> 3, s5 = c2[k] >> 3, o5 = so ? m5 - s5 : m5 + s5;
+                if (hf) o5 >>= 1;
+                o5 = o5 < 0 ? 0 : o5 > 31 ? 31 : o5;
+                d[k] = (uint8_t)((o5 << 3) | (o5 >> 2));
+              }
+            }
+          }
+        free(b2);
+      }
+    }
     { int be = 0, so = 0, hf = 0, mw = 0, mh = 0, both = 0;     // a sprite that is the sub pixel (g_objSubOn, drawSprite)
       const uint8_t* mainPre = f.sd ? CtFieldSceneMainScreen(f.sd, &be, &so, &hf, &both) : NULL;
       const uint8_t* mcov = f.sd ? CtFieldSceneCoverage(f.sd, &mw, &mh) : NULL;

@@ -955,6 +955,16 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
 //     CtFieldSceneObjLevels' two maps.
 // Returns NULL unless one of them is the setup; else the image and the math the bake applies (blend layers, subtract,
 // half).
+// The bake's main screen before its colour math, whatever the setup (NULL with no bake), and the math it took.
+const uint8_t* CtFieldSceneMainPre(void* h, int* blendEn, int* subOp, int* half) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !sd->bakeMain) return NULL;
+  int ef = sd->scrOn ? sd->scrCGADSUB : sceneEffect(sd);
+  if (blendEn) *blendEn = ef & 0x07;
+  if (subOp) *subOp = (ef & 0x80) != 0;
+  if (half) *half = (ef & 0x40) != 0;
+  return sd->bakeMain;
+}
 const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half, int* objBoth) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeMain) return NULL;

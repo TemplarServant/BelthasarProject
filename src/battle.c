@@ -5700,7 +5700,9 @@ static void battleCommitPcAction(CtBattleHost* h, int atk) {
   // battle_item_slice.md sec. 2.5 (C1/1685-1688): the item is consumed at the confirm, on the battle staging copy
   // (DEC $1583,X), not at animate (unlike a tech's MP). The field's $2400/$2500 stay untouched all fight; the
   // merge-back at battle end (C1/B500) is handled elsewhere.
-  if (itemId > 0 && itemSlot >= 0 && itemSlot < 8) {
+  if (itemId > 0 && itemSlot >= 0 && itemSlot < 0x100) {   // (any of the 256 records: C1/1685 has no bound. A `< 8` here left
+                                                           //  the ninth item on -- the HyperEther of the ending route's e17 f40635 --
+                                                           //  unspent and unmarked: 19 on the list where the cartridge showed 17)
     { int x = s[0x9F36] | (s[0x9F37] << 8);              //   C1/1685-1688 `LDX $9F36 / DEC $1583,X`
       if (x < 0x500) s[0x1583 + x]--; }
     s[0x9920] = 0xFF;                                     //   C1/168B-168D: the list's next open redraws its arrows
@@ -17852,7 +17854,7 @@ static void battleModuleTail(CtBattleHost* h, int path) {
       if (!(q[0] & 0x40)) continue;                               // 1B6DF BIT #40
       q[0] &= 0xBF;                                               // 1B6E3-1B6E5
       uint8_t iid = q[5];                                         // $93F4,X
-      for (int rec = 0; rec < 8; rec++)                           // 1B6F0-1B6FC
+      for (int rec = 0; rec < 0x100; rec++)                       // 1B6F0-1B702: the 256 records (a `< 8` lost a refund past the eighth)
         if (s[0x1580 + rec * 5] == iid) { s[0x1583 + rec * 5]++; break; }   // 1B704-1B708
       if (getenv("CT_BATTLE_TRACE")) fprintf(stderr, "battle-itemrefund seat%d item%02X (C1/B6D1)\n", seat, iid);
     }

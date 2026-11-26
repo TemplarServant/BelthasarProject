@@ -3965,3 +3965,7 @@ A0:12,80:24,A0:84,20:64,0:60,60:24,20:84,0:296,100:2,0:16,100:2,0:10,100:2,0:16,
 ## 117b_tech_target_marle_kneels -- [branch of 117_kajar_restock] Marle's Cure, the target overlay with Marle herself at 50/520: she
 # kneels with her crossbow in its weapon colours (C2/F5A7's OBJ colours 13-15), over Ayla's sprite below (C2/F657's order)
 0:30,200:4,0:60,80:2,0:12,80:2,0:12,100:2,0:40,20:2,0:12,100:2,0:40,(20:2,0:10)*3,100:2,0:60
+
+## 130d_item_hover_kept_scroll -- [branch of 130_black_omen_gaspar] the Item list scrolled, the menu closed and opened again: the
+# ribbon's Item hover shows the list at its kept scroll ($0416 outlives the menu; C2/9A4D zeroes it only on a ribbon move)
+0:30,200:4,0:60,80:2,0:12,100:2,0:40,(20:2,0:8)*14,1:4,0:30,1:4,0:60,200:4,0:70

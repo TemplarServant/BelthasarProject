@@ -2194,7 +2194,9 @@ void CtMenuRender(const CtMenuHost* h, uint8_t* fb, int menuOpt) {
   int selCh = (g_charSelChar >= 0) ? g_charSelChar : lead;
   switch (menuOpt) {
     case 0: mPartyPanels(h, fb, 8, selCh); mPanelAtkDef(h, fb, 8, selCh); mTimeGold(h, fb); mDetailRight(h, fb, selCh, -1); break;  // Equip/Status
-    case 1: CtMenuRenderItem(h, fb, -1, 0, -1, 0, 0, 1, 1, 0, 0, 0); break; // Item preview: no cursor (not entered yet)
+    case 1: CtMenuRenderItem(h, fb, -1, (h->mem && h->mem[0x0416] <= 232) ? h->mem[0x0416] : 0, -1, 0, 0, 1, 1, 0, 0, 0); break;   // Item preview: no cursor (not
+            // entered yet), the list at its kept scroll $0416 (C2/9A4D zeroes it on a ribbon move unless $0D88, the
+            // cursor memory, is set: the ending route's e17 f29700, the list at MaidenSuit under the ribbon)
     case 2: mPartyPanels(h, fb, 24, -1); mPartySprites(h, fb);
             mTechTabs(fb, (h->mem && h->mem[0x0418] < 3) ? h->mem[0x0418] : 0);   // $0418: 0 after a ribbon move (C2/9A5C),
             mTechMpUsed(h, fb, -1, -1); break;   // the screen's last tab after its B (C2/9B71 -> C2/B960 redraws no tab)

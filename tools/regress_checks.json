@@ -51515,7 +51515,8 @@
         "playthrough: 130b_tech_list_stars SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
         "playthrough: 130c_tech_target_low_hp SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port -1",
         "playthrough: 117b_tech_target_marle_kneels SAME -- locs 165 | story C6 | party 000105 | gold 35384 | hp 301 (1) | ctrl 1 | end picture 0 px at port -1",
-        "playthrough: 125/142 legs SAME"
+        "playthrough: 130d_item_hover_kept_scroll SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
+        "playthrough: 126/143 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -52268,17 +52269,18 @@
         "python",
         "tools/playthrough.py",
         "cmp",
-        "130b_tech_list_stars,130c_tech_target_low_hp,117b_tech_target_marle_kneels"
+        "130b_tech_list_stars,130c_tech_target_low_hp,117b_tech_target_marle_kneels,130d_item_hover_kept_scroll"
       ],
       "env": {},
       "expect": [
         "playthrough: 130b_tech_list_stars SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
         "playthrough: 130c_tech_target_low_hp SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port -1",
         "playthrough: 117b_tech_target_marle_kneels SAME -- locs 165 | story C6 | party 000105 | gold 35384 | hp 301 (1) | ctrl 1 | end picture 0 px at port -1",
-        "playthrough: 3/3 legs SAME"
+        "playthrough: 130d_item_hover_kept_scroll SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
+        "playthrough: 4/4 legs SAME"
       ],
       "pin": [
-        "^playthrough: 1(30[bc]|17b)_",
+        "^playthrough: 1(30[bcd]|17b)_",
         "^playthrough: \\d+/\\d+ legs SAME"
       ],
       "tier": "full",
@@ -52290,7 +52292,7 @@
         "tools/playthrough/route.txt"
       ],
       "note_pass": "the X menu's Tech screen from the route's leg 130: the list's stars and the target overlay's kneeling member are the cartridge's pictures",
-      "notes": "THE TECH SCREEN'S LIST AND TARGET OVERLAY (2026-11-26, found by the picture audit of the ending's legs on the cartridge's clock; disasm/notes/menu2_tech_screen.md, the addendum). Two branch legs of route leg 130 (the End of Time, Marle / Magus / Ayla, Ayla at 50/716): 130b opens Marle's Tech list -- C2/BDD9 blits a name record's eleven cells as they stand, so a magic tech's leading 2F star is drawn and its name starts a cell to the right (the port stripped it: 1228 px); 130c picks Cure and stops on the target overlay -- C2/BEDC's BF11-BF22 asks the kneeling pose 12 of a member whose HP is under the HP scale of the ROW's index ($0D38,X with X = the panel), and C2/F5A7 (the Tech screen's build C2/B8EF) has loaded each character's weapon colours into OBJ colours 13-15 (424 px before). 117b is the same overlay from leg 117 with Marle herself at 50/520: her kneeling pose draws the crossbow in the weapon colours, over Ayla's sprite in the panel below (C2/F657's OAM order: the lowest character id on top); 446 px before.",
+      "notes": "THE TECH SCREEN'S LIST AND TARGET OVERLAY (2026-11-26, found by the picture audit of the ending's legs on the cartridge's clock; disasm/notes/menu2_tech_screen.md, the addendum). Two branch legs of route leg 130 (the End of Time, Marle / Magus / Ayla, Ayla at 50/716): 130b opens Marle's Tech list -- C2/BDD9 blits a name record's eleven cells as they stand, so a magic tech's leading 2F star is drawn and its name starts a cell to the right (the port stripped it: 1228 px); 130c picks Cure and stops on the target overlay -- C2/BEDC's BF11-BF22 asks the kneeling pose 12 of a member whose HP is under the HP scale of the ROW's index ($0D38,X with X = the panel), and C2/F5A7 (the Tech screen's build C2/B8EF) has loaded each character's weapon colours into OBJ colours 13-15 (424 px before). 117b is the same overlay from leg 117 with Marle herself at 50/520: her kneeling pose draws the crossbow in the weapon colours, over Ayla's sprite in the panel below (C2/F657's OAM order: the lowest character id on top); 446 px before. 130d scrolls the Item list, closes the menu and opens it again: the ribbon's Item hover draws the list at its kept scroll $0416 (C2/9A4D zeroes it only on a ribbon move without the cursor memory $0D88); 3922 px before.",
       "mutations": [
         {
           "file": "src/menu.c",
@@ -52309,6 +52311,12 @@
           "find": "        else if (menuScreen == 2 || menuScreen == 3 || menuScreen == 5) CtMenuWeaponPal(&mh, 1);   // C2/AE0A, B8EF, CA21 / CB0A",
           "replace": "        /* MUT: the weapon colours stay black */",
           "why": "Marle's crossbow is black: 117b's picture differs"
+        },
+        {
+          "file": "src/menu.c",
+          "find": "    case 1: CtMenuRenderItem(h, fb, -1, (h->mem && h->mem[0x0416] <= 232) ? h->mem[0x0416] : 0, -1, 0, 0, 1, 1, 0, 0, 0); break;",
+          "replace": "    case 1: CtMenuRenderItem(h, fb, -1, 0, -1, 0, 0, 1, 1, 0, 0, 0); break;   /* MUT: the hover from the list's top */",
+          "why": "the reopened menu's Item hover shows the list from its first row: 130d's picture differs"
         }
       ]
     },
