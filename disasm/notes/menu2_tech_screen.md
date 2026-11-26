@@ -1405,3 +1405,26 @@ three-row window, separate from the Equip screen's: `$0419` the row (`$54 = $041
 `tools/menu_audit_cmp.py techroster` 0 of 477, `techreserve` 0 of 417, `techreserve2` ($2838 = C0: Marle's Aura
 learned) 0 of 417 (regress `menu-tech-whole-roster-member-select-vs-oracle`, `menu-tech-skill-pts-block-vs-oracle`,
 `menu-tech-reserve-caster-vs-oracle`).
+
+## Addendum 2026-11-26 -- the list's star, the target overlay's poses, the weapon colours
+
+Found by the picture audit of the ending's legs on the cartridge's clock (three pictures of the Tech screen differed).
+
+* **The star.** `C2/BDD9-BDE6`: `LDA #15C4 / ADC $4216 / TAY / LDX $61 / LDA #CC0B / JSR C2/EF65` -- the tech's name
+  record (`$CC:15C4 + 11 * id`) goes to the tilemap as its eleven cells stand. A magic tech's record begins with `2F`
+  (the star glyph: 26 of the 117 records), so its name starts a cell to the right; `EF` is the pad. The port's decoder
+  folded `2F` to a space and stripped it.
+* **The target overlay's poses.** `C2/BEE6-BF2D`, the party loop of `C2/BEDC`:
+  `LDA $71 / ASL A / TAX / LDA $C2BF2F,X / STA $180E,Y` (the sprite's place), then
+  `BF11 LDA $0D38,X / CMP $9A93 / SEP #20 / LDA #00 / STA $1818,Y / BCC + / LDA #12 / BF22 STA $1811,Y`. `X` is still the
+  PANEL's index times two, so the HP scale compared with the member's HP is the one of the character whose id equals
+  the row (the Item overlay's `C2/B02B` reads `$0D5D`, which `C2/A1EF` made from the member's own scale). Request `12`
+  = the kneeling pose.
+* **The weapon colours.** `C2/F5A7` (called by the Item screen's build `C2/AE0A`, the Tech screen's `C2/B8EF`, the Form
+  screen's `C2/CA21` / `C2/CB0A` and the shop's `C2/D6E9`) copies each character's 24 palette bytes and then, for the
+  seven characters, three words `$D1:4B00 + 6 * $CD:6CEC[weapon]` (`C2/F5ED`, the weapon = the sheet's `+0x29`) into
+  colours 13-15 of OBJ palette `1 + id`. A pose that draws the weapon (the kneeling Marle's crossbow) uses them.
+* **The sprites' order.** `C2/F657` walks the blocks `$1800 + 0x40 n` in order; the first in the OAM lies on top, so
+  where two members' sprites overlap the lower character id covers the higher.
+
+Pins: the route's branch legs `130b_tech_list_stars` and `130c_tech_target_low_hp` (tools/playthrough/route.txt).

@@ -444,6 +444,7 @@ void CtMenuSetFormPanelDim(const uint8_t* panel9);
 //   CtMenuSprTick       -- one frame of C2/F657 + C2/F69B, over all seven characters
 //   CtMenuSprPose       -- the assembly frame that character is showing right now (block+0x03)
 void CtMenuSprReset(const CtMenuHost* h);
+void CtMenuWeaponPal(const CtMenuHost* h, int on);   // C2/F5A7's weapon colours (OBJ colours 13-15) for the X menu's sprites; 0 = the init's black
 void CtMenuSprFormAnims(const CtMenuHost* h, int cursorCell, int pickedCell);
 void CtMenuSprTick(const CtMenuHost* h);
 int  CtMenuSprPose(const CtMenuHost* h, int charId);

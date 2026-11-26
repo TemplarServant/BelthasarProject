@@ -18940,6 +18940,9 @@ int CtBattleMosaicRows(const uint8_t* mem, int H, uint8_t* size, int16_t* src) {
 // bit 3 (ppu.c's actMode 8: BG3's priority tiles ahead of OBJ priority 3). field.c puts those pixels back after drawing
 // the combatants (the attract 07D's Frog Squash frog covers the enemies that way).
 uint8_t gBattleFxFront[256 * 256];
+// gBattleFxArenaOff[y * 256 + x] = 1 where the row's windows take BG1 and BG2 off the main screen (btFxRowPixels): the
+// arena's priority tiles are not put back over the fighters there.
+uint8_t gBattleFxArenaOff[256 * 256];
 // For a pixel marked 2: BG3's colour (5 bits each, bits 0-14, after the colour window's clip), subtract (15), half (16) and
 // the line's fixed colour (17-21 R, 22-26 G, 27-31 B) -- what ppu_handlePixel needs once the sub-screen pixel is known.
 uint32_t gBattleFxFrontMath[256 * 256];
@@ -18986,6 +18989,16 @@ static int battleFxSubRest(int TM, int TS, int TMW, int TSW, int cgwsel, int cga
   return (cgwsel & 0x02) && (TS & 0x1B) && !(TS & 0x04) && (TS & 0x1B) == (TM & 0x1B) && !((TSW ^ TMW) & 0x1B & won)
          && !(cgadsub & 0x3B);
 }
+// The sub screen is the arena alone: BG1 / BG2 as the main screen has them and no sprite (`TS & 1F` = `TM & 03`), BG3's
+// math alone adding it, the two screens windowed alike for those layers. A BG3 pixel on top of the main screen then takes
+// the arena's pixel under it -- whatever sprite stands there, the sprites are not on the sub screen -- or the fixed
+// colour, unhalved, over the backdrop. MEASURED on the rule's cartridge, the ending route's e17 f1199 (Lavos's Dark
+// Plasma, effect 72): lines 57-184 run TM 17 TS 03 TMW 17 TSW 17 CGWSEL 02 CGADSUB 04, no window enabled, and the bolts
+// on BG3 are added over the sea; the port left those lines out and drew no bolt (583 px a picture).
+static int battleFxSubArena(int TM, int TS, int TMW, int TSW, int cgwsel, int cgadsub, const uint8_t* ws) {
+  const int won = ((ws[0] & 0x0A) ? 0x01 : 0) | ((ws[0] & 0xA0) ? 0x02 : 0);
+  return (cgwsel & 0x02) && (TS & 0x03) && (TS & 0x1F) == (TM & 0x03) && !((TSW ^ TMW) & 0x03 & won) && !(cgadsub & 0x3B);
+}
 static int battleFxSubObjOnly(int TS, int TSW, int cgwsel, int cgadsub, const uint8_t* ws) {
   return (cgwsel & 0x02) && (TS & 0x1F) == 0x10 && !(cgadsub & 0x3B) && !((TSW & 0x10) && (ws[2] & 0x0A));
 }
@@ -18999,7 +19012,9 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
     int bg3Main = (TM & 0x04) != 0, addSub = (cgwsel & 0x02) != 0;
     int subRest = battleFxSubRest(TM, TS, TMW, TSW, cgwsel, cgadsub, ws);
     int subObj = battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws);   // the sub screen is the sprites alone (below)
-    if (!(cgadsub & 0x3F) && !bg3Main) return;                     // no math, no BG3 on this line: the arena stands
+    int subArena = battleFxSubArena(TM, TS, TMW, TSW, cgwsel, cgadsub, ws);   // ...or the arena alone
+    const int arenaWin = (TMW & 0x03) == 0x03 && (ws[0] & 0x0A) && (ws[0] & 0xA0);   // BG1 and BG2 both behind windows
+    if (!(cgadsub & 0x3F) && !bg3Main && !arenaWin) return;        // no math, no BG3, no window on this line: the arena stands
     int sub3 = (TS & 0x04) != 0, win3M = (TMW & 0x04) != 0, win3S = (TSW & 0x04) != 0;
     int half = (cgadsub & 0x40) != 0, subtract = (cgadsub & 0x80) != 0;
     int clip = (cgwsel >> 6) & 3, prevent = (cgwsel >> 4) & 3;
@@ -19016,6 +19031,22 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
       int r = d[0] >> 3, g = d[1] >> 3, b = d[2] >> 3;
       const int ar = r, ag = g, ab = b;                            // (the arena's own pixel: the sides' sub screen below)
       int w3 = -1, px3 = -1, front = 0;
+      // The arena's own layers through the windows (ppu_getPixel: a layer whose TMW bit is set is off the main screen
+      // where its windows are on): W12SEL enables them for BG1 (bits 0-3) and BG2 (bits 4-7), WBGLOG combines the two.
+      // With both taken away the pixel is the backdrop's (BG3, below, shows over it); one of them alone would uncover
+      // the other's pixel, which the arena's composite does not keep -- left as it is. MEASURED on the rule's cartridge,
+      // the ending route's e11 f4199 (Spekkio's practice fight): TM 17 TMW 17 with W12SEL's windows on BG1 and BG2 and a
+      // disc growing on lines 57-169 -- black inside it but for BG3's streaks, where the port kept the room's floor
+      // (8212 px a picture).
+      if (layer < 2 && arenaWin) {
+        int in1 = battleFxWinState((ws[0] >> 1) & 1, ws[0] & 1, (ws[0] >> 3) & 1, (ws[0] >> 2) & 1, ws[3] & 3, xw, w1l, w1r, w2l, w2r);
+        int in2 = battleFxWinState((ws[0] >> 5) & 1, (ws[0] >> 4) & 1, (ws[0] >> 7) & 1, (ws[0] >> 6) & 1, (ws[3] >> 2) & 3, xw, w1l, w1r, w2l, w2r);
+        if (in1 && in2) {
+          int wv = h->fxCgram[0] | (h->fxCgram[1] << 8);
+          r = wv & 0x1F; g = (wv >> 5) & 0x1F; b = (wv >> 10) & 0x1F; layer = 5;
+          if (!wide && W <= 256 && line < 256) gBattleFxArenaOff[line * 256 + x] = 1;
+        }
+      }
       if ((layer == 5 || bg3Top) && bg3Main) {                     // the backdrop: BG3 shows through on the main screen --
         w3 = battleFxWinState(e31, i31, e32, i32, l3, xw, w1l, w1r, w2l, w2r);   // or, in actMode 8, its priority tiles
         if (!(win3M && w3)) {                                      //   in front of the arena's BG1/BG2
@@ -19032,6 +19063,16 @@ static void btFxRowPixels(uint8_t* fb, int W, const uint8_t* cov, const CtBattle
       int cw = battleFxWinState(e51, i51, e52, i52, l5, xw, w1l, w1r, w2l, w2r);
       if (clip == 3 || (clip == 2 && cw) || (clip == 1 && !cw)) r = g = b = 0;
       int math = ((cgadsub >> layer) & 1) && !(prevent == 3 || (prevent == 2 && cw) || (prevent == 1 && !cw));
+      if (math && layer == 2 && px3 > 0 && subArena) {             // the arena under BG3, sprite or not (the pixel in the
+        int back = !(cv[x] & 3);                                   //  fb is the arena's: the sprites come after)
+        int sr = back ? fixR : ar, sg = back ? fixG : ag, sb = back ? fixB : ab;
+        if (subtract) { r -= sr; g -= sg; b -= sb; } else { r += sr; g += sg; b += sb; }
+        if (half && !back) { r >>= 1; g >>= 1; b >>= 1; }
+        if (r > 31) r = 31; if (g > 31) g = 31; if (b > 31) b = 31;
+        if (r < 0) r = 0; if (g < 0) g = 0; if (b < 0) b = 0;
+        d[0] = (uint8_t)((r << 3) | (r >> 2)); d[1] = (uint8_t)((g << 3) | (g >> 2)); d[2] = (uint8_t)((b << 3) | (b >> 2));
+        continue;
+      }
       if (math && front && subRest && wide) {                      // (the sides: no sprite here -- CtBattleFxFrontApply's
         int back = !(cv[x] & 3);                                   //  math against the arena's pixel, now)
         int sr = back ? fixR : ar, sg = back ? fixG : ag, sb = back ? fixB : ab;
@@ -19089,6 +19130,7 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
   if (!wide) for (int l = 0; l < 256 && l < H; l++) arenaRows |= gBattleFxArenaRows[l];
   if (wide || arenaRows) { memset(wideOk, 0, sizeof wideOk); memset(wideHud, 0, sizeof wideHud); }
   if (!wide && W > 0 && H > 0 && W <= 256 && H <= 256) memset(gBattleFxFront, 0, (size_t)W * H);
+  if (!wide) memset(gBattleFxArenaOff, 0, sizeof gBattleFxArenaOff);
   if (!wide) memset(gBattleFxRow, 0, sizeof gBattleFxRow);
   if (!fb || !cov || !mem || !h || !h->mvInited || W <= 0 || H <= 0) return;
   static const uint16_t tbl[6] = { 0xC867, 0xC8EE, 0xC91B, 0xC948, 0xC975, 0 };
@@ -19166,7 +19208,8 @@ static void btFxCompose(uint8_t* fb, int W, int H, const uint8_t* cov, const uin
     // blocks ($C02B / $C02F) and are drawn by CtBattleHudRender.
     gBattleFxRowModelled[line] = from[2] == 0xBE8D && (from[3] == 0xBE95 || (from[3] >= 0xBB05 && from[3] < 0xBB05 + 0x180))
                                  && !(cgwsel & 0x01) && (!(addSub && (TS & 0x1B)) || subRest
-                                                         || battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws));
+                                                         || battleFxSubObjOnly(TS, TSW, cgwsel, cgadsub, ws)
+                                                         || battleFxSubArena(TM, TS, TMW, TSW, cgwsel, cgadsub, ws));
     if ((wide || arenaRows) && line < 256) {                       // (the widescreen: each arena row's registers, for the
       BtFxRegs* R = &wideRegs[line]; wideOk[line] = gBattleFxRowModelled[line];   //  HUD's band rows below)
       wideHud[line] = from[2] == 0xC02B || from[2] == 0xC02F || from[3] == 0xC02B || from[3] == 0xC02F;
@@ -21118,7 +21161,9 @@ static void battleFxTilemapUpload(CtBattleHost* h) {
   int va = CtRomByte(rom, 0x400000L, (long)(ROM_FX_UPLOAD_VRAM + a)) | (CtRomByte(rom, 0x400000L, (long)(ROM_FX_UPLOAD_VRAM + a + 1)) << 8);   // CD/061A
   int src = s[0xCA18] | (s[0xCA19] << 8);
   if (a == s[0xCD1F]) {                                            // CD/0624
-    if (src == (s[0xCD20] | (s[0xCD21] << 8))) return;             // CD/062C BEQ -> skip
+    if (src == (s[0xCD20] | (s[0xCD21] << 8))) {                   // CD/062C BEQ -> skip
+      if (battleFleeProgTraceOn()) fprintf(stderr, "fxupload f%d same block %04X: none\n", h->frames, src);
+      return; }
   } else s[0xCD1F] = (uint8_t)a;                                   // CD/0636
   s[0xCD20] = (uint8_t)src; s[0xCD21] = (uint8_t)(src >> 8);       // CD/0631 / CD/063C
   for (int r = 0; r < 16; r++) {                                   // D1/E8D9: 16 transfers of 0x20 bytes
@@ -21166,7 +21211,9 @@ static void battleNmiHead(CtBattleHost* h) {
   uint8_t* s = h->mem;
   s[0xBE8D] = s[0xBE89]; s[0xBE8E] = s[0xBE8A]; s[0xBE8F] = s[0xBE8B]; s[0xBE90] = s[0xBE8C];   // D1/E7AF-E7B8
   s[0xBE95] = s[0xBE91]; s[0xBE96] = s[0xBE92]; s[0xBE97] = s[0xBE93]; s[0xBE98] = s[0xBE94];   // D1/E7BB-E7C4
+  if (getenv("CT_FXHEADDBG")) fprintf(stderr, "fxhead f%d CA17=%02X CA1E=%02X CA18=%02X%02X CD1F=%02X CD20=%02X%02X\n", h->frames, s[0xCA17], s[0xCA1E], s[0xCA19], s[0xCA18], s[0xCD1F], s[0xCD21], s[0xCD20]);
   if (s[0xCA1E] == 0) battleFxTilemapUpload(h);                    // CD/08A4
+  else if (s[0xCA17] && battleFleeProgTraceOn()) fprintf(stderr, "fxupload f%d held: $CA1E=%02X\n", h->frames, s[0xCA1E]);
   // CD/0607's tail, the message window's text tiles: CD/088D is the service of `$7E` = 1 / 2 (D1/E7DA `JSL CD/0C95`'s
   // table CD:0C83 = 09F1, 088D, 088D) -- the boot's D1/F24B `STZ $7E` keeps CD/09F1 there until C1/0034's CD/0399, the
   // band's arm in the port's frames (battleStripNmiUpload) -- and its `LDA $7ECE0F / BEQ`, `LDA $CA1E / BNE` lead to it.

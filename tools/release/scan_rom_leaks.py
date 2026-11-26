@@ -107,8 +107,8 @@ def runs_from_text(text):
 def is_ramp(win):
     """A window made of structure, not content: read as 1, 2 or 4 interleaved sequences (bytes, little-endian words,
     longs), each one steps by a constant (00 01 02 .., 00 00 01 00 02 00 .., a run of one value) or holds only zero
-    and powers of two (80 40 20 .. 01: bit masks); or two such byte pieces end to end (a padding run, then an index
-    table: 00 00 .. 00 01 02 03 ..). Identity, index and bit tables: any program and any data may hold them."""
+    and powers of two (80 40 20 .. 01: bit masks); or two or three such byte pieces end to end (a padding run, then an index
+    table: 00 00 .. 00 01 02 03 .., then padding again). Identity, index and bit tables: any program and any data may hold them."""
     def seq_ok(q):
         d = (q[1] - q[0]) & 0xFF if len(q) > 1 else 0
         if all(((q[k + 1] - q[k]) & 0xFF) == d for k in range(len(q) - 1)):
@@ -116,7 +116,13 @@ def is_ramp(win):
         return all(v & (v - 1) == 0 for v in q)
     if any(all(seq_ok(win[r::st]) for r in range(st)) for st in (1, 2, 4)):
         return True
-    return any(seq_ok(win[:k]) and seq_ok(win[k:]) for k in range(2, len(win) - 1))
+    if any(seq_ok(win[:k]) and seq_ok(win[k:]) for k in range(2, len(win) - 1)):
+        return True
+    # ...or three: an index table between two padding runs (FF FF FF FF 10 11 .. 1F FF FF FF FF FF -- v0.28.0's false
+    # positive, a 16-entry ramp in the APK's libmain.so that one of the last form's tilemap streams also holds)
+    n = len(win)
+    return any(seq_ok(win[:i]) and seq_ok(win[i:j]) and seq_ok(win[j:])
+               for i in range(2, n - 3) for j in range(i + 2, n - 1))
 
 
 def decode_text(data):

@@ -51512,7 +51512,10 @@
         "playthrough: 136_death_peak_terrace SAME -- locs 0F6 108 | story D4 | party 010605 | gold 46684 | hp 646 (1) | ctrl 3 | end picture 0 px at port +0",
         "playthrough: 137_lavos_spawns_summit SAME -- locs 108 107 108 0F6 108 0F6 108 107 108 0F6 108 0F7 106 104 0F6 1EF 109 1A7 1AD 1D0 | story D4 D5 | party 010605 | gold 53684 | hp 646 (1) | ctrl 25 | end picture 0 px at port -2",
         "playthrough: 47b_race_win SAME -- locs 0DF 10F 0E1 | story 37 | party 000201 | gold 1634 | hp 101 (1) | ctrl 3 | end picture 0 px at port +0",
-        "playthrough: 122/139 legs SAME"
+        "playthrough: 130b_tech_list_stars SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
+        "playthrough: 130c_tech_target_low_hp SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port -1",
+        "playthrough: 117b_tech_target_marle_kneels SAME -- locs 165 | story C6 | party 000105 | gold 35384 | hp 301 (1) | ctrl 1 | end picture 0 px at port -1",
+        "playthrough: 125/142 legs SAME"
       ],
       "pin": [
         "^playthrough: [0-9]"
@@ -52256,6 +52259,56 @@
           "find": "  if (sc->mode[obj] == 0) { sc->playerObj = obj; sc->playerLoaded = 1; }",
           "replace": "  /* MUT: the lead stays the scene's first */",
           "why": "the port keeps steering Crono's object, out of the party since the exchange: nobody walks and the end picture differs"
+        }
+      ]
+    },
+    {
+      "name": "playthrough-branch-tech-menu-vs-rule-cartridge",
+      "argv": [
+        "python",
+        "tools/playthrough.py",
+        "cmp",
+        "130b_tech_list_stars,130c_tech_target_low_hp,117b_tech_target_marle_kneels"
+      ],
+      "env": {},
+      "expect": [
+        "playthrough: 130b_tech_list_stars SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port +0",
+        "playthrough: 130c_tech_target_low_hp SAME -- locs 1D0 | story D4 | party 010605 | gold 43384 | hp 646 (1) | ctrl 1 | end picture 0 px at port -1",
+        "playthrough: 117b_tech_target_marle_kneels SAME -- locs 165 | story C6 | party 000105 | gold 35384 | hp 301 (1) | ctrl 1 | end picture 0 px at port -1",
+        "playthrough: 3/3 legs SAME"
+      ],
+      "pin": [
+        "^playthrough: 1(30[bc]|17b)_",
+        "^playthrough: \\d+/\\d+ legs SAME"
+      ],
+      "tier": "full",
+      "timeout_s": 4800,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "the X menu's Tech screen from the route's leg 130: the list's stars and the target overlay's kneeling member are the cartridge's pictures",
+      "notes": "THE TECH SCREEN'S LIST AND TARGET OVERLAY (2026-11-26, found by the picture audit of the ending's legs on the cartridge's clock; disasm/notes/menu2_tech_screen.md, the addendum). Two branch legs of route leg 130 (the End of Time, Marle / Magus / Ayla, Ayla at 50/716): 130b opens Marle's Tech list -- C2/BDD9 blits a name record's eleven cells as they stand, so a magic tech's leading 2F star is drawn and its name starts a cell to the right (the port stripped it: 1228 px); 130c picks Cure and stops on the target overlay -- C2/BEDC's BF11-BF22 asks the kneeling pose 12 of a member whose HP is under the HP scale of the ROW's index ($0D38,X with X = the panel), and C2/F5A7 (the Tech screen's build C2/B8EF) has loaded each character's weapon colours into OBJ colours 13-15 (424 px before). 117b is the same overlay from leg 117 with Marle herself at 50/520: her kneeling pose draws the crossbow in the weapon colours, over Ayla's sprite in the panel below (C2/F657's OAM order: the lowest character id on top); 446 px before.",
+      "mutations": [
+        {
+          "file": "src/menu.c",
+          "find": "    if (tids[k] >= 0 && tids[k] <= 0xFF && nm[0]) {",
+          "replace": "    if (0) {   /* MUT: the name without its first cell */",
+          "why": "the star is gone and every magic tech's name starts a cell early: 130b's picture differs"
+        },
+        {
+          "file": "src/field.c",
+          "find": "                menuTechPanelPoses(s7);                       // C2/BEDC's BF22: the members' poses on their HP",
+          "replace": "                /* MUT: nobody kneels */",
+          "why": "Ayla stands in the target overlay: 130c's picture differs"
+        },
+        {
+          "file": "src/field.c",
+          "find": "        else if (menuScreen == 2 || menuScreen == 3 || menuScreen == 5) CtMenuWeaponPal(&mh, 1);   // C2/AE0A, B8EF, CA21 / CB0A",
+          "replace": "        /* MUT: the weapon colours stay black */",
+          "why": "Marle's crossbow is black: 117b's picture differs"
         }
       ]
     },
@@ -57119,7 +57172,7 @@
       ],
       "env": {},
       "expect": [
-        "fieldpicture: item-overlay-asks-the-weak-pose leg 93 +27900 frames of the leg's pad: 18 px differ at port -2"
+        "fieldpicture: item-overlay-asks-the-weak-pose leg 93 +27900 frames of the leg's pad: 0 px differ at port -2"
       ],
       "pin": [
         "^fieldpicture: item-overlay-asks-the-weak-pose "

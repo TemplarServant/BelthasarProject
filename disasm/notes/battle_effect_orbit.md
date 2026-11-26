@@ -449,3 +449,20 @@ CGWSEL 02 CGADSUB 04, W12SEL / W34SEL / WOBJSEL 00 -- the masks differ and mask 
 the hall and the party. The port gave the shortcut up and left the lines unadded (up to 11171 px a picture, 34
 pictures). battle.c battleFxSubRest compares the masks of the layers a window is on. Check
 field-picture-fire-adds-where-no-window-is-on-vs-cartridge.
+
+## Addendum 2026-11-26 -- two more line setups of the effect layer (the ending's audit)
+
+* **The sub screen is the arena alone** (`battleFxSubArena`). Lavos's Dark Plasma (effect 72, program `D1/6EEA`, a
+  tilemap frame a NMI alternating with the blank frame `17`): lines 57-184 run `TM 17 TS 03 TMW 17 TSW 17 CGWSEL 02
+  CGADSUB 04` with no window enabled (`--hdma` on the ending route's e17 f1199). BG3's bolts are on the main screen
+  only and take the sub screen's pixel: BG1 / BG2 under them, never a sprite (OBJ is not on the sub screen), or the
+  fixed colour over the backdrop. The port left such lines out (`addSub && (TS & 1B)` matched neither `subRest` nor
+  `subObj`).
+* **The arena behind the windows** (`arenaWin`, `gBattleFxArenaOff`). Spekkio's practice fight at the party's level 40+
+  (e11 f4199): `TM 17 TS 00 TMW 17`, `W12SEL`'s windows on for BG1 and BG2, a disc growing on lines 57-169. Inside it
+  BG1 and BG2 are off the main screen (`ppu_getPixel`): the backdrop, BG3's streaks over it, the sprites. The port kept
+  the room's floor there, and its foreground pass put the room's priority tiles back over the fighters.
+
+Both are pinned only by the ending's legs so far (the scratch route; the public route's legs after 137 are being
+authored). The field's own screens: a script may poke `$0BD7` / `$0BD8` (op 4A, `C0/67D7`: loc 15B's `17` / `13` under
+Lavos's shell, e13 f993), and the bake follows the live pair (scene.c `CtFieldSceneSetScreenLive`).

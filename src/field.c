@@ -6471,6 +6471,21 @@ static void menuItemPanelPoses(const uint8_t* s7) {
     CtMenuSprRequest(pid, sc >= hp ? 0x12 : 0);
   }
 }
+// C2/BEDC's panel loop (the Tech screen's target overlay), `BF11 LDA $0D38,X / CMP $9A93 / SEP #20 / LDA #00 / STA
+// $1818,Y / BCC / LDA #12 / BF22 STA $1811,Y`: as C2/AFED's, except that X is still BEFE's `LDA $71 / ASL A / TAX` -- the
+// PANEL's index, not the member's -- so the scale compared is the one of the character whose id equals the row (C2/A1EF
+// reads $0D38 by $9A90 for the HP's colour; this loop does not). MEASURED, the ending route's e02 f13200 (Marle at
+// 50/718 in row 0, $0D38[0] = Crono's 79): the kneeling Marle beside the hand.
+static void menuTechPanelPoses(const uint8_t* s7) {
+  for (int k = 0; k < 3; k++) {
+    const uint8_t v = s7[0x0D5F + k];
+    if (v & 0x80) break;
+    const int pid = v & 7;
+    const int hp = s7[0x2603 + pid * 0x50] | (s7[0x2604 + pid * 0x50] << 8);
+    const int sc = s7[0x0D38 + k * 2] | (s7[0x0D39 + k * 2] << 8);
+    CtMenuSprRequest(pid, sc >= hp ? 0x12 : 0);
+  }
+}
 static void fieldExitPlaneWram(uint8_t* s, int loc);   // C0/A66B (below, with the treasure plane)
 static void fieldMapHeaderStage(uint8_t* s, int loc) {
   long rl = 0; const uint8_t* rimg = CtBattleRom(&rl);
@@ -15597,6 +15612,7 @@ int main(int argc, char** argv) {
                 // hold now and places the sprites (C2:BF2F), $0D75 = 3 (C2/BEAF), and queues BECE/BED5/FC3E. No input.
                 // This is the frame after the list's A or the popup's end.
                 menuTechOvBuild = 0; menuTechOvFirst = 0; s7[0x0D75] = 3;
+                menuTechPanelPoses(s7);                       // C2/BEDC's BF22: the members' poses on their HP
                 for (int k = 0; k < 3; k++) {
                   int pid = s7[0x2980 + k] & 7;
                   menuTechShown[k][0] = (uint16_t)(s7[0x2603 + pid * 0x50] | (s7[0x2604 + pid * 0x50] << 8));
@@ -16486,6 +16502,8 @@ int main(int argc, char** argv) {
           int optOnScreen = menuRibbonWait > 0 ? menuOptShown : menuOpt;
           CtMenuSetFormPanelDim(((menuScreen == 5) || (menuScreen == 0 && optOnScreen == 4)) ? fpd : 0); }
         if (menuT <= 1 && !menuSprBuiltAtP) CtMenuSprReset(&mh);   // the blocks are (re)built on menu open (or at P, above)
+        if (menuT <= 1) CtMenuWeaponPal(&mh, 0);                   // the init: colours 13-15 black until a screen's C2/F5A7
+        else if (menuScreen == 2 || menuScreen == 3 || menuScreen == 5) CtMenuWeaponPal(&mh, 1);   // C2/AE0A, B8EF, CA21 / CB0A
         if (menuScreen == 3 && menuStatSub >= 1) CtMenuSprBlock7(&mh, menuStatChar);   // C2/BA09: the caster's copy
         if (menuScreen == 5) {
           if (menuFormAnimReq > 0) CtMenuSprFormAnims(&mh, menuFormSlot, menuFormPick);
@@ -16501,9 +16519,10 @@ int main(int argc, char** argv) {
         else if (menuScreen == 0x0C)                         // the shop: $1811 as C2/DD7C / C2/D605 left it
           for (int c = 0; c < 7; c++) CtMenuSprRequest(c, menuShop.anim[c]);
         // The Item overlay's requests stand as its builds left them (C2/AFED's B032 at the build and C2/B34F's rebuild; no
-        // frame resets them in the ROM). Elsewhere the port still puts everyone still each frame: bank C2's other writers
-        // of `$1811` -- the Tech screen's C2/BEDC (BF22), C2/FF3E, ... -- are not modelled, and the Form's and the shop's
-        // are above.
+        // frame resets them in the ROM), and so do the Tech overlay's (C2/BEDC's BF22). Elsewhere the port still puts
+        // everyone still each frame: bank C2's other writers of `$1811` -- C2/FF3E, ... -- are not modelled, and the
+        // Form's and the shop's are above.
+        else if (menuScreen == 3 && menuStatSub == 2) { }      // the Tech overlay's stand as C2/BEDC left them
         else if (menuItemTgt < 0) CtMenuSprFormAnims(&mh, -1, -1);
         CtMenuSprTick(&mh);
         // --menutest: the animating member's pose, frame by frame, run-length encoded, so the timing is
@@ -19547,6 +19566,8 @@ int main(int argc, char** argv) {
     }
     if (fieldNmi && f.sd) bgDirty |= CtFieldSceneSetScreen(f.sd, 0, 0, 0, 0, 0);   // the field's frames: the map header's
     if (fieldNmi && f.sd && f.vm) bgDirty |= CtFieldSceneSetEffect(f.sd, CtSceneMem7E(f.vm)[0x0BE0]);   // ...math: $0BE0
+    if (fieldNmi && f.sd && f.vm)                                                  // ...and screens: $0BD7 / $0BD8
+      bgDirty |= CtFieldSceneSetScreenLive(f.sd, CtSceneMem7E(f.vm)[0x0BD7], CtSceneMem7E(f.vm)[0x0BD8]);
     // The caption plane (fieldVramSink): op 0xE5's style 4 rebuilds BG3 from the map and this NMI uploads it to $1D80
     // (C0/EB2F `CMP #04` -> C0/7F62), so BG3's tilemap is the map's again; while the plane holds, the bake leaves BG3 out.
     if (fieldNmi && f.vm && CtSceneMem7E(f.vm)[0x0146] == 4) g_bg3Plane = 0;
@@ -20811,6 +20832,7 @@ int main(int argc, char** argv) {
             // clear: the canopy covers the fighters), 3 at GATO and in Manoria's cathedral.
             if (objPrio[y * CAMW + x] == 3) continue;
             if (bgWinAt(x, y)) continue;
+            if (fxFrontOn && y < 256 && x < 256 && gBattleFxArenaOff[y * 256 + x]) continue;   // the effect's windows took BG1 / BG2 away
             // (the sprite under it is its sub pixel, mixed -- with OBJ on BOTH screens: the tile is the main screen's and
             //  the sprite showed through it. With OBJ on the sub screen ALONE the tile is on the sub screen with the
             //  sprite and beats it there like anywhere: the sub pixel is the tile's. MEASURED on the rule's cartridge,

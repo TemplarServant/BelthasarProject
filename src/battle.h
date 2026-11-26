@@ -941,6 +941,7 @@ void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, c
 // ...and after the sprites: BG3's front pixels come back from `atCompose` (the fb as the compositor left it), and those
 // whose colour math adds the sub screen (the main screen less BG3) are finished against the pixel now under them, those
 // whose sub screen is the sprites alone against the sprite drawn there (`objPal` != FF; NULL = none) or the fixed colour.
+extern uint8_t gBattleFxArenaOff[256 * 256];   // 1 = BG1 and BG2 are windowed off the main screen at this pixel (the last compose)
 void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov, const uint8_t* objPal);
 // ...and last, the sprites' own share of the rows the compositor evaluated: the clip, and the colour math of the OBJ
 // pixels of palettes 4-7 (CGADSUB bit 4). `objPal` = per pixel the OBJ palette of the sprite on top (0xFF = none).

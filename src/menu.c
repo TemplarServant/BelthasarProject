@@ -960,9 +960,12 @@ void CtMenuRenderItemOverlay(const CtMenuHost* h, uint8_t* fb, int tgt, const ui
     mCharPanel(h, fb, MP_X + 112, 72 + 40 * k, &p, 8, 0);
     mPanelAtkDefOne(h, fb, 120, 112 + 40 * k, p.charId, 0);
   }
-  for (int k = 0; k < 3; k++) {                             // OBJ: the party at C2:B045, prio 2
+  // OBJ: the party at C2:B045, prio 2. C2/F657 walks the blocks in their order ($1800 + 0x40 n, n = the character), and
+  // the first in the OAM lies on top: where two sprites overlap (a kneeling member over the next panel's) the lower
+  // character id covers the higher -- drawn here from the highest id down.
+  for (int c = 6; c >= 0; c--) for (int k = 0; k < 3; k++) {
     CtMenuPanel p;
-    if (!CtMenuPanelData(h->mem, k, &p)) continue;
+    if (!CtMenuPanelData(h->mem, k, &p) || p.charId != c) continue;
     int w = (h->rom && h->romLen > 0x2B045 + 6) ? (CtRomByte(h->rom, 0x400000L, (long)(0x2B045 + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2B046 + 2 * k)) << 8)) : 0;
     mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
   }
@@ -1844,6 +1847,23 @@ static int mSprPlace(const uint8_t* blob, int cx, int feetY, int* ox, int* oy,
 // +0x29 when a screen runs C2/F5A7, and until then they hold what the menu's init left (black, the art's own). A
 // caller sets mSprWpn (three BGR555 words) around the blit when the weapon colours are loaded.
 static const uint16_t* mSprWpn = NULL;
+// ...and the X menu's screens that run C2/F5A7 in their build -- the Item screen (C2/AE0A), the Tech screen (C2/B8EF), the
+// Form screen (C2/CA21 / CB0A) -- load them for all seven characters; the menu's init leaves them black again.
+// CtMenuWeaponPal(h, 1) is that second loop of C2/F5A7 (the weapon = the sheet's +0x29 now), (h, 0) the init. MEASURED on
+// the rule's cartridge, the ending route's e02 f13199 (the Tech target overlay, Marle kneeling): CGRAM A0-AF's colours
+// 13-15 are D1:4B06's three words (her crossbow: CD:6CEC[12] = 1), where the port drew the bow's stock black (17 px).
+static int g_menuWpnOn = 0; static uint16_t g_menuWpnPal[7][3];
+void CtMenuWeaponPal(const CtMenuHost* h, int on) {
+  g_menuWpnOn = 0;
+  if (!on || !h || !h->mem || !h->rom || h->romLen <= 0x0D6CEC + 0x100) return;
+  for (int c = 0; c < 7; c++) {
+    int wpn = h->mem[0x2600 + c * 0x50 + 0x29];
+    long a = 0x110000L + 0x4B00 + 6L * CtRomByte(h->rom, 0x400000L, (long)(0x0D6CEC + wpn));   // C2/F5ED: $D1:4B00 + 6 * CD:6CEC[weapon]
+    for (int k = 0; k < 3; k++)
+      g_menuWpnPal[c][k] = (a + 2 * k + 1 < h->romLen) ? (uint16_t)(CtRomByte(h->rom, 0x400000L, (long)(a + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(a + 2 * k + 1)) << 8)) : 0;
+  }
+  g_menuWpnOn = 1;
+}
 static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY, int dim) {
   int w, hh, x0, y0;
   if (!mSprPlace(blob, cx, feetY, &x0, &y0, NULL, NULL, NULL, NULL)) return;
@@ -2058,7 +2078,10 @@ static void mBlitPartySprPose(const CtMenuHost* h, uint8_t* fb, int charId, int 
       }
     }
   }
+  const uint16_t* keepWpn = mSprWpn;
+  if (!mSprWpn && g_menuWpnOn && charId >= 0 && charId < 7) mSprWpn = g_menuWpnPal[charId];   // (the shop sets its own)
   mBlitSprAnchored(fb, blob, cx + dx, feetY + dy, dim);
+  mSprWpn = keepWpn;
 }
 // The Form panel geometry, in one place so a probe grades what the renderer uses: the text column and the sprite
 // anchor C2/CE6E gives each panel.
@@ -3357,7 +3380,15 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
     // caster, which the X menu's three-member column never loads).
     mDim = dim[k] ? 2 : (h->mem && h->mem[0x0071] < h->mem[0x0073]                     // 2BDCF BIT $78 / BMI
                          && CtMenuTechFieldUsable(h->mem, charId, tids[k])) ? 3 : 0;
-    mText(h, fb, nm, 144, 60 + i * 12);
+    // C2/BDD9-BDE6: Y = $15C4 + techId * 11, `LDA #CC0B / JSR C2/EF65` -- the record's eleven cells as they stand, so a
+    // magic tech's leading 2F (the star) is drawn in cell 0 and its name starts a cell to the right; EF is the pad.
+    if (tids[k] >= 0 && tids[k] <= 0xFF && nm[0]) {
+      for (int c = 0; c < ROM_ITEM_STRIDE; c++) {
+        int code = mnuRom((long)ROM_TECH_NAMES + (long)tids[k] * ROM_ITEM_STRIDE + c);
+        if (code != 0xEF && code != 0xFF) mCodeAt(h, fb, code, 144 + c * 8, 60 + i * 12);
+      }
+    } else
+      mText(h, fb, nm, 144, 60 + i * 12);
     mDim = 0;
   }
   // the list cursor, when the list is entered, at its nav record: the screen's graph $FF:B7A5 (a length byte, 0x54 =
@@ -3421,11 +3452,14 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
     if (!CtMenuPanelData(h->mem, k, &p)) continue;
     if (shown) { p.hp = shown[k][0]; p.mp = shown[k][1]; }
     mCharPanel(h, fb, MP_X + 112, 48 + 32 * k, &p, 8, 0);
-    if (h->rom && h->romLen > 0x2BF2F + 6) {
+  }
+  if (h->rom && h->romLen > 0x2BF2F + 6)                           // the sprites, the OAM's order (C2/F657: the lowest
+    for (int c = 6; c >= 0; c--) for (int k = 0; k < 3; k++) {     //   character id on top, as the Item overlay's)
+      CtMenuPanel p;
+      if (!CtMenuPanelData(h->mem, k, &p) || p.charId != c) continue;
       int w = CtRomByte(h->rom, 0x400000L, (long)(0x2BF2F + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2BF30 + 2 * k)) << 8);
       mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
     }
-  }
   if (tgt >= 0 && tgt < 3 && h->rom && h->romLen > 0x3FB7A6L + 14 * 6)
     mHandCursor(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6)), CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6 + 1)));
   if (popCurve >= 0 && popAmt && h->rom && h->romLen > 0x3FCEBA + 0x60) {   // C2/9016 at each anchor

@@ -83,6 +83,7 @@ int   CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn);   /
 int   CtFieldSceneTileDma(void* h, int vramWord, const uint8_t* bytes, int n);   // a VRAM DMA into the BG1/BG2 characters
 int   CtFieldSceneSetCgram(void* h, const uint8_t* page);                          // CGRAM 0-127 from the live page $7E:2200
 int   CtFieldSceneSetEffect(void* h, int cgadsub);   // the field's live CGADSUB ($0BE0); 1 = the bake must redo
+int   CtFieldSceneSetScreenLive(void* h, int tm, int ts);   // the field's live TM / TS ($0BD7 / $0BD8); 1 = redo
 // The colour math the bake composes with: on = 0 -> the map header's (effect_flags); on = 1 -> these (CGWSEL, CGADSUB: a
 // battle's arena, its NMI's shadows; the layer designations stay the header's). Returns 1 when that changes the inputs.
 int   CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int ts);   // a battle's colour math + TM/TS

@@ -432,6 +432,7 @@ typedef struct {
   int w1, h1, w2, h2, w3, h3, has_l3;
   int screen_flags, effect_flags;
   int scrOn, scrCGWSEL, scrCGADSUB;   // CtFieldSceneSetScreen: a battle's own colour math
+  int scrLive, scrLiveOn;              // CtFieldSceneSetScreenLive: the field's live TM / TS ($0BD7 / $0BD8), in the header byte's shape
   int fxLive, fxLiveOn;                // CtFieldSceneSetEffect: the field's live CGADSUB ($0BE0), over the header's byte
   int scrTM, scrTS;                   // ...and its layer designations (BL1/BL2/BL3 bits)
   int scrObjM, scrObjS;               // ...and OBJ's ($212C/$212D bit 4)
@@ -590,6 +591,11 @@ static void CtLoadSceneFromRom(const uint8_t* rom, int index, int frame,
 // byte effect_flags holds) and channel 6's rows take it every frame (FD/C6F6); op 0xF1 (C0/3D2C-3D74) and C0/21E1's
 // entry 9 (C0/25AE) rewrite it. CtFieldSceneSetEffect hands the bake the live byte.
 static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive : sd->effect_flags; }
+// ...and so are its screens: the load makes $0BD7 / $0BD8 from header byte 4 (C0/A41B-A456) and channel 4's rows ship them
+// every frame (FD/C1AD `$7F:1520` / `$7F:1521`), but a script may rewrite them -- the poke ops write the shadows
+// themselves (C0/67D7: loc 15B's `4A D7 0B 7E 17` / `4A D8 0B 7E 13` put BG1 / BG2 / OBJ on the sub screen under Lavos's
+// shell, the ending route's e13 f993). CtFieldSceneSetScreenLive hands the bake the live pair in the header byte's shape.
+static int sceneScreen(const SceneData* sd) { return sd->scrLiveOn ? sd->scrLive : sd->screen_flags; }
 static int gSceneLayersOff = 0;   // BL1/BL2/BL3 bits removed from both screens for one compose (see below)
 static uint8_t* gSceneMotCov;     // CtComposeScene's motion coverage, when it is asked for the coverage (CtFieldSceneBake)
 static uint8_t* gSceneMainPre;    // ...and its main screen before the colour math (the same crop)
@@ -600,7 +606,7 @@ static uint8_t* gSceneSubCov;
 static int gSceneBlend, gSceneSubOp, gSceneHalf;
 static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* outW, int* outH, uint8_t** outPrio,
                                uint8_t** outCov) {
-  int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
+  int main_t = sceneScreen(sd) & 0x07, sub_t = (sceneScreen(sd) >> 4) & 0x07;
   int ef = sceneEffect(sd);
   int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0;
   int back_en = (ef & 0x20) != 0;                    // CGADSUB bit 5: the backdrop is in the math
@@ -952,7 +958,7 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
 const uint8_t* CtFieldSceneMainScreen(void* h, int* blendEn, int* subOp, int* half, int* objBoth) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !sd->bakeMain) return NULL;
-  int objM = (sd->screen_flags & 0x08) != 0, objS = (sd->screen_flags & 0x80) != 0;
+  int objM = (sceneScreen(sd) & 0x08) != 0, objS = (sceneScreen(sd) & 0x80) != 0;
   int ef = sceneEffect(sd);
   int be = ef & 0x07, so = (ef & 0x80) != 0, hf = (ef & 0x40) != 0;
   if (sd->scrOn) {
@@ -1119,7 +1125,7 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   SceneData* sd = (SceneData*)h;
   if (!sd || !o) return 0;
   // the bake's own setup (CtComposeScene's head, blend on)
-  int main_t = sd->screen_flags & 0x07, sub_t = (sd->screen_flags >> 4) & 0x07;
+  int main_t = sceneScreen(sd) & 0x07, sub_t = (sceneScreen(sd) >> 4) & 0x07;
   int ef = sceneEffect(sd);
   int blend_en = ef & 0x07, sub_op = (ef & 0x80) != 0, half = (ef & 0x40) != 0, back_en = (ef & 0x20) != 0;
   if (sd->scrOn) {
@@ -1157,7 +1163,7 @@ int CtFieldSceneLayers(void* h, CtSceneLayers* o) {
   }
   for (int i = 0; i < 6; i++) { o->rgb[i] = sd->layRgb[i]; o->cov[i] = sd->layCov[i]; o->w[i] = sd->layW[i]; o->h[i] = sd->layH[i]; }
   o->mainT = main_t; o->subT = sub_t; o->blendEn = blend_en; o->subOp = sub_op; o->half = half; o->backEn = back_en;
-  o->objMain = sd->scrOn ? sd->scrObjM != 0 : (sd->screen_flags & 0x08) != 0;
+  o->objMain = sd->scrOn ? sd->scrObjM != 0 : (sceneScreen(sd) & 0x08) != 0;
   memcpy(o->backdrop, sd->pal[0], 3);
   return 1;
 }
@@ -1194,9 +1200,9 @@ int CtFieldSceneSetVramLayers(void* h, int layers) {
 int CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return 0;
-  if (mainT) *mainT = sd->scrOn ? sd->scrTM : sd->screen_flags & 0x07;
-  if (subT) *subT = sd->scrOn ? sd->scrTS : (sd->screen_flags >> 4) & 0x07;
-  if (mathEn) *mathEn = sd->scrOn ? (sd->scrCGADSUB & 0x07) : (sd->effect_flags & 0x07);
+  if (mainT) *mainT = sd->scrOn ? sd->scrTM : sceneScreen(sd) & 0x07;
+  if (subT) *subT = sd->scrOn ? sd->scrTS : (sceneScreen(sd) >> 4) & 0x07;
+  if (mathEn) *mathEn = sd->scrOn ? (sd->scrCGADSUB & 0x07) : (sceneEffect(sd) & 0x07);
   return 1;
 }
 // The field's VRAM tilemaps against the map (RingOv, above). `vram` = the VRAM image's words, `known[a - $6000]` set
@@ -1360,6 +1366,14 @@ int CtFieldSceneSetEffect(void* h, int cgadsub) {
   if (!sd) return 0;
   int ef = cgadsub & 0xFF, ch = !sd->fxLiveOn ? ef != sd->effect_flags : ef != sd->fxLive;
   sd->fxLive = ef; sd->fxLiveOn = 1;
+  return ch;
+}
+int CtFieldSceneSetScreenLive(void* h, int tm, int ts) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd) return 0;
+  int b = (tm & 0x07) | ((tm & 0x10) >> 1) | ((ts & 0x07) << 4) | ((ts & 0x10) << 3);
+  int ch = !sd->scrLiveOn ? b != sd->screen_flags : b != sd->scrLive;
+  sd->scrLive = b; sd->scrLiveOn = 1;
   return ch;
 }
 int CtFieldSceneSetScreen(void* h, int on, int cgwsel, int cgadsub, int tm, int ts) {
