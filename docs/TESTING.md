@@ -3784,6 +3784,8 @@ Legs 138-160 take the route from the summit to "The End". `playthrough-legs-on-t
 (`playthrough-legs-vs-rule-cartridge`, 138 of 166 on the port's own clock: the 28 others are the SPC lattice's timing
 class, disasm/notes/playthrough_leg_ledger.md). Six more checks pin what the end's legs found:
 
+* `field-picture-party-shudder-heading-is-the-whole-lists-vs-cartridge` (leg 158 f14700): op `85 hh` on the
+  target-list track sets every target's heading; the hit's shudder lifts the party together.
 * `field-picture-shadow-attribute-is-the-composes-vs-cartridge` (leg 157 f4241, `lag` 0): the ground shadow's attribute
   is the one the compose read, a frame behind `$9F46`.
 * `field-picture-core-wave-top-rows-and-face-vs-cartridge` (leg 159 f76200): the Core's face cell (a sheet of 0x2E7
@@ -3792,6 +3794,8 @@ class, disasm/notes/playthrough_leg_ledger.md). Six more checks pin what the end
   one BG layer more than the main screen.
 * `field-picture-core-revive-discs-and-fading-enemies-vs-cartridge` (f53600): the windows on the one arena layer the
   main screen carries, and OBJ priority 0 behind BG3's priority tiles.
+* `field-picture-core-revive-enemies-behind-bg1-vs-cartridge` (f65380): OBJ priority 0 / 1 behind the arena's own
+  BG1 / BG2 pixels, the low-priority tiles' too.
 * `field-picture-core-collapse-disc-shows-bg2-vs-cartridge` (f103900): one of the two arena layers behind a window
   shows the other.
 * `playthrough-end-legs-fight-logic-vs-rule-cartridge` (`cmp 138,150 --clock`): the maxHP clamp of every action's

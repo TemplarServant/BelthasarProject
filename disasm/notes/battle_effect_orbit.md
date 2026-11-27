@@ -495,3 +495,9 @@ and 0, so the haze's tiles are in front of them and BG3's math (the sub screen i
 pixel of theirs is the fading row's colour plus the haze's (0,0,3). The port's WRAM agreed byte for byte over the span
 (`$993F`, `$2382`) and its drawer already took the row from the uploaded page (a script's flash holds the attribute);
 it drew the sprites over the haze (1822 px). CtBattleFxFrontApply marks 6-8.
+
+Before the discs open (leg 159 f65310-f65407, the second call: TM 11, no window, the two enemies already at OBJ
+priority 0) they are behind BG1's own low-priority tiles and not on the picture at all: mode 1's order is OBJ3 > BG1H >
+BG2H > OBJ2 > BG1L > BG2L > OBJ1 > BG3H > OBJ0 > BG3L. field.c's foreground pass knew the priority tiles over OBJ 0-2
+only (337 px on f65380, 1822 on f65400); a second pass now hides a sprite of priority 0 / 1 wherever the main screen has
+a BG1 / BG2 pixel.

@@ -58870,6 +58870,40 @@
       ]
     },
     {
+      "name": "field-picture-party-shudder-heading-is-the-whole-lists-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "party-shudder-heading-is-the-whole-lists"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: party-shudder-heading-is-the-whole-lists leg 158 +14700 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: party-shudder-heading-is-the-whole-lists "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a heading set on the target-list track is every target's: the party shudders together",
+      "notes": "OP `85 hh` ON TRACK 4 SETS THE HEADING OF EVERY ENTRY OF THE TARGET LIST. C1/6258: `LDA $A010 / CMP #08 / BCS` (an effect object, `$A5B5`), `CMP #04 / BNE` (a track's own combatant, `$A014,X` -- tracks 5-7 are their own list entries), else C1/627A `LDA $A018,X / BMI out / TAY / LDA $80 / STA $A5AA,Y / INX`: the whole list. Playthrough leg 158 (the form past the shell, action `$9877` 38 on the three PCs): C1/6287 stores C0 at `$A5AA..$A5AC` on f14564 and the hit's shudder (a radius along the heading, every other frame f14685-f14697) lifts the three PCs 4 px together. The port stored the first entry's alone: the third PC shook along a stale heading (15: +3,+1), 484 px on a frame of the lift. battle.c, op 0x85. On the cartridge's clock. NOT MEASURED: the sibling ops C1/611B (76) and C1/6154, whose track-4 arm walks `$A015,X` -- left as they were. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/battle.c",
+          "find": "          if (t == 4)\n            for (int i = 5; i < 16 && h->ascRole[i] >= 0 && h->ascRole[i] < 11; i++) {",
+          "replace": "          if (t == 4 && 0) /* MUT: the first entry alone */\n            for (int i = 5; i < 16 && h->ascRole[i] >= 0 && h->ascRole[i] < 11; i++) {",
+          "why": "the heading is the whole list's"
+        }
+      ]
+    },
+    {
       "name": "field-picture-shadow-attribute-is-the-composes-vs-cartridge",
       "argv": [
         "python",
@@ -58940,6 +58974,40 @@
           "find": "      if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn, ringMargin)) {",
           "replace": "      if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn, 0 * ringMargin)) { /* MUT */",
           "why": "a line its record moves shows the tilemap's cells past the staged view"
+        }
+      ]
+    },
+    {
+      "name": "field-picture-core-revive-enemies-behind-bg1-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "core-revive-enemies-behind-bg1"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: core-revive-enemies-behind-bg1 leg 159 +65380 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: core-revive-enemies-behind-bg1 "
+      ],
+      "tier": "full",
+      "timeout_s": 7200,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a sprite of OBJ priority 0 or 1 is behind the arena's BG1 / BG2 pixels, low-priority tiles too",
+      "notes": "OBJ PRIORITY 0 / 1 IS BEHIND EVERY BG1 / BG2 PIXEL (mode 1: OBJ3 > BG1H > BG2H > OBJ2 > BG1L > BG2L > OBJ1 > BG3H > OBJ0 > BG3L). Playthrough leg 159 (the Lavos Core calls its bits back a second time): `$99B8` / `$99BC` 00 from f65310 -- the two enemies' attribute 08 -- with TM 11 and no window until f65408: they are not on the picture until the discs open on the backdrop (then behind BG3's priority tiles: field-picture-core-revive-discs-and-fading-enemies). The port's foreground pass knew the priority tiles over OBJ 0-2 only and drew the two enemies over BG1 (337 px on f65380, 1822 on f65400). field.c, the pass after the priority tiles'. On the cartridge's clock. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "              if (objPrio[y * CAMW + x] > 1) continue;         // (0xFF: no sprite; 2, 3: before the low tiles)",
+          "replace": "              continue; /* MUT: every sprite before the low tiles */",
+          "why": "OBJ priority 0 / 1 is behind BG1 / BG2's low-priority tiles"
         }
       ]
     },

@@ -20975,6 +20975,29 @@ int main(int argc, char** argv) {
             memcpy(fb + ((size_t)y * CAMW + x) * 3, bArenaFb + ((size_t)y * CAMW + x) * 3, 3);
             objPal[y * CAMW + x] = 0xFF;                 // the BG tile is on top here, not the sprite
           }
+      // ...and a cell of OBJ priority 0 or 1 is behind EVERY BG1 / BG2 pixel, the low-priority tiles' too (mode 1: OBJ3 >
+      // BG1H > BG2H > OBJ2 > BG1L > BG2L > OBJ1 > BG3H > OBJ0 > BG3L): it shows only where the main screen has neither --
+      // the backdrop, BG3, or where a window took the layers away. MEASURED on the rule's cartridge, playthrough leg 159
+      // (the Lavos Core calls its bits back): `$99B8` / `$99BC` 00 from f65310 -- the two enemies' attribute 08, OBJ
+      // priority 0 -- with TM 11 and no window until f65408: they are not on the picture until the discs open on the
+      // backdrop; the port drew them over BG1 (1822 px on f65400).
+      { int lw = 0, lh = 0; const uint8_t* lcov = (f.sd && !dbg.noFg) ? CtFieldSceneCoverage(f.sd, &lw, &lh) : NULL;
+        if (lcov && lw == f.W && lh == f.H)
+          for (int y = 0; y < ch; y++)
+            for (int x = 0; x < cw; x++) {
+              if (objPrio[y * CAMW + x] > 1) continue;         // (0xFF: no sprite; 2, 3: before the low tiles)
+              const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;
+              const int mz = g_bMosOn ? g_bMosSize[y] : 1;
+              size_t bo = mz > 1 ? fieldBaseAt(&f, camx + x - x % mz + arenaD[ry * 4], bcamy + g_bMosSrc[y] + arenaD[ry * 4 + 1])
+                                 : fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);
+              if (!(lcov[bo] & 0x03)) continue;                // the backdrop or BG3 there
+              if (bgWinAt(x, y)) continue;
+              if (fxFrontOn && y < 256 && x < 256 && gBattleFxArenaOff[y * 256 + x]) continue;
+              if (g_objSubBoth && g_objSubDone[(size_t)y * g_fw + x]) continue;
+              memcpy(fb + ((size_t)y * CAMW + x) * 3, bArenaFb + ((size_t)y * CAMW + x) * 3, 3);
+              objPal[y * CAMW + x] = 0xFF; objPrio[y * CAMW + x] = 0xFF;
+            }
+      }
       if ((prioKept || prioCovered) && getenv("CT_BATTLE_PRIOTRACE"))
         fprintf(stderr, "battleprio f%d $A5E3=%02X cells over priority tiles: %d in front (OBJ 3), %d covered\n",
                 liveHost.frames, bmem[0xA5E3], prioKept, prioCovered);

@@ -14099,6 +14099,17 @@ static void battleAscTick(CtBattleHost* h, int rel) {
           // keeps one per-track heading for both (op 0x76 writes it through the same split, C1/611B).
           h->ascHead[t] = a1 & 0xFF;
           battleAscHeadMirror(h, t);
+          // ...and on track 4 the byte goes to EVERY entry of the target list: C1/6267 `CMP #04 / BNE` -> C1/627A
+          // `TDC / TAX / LDA $A018,X / BMI out / TAY / LDA $80 / STA $A5AA,Y / INX / BRA` (tracks 5-7 take their own
+          // entry, `$A014,X`). MEASURED on the rule's cartridge, playthrough leg 158 (the form past the shell, its
+          // action 38 on the whole party): C1/6287 stores C0 at `$A5AA`, `$A5AB` and `$A5AC` on f14564, and the hit's
+          // shudder (CF/F36x, a radius along the heading) lifts the three PCs 4 px together; the port stored the first
+          // entry's alone and the third PC shook along a stale heading (15: +3,+1 -- 484 px on the frames of the lift).
+          if (t == 4)
+            for (int i = 5; i < 16 && h->ascRole[i] >= 0 && h->ascRole[i] < 11; i++) {
+              h->ascHead[i] = a1 & 0xFF;
+              h->mem[0xA5AA + h->ascRole[i]] = (uint8_t)a1;
+            }
           break;
         case 0x11: case 0x99: case 0x9B: case 0x9D: {                // slide to the stored point
           // The same move ops, taking their target from the stored point $5D9E/$5D9F instead of a resolved mode;

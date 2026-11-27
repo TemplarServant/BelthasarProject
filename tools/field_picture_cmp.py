@@ -264,11 +264,18 @@ PICTURES = {
     # the shadow's attribute is the compose's, a frame behind the byte (battle_enemy_cells.md), on the cartridge's clock.
     # The picture stands still for four frames but for the shadow: graded at the port's own frame (`lag`).
     'shadow-attribute-is-the-composes': dict(leg='157_day_of_lavos_nine_fights', at=0, frames=4241, own=True, clock=True, lag=0),
+    # Leg 158 (the form past the shell, its action 38 on the whole party): op `85 hh` on track 4 sets the heading of every
+    # entry of the target list (C1/627A), so the hit's shudder lifts the three PCs together (f14685-f14697, every other
+    # frame); f14700 is the cartridge's picture of the last lift.
+    'party-shudder-heading-is-the-whole-lists': dict(leg='158_lavos_shell_form_to_1da', at=0, frames=14700, own=True, clock=True),
     # Leg 159 (the end's fight, loc 1DF, from f40362): the Lavos Core, on the cartridge's clock (`clock`).
     # f76200 -- the era background under BG2's line wave (its record at -1 on the top line: that row is the tilemap's
     # far side, field_bg_tilemap.md) and the Core in pose 2B, its face cell on sheet tiles 2DF-2E6
     # (battle_enemy_cells.md): 496 px with neither, 240 with the face alone;
     'core-wave-top-rows-and-face': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=76200, own=True, clock=True),
+    # f65380 -- the second call: the two enemies at OBJ priority 0 behind BG1's own tiles (TM 11, no window yet): not on
+    # the picture until the discs open;
+    'core-revive-enemies-behind-bg1': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=65380, own=True, clock=True),
     # f41200 -- the speed lines: TM 15 TS 13 CGADSUB 04, BG3's streaks add a sub screen with one BG layer more;
     'core-speed-lines-add-the-sub-screen': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=41200, own=True, clock=True),
     # f53600 -- the bits called back: TM 15 TS 10 with W12SEL's windows on BG1 alone (two discs on the backdrop and

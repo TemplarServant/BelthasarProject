@@ -664,3 +664,29 @@ other rolls, and the tape is how a replayed pad is held to the cartridge's.
 
 What the two lists do not grade: the pictures inside a leg (the `field-picture-*` and `playthrough-branch-*` checks pin
 the ones found so far; the end's fight has four open samples, above), and sound (the `sound-*` family).
+
+## The pictures inside legs 138-160 (2026-11-27, the audit)
+
+One picture every 300 frames of the 23 legs, the port on the cartridge's clock: 4,537 samples, 4,487 at 0 px (five legs
+whole: 140, 148, 149, 152 and 157 -- the nine fights, 531 samples). Two rules came out of it, and with them 4,489:
+
+* **Op `85 hh` on the target-list track sets every target's heading** (C1/627A; leg 158 f14564): the hit's shudder lifts
+  the three PCs together. `field-picture-party-shudder-heading-is-the-whole-lists`.
+* **OBJ priority 0 / 1 is behind the arena's BG1 / BG2 pixels, low-priority tiles too** (mode 1's order; leg 159
+  f65310-f65407, the second call of the bits): the two enemies are not on the picture until the discs open.
+  `field-picture-core-revive-enemies-behind-bg1`.
+
+What the other samples are, by class:
+
+* **A load's end** (legs 142 f23400, 144 f34200-f35100, 147 f16800-f17700, 156 f38100): the port ends a location load
+  some frames before the cartridge (leg 147's entry into 135: the ramp from f16671 against f16705), walks from there on
+  the pad's own frames and meets the cartridge's place again at the next stop. The length of an NMI-off load is the
+  timing class; the tape holds most loads' ends and not these.
+* **A scroll's phase after such a load** (leg 156 f38700, the Epoch's cockpit: the sea under it, 8661 px at every
+  offset): the layer moves a step a frame from the load's end, so its phase is the load's.
+* **A dissolve's packets** (10-16 px on a sample in legs 138, 139, 141, 143, 146, 147, 150, 151: a type-2 corpse, two
+  packets a level): on the frames a level's second packet is on the screen the port's is a level behind in a 16-px
+  column (leg 143 f12598 / f12600: 9 / 10 px; f12597: 0). OPEN -- the per-frame packet state is not derived yet.
+* **Not triaged**: leg 139 f23100 (53 px), 141 f50100 (107), 144 f41700 (63), 145 f35700 (38), 150 f6000 / f7500 (163 /
+  82), 151 f13200 (78), 153 f16200 / f35100 (53 / 38), 154 f22800-f35100 (17-531), 155 f28800 (20), 159 f113400-f114300
+  (the fall to the fair, 102-1003 at port -2), 160 f10800 (82 at port -2).
