@@ -3784,6 +3784,8 @@ Legs 138-160 take the route from the summit to "The End". `playthrough-legs-on-t
 (`playthrough-legs-vs-rule-cartridge`, 138 of 166 on the port's own clock: the 28 others are the SPC lattice's timing
 class, disasm/notes/playthrough_leg_ledger.md). Six more checks pin what the end's legs found:
 
+* `field-picture-corpse-packets-follow-the-cells-names-vs-cartridge` (leg 143 f12600): a corpse's dissolve level
+  reaches each cell with the $400 packet its own VRAM tiles are in.
 * `field-picture-party-shudder-heading-is-the-whole-lists-vs-cartridge` (leg 158 f14700): op `85 hh` on the
   target-list track sets every target's heading; the hit's shudder lifts the party together.
 * `field-picture-shadow-attribute-is-the-composes-vs-cartridge` (leg 157 f4241, `lag` 0): the ground shadow's attribute

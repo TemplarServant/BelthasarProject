@@ -248,3 +248,16 @@ screen. MEASURED on the rule's cartridge, a Lavos replica fight (the end's route
 (CD/1B93), `$23BE` 14A5 from f1200 (D1/E72E), OAM 16 attribute 32 on f1199 and 3A on f1200, the shadow (5,5,5) on both.
 The port read `$9F46` when it drew and showed the flipped attribute with the unswapped row for a frame (36 px). It
 keeps the attribute the compose read now, beside the cells' (`shadowAttrCmp` / `shadowAttrShown`, as `objPalCmp`).
+
+## A corpse's dissolve follows the combatant's own raster (2026-11-27)
+
+CD/3ED2 ships a dissolve level in $400-byte packets from the combatant's tile base, one an NMI. Which packet a cell's
+tiles are in is sec. 3's naming law: cell c's tiles are N, N+1, N+16, N+17 for its OAM name N, and a big enemy's cells
+run on into the next combatants' names. For a type 2 outside combatant 3 (layout 5) the names are +00..+06, +18..+1E,
++20..+26 from its own first, so cells 4-7 have their top halves in tiles 24-31 -- the first packet -- and their bottom
+halves in 40-47, the second, with cells 8-11 (32-39, 48-55). MEASURED on the rule's cartridge, playthrough leg 143 (a
+corpse at combatant 6, `$CCFE` a level every two frames, `$CA27` at the base and at +$400 on alternate frames): the VRAM
+tiles whose pixels change are 3 5 7 19 21 23 24-27 31 on f12598, 34 36 37 39 40-43 45 47 50-53 55 on f12599, 0 2 4 16
+18 20 24 28-31 on f12600, and so on. The port laid every corpse's cells in combatant 3's raster -- cell c at (c % 8) *
+2 + 0x20 * (c / 8) -- so cells 4-7 were whole in the first packet and a level ahead on the frame between the two
+(9-10 px a picture). field.c battleDissolveRender takes the tile from the cell's name now.

@@ -264,6 +264,10 @@ PICTURES = {
     # the shadow's attribute is the compose's, a frame behind the byte (battle_enemy_cells.md), on the cartridge's clock.
     # The picture stands still for four frames but for the shadow: graded at the port's own frame (`lag`).
     'shadow-attribute-is-the-composes': dict(leg='157_day_of_lavos_nine_fights', at=0, frames=4241, own=True, clock=True, lag=0),
+    # Leg 143 (the Black Omen's 135: a type-2 corpse at combatant 6): a dissolve level ships in two $400 packets, and the
+    # cells' tiles are where their OAM names put them -- cells 4-7's bottom halves in the second packet (f12600, the
+    # frame between the two).
+    'corpse-packets-follow-the-cells-names': dict(leg='143_omen_circuit_c', at=0, frames=12600, own=True, clock=True),
     # Leg 158 (the form past the shell, its action 38 on the whole party): op `85 hh` on track 4 sets the heading of every
     # entry of the target list (C1/627A), so the hit's shudder lifts the three PCs together (f14685-f14697, every other
     # frame); f14700 is the cartridge's picture of the last lift.

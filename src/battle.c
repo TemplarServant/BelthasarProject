@@ -21375,6 +21375,10 @@ static void battleNmiHead(CtBattleHost* h) {
   battleOamUpload(h);                                             // ...and the mirror they are in: CF/E300-E330
   memcpy(h->dissolveStepShown, h->dissolveStep, sizeof h->dissolveStepShown);   // CD/3ED2's tiles: the corpse's dither level
   memcpy(h->dissolvePktShown, h->dissolvePkt, sizeof h->dissolvePktShown);      // ...and the next level's packets shipped
+  if (h->dissolveRunning >= 0 && getenv("CT_BATTLE_DISSOLVETRACE"))            // the level and packets on the next picture
+    fprintf(stderr, "dissolveshown f%d slot%d step=%d pkt=%d of %d type=%d\n", h->frames, h->dissolveRunning,
+            h->dissolveStepShown[h->dissolveRunning], h->dissolvePktShown[h->dissolveRunning],
+            battleDissolvePackets(h, h->dissolveRunning), h->mem[0x967C + 3 + h->dissolveRunning] & 7);
   memcpy(h->fxObjShown, h->fxObjCmp, sizeof h->fxObjShown);       // ...and the effect objects' cells
   memcpy(h->fxObjMatShown, h->fxObjMatCmp, sizeof h->fxObjMatShown);
   h->fxObjGateShown = h->fxObjGateCmp;

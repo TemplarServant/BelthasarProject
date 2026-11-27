@@ -685,8 +685,9 @@ What the other samples are, by class:
 * **A scroll's phase after such a load** (leg 156 f38700, the Epoch's cockpit: the sea under it, 8661 px at every
   offset): the layer moves a step a frame from the load's end, so its phase is the load's.
 * **A dissolve's packets** (10-16 px on a sample in legs 138, 139, 141, 143, 146, 147, 150, 151: a type-2 corpse, two
-  packets a level): on the frames a level's second packet is on the screen the port's is a level behind in a 16-px
-  column (leg 143 f12598 / f12600: 9 / 10 px; f12597: 0). OPEN -- the per-frame packet state is not derived yet.
+  packets a level) -- FIXED: the cells' tiles are where their OAM names put them, so for a type 2 outside combatant 3
+  cells 4-7's bottom halves are in the level's second packet (battle_enemy_cells.md; leg 143 f12598 / f12600: 9 / 10 px
+  -> 0). `field-picture-corpse-packets-follow-the-cells-names`.
 * **Not triaged**: leg 139 f23100 (53 px), 141 f50100 (107), 144 f41700 (63), 145 f35700 (38), 150 f6000 / f7500 (163 /
   82), 151 f13200 (78), 153 f16200 / f35100 (53 / 38), 154 f22800-f35100 (17-531), 155 f28800 (20), 159 f113400-f114300
   (the fall to the fair, 102-1003 at port -2), 160 f10800 (82 at port -2).

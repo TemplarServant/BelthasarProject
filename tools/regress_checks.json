@@ -58870,6 +58870,40 @@
       ]
     },
     {
+      "name": "field-picture-corpse-packets-follow-the-cells-names-vs-cartridge",
+      "argv": [
+        "python",
+        "tools/field_picture_cmp.py",
+        "corpse-packets-follow-the-cells-names"
+      ],
+      "env": {},
+      "expect": [
+        "fieldpicture: corpse-packets-follow-the-cells-names leg 143 +12600 frames of the leg's pad: 0 px differ at port -1"
+      ],
+      "pin": [
+        "^fieldpicture: corpse-packets-follow-the-cells-names "
+      ],
+      "tier": "full",
+      "timeout_s": 3600,
+      "inputs": [
+        "Chrono_Trigger_USA_SNES.sfc",
+        "ct_assets.dat",
+        "tools/field_picture_cmp.py",
+        "tools/playthrough.py",
+        "tools/playthrough/route.txt"
+      ],
+      "note_pass": "a corpse's dither level reaches each cell with the packet its own VRAM tiles are in",
+      "notes": "A DISSOLVE LEVEL'S PACKETS FOLLOW THE COMBATANT'S OWN VRAM RASTER. CD/3ED2 ships a level in $400-byte packets, one an NMI, from the combatant's tile base (CC:F941); a cell's tiles are N, N+1, N+0x10, N+0x11 for its OAM name N (CC:FAF3 through CF/EB94), and a big enemy's cells run on into the next combatants' names. For a type 2 outside combatant 3 the names are +00..+06, +18..+1E, +20..+26: cells 4-7 have their top halves in tiles 24-31 (the first packet) and their bottom halves in 40-47 (the second). Playthrough leg 143 (the Black Omen's 135, a corpse at combatant 6, `$CCFE` a level every two frames): the VRAM tiles that change are 0-31 on one frame and 32-55 on the next (the cartridge's VRAM, f12597-f12601). The port laid every cell in combatant 3's raster, cells 4-7 whole in the first packet: 9-10 px a picture on the frames between the two packets (the 10-16 px samples of the audit of legs 138-151). field.c battleDissolveRender. On the cartridge's clock. RE-PIN only with the cartridge's picture in hand.",
+      "mutations": [
+        {
+          "file": "src/field.c",
+          "find": "        int base = ec[c].name - ec[0].name;                       // (the cell's name, from the combatant's first)",
+          "replace": "        int base = (c % 8) * 2 + 0x20 * (c / 8); /* MUT: combatant 3's raster for every corpse */",
+          "why": "a cell's tiles are where its OAM name puts them"
+        }
+      ]
+    },
+    {
       "name": "field-picture-party-shudder-heading-is-the-whole-lists-vs-cartridge",
       "argv": [
         "python",

@@ -9040,7 +9040,15 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
         battleEnemySheetTile(slot, id, 1);                           // (the id's sheet: decompressed once)
         if (ctEnemyShCache[slot].nbytes <= 0) continue;
       }
-      // scratch sheet in the T,T+1,T+0x10,T+0x11 raster the compositor expects: cell c at base (c%8)*2 + 0x20*(c/8)
+      // scratch sheet in the combatant's own VRAM raster: cell c's tiles are N, N+1, N+0x10, N+0x11 for its OAM name N
+      // (CC:FAF3 through CF/EB94), counted from the combatant's first name -- its tile base, CC:F941. A big enemy's
+      // cells run on into the next combatants' names, so for a type 2 outside combatant 3 (names +00..+06, +18..+1E,
+      // +20..+26) cells 4-7 have their top halves in tiles 24-31 and their bottom halves in 40-47: the SECOND $400
+      // packet of a level. MEASURED on the rule's cartridge, playthrough leg 143 (a type-2 corpse at combatant 6,
+      // `$CCFE` a level every two frames): the VRAM tiles that change are 0-31 on one frame and 32-55 on the next
+      // (f12598 3 5 7 19 21 23 24-27 31; f12599 34 36 37 39 40-43 45 47 50-53 55). The port laid cell c at
+      // (c % 8) * 2 + 0x20 * (c / 8) -- combatant 3's raster -- and showed cells 4-7 whole a level ahead on the frames
+      // between the two packets (9-10 px a picture).
       static uint8_t scratch[0x60][32];
       memset(scratch, 0, sizeof scratch);
       static const int vtb[4] = { 0x00, 0x01, 0x10, 0x11 };        // TL TR / BL BR (battleEnemyPoseBlitT's order)
@@ -9050,7 +9058,8 @@ static void battleDissolveRender(uint8_t* fb, const uint8_t* mem, const CtBattle
       footX += ldx + battleHopX(h, 3 + slot); footY += ldy + battleHopY(h, 3 + slot);   // CF/EAE3 / CF/EAF8, as alive
       CtDissolveCell cells[24];
       for (int c = 0; c < ncell; c++) {
-        int base = (c % 8) * 2 + 0x20 * (c / 8);
+        int base = ec[c].name - ec[0].name;                       // (the cell's name, from the combatant's first)
+        if (base < 0 || base + 0x11 >= 0x60) base = (c % 8) * 2 + 0x20 * (c / 8);
         for (int i = 0; i < 4; i++) {
           uint16_t w = ec[c].w[i]; int src = w & 0x07FF;
           const uint8_t* t = battleEnemySheetTile(slot, id, src); // word 0 = blank
