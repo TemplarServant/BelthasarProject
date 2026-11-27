@@ -210,3 +210,14 @@ OPEN: the half of a tilemap no upload of the room wrote (after a load it is the 
 words) is not known to the port and is drawn from the map; the `$7E:3000` cells outside a layer's own map (the
 cartridge's leftovers, above); the doors' own VRAM writes (their cells are forgotten); an edge upload on a frame whose
 NMI takes the caption plane's `$46` arm (the cartridge drops it, the port sends it).
+
+### The cells past the screen's edge (2026-11-26)
+
+A line whose scroll an HDMA record moves away from the staged view (a fight's line wave, a shake) shows tilemap pixels
+the staged 256x224 window does not: the tilemap wraps (512 x 256), so they are the cells on its far side. MEASURED on
+the rule's cartridge, the end's fight (loc 1DF, the era background a program ships to `$6800`, all 32 rows): BG2's
+records `$210F/$2110` = (1022,1022) on lines 1-5 against a staged (0,0); the picture's rows 0-1 are tilemap rows
+254-255 (`--hdma`, `--peek .vram`). The port laid the tilemap's own cells over the map inside the screen's window only
+and read the map above it (496 px a picture with the wave at -2, 256 at -1). The overlay (scene.c RingOv `mx`, `my`)
+now keeps the cells 16 px past each edge where the canvas has that room beside the screen, so each tilemap pixel still
+has one place on the canvas.

@@ -1149,6 +1149,19 @@ static void worldEnterAt(World* w, int px, int py) {   // the C2 loader placemen
   CtWorldEnter(&w->cam, &w->mv, px >> 3, py >> 3);
   if (!g_owCaptureStart) worldEnterSong(w, px >> 3, py >> 3);   // a capture's song is already playing on its seeded SPC
   worldClearHdmaArea(w->wram);                         // C2/2C7A JSR C2/2BFB, before C2/09C5's two maps
+  // The two layers' scroll cells `$E3,X` / `$E7,X` stand before the rebuild reads them (C2/09DB `LDA $E3,X / ASL x3 /
+  // STA $20,X`, C2/09E2 `LDA $E7,X / ASL x3 / STA $26,X`): the camera's, as the entry placed it. They were written a
+  // frame later here, after C2/0132's clear, so the rebuild left `$20..$2B` at 0000. `$0027` -- BG1's vertical scroll,
+  // high byte -- is the fight loop's iteration counter afterwards (C1/8121 `INC $0027`: its handlers run on odd counts,
+  // C1/82A2), so a fight after a world map began a pass off. MEASURED on the rule's cartridge, playthrough leg 150
+  // (1F6 entered on f972): `$26` 0198 from f1008 (C2/09E9), 01 still in `$0027` when the fight of f3600 begins (its
+  // first handler pass on the count 3, f3754); the port's `$26` stayed 0000 and its first pass ran on the count 1,
+  // two frames early -- a party member's turn came ready inside those frames and the practice fight took another road.
+  for (int bg = 0; bg < 2; bg++) {
+    const uint16_t h = (uint16_t)((bg ? w->cam.bg2h : w->cam.bg1h) >> 3), v = (uint16_t)((bg ? w->cam.bg2v : w->cam.bg1v) >> 3);
+    w->wram[0xE3 + bg * 2] = (uint8_t)h; w->wram[0xE4 + bg * 2] = (uint8_t)(h >> 8);
+    w->wram[0xE7 + bg * 2] = (uint8_t)v; w->wram[0xE8 + bg * 2] = (uint8_t)(v >> 8);
+  }
   CtWorldTilemapBuild(&w->stm, w->wram, &w->cam);
   w->entryLatch = 0xFFFF;
   // C2/23B4 `STZ $1BEC` / C2/23B7 `STZ $1BF6`, after C2/0471 and before C2/26D6: the fade objects' mutex starts free. Its
@@ -8776,7 +8789,9 @@ static void battleGatoRender(uint8_t* fb, const uint8_t* mem, const CtBattleHost
 // sheet (battle_sheet_decomp.md) -> blit at the live foot with the ROM palette E4:0000 + rec[+2]*24 (colours 1-12).
 // Open in the dossier: the window's cycling (ptrB dwells). Draw order inside a slot: high cell first (SNES low oidx on
 // top). Below: blit one enemy E3 pose at the live foot from the per-slot decompressed ROM sheet.
-static struct { int id; int nbytes; uint8_t px[0x4000]; } ctEnemyShCache[8];   // per-slot ROM sheet
+// (A cell word names a sheet tile in 11 bits, C1/1D4A: a sheet may hold 0x800 tiles = 0x10000 bytes. The Lavos Core's
+// is 0x5CE0 bytes; with room for 0x200 tiles only, its face cell -- tiles 2DF-2E6 -- was drawn blank.)
+static struct { int id; int nbytes; uint8_t px[0x10000]; } ctEnemyShCache[8];   // per-slot ROM sheet
 // The tile raster is per type: C1/1CBE `JSR C1/0089` = type * $0E indexes a 14-byte block at CC:F3B6 (six row offsets,
 // then +$0C = the words per row ($80) and +$0D = the rows ($85)); C1/1CE7 copies the record's words row by row into the
 // combatant's tile buffer. Type 0 = `.. 08 02` (two rows of 8), type 1 = `.. 10 02` (two rows of 16); a cell c covers
@@ -8865,6 +8880,11 @@ static void battleEnemyGenRender(uint8_t* fb, const uint8_t* mem, const CtBattle
     // formation's slot is data (the op-0x83 loader stores (op2 & 0x7F) + 1 into $0D00,X, C0/47A3-47C6, and the staging
     // turns it into `slot = op2 - 3`, C0/0557-056E), so every other id or slot falls through to this id-driven ROM chain
     // (E4:F600 + id*0x10 -> the E3 record -> the CT-LZ sheet -> E4:0000 + rec[+2]*24).
+    if (getenv("CT_BATTLE_PALTRACE") && h->mvInited && h->frames % 30 == 0)
+      fprintf(stderr, "enemypal f%d slot%d id=%02X AF02=%02X dissolve=%d shown=%02X def=%02X live=%02X flashing=%d row4=%04X\n",
+              h->frames, slot, id, mem[0xAF02 + slot], h->dissolveActive[slot], h->objPalShown[3 + slot], BT_OBJPALDEF(h, 3 + slot),
+              BT_OBJPAL(h, 3 + slot), battleEnemyFlashing(h, 3 + slot),
+              h->fxCgram[(128 + 64 + 1) * 2] | (h->fxCgram[(128 + 64 + 1) * 2 + 1] << 8));
     if (id == 0x92 && slot == 3) continue;                       // battleGatoRender owns slot 3 only
     // A corpse is the dissolve's (battleDissolveRender, from the kill to CF/FE7B's `STZ $96F5,X`). Anything else that is
     // PRESENT is drawn, on the alive list or off it: the compose's gate is the presence byte alone (FE845 `LDA $96E9,Y /
@@ -9426,7 +9446,13 @@ static void battleShadowRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   // Magus's shadow (`$A5DB` 01), is tile 002 at (120,124) attribute 3A, its pixels palette 5's colour 15 (CGRAM DF,
   // (5,5,5)) on f14400 and through the holes of his robe on f17100; the port drew the shadow in palette 1 only and left it
   // out (58 px / 3 px). Palette 1 is FF:9E0A's tail as before; another is read from the page the NMI uploaded.
-  const int spal = ((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7;
+  // The attribute is the one the compose wrote, as the cells' (h->shadowAttrShown): program op C9 flips `$9F46` bit 3 on
+  // one frame and E1 swaps the palette rows 1-3 / 5-7 on the next, after that frame's compose and before its upload --
+  // read live, the shadow was a frame ahead of its colours. MEASURED on the rule's cartridge, a Lavos replica fight
+  // (the end's leg, f1198-f1200): `$9F46` 0A from f1199 (CD/1B93), the page's `$23BE` 14A5 from f1200 (D1/E72E), OAM 16
+  // attribute 32 on f1199 and 3A on f1200; the port drew 3A with the unswapped row for a frame (36 px).
+  const int sattr = h->shadowAttrShown;
+  const int spal = (sattr >> 1) & 7;
   uint16_t palw[16];
   if (spal == 1) { if (!CtBattleObjPal1Tail(palw)) return; }
   else for (int i = 0; i < 16; i++) { int c = (128 + spal * 16 + i) * 2; palw[i] = (uint16_t)(h->fxCgram[c] | (h->fxCgram[c + 1] << 8)); }
@@ -9434,15 +9460,15 @@ static void battleShadowRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
   static const int name[4] = { 0x00, 0x01, 0x10, 0x11 };                 // VRAM $02 $03 $12 $13, rebased
   for (int q = 0; q < 4; q++) { const uint8_t* s = CtBattleShadowTile(q); if (!s) return; memcpy(win[name[q]], s, 32); }
   int ox = ((BT_LIVEX(h, cmb) & 0xFF) - 8) & 0xFF, oy = ((BT_LIVEY(h, cmb) & 0xFF) - 4) & 0xFF;   // CF/EA97-EAA5
-  { int keep = g_bObjPalCur; g_bObjPalCur = ((mem[0xA5E3] | mem[0x9F46]) >> 1) & 7;   // its attribute's palette (1)
-    int keepPr = g_bObjSubPrio; if (g_bObjPrioMask) g_bObjSubPrio = ((mem[0xA5E3] | mem[0x9F46]) >> 4) & 3;   // ...and priority
+  { int keep = g_bObjPalCur; g_bObjPalCur = spal;                       // its attribute's palette (1)
+    int keepPr = g_bObjSubPrio; if (g_bObjPrioMask) g_bObjSubPrio = (sattr >> 4) & 3;   // ...and priority
     battleBlitCell(fb, win, 0x12, 0, ox, oy, palw, 0, 0);
     g_bObjPalCur = keep; g_bObjSubPrio = keepPr; }
   // CT_BATTLE_ASCTRACE: the shadow's OAM (X,Y) on every frame it moves, comparable with the oracle's $0700 mirror entry
   if (getenv("CT_BATTLE_ASCTRACE")) {
     static int lastO[11] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
     if (lastO[cmb] != (ox << 8 | oy)) { lastO[cmb] = ox << 8 | oy;
-      fprintf(stderr, "battleshadow f%d cmb%d oam=%02X %02X 02 %02X\n", h->frames, cmb, ox, oy, (mem[0xA5E3] | mem[0x9F46]) & 0xFF); }
+      fprintf(stderr, "battleshadow f%d cmb%d oam=%02X %02X 02 %02X\n", h->frames, cmb, ox, oy, sattr & 0xFF); }
   }
 }
 // The OBJ palette a combatant's cells carry: CF/EB1E `$37 = $9930,X | $99A9,X` (X = cmb + $0C), whose palette field is
@@ -19675,7 +19701,20 @@ int main(int argc, char** argv) {
           if (battlePhase && L) { rs[L * 2] += g_bDriftAdj[(L - 1) * 2]; rs[L * 2 + 1] += g_bDriftAdj[(L - 1) * 2 + 1]; }   // (the
         }                                                                //   records' counters in a fight: above)
       }
-      if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn)) {
+      // ...and past the screen's edges as far as this frame's line records move a layer from its staged scroll (a fight's
+      // wave or shake, CtBattleArenaScrollDelta): those lines show the tilemap's cells there (scene.c RingOv mx / my).
+      int ringMargin = 0;
+      if (ringOn && battlePhase) {
+        static int16_t rd[CAMH * 4]; static uint8_t rr[CAMH];
+        CtBattleArenaScrollDelta(CtSceneMem7E(f.vm), CAMH, rd, rr);
+        for (int y = 0; y < CAMH; y++)
+          for (int k = 0; k < 4; k++) {
+            if (!rr[y]) continue;                                // (not the HUD band's lines: the port draws those itself)
+            int a = rd[y * 4 + k] < 0 ? -rd[y * 4 + k] : rd[y * 4 + k];
+            if (a > ringMargin) ringMargin = a;
+          }
+      }
+      if (CtFieldSceneSetRing(f.sd, g_fieldVram, g_ringKnown, rb, rs, camx, camy, ringOn, ringMargin)) {
         bgDirty = 1;
         if (getenv("CT_RINGDBG")) { int rn[3]; CtFieldSceneRingCells(f.sd, rn);
           printf("ringov: f%d cells BG1 %d BG2 %d BG3 %d scroll %d,%d %d,%d %d,%d cam %d,%d\n", frameNo, rn[0], rn[1], rn[2],
@@ -19769,7 +19808,9 @@ int main(int argc, char** argv) {
           for (int y = 0; y < ch; y++) { ap += arenaRow[y] >= 3 && (arenaD[y * 4] != arenaD[y * 4 + 2] || arenaD[y * 4 + 1] != arenaD[y * 4 + 3]);
             r2 += arenaRow[y] == 2; if (arenaD[y * 4 + 2] < mn) mn = arenaD[y * 4 + 2]; if (arenaD[y * 4 + 2] > mx) mx = arenaD[y * 4 + 2]; }
           fprintf(stderr, "arenarow f%d row100=%d d=(%d,%d,%d,%d) ok=%d TM=%X TS=%X math=%X apart=%d rows2=%d bg2dx=%d..%d\n", frameNo,
-                  arenaRow[100], arenaD[400], arenaD[401], arenaD[402], arenaD[403], arenaApartOk, mt, st, me, ap, r2, mn, mx); }
+                  arenaRow[100], arenaD[400], arenaD[401], arenaD[402], arenaD[403], arenaApartOk, mt, st, me, ap, r2, mn, mx);
+          for (int y = 0; y < 5; y++)
+            fprintf(stderr, "arenatop f%d row%d=%d d=(%d,%d,%d,%d)\n", frameNo, y, arenaRow[y], arenaD[y * 4], arenaD[y * 4 + 1], arenaD[y * 4 + 2], arenaD[y * 4 + 3]); }
         if (nz) fprintf(stderr, "arenashift f%d rows=%d first=%d (%d,%d)\n", frameNo, nz, fy, arenaD[fy * 4], arenaD[fy * 4 + 1]);
       }
     } else memset(arenaD, 0, sizeof arenaD);
@@ -20732,6 +20773,42 @@ int main(int argc, char** argv) {
             }
         }
       }
+      // An arena layer's own picture under the view, at its own line records' place, with what the main screen has
+      // there (battle.c CtBattleFxLayerAlone): the layer the sub screen carries and the main screen does not -- the
+      // sub pixel a BG3 pixel of the effect's layer adds (battleFxSubMore) -- and the one left where a window takes
+      // the other of the two away (W12SEL as CD/08B8 latched it). One layer's bake a frame, only while it is so.
+      static uint8_t bAlone[2][CAMW * CAMH * 4]; int bAloneOn = 0;
+      { int mt = 0, st = 0, me = 0;
+        if (f.sd && !defeatHold && CtFieldSceneScreenLayers(f.sd, &mt, &st, &me)) {
+          int need = st & 0x03 & ~mt;
+          if (need == 3) need = 0;
+          { const int w1 = (liveHost.fxWinSel[0] & 0x0A) != 0, w2 = (liveHost.fxWinSel[0] & 0xA0) != 0;
+            if ((mt & 0x03) == 0x03 && w1 != w2) need |= w1 ? 2 : 1; }
+          for (int ex = 1; ex <= 2; ex++) {
+            if (!(need & ex)) continue;
+            int ew = 0, eh = 0, mw = 0, mh = 0; uint8_t* eprio = NULL; uint8_t* ecov = NULL;
+            uint8_t* e = CtFieldSceneBakeLayerAlone(f.sd, ex, &ew, &eh, &eprio, &ecov);
+            const uint8_t* mcov = CtFieldSceneCoverage(f.sd, &mw, &mh);
+            if (e && eprio && ecov && mcov && ew == f.W && eh == f.H && mw == f.W && mh == f.H) {
+              const int k = ex == 2 ? 2 : 0;
+              for (int y = 0; y < CAMH; y++) {
+                const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;
+                for (int x = 0; x < CAMW; x++) {
+                  size_t pm = fieldBaseAt(&f, camx + x + arenaD[ry * 4], bcamy + y + arenaD[ry * 4 + 1]);
+                  size_t pe = fieldBaseAt(&f, camx + x + arenaD[ry * 4 + k], bcamy + y + arenaD[ry * 4 + k + 1]);
+                  uint8_t* o = bAlone[ex - 1] + ((size_t)y * CAMW + x) * 4;
+                  memcpy(o, e + pe * 3, 3);
+                  o[3] = (uint8_t)(((ecov[pe] & ex) ? 1 : 0) | (eprio[pe] ? 2 : 0) | ((mcov[pm] & 3) ? 4 : 0)
+                                   | ((f.prio && f.prio[pm]) ? 8 : 0) | (ex == 1 ? 16 : 0));
+                }
+              }
+              bAloneOn |= ex;
+            }
+            free(e); free(eprio); free(ecov);
+          }
+        } }
+      CtBattleFxLayerAlone(1, (bAloneOn & 1) ? bAlone[0] : NULL); CtBattleFxLayerAlone(2, (bAloneOn & 2) ? bAlone[1] : NULL);
+      CtBattleFxObjPrio(NULL);
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (cvs && !defeatHold) {
           for (int y = 0; y < CAMH; y++)
@@ -20904,6 +20981,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleFxCloudRender(fb, &liveHost);            // a program's sprite cloud (CD/2BFC), OAM 4-19
       if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
+      CtBattleFxObjPrio(objPrio);                     // (the sprites' priorities, now that they are drawn)
       if (fxFrontOn)                                  // mode 1 + $2105 bit 3 (ppu.c actMode 8): BG3's priority tiles are
         CtBattleFxFrontApply(fb, CAMW, CAMH, fxFrontFb, cvwin, objPal);   // in front of every OBJ and BG1/BG2 priority tile --
                                                        // and the Ice crystal's are added to what is under them

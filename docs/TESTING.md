@@ -3776,3 +3776,30 @@ across the load into loc 0D9 (its black frames a free span). One mutation. Found
 `field-objdata-enemy-template-base-vs-cartridge` and `field-objdata-enemy-attribute-half-vs-cartridge`: the enemy
 loader (op 0x83, C0/47AC-47D7) stores the slot's tile base as a word and the template base `$1700,X` = slot * 32.
 Playthrough leg 57 f1500-f1560 and leg 45 f90-f160, the OAM mirror and the tiles in use on every frame.
+
+### The end's fight on the public route: field-picture-core-* / shadow-attribute, playthrough-end-legs-fight-logic (2026-11-27)
+
+Legs 138-160 take the route from the summit to "The End". `playthrough-legs-on-the-cartridges-clock` (`cmp all -j
+--clock`, 166 of 166 legs SAME) is the whole route on the cartridge's clock, beside the plain list
+(`playthrough-legs-vs-rule-cartridge`, 138 of 166 on the port's own clock: the 28 others are the SPC lattice's timing
+class, disasm/notes/playthrough_leg_ledger.md). Six more checks pin what the end's legs found:
+
+* `field-picture-shadow-attribute-is-the-composes-vs-cartridge` (leg 157 f4241, `lag` 0): the ground shadow's attribute
+  is the one the compose read, a frame behind `$9F46`.
+* `field-picture-core-wave-top-rows-and-face-vs-cartridge` (leg 159 f76200): the Core's face cell (a sheet of 0x2E7
+  tiles) and the tilemap's rows past the staged view under BG2's line wave.
+* `field-picture-core-speed-lines-add-the-sub-screen-vs-cartridge` (f41200): TM 15 TS 13, BG3 adds a sub screen with
+  one BG layer more than the main screen.
+* `field-picture-core-revive-discs-and-fading-enemies-vs-cartridge` (f53600): the windows on the one arena layer the
+  main screen carries, and OBJ priority 0 behind BG3's priority tiles.
+* `field-picture-core-collapse-disc-shows-bg2-vs-cartridge` (f103900): one of the two arena layers behind a window
+  shows the other.
+* `playthrough-end-legs-fight-logic-vs-rule-cartridge` (`cmp 138,150 --clock`): the maxHP clamp of every action's
+  close on every combatant, and the fight loop's iteration counter `$0027` as the world map left it.
+
+The picture cases carry `clock=True` in `tools/field_picture_cmp.py`: the port runs on the cartridge's clock, as
+`playthrough.py cmp --clock` does (the leg's SPC stores off the cartridge, the loads' ends off its timeline). A fight
+of 40,000 frames on the port's own clock drifts three or four frames (the SPC's lattice, the timing class) and its
+layers' phases with it -- 470-593 px on these pictures, none of them behaviour. Each case plays leg 159 from its start
+(a seed inside a fight does not start the port's), so the last one is a replay of 103,900 frames: timeouts 5400-7200 s.
+Mutations: each rule's own line (nine in all).

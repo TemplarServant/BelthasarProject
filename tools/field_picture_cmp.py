@@ -260,6 +260,22 @@ PICTURES = {
     # Leg 91 (loc 0A9's fight, from f42586), the enemy's action `$9877` 7B: cmb 3 jumps with an afterimage (`A4`), four
     # copies of its cells at the recorded points behind the body, every other frame.
     'enemy-afterimage-is-drawn': dict(leg='91_flea', at=0, frames=69900, own=True),
+    # Leg 157 (the first replica's fight): program op C9 flips `$9F46` on f4240 and E1 swaps the palette rows on f4241 --
+    # the shadow's attribute is the compose's, a frame behind the byte (battle_enemy_cells.md), on the cartridge's clock.
+    # The picture stands still for four frames but for the shadow: graded at the port's own frame (`lag`).
+    'shadow-attribute-is-the-composes': dict(leg='157_day_of_lavos_nine_fights', at=0, frames=4241, own=True, clock=True, lag=0),
+    # Leg 159 (the end's fight, loc 1DF, from f40362): the Lavos Core, on the cartridge's clock (`clock`).
+    # f76200 -- the era background under BG2's line wave (its record at -1 on the top line: that row is the tilemap's
+    # far side, field_bg_tilemap.md) and the Core in pose 2B, its face cell on sheet tiles 2DF-2E6
+    # (battle_enemy_cells.md): 496 px with neither, 240 with the face alone;
+    'core-wave-top-rows-and-face': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=76200, own=True, clock=True),
+    # f41200 -- the speed lines: TM 15 TS 13 CGADSUB 04, BG3's streaks add a sub screen with one BG layer more;
+    'core-speed-lines-add-the-sub-screen': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=41200, own=True, clock=True),
+    # f53600 -- the bits called back: TM 15 TS 10 with W12SEL's windows on BG1 alone (two discs on the backdrop and
+    # BG3's stars), the two enemies in OBJ palette 4 while it fades up, OBJ priority 0 behind BG3's priority tiles;
+    'core-revive-discs-and-fading-enemies': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=53600, own=True, clock=True),
+    # f103900 -- the collapse: TM 13 TS 02, window 1 on BG1 alone: BG2's vortex inside the growing disc.
+    'core-collapse-disc-shows-bg2': dict(leg='159_lavos_inner_form_core_fair', at=0, frames=103900, own=True, clock=True),
     # Leg 95 (Magus's fight), action `$9877` 9F: Magus's shadow in OBJ palette 5 (`$9F46` bit 3, CD/1B8B), f14400.
     'shadow-in-palette-5-is-drawn': dict(leg='95_magus', at=0, frames=14400, own=True),
     # The same fight, Magus's fire (f17340-f17406): lines 0-160 run TM 17 TS 13 TMW 17 TSW 00 CGWSEL 02 CGADSUB 04 with no
@@ -600,10 +616,24 @@ def run(name, want_png):
         P.walkscript = lambda p: ','.join('H%X:%d' % (mk, n) if mk else '.:%d' % n for mk, n in prev + p)
     elif own:                                                 # ...and from the leg's start, the previous leg's last
         first = P.last_key(legs, i)
+    tape_env = None
+    if d.get('clock'):                                        # the port on the cartridge's clock, as `cmp --clock`: a long
+        tape = os.path.join(SCRATCH, 'aputape.txt')           # fight's own clock drifts a few frames (the SPC's lattice:
+        P.oracle_tape(start, pad, tape)                       # the timing class), and its layers' phases with it
+        tape_env = os.environ.get('CT_APUTAPE')
+        os.environ['CT_APUTAPE'] = tape
+        P.load_tapes(start, pad, P.oracle_timeline(start, pad))
     try:
         _, pics = P.port_timeline(start, pad, first)
     finally:
         P.walkscript = keys
+        if d.get('clock'):
+            os.environ.pop('CT_LITTAPE', None)
+            os.environ.pop('CT_CLKTAPE', None)
+            if tape_env is None:
+                os.environ.pop('CT_APUTAPE', None)
+            else:
+                os.environ['CT_APUTAPE'] = tape_env
     c = P.oracle_picture(start, pad)
     if not pics:
         print('fieldpicture: %s leg %s: the port drew no picture' % (name, legs[i]['name'].split('_')[0]))

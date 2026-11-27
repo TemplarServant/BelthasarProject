@@ -611,3 +611,56 @@ cartridge's cycles the port plays them as the cartridge does, so what plain mode
 class and nothing else. Real differences the tape found: a song command's record left in the mailbox for a load's queued
 JSLs (leg 29), $7E:317E's 8-bit STZ (leg 47), the ATB handler's whole run while a PC's turn is pending (leg 51: an
 enemy's turn 8 frames late), the touch latch (legs 54 / 55), a $C3 stage's driver reset sixteen frames early (leg 47).
+
+## The route's end: legs 138-160 (2026-11-27)
+
+The route now runs from power-on to "The End" in one chain: 23 legs from leg 137's summit -- the End of Time, the Last
+Village's shop, the Black Omen's 135 / 136 circuit for levels (eleven legs of fights, six of restocking), the bucket,
+the nine fights of the shell as one battle chain (leg 157, 160,000 frames: no field moment between them), the form past
+the shell and the Shelter (158), the inner form, the Lavos Core and the fall to the fair (159: 1DF's entry gives no
+place to cut -- a state there has no lead yet and does not seed the port), the fair, the farewells and the credits (160).
+The party is Marle / Magus / Ayla at level 54; the Core fell to Haste, Ayla's Triple Kick on the left bit and Magus's
+DarkMatter while it is down (found by a backtracking search over the cartridge's own states: 147 turns, 8 steps back).
+
+On the cartridge's clock all 23 are SAME, each end picture 0 px. On the port's own clock twelve are SAME and eleven
+DIFFERENT (139, 141, 145, 146, 150, 151, 153, 154, 157, 158, 159): legs of fight after fight, where the SPC's lattice
+moves a fight's exit a frame or two, the play clock with it, and `$29AD` -- the next fight's RNG cursor (C1/800A) --
+with the clock: other rolls, another fight (the 2026-11-07 class; the tape puts the cartridge's clock back and the
+legs are the cartridge's). What they found on the way, all fixed:
+
+* **Leg 138 -- the maxHP clamp is every combatant's.** C1/EC7F walks all eleven at each action's close and brings a
+  curHP above its maximum down (ECD1), staged delta or not. Incognito's op 07 turns into the hidden Peeping Doom, which
+  takes the actor's 110 HP over its own maximum of 1; the port clamped only a combatant it had a delta for.
+* **Legs 150, 154, 156 -- the fight loop's counter after a world map.** `$0027` (C1/8121 `INC`, handlers on odd counts,
+  C1/82A2) is the high byte of the world program's BG1 vertical scroll (C2/09E2 `STA $26,X`): the fight's first handler
+  pass falls on the parity the world map left. The port stored the scroll cells a frame after the rebuild that reads
+  them, so `$26` was 0000 and every fight after a world map ran a pass -- two frames -- early. With a long practice fight
+  (Spekkio's, lost on purpose for his heal) a party member's turn came ready inside those two frames and the pad's
+  command went to another turn. This counter is the likeliest cause of other fights' two-frame leads in this ledger.
+* **The pictures of the end's fight** (the private route's audit, then pinned on legs 157 / 159): an enemy sheet of
+  more than 0x200 tiles (the Core's face), the shadow's attribute a frame early, the tilemap's cells past the staged view
+  under a line wave, a sub screen with one BG layer more (the speed lines), the windows on the one arena layer the main
+  screen carries (the revive's discs), one of two arena layers behind a window (the collapse), and OBJ priority 0
+  behind BG3's priority tiles.
+
+Open on the end's fight (the private route's audit of the Core's leg, 376 of 388 pictures at 0 px before the last four
+fixes): the cross-fade to the square after the collapse (TM 11 TS 02 CGADSUB 01 with window 1 on BG1: the scenery's
+priority tiles take another mix, 7120 px on one sample), two samples where the vortex is a frame apart from the sprites
+(416 / 3631 px at port +0), and four samples of a menu list three frames apart (858-1005 px).
+
+## The whole route on the cartridge's clock: 166 of 166 (2026-11-27)
+
+`python tools/playthrough.py cmp all -j --clock`: every leg from power-on to "The End" and the five branch legs are
+SAME, each leg's storyline, party, gold, HP and control chains and its last picture the cartridge's. It is a check now,
+`playthrough-legs-on-the-cartridges-clock`, beside the plain one (`playthrough-legs-vs-rule-cartridge`, the port's own
+clock: 138 of 166).
+
+The 28 legs DIFFERENT on the port's own clock are therefore all the SPC lattice's timing class and nothing else: 20,
+24, 25, 33, 43, 51, 63, 85, 93, 94, 99, 100, 109, 116, 118, 124, 127 and, of the end's legs, 139, 141, 145, 146, 150,
+151, 153, 154, 157, 158, 159. In each the port's own SPC ends a fade or an upload a frame or two away from the
+cartridge's, a fight's exit moves with it, the play clock with the exit, and the rolls the clock seeds (C0/0C70's field
+cursor, `$29AD` at a fight's boot) with the clock. The decision of 2026-11-07 stands: the game works the same way with
+other rolls, and the tape is how a replayed pad is held to the cartridge's.
+
+What the two lists do not grade: the pictures inside a leg (the `field-picture-*` and `playthrough-branch-*` checks pin
+the ones found so far; the end's fight has four open samples, above), and sound (the `sound-*` family).

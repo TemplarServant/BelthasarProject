@@ -316,7 +316,14 @@ static void draw_layer(uint8_t* px, uint8_t* cov, int W, int H, const uint16_t* 
 // edit reaches stays as it was. The field hands in the cells of each tilemap that are on the screen and whose word is
 // not the one the map puts there (CtFieldSceneSetRing); those are drawn from the word. Cell i = row * 64 + col; (hx, vy)
 // = the tilemap pixel the screen's first pixel shows (the layer's scroll).
-typedef struct { uint16_t w[64 * 32]; uint8_t on[64 * 32]; int n, hx, vy; } RingOv;
+// (mx, my): the margin past the screen's edges the cells are kept for too. A line whose scroll an HDMA record moves (a
+// fight's wave, a shake) shows the tilemap's cells past the staged view -- the tilemap wraps, so they are there. MEASURED
+// on the rule's cartridge, the end's fight (loc 1DF, a program's era background: every cell is the tilemap's own): BG2's
+// line records at -2 on lines 1-5, the picture's rows 0-1 the tilemap's rows 254-255; the port read the map there
+// (496 px a picture). The margin is the caller's: as far as this frame's line records move a layer from its staged
+// scroll (0 when none does), at most 16, and only where the canvas has room for it beside the screen (a canvas as wide
+// as the screen has none: its margin would be the screen's other side), so every tilemap pixel still stands at one place.
+typedef struct { uint16_t w[64 * 32]; uint8_t on[64 * 32]; int n, hx, vy, mx, my; } RingOv;
 static void ring_corner(uint16_t v, int bg3, Corner* c) {      // a tilemap word, as parse_metas reads a record's
   uint16_t chip = v & 0x3FF;
   if (!bg3) chip = (chip >= 256) ? (uint16_t)(chip - 256) : 0xFFFF;
@@ -324,12 +331,12 @@ static void ring_corner(uint16_t v, int bg3, Corner* c) {      // a tilemap word
   c->chip = chip; c->base = (uint8_t)(((v >> 10) & 7) * (bg3 ? 4 : 16));
   c->fx = (v & 0x4000) ? 1 : 0; c->fy = (v & 0x8000) ? 1 : 0; c->prio = (v & 0x2000) ? 1 : 0;
 }
-// Where cell i stands on the 256x224 screen (its top-left pixel, -7.. when the edge cuts it); 0 = not on it.
+// Where cell i stands on the 256x224 screen and its margin (its top-left pixel, -7.. when the edge cuts it); 0 = not on it.
 static int ring_cell_screen(const RingOv* o, int i, int* sx, int* sy) {
   int x = ((i & 63) * 8 - o->hx) & 511, y = ((i >> 6) * 8 - o->vy) & 255;
-  if (x >= 256) x -= 512;
-  if (y >= 224) y -= 256;
-  if (x <= -8 || y <= -8) return 0;
+  if (x >= 256 + o->mx) x -= 512;
+  if (y >= 224 + o->my) y -= 256;
+  if (x <= -8 - o->mx || y <= -8 - o->my) return 0;
   *sx = x; *sy = y;
   return 1;
 }
@@ -344,10 +351,10 @@ static void draw_ring(uint8_t* px, uint8_t* cov, int W, int H, const RingOv* o, 
     if (c.chip >= nchips || !present[c.chip] || (int)c.prio != (prio == 1)) continue;
     const uint8_t* tile = chips + (size_t)c.chip * 64;
     for (int y = 0; y < 8; y++) {
-      int qy = sy + y; if (qy < 0 || qy >= 224) continue;
+      int qy = sy + y; if (qy < -o->my || qy >= 224 + o->my) continue;
       int py = ((ocy + qy) % H + H) % H;
       for (int x = 0; x < 8; x++) {
-        int qx = sx + x; if (qx < 0 || qx >= 256) continue;
+        int qx = sx + x; if (qx < -o->mx || qx >= 256 + o->mx) continue;
         uint8_t v = tile[(c.fy ? 7 - y : y) * 8 + (c.fx ? 7 - x : x)];
         if (v == 0) continue;
         int idx = py * W + ((ocx + qx) % W + W) % W;
@@ -597,6 +604,7 @@ static int sceneEffect(const SceneData* sd) { return sd->fxLiveOn ? sd->fxLive :
 // shell, the ending route's e13 f993). CtFieldSceneSetScreenLive hands the bake the live pair in the header byte's shape.
 static int sceneScreen(const SceneData* sd) { return sd->scrLiveOn ? sd->scrLive : sd->screen_flags; }
 static int gSceneLayersOff = 0;   // BL1/BL2/BL3 bits removed from both screens for one compose (see below)
+static int gSceneOnlyMain = 0;    // ...or these layers alone, on the main screen, with no math (CtFieldSceneBakeLayerAlone)
 static uint8_t* gSceneMotCov;     // CtComposeScene's motion coverage, when it is asked for the coverage (CtFieldSceneBake)
 static uint8_t* gSceneMainPre;    // ...and its main screen before the colour math (the same crop)
 static uint8_t* gSceneMainLvl;    // ...and the two screens' top BG pixels against the sprites (BG_OBJ_LVL, the same crop)
@@ -620,6 +628,7 @@ static uint8_t* CtComposeScene(const SceneData* sd, int blend, int full, int* ou
   }
   if (!blend) { main_t |= sub_t; sub_t = 0; }
   main_t &= ~gSceneLayersOff; sub_t &= ~gSceneLayersOff;   // CtFieldSceneBakeLayersOff: layers a window takes away
+  if (gSceneOnlyMain) { main_t = gSceneOnlyMain; sub_t = 0; blend_en = 0; back_en = 0; }
   main_t &= ~sd->vramOff; sub_t &= ~sd->vramOff;           // CtFieldSceneSetVramLayers: the host draws them from VRAM
   // CT_SCENEDBG=1: the scene's layer setup, once per compose. main_t/sub_t are the TM/TS
   // designations the screen_flags byte carries (bits 0-2 main, 4-6 sub; BL1=1 BL2=2 BL3=4), and
@@ -942,6 +951,17 @@ uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH)
   gSceneLayersOff = 0;
   return out;
 }
+// One layer's own picture (`layer` = BL1 / BL2 / BL3), whatever the screens carry: its pixels over the backdrop, with no
+// math; *outCov = the layer's bit where it has a pixel, *outPrio = 1 on its priority tiles' pixels. All three are the
+// caller's to free. For a layer the sub screen has and the main screen has not (the battle compositor's sub pixel).
+uint8_t* CtFieldSceneBakeLayerAlone(void* h, int layer, int* outW, int* outH, uint8_t** outPrio, uint8_t** outCov) {
+  SceneData* sd = (SceneData*)h;
+  if (!sd || !(layer & 0x07)) return NULL;
+  gSceneOnlyMain = layer & 0x07;
+  uint8_t* out = CtComposeScene(sd, 1, 1, outW, outH, outPrio, outCov);
+  gSceneOnlyMain = 0;
+  return out;
+}
 // The last bake's main screen before the colour math (same size as the bake), for a sprite that is the SUB pixel under
 // a main pixel with colour math. The bake holds both screens already mixed, which is right for a sprite only where the
 // sprite is the main pixel. Two setups make it the sub pixel:
@@ -1222,7 +1242,7 @@ int CtFieldSceneScreenLayers(void* h, int* mainT, int* subT, int* mathEn) {
 // frame are set. on = 0: none (another program's picture, a mod's wider one). Returns 1 when the cells or where they
 // stand changed (re-bake).
 int CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, const int* base, const int* scr,
-                        int cx, int cy, int on) {
+                        int cx, int cy, int on, int margin) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return 0;
   int CW = sd->w1 > sd->w2 ? sd->w1 : sd->w2; if (sd->has_l3 && sd->w3 > CW) CW = sd->w3;
@@ -1245,13 +1265,15 @@ int CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, con
       int LW = lw * 16, LH = lh * 16;
       if (mapRing) { LW = (lw != 16 || lh != 16) ? 512 : 256; LH = 256; }
       nv.hx = scr[L * 2]; nv.vy = scr[L * 2 + 1];
+      if (margin > 16) margin = 16;                       // (the tilemap's 32 hidden lines, half on each side)
+      nv.mx = (margin > 0 && W >= 256 + 32) ? margin : 0; nv.my = (margin > 0 && H >= 224 + 32) ? margin : 0;
       for (int i = 0; i < 64 * 32; i++) {
         int sx, sy, col = i & 63, row = i >> 6;
         if (!ring_cell_screen(&nv, i, &sx, &sy)) continue;
         int a = base[L] + ((col & 32) ? 0x400 : 0) + row * 32 + (col & 31);
         if (a < 0x6000 || a >= 0x7800 || !known[a - 0x6000]) continue;
         // the corner the map draws on the cell's first pixel on the screen (draw_layer's law)
-        int qx = sx < 0 ? 0 : sx, qy = sy < 0 ? 0 : sy;
+        int qx = sx < -nv.mx ? -nv.mx : sx, qy = sy < -nv.my ? -nv.my : sy;
         int px = ((cx + qx) % W + W) % W, py = ((cy + qy) % H + H) % H;
         int lx = ((px + sox) % LW + LW) % LW, ly = ((py + soy) % LH + LH) % LH;
         int k = ((ly % 16) / 8) * 2 + (lx % 16) / 8, mr, mc;
@@ -1276,7 +1298,7 @@ int CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, con
     }
     RingOv* cur = &sd->rov[L];
     if (nv.n != cur->n) changed = 1;
-    else if (nv.n && (nv.hx != cur->hx || nv.vy != cur->vy || memcmp(nv.on, cur->on, sizeof nv.on) ||
+    else if (nv.n && (nv.hx != cur->hx || nv.vy != cur->vy || nv.mx != cur->mx || nv.my != cur->my || memcmp(nv.on, cur->on, sizeof nv.on) ||
                       memcmp(nv.w, cur->w, sizeof nv.w))) changed = 1;
     if (nv.n || cur->n) *cur = nv;
     if (nv.n) any = 1;
@@ -1296,10 +1318,10 @@ int CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, con
       int sx, sy;
       if (!o->on[i] || !ring_cell_screen(o, i, &sx, &sy)) continue;
       for (int y = 0; y < 8; y++) {
-        int qy = sy + y; if (qy < 0 || qy >= 224) continue;
+        int qy = sy + y; if (qy < -o->my || qy >= 224 + o->my) continue;
         int py = ((cy + qy) % H + H) % H;
         for (int x = 0; x < 8; x++) {
-          int qx = sx + x; if (qx < 0 || qx >= 256) continue;
+          int qx = sx + x; if (qx < -o->mx || qx >= 256 + o->mx) continue;
           sd->rovMask[L][(size_t)py * W + ((cx + qx) % W + W) % W] = 1;
         }
       }

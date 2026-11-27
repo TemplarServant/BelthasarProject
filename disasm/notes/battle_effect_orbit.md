@@ -466,3 +466,32 @@ field-picture-fire-adds-where-no-window-is-on-vs-cartridge.
 Both are pinned only by the ending's legs so far (the scratch route; the public route's legs after 137 are being
 authored). The field's own screens: a script may poke `$0BD7` / `$0BD8` (op 4A, `C0/67D7`: loc 15B's `17` / `13` under
 Lavos's shell, e13 f993), and the bake follows the live pair (scene.c `CtFieldSceneSetScreenLive`).
+
+## The sub screen with one more BG layer; one arena layer behind a window (2026-11-27)
+
+Three setups of the end's fight (loc 1DF, the Lavos Core) the compositor left out, all read off the rule's cartridge
+with `--hdma` on a state of the frame (the end's route, leg e17):
+
+* **f67200, the Core's speed lines (effect 75).** Lines 1-160: TM 15 TS 13 TMW 17 TSW 17 CGADSUB 04, no window
+  enabled, BG3's scroll a record a line on channel 3 (`$2111` 137..982, `$2112` 41-47). BG2 is on the sub screen only.
+  BG3's priority tiles (BGMODE bit 3) add the sub screen's pixel: the sprite there, else the arena's -- BG1's or,
+  where it wins (mode 1's BG1.1 BG2.1 BG1.0 BG2.0), BG2's. `battleFxSubMore`; the extra layer's own picture is the
+  field's (scene.c `CtFieldSceneBakeLayerAlone` -> battle.c `CtBattleFxLayerAlone`), at that layer's own line records'
+  place. 7382 px a picture before.
+* **f85200, the bits called back.** Lines 43-150: TM 15 TS 10 TMW 17, W12SEL's two windows on BG1 alone (`$2123` low
+  nibble), two discs. BG2 is not on the main screen, so inside them the pixel is the backdrop's and BG3's stars show:
+  the arena's layers the MAIN SCREEN CARRIES all behind a window, not "BG1 and BG2 both". 8234 px before; the 1822 px
+  left are the called-back enemies' own colours (below).
+* **f105000, the collapse.** TM 13 TS 02 TMW 17 CGADSUB 00, window 1 on BG1 alone, a disc growing from the middle:
+  BG2 (the green vortex) inside it, BG1 around it. One of the two layers behind a window shows the other one's own
+  pixel there (the same layer-alone picture). 18347 px before.
+
+A line with no colour math at all (CGADSUB bits 0-5 clear) is modelled whatever its sub screen carries: nothing reads it.
+
+The called-back enemies stand in OBJ palette 4 (`$993C` 08, C1/5DFF at f85000 until C1/5EAE at f85371) while an objslot
+record fades that row up from black (FD/E699 on `$2382..` every third frame from f85143) -- and at OBJ PRIORITY 0: their
+attribute is 08 over `$99B5` 00. Mode 1 without BGMODE bit 3 puts BG3's priority tiles between the sprites of priority 1
+and 0, so the haze's tiles are in front of them and BG3's math (the sub screen is the sprites, TS 10) adds them: every
+pixel of theirs is the fading row's colour plus the haze's (0,0,3). The port's WRAM agreed byte for byte over the span
+(`$993F`, `$2382`) and its drawer already took the row from the uploaded page (a script's flash holds the attribute);
+it drew the sprites over the haze (1822 px). CtBattleFxFrontApply marks 6-8.

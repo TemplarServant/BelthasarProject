@@ -105,10 +105,13 @@ It is **not yet verified playable from start to finish**.
   exits and location loads, a handful of pictures) is kept in [docs/ROADMAP.md](docs/ROADMAP.md#2-engine). Timing that
   comes from the SNES's limits -- the battle exit's release following the sound uploads' pace, and the random rolls it
   moves -- are not reproduced, by the owner's decision of 2026-11-07 ([CLAUDE.md](CLAUDE.md)).
-- **The playthrough is graded only partway.** `tools/playthrough.py` grades one route against the cartridge leg by
-  leg from New Game to Crono's return at the summit of Death Peak (137 legs). Each leg that differs is traced to the
-  ROM and either fixed or classed as timing, in [disasm/notes/playthrough_leg_ledger.md](disasm/notes/playthrough_leg_ledger.md);
-  the later legs are still being triaged there. Nothing past the summit is graded. How far this reaches is kept in
+- **One playthrough is graded from New Game to "The End".** `tools/playthrough.py` grades one route against the
+  cartridge leg by leg (161 legs and five branches, 4.8 million frames). On the cartridge's clock -- the port's sound
+  processor fed at the cartridge's cycles -- every leg is the cartridge's; on the port's own clock 28 of them part
+  from it where a fight's exit lands a frame or two away and the rolls its clock seeds move with it (the timing class
+  above), each traced in [disasm/notes/playthrough_leg_ledger.md](disasm/notes/playthrough_leg_ledger.md). It is ONE
+  route: other parties, side quests and endings are not graded, and neither are the pictures inside a leg beyond the
+  ones the `field-picture-*` checks pin. How far this reaches is kept in
   [docs/ROADMAP.md](docs/ROADMAP.md#story-coverage) (G1).
 
 ## Quick start

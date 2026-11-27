@@ -390,6 +390,8 @@ typedef struct CtBattleHost {
   int fxTechDarkKRetired;    // unused (the Cyclone darken is the objslot fade page)
   uint8_t objPalCmp[11];     // $993C as the OAM compose read it (CF/EA11 -- the IRQ chain, after the NMI head) ...
   uint8_t objPalShown[11];   // ... and as the NMI uploaded it: what the picture shows, two frames after the script
+  uint8_t shadowAttrCmp;     // the ground shadow's attribute `$A5E3 | $9F46` as the same compose read it (CF/EA8A) ...
+  uint8_t shadowAttrShown;   // ... and as uploaded (op C9 flips $9F46 a frame before E1 swaps the palette rows)
   uint8_t frontCmp[11];      // $A5CD as the draw-list build CF/E83F -> CF/E855 read it (the same compose; ops 27/28 write it)
   // The selection bracket: OAM entries 0-3 as the last menu-sprite rebuild left them (C1/1153 -> C1/1115, consumed
   // from $993A) and as the next NMI uploaded them; `on` = the rebuild wrote the bracket and nothing replaced it.
@@ -943,6 +945,8 @@ void CtBattleFxLayerComposeWide(uint8_t* fb, int W, int H, const uint8_t* cov, c
 // whose sub screen is the sprites alone against the sprite drawn there (`objPal` != FF; NULL = none) or the fixed colour.
 extern uint8_t gBattleFxArenaOff[256 * 256];   // 1 = BG1 and BG2 are windowed off the main screen at this pixel (the last compose)
 void CtBattleFxFrontApply(uint8_t* fb, int W, int H, const uint8_t* atCompose, const uint8_t* cov, const uint8_t* objPal);
+void CtBattleFxLayerAlone(int layer, const uint8_t* rgbf);   // BG1's / BG2's own picture under the view (NULL: none)
+void CtBattleFxObjPrio(const uint8_t* objPrio);              // the drawn sprites' OBJ priorities, per pixel
 // ...and last, the sprites' own share of the rows the compositor evaluated: the clip, and the colour math of the OBJ
 // pixels of palettes 4-7 (CGADSUB bit 4). `objPal` = per pixel the OBJ palette of the sprite on top (0xFF = none).
 // Returns the pixels it changed. ct --sweepfxcompose grades it on the cartridge's own OBJ layer.

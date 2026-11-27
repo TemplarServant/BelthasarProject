@@ -24,6 +24,7 @@ void* CtFieldSceneOpen(const CtAssets* a, int index, int frame);
 void  CtFieldSceneClose(void* h);
 uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
+uint8_t* CtFieldSceneBakeLayerAlone(void* h, int layer, int* outW, int* outH, uint8_t** outPrio, uint8_t** outCov);   // one layer, no math
 // The widescreen's still backdrop (a mod; field.c fieldWideStill): layers BL2 2 / BL3 4 held to the wide picture --
 // the 256 view's columns (canvas column vx on) drawn from canvas column vw -- and mirrored past them instead of
 // repeated; 0 = the plain bake. Returns 1 when changed (re-bake).
@@ -72,7 +73,7 @@ int   CtFieldSceneSetLayerOffsets(void* h, int bg2x, int bg2y, int bg3x, int bg3
 // The field's VRAM tilemaps against the map: the cells on the screen whose word is not the one the map puts there are
 // drawn from the word (scene.c RingOv; disasm/notes/field_bg_tilemap.md sec. 7). Returns 1 when a re-bake is needed.
 int   CtFieldSceneSetRing(void* h, const uint16_t* vram, const uint8_t* known, const int* base, const int* scr,
-                          int cx, int cy, int on);
+                          int cx, int cy, int on, int margin);
 int   CtFieldSceneRingCells(void* h, int* out);
 int   CtFieldSceneRingCell(void* h, int L, int k, int* col, int* row, int* word);
 int   CtFieldSceneSetBg3Rows(void* h, const int16_t* dx, int n, int y0);   // BG3's scroll a line at a time (HDMA channel 3)

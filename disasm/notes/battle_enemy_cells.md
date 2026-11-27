@@ -228,3 +228,23 @@ At the 07D that dispatch committed slot 3's idle window (mode FF -> 00) and publ
 closed now while `h->demoPass` is set (from the demo's turn to its end, the span the ROM spends inside C1/B967): one
 walk per demo battle, the cartridge's. Check `attract-demo-battles-walk-once-vs-cartridge`
 (tools/attract_demo_walk_cmp.py).
+
+## A sheet may hold 0x800 tiles (2026-11-26)
+
+The gather's source is `(w & 7FF) << 5` past the combatant's sheet (C1/1D4A-1D52): eleven bits, so a sheet may run to
+0x10000 bytes. The Lavos Core (id `CE`, sheet at `$7F:8000`, the bits' at `$7F:DCE0`) is 0x5CE0 bytes = 0x2E7 tiles;
+its face cell (name 42) takes tiles `2E1 2E2 / 02C 02D` in pose 2B and `2E5 2E6` in 2C (record `E1:E000 + pose * 78`).
+The port's drawer kept each slot's decompressed sheet in a 0x4000-byte buffer (0x200 tiles) and drew a tile past it as
+blank: the Core's face was a 16x16 hole on every picture of those poses (256 px; found with CT_BATTLE_RENDERWRAM on the
+cartridge's WRAM of the frame). The buffer is 0x10000 bytes now (src/field.c `ctEnemyShCache`).
+
+## The shadow's attribute is the compose's (2026-11-26)
+
+CF/EA8A writes a combatant's ground shadow as the last entry of its group: tile 02, attribute `$A5E3 | $9F46`. Program
+op C9 (CD/1B78) flips bit 3 of `$9F46` and of the eleven `$993C` bytes; E1 (CD/1B9A -> D1/E70A) swaps the palette rows
+1-3 with 5-7 on the next frame. The compose runs before the program in a frame (vPos 13 against the line-64 service),
+so the OAM with the flipped attribute is the one uploaded with the swapped page -- the colours never change on the
+screen. MEASURED on the rule's cartridge, a Lavos replica fight (the end's route, f1198-f1200): `$9F46` 0A from f1199
+(CD/1B93), `$23BE` 14A5 from f1200 (D1/E72E), OAM 16 attribute 32 on f1199 and 3A on f1200, the shadow (5,5,5) on both.
+The port read `$9F46` when it drew and showed the flipped attribute with the unswapped row for a frame (36 px). It
+keeps the attribute the compose read now, beside the cells' (`shadowAttrCmp` / `shadowAttrShown`, as `objPalCmp`).
