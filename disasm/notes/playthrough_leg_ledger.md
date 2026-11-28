@@ -712,4 +712,14 @@ What the other samples are, by class:
   math (`--hdma`: CGADSUB 00); the picture's best fit is a frame further than the field's usual -2 because the leg runs
   on from its early load end (f34200-f35100 above), so the palette's 4-frame step is met a frame apart.
 * **Leg 151 f13200** (78 px): 0 px on the commit of the rules above (not traced to one of them).
-* **Not triaged**: leg 159 f113400-f114300 (the fall to the fair, 102-1003 px at port -2).
+* **Leg 159 f113400-f114300** (the fair after the fall, 102-1003 px at port -2: NPCs on other paths) -- the battle
+  exit's timing class (CLAUDE.md, the 2026-11-07 decision). Loc 1DF's object 0 runs `D8 93 E0` (the Core's fight) at
+  0x002C, then `48 EC 01 7F 06` (the outcome `$7F01EC` to local 6), an IF, and `CHANGELOC 52` (its pointer counted
+  from the script's start, the 0x160-byte function table included: `$1180` 018F = 0x002F). The fight hands back on
+  f104692 in the port and on f104693 on the cartridge (the exit's release on the SPC fade lattice); every later
+  difference follows from that frame: the fade a frame ahead (`$0118`-`$011D`), loc 052 committed on f104973 for the
+  cartridge's f104974, the play clock `$0400` a tick behind from there (the load frame's), C0/0C70's `$01F8` seeded
+  from it (43 for 42 on the 050 load), and the fair's NPC rolls with it. Measured with s233_frame_cells_cut (the
+  objects' `$1180`, `$0100`-`$011F`, `$0400`, `$01F8` over f0-f113720): before f104692 the two sides differ only on the
+  frame a load writes the cursor (f2899, f39937: the cartridge's store a frame before the port's, equal on the next),
+  and between the hand-back and the commit only in the fade's countdown.

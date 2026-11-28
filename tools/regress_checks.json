@@ -51548,7 +51548,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "            if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }",
+          "find": "            if (hm & 0x100) { wsAHeld = 1; if (nb & 0x100) talkPressed = 1; }",
           "replace": "            /* MUT */",
           "why": "the route's A no longer reaches the port's host: Mom's lines, the names and Marle's scene stall, and every chain from 01 on parts from the cartridge's"
         }
@@ -51753,7 +51753,7 @@
       "mutations": [
         {
           "file": "src/field.c",
-          "find": "            if (hm & 0x100) { wsAHeld = 1; if (first) talkPressed = 1; }",
+          "find": "            if (hm & 0x100) { wsAHeld = 1; if (nb & 0x100) talkPressed = 1; }",
           "replace": "            /* MUT */",
           "why": "the route's A no longer reaches the port's host: every chain from 01 on parts from the cartridge's"
         }
