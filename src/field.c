@@ -3057,7 +3057,62 @@ static int g_objSubMixed;                        // sprite pixels mixed that way
 // half-add of the sub screen): the Vamps and Marle's head are seen THROUGH the mist, BG3's priority tiles.
 static int g_bObjSubPrio = -1;
 static uint8_t* g_bObjPrioMask;                  // (below: the OBJ priority on top, per pixel of a fight's picture)
+// THE PPU'S PER-LINE OBJ LIMITS IN A FIGHT (snes/ppu.c ppu_evaluateSprites, the oracle's; the field's pass is
+// fieldOamDraw's): on each line the first 32 entries in range from index 0 are kept, and their 8-pixel slivers are
+// fetched from the last kept entry back to the first, at most 34 -- on a crowded line the lowest-index sprites, the
+// ones in front, lose their slivers. The fight's painter draws its OAM entries back to front through five primitives
+// (battleBlitCell, battleDissolveBlitCells, battleFxBlitTile, battleFxDrawOam, the target hand), so a first walk of the
+// same calls only lists the entries (mode 1: the list's last is OAM's first), battleObjCellLimits works out the slivers
+// each keeps, and the drawing walk (mode 2) plots those. MEASURED on the rule's cartridge, playthrough leg 153 f16200
+// (the Black Omen, two Synchrites and a smoke over Magus): lines 50-61 hold 18 entries, 36 slivers; entry 12, the
+// front enemy's first cell at x 207, loses both and the arena shows there (53 px the port drew; leg 139 f23100 the same).
+static struct { int16_t x, y; uint8_t size; } g_bCell[256];
+static uint8_t g_bCellKeepTab[256][16];          // per listed entry and sprite row: the slivers drawn (bit per 8 px)
+static int g_bCellN, g_bCellMode, g_bCellSeq;    // mode 0 = off, 1 = list, 2 = draw
+static const uint8_t* g_bCellKeep; static int g_bCellX, g_bCellY;
+static int battleObjCellBegin(int x, int y, int size) {
+  if (g_bCellMode == 1) {
+    if (g_bCellN < 256) { g_bCell[g_bCellN].x = (int16_t)x; g_bCell[g_bCellN].y = (int16_t)y; g_bCell[g_bCellN].size = (uint8_t)size; g_bCellN++; }
+    return 0;
+  }
+  if (g_bCellMode == 2) {
+    const int k = g_bCellSeq++;
+    g_bCellKeep = (k < g_bCellN && g_bCell[k].x == x && g_bCell[k].y == y && g_bCell[k].size == size) ? g_bCellKeepTab[k] : NULL;
+    g_bCellX = x; g_bCellY = y;
+  }
+  return 1;
+}
+static void battleObjCellEnd(void) { g_bCellKeep = NULL; }
+static void battleObjCellLimits(void) {
+  memset(g_bCellKeepTab, 0, sizeof g_bCellKeepTab);
+  for (int p = 0; p < 224; p++) {                          // the picture's rows = the PPU's lines 1-224
+    int found[32], nf = 0;
+    for (int k = g_bCellN - 1; k >= 0; k--) {              // range: the first 32 in range, OAM index 0 up
+      const int row = p - g_bCell[k].y, size = g_bCell[k].size, x = g_bCell[k].x;
+      if (row < 0 || row >= size || x <= -size || x > 255) continue;
+      if (nf == 32) break;                                 // range over
+      found[nf++] = k;
+    }
+    int tiles = 0;
+    for (int q = nf - 1; q >= 0 && tiles <= 34; q--) {     // time: the slivers, last found first, at most 34
+      const int k = found[q], row = p - g_bCell[k].y, size = g_bCell[k].size, x = g_bCell[k].x;
+      for (int col = 0; col < size; col += 8)
+        if (col + x > -8 && col + x < 256) { if (++tiles > 34) break; g_bCellKeepTab[k][row] |= (uint8_t)(1 << (col >> 3)); }
+    }
+  }
+  { static int tr = -1; if (tr < 0) { const char* e = getenv("CT_BATTLE_OBJLINETRACE"); tr = (e && *e) ? 1 : 0; }
+    if (tr) { printf("objline n=%d:", g_bCellN);           // the list in OAM order: x,y,size and * where a sliver is lost
+      for (int k = g_bCellN - 1; k >= 0; k--) { int lost = 0;
+        for (int r = 0; r < g_bCell[k].size; r++) { const int p = g_bCell[k].y + r;
+          if (p < 0 || p >= 224) continue;
+          for (int col = 0; col < g_bCell[k].size; col += 8)
+            if (col + g_bCell[k].x > -8 && col + g_bCell[k].x < 256 && !((g_bCellKeepTab[k][r] >> (col >> 3)) & 1)) lost = 1; }
+        printf(" %d,%d,%d%s", g_bCell[k].x, g_bCell[k].y, g_bCell[k].size, lost ? "*" : ""); }
+      putchar(10); } }
+}
 static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
+  if (g_bCellKeep) { const int rr = y - g_bCellY, cc = x - g_bCellX;   // a sliver the line's limit dropped (above)
+    if (rr >= 0 && rr < 16 && cc >= 0 && cc < 16 && !((g_bCellKeep[rr] >> (cc >> 3)) & 1)) return; }
   if (x >= 0 && x < g_fw && y >= 0 && y < CAMH) { size_t o = ((size_t)y * g_fw + x) * 3;
     int sub = 0;
     if (g_bObjSubPrio >= 0 && g_objSubOn) {                // a battle sprite's pixel (above)
@@ -3092,6 +3147,12 @@ static void plot(uint8_t* fb, int x, int y, int r, int g, int b) {
 // is reported once and not drawn.
 static int16_t g_bgWinL[256], g_bgWinR[256];
 static int g_bgWinOn = 0;
+// ...and inside it the layer each pixel is with BG1 and BG2 gone -- BG3, or 0 for the backdrop -- for the colour math
+// (fieldColWindowApply: the backdrop is in the math only with CGADSUB bit 5). MEASURED on the rule's cartridge,
+// playthrough leg 160 (the fair's Gate, loc 055: TM 17, TMW 17, W12SEL 22, CGADSUB 17, the fixed colour (0,0,18)): the
+// rim of the disc the swirl's sprite leaves bare is CGRAM 0, black (0,0,0); the port added the fixed colour as to the
+// BG1 / BG2 pixel the map has there ((0,0,148): 82 px a picture).
+static uint8_t g_bgWinLay[FIELD_WMAX * CAMH]; static int g_bgWinLayOn;
 // Window 1's edges as HDMA channel 5 hands them out: the channel's table in the set FD/C2C1 built this frame -- `$0153` bit 0
 // clear after it = set A ($7F:1133), set = set B ($7F:13EB) (field_hdma_tables.md: the builder flips the bit after each set,
 // and the window routines write the buffer of the set built next: `LDA $53 / BEQ` -> $17C8 (set A) / $1AC8 (set B)). DMAP 41,
@@ -3239,6 +3300,7 @@ static void fieldColWindowApply(uint8_t* fb, int cw, int ch, const uint8_t* objP
       int sx = (camx + x) % covW, sy = (camy + y) % covH; if (sx < 0) sx += covW; if (sy < 0) sy += covH;
       size_t bi = (size_t)sy * covW + sx;
       int lay = cov ? cov[bi] : 0, inside = x >= L && x <= R;
+      if (g_bgWinLayOn && y < CAMH && bgWinAt(x, y)) lay = g_bgWinLay[(size_t)y * g_fw + x];   // (BG1 / BG2 windowed off)
       uint8_t* d = fb + ((size_t)y * g_fw + x) * 3;
       if (bgSub && op == 0xFF) {                                  // a map pixel: start from the main screen before the math
         int baked = (lay & bBlend) && subCov[bi];                 //   (outside the window that is all it shows: the
@@ -8105,6 +8167,7 @@ static void battleStanceRender(uint8_t* fb, const uint8_t* mem, const CtBattleHo
 // sheet (0xA0 for battle_anim, 0x40 for battle_end).
 static void battleBlitCell(uint8_t* fb, const uint8_t (*tiles)[32], int ntile, int tile,
                            int bx, int by, const uint16_t* palw, int hf, int vf) {
+  if (!battleObjCellBegin(bx, by, 16)) return;             // (one OAM entry: the line limits, plot's)
   for (int cy = 0; cy < 2; cy++)
     for (int cx = 0; cx < 2; cx++) {
       int ti = tile + cx + 0x10 * cy;
@@ -8127,6 +8190,7 @@ static void battleBlitCell(uint8_t* fb, const uint8_t (*tiles)[32], int ntile, i
         }
       }
     }
+  battleObjCellEnd();
 }
 
 // The hurt flash's pal4 white swap (battle_actionfx.md P3) for the enemy layers: the combat-live enemy is drawn by
@@ -8971,6 +9035,7 @@ static void battleDissolveBlitCells(uint8_t* fb, const CtDissolveCell* cells, in
                                     const uint8_t (*tiles)[32], int ntile, const uint16_t* pal4, int pkt, int pktTiles) {
   for (int c = 0; c < ncell; c++) {
     int ti0 = cells[c].tile;
+    if (!battleObjCellBegin(cells[c].x, cells[c].y, 16)) continue;
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = ti0 + cx + 0x10 * cy;
@@ -8990,6 +9055,7 @@ static void battleDissolveBlitCells(uint8_t* fb, const CtDissolveCell* cells, in
           }
         }
       }
+    battleObjCellEnd();
   }
 }
 
@@ -9267,6 +9333,7 @@ static void battleMarleAttackRender(uint8_t* fb, const uint8_t* mem, const CtBat
 // One 8x8 4bpp OBJ tile blit at (x,y), palette = ctBattleFxDigitPal (OBJ pal0, shared by the damage digits and the
 // "MISS" glyph, battle_actionfx.md P1.1 / battle_miss_evade.md sec. 2). idx 0 = clear.
 static void battleFxBlitTile(uint8_t* fb, const uint8_t* t, int x, int y, const uint16_t* pal) {
+  if (!battleObjCellBegin(x, y, 8)) return;
   for (int yy = 0; yy < 8; yy++) {
     int b0 = t[yy * 2], b1 = t[yy * 2 + 1], b2 = t[16 + yy * 2], b3 = t[16 + yy * 2 + 1];
     for (int xx = 0; xx < 8; xx++) {
@@ -9280,6 +9347,7 @@ static void battleFxBlitTile(uint8_t* fb, const uint8_t* t, int x, int y, const 
            (((w >> 10) & 31) << 3) | (((w >> 10) & 31) >> 2));
     }
   }
+  battleObjCellEnd();
 }
 // One number is one combatant's (the pool's slot is the combatant, battle.h): the compose lays its row at the head of
 // that combatant's entry -- CF/E8D4 `JSR CF/EDB8`, which with `$A3D1` set is `JMP CF/EE9F`: `LDA $A3D4,X / BEQ none`,
@@ -9302,7 +9370,7 @@ static void battleFxPopupRender(uint8_t* fb, const CtBattleHost* h, int i) {
     // ctBattleFxMissTile, pal0) instead of digits, with the same anchor, rise arc and 58-frame life.
     if (p->kind == 1) {
       int leftX = p->centerX - (CT_FX_MISS_NTILE * CT_FX_DIGIT_W) / 2;
-      if (getenv("CT_FX_DEBUG")) fprintf(stderr, "[fxpopup] slot=%d MISS age=%d dy=%d centerX=%d restY=%d leftX=%d y=%d\n",
+      if (g_bCellMode != 1 && getenv("CT_FX_DEBUG")) fprintf(stderr, "[fxpopup] slot=%d MISS age=%d dy=%d centerX=%d restY=%d leftX=%d y=%d\n",
                                           i, p->age, dy, p->centerX, p->restY, leftX, y);
       g_bObjPalCur = 0;                                         // attr 0x31: OBJ palette 0 (the sprites' colour math)
       for (int k = 0; k < CT_FX_MISS_NTILE; k++)
@@ -9320,7 +9388,7 @@ static void battleFxPopupRender(uint8_t* fb, const CtBattleHost* h, int i) {
            for (int k = nt - 1; k >= 0; k--) digits[nd++] = tmp[k]; }
     int leftX = p->centerX - (nd * CT_FX_DIGIT_W) / 2;   // centered on the target origin (dossier render rule)
     // CT_FX_DEBUG=1: print each live popup's computed placement (stderr only).
-    if (getenv("CT_FX_DEBUG")) fprintf(stderr, "[fxpopup] slot=%d value=%d nd=%d age=%d dy=%d centerX=%d restY=%d leftX=%d y=%d romKind=%d pal=%s\n",
+    if (g_bCellMode != 1 && getenv("CT_FX_DEBUG")) fprintf(stderr, "[fxpopup] slot=%d value=%d nd=%d age=%d dy=%d centerX=%d restY=%d leftX=%d y=%d romKind=%d pal=%s\n",
                                         i, p->value, nd, p->age, dy, p->centerX, p->restY, leftX, y, p->romKind,
                                         (p->romKind == 1 || p->romKind == 2) ? "4-green" : "0");
     // The palette is the ROM's kind (C1/5B99-5BAD): a restore number (kind 1 HP / kind 2 MP) draws with
@@ -9344,6 +9412,7 @@ static void battleFxPopupRender(uint8_t* fb, const CtBattleHost* h, int i) {
 static void battleFxDrawOam(uint8_t* fb, const CtBattleHost* h, int x, int y, int tile, int attr, int size) {
   int pal = (attr >> 1) & 7, page = attr & 1;
   int hf = (attr & 0x40) != 0, vf = (attr & 0x80) != 0;
+  if (!battleObjCellBegin(x, (y & 0xFF) > 256 - size ? (y & 0xFF) - 256 : (y & 0xFF), size)) return;   // (rows wrap at 256)
   int keepPal = g_bObjPalCur; g_bObjPalCur = pal;                   // the entry's own palette (the sprites' colour math)
   for (int r = 0; r < size; r++) {
     int fy = (y + r) & 0xFF;
@@ -9370,6 +9439,7 @@ static void battleFxDrawOam(uint8_t* fb, const CtBattleHost* h, int x, int y, in
     }
   }
   g_bObjPalCur = keepPal;
+  battleObjCellEnd();
 }
 // The effect objects attached to combatant `cmb` (battle.c's uploaded matrix: h->fxObjMatShown[o*11 + cmb]). The ROM's
 // compose walks the combatants front to back and, for each, CF/EDB8 puts the objects marked 80 before its cells (in
@@ -9408,7 +9478,7 @@ static void battleFxObjRender(uint8_t* fb, const CtBattleHost* h, int cmb, int b
 }
 static void battleFxCloudRender(uint8_t* fb, const CtBattleHost* h) {
   { static int tr = -1; if (tr < 0) { const char* e = getenv("CT_BATTLE_CLOUDTRACE"); tr = (e && *e) ? 1 : 0; }
-    if (tr && h && (h->fxOamCloudOn || h->fxCloudRan)) {        // the cloud this frame's upload carried (OAM 4-19)
+    if (tr && g_bCellMode != 1 && h && (h->fxOamCloudOn || h->fxCloudRan)) {   // the cloud this frame's upload carried (OAM 4-19)
       fprintf(stderr, "cloud f%d on=%d", h->frames, h->fxOamCloudOn);
       for (int e = 0; e < 16; e++) fprintf(stderr, " %02X%02X%02X%02X", h->fxOamCloud[e * 4], h->fxOamCloud[e * 4 + 1], h->fxOamCloud[e * 4 + 2], h->fxOamCloud[e * 4 + 3]);
       fprintf(stderr, " pal0="); for (int k = 0; k < 8; k++) fprintf(stderr, "%02X%02X", h->fxCgram[256 + k * 2], h->fxCgram[257 + k * 2]);
@@ -9655,7 +9725,7 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
   // bracket's three), so its middle band pulses with CF/E5AA's $A4EF grey; they are read from the uploaded CGRAM.
   uint16_t palw[16];
   for (int i = 0; i < 16; i++) palw[i] = (uint16_t)(h->fxCgram[(128 + 16 + i) * 2] | (h->fxCgram[(128 + 16 + i) * 2 + 1] << 8));
-  if (getenv("CT_BATTLE_HANDTRACE"))                         // each shown sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
+  if (g_bCellMode != 1 && getenv("CT_BATTLE_HANDTRACE"))     // each shown sprite's OAM x/y, the oracle's $0700+d*4 / $0701+d*4
     for (int d = 0; d < 4; d++)
       if ((h->handVisShown >> d) & 1)
         printf("battlehand: sprite%d cmb=%d oam=%02X,%02X grp=%02X a62d=%02X%02X%02X page=%d\n", d, h->handOamShown[d].cmb,
@@ -9672,6 +9742,7 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
   for (int d = 3; d >= 0; d--) {                            // entry 0 over 1 over 2 over 3 (the lower OAM index in front)
     if (!((h->handVisShown >> d) & 1)) continue;
     int ax = h->handOamShown[d].x, ay = h->handOamShown[d].y;
+    if (!battleObjCellBegin(ax, ay, 16)) continue;
     for (int cy = 0; cy < 2; cy++)
       for (int cx = 0; cx < 2; cx++) {
         int ti = 0x000 + cx + 0x10 * cy;                   // tile 0x000 quad: 0x00,0x01,0x10,0x11
@@ -9691,6 +9762,7 @@ static void battleTargetCursorRender(uint8_t* fb, const uint8_t* mem, CtBattleHo
           }
         }
       }
+    battleObjCellEnd();
   }
   g_bObjPalCur = -1; g_bObjSubPrio = -1;
 }
@@ -12296,6 +12368,7 @@ int main(int argc, char** argv) {
   int menuTechRet = 0;          // C2/9016 is dead: C2/8F55 returns on the next frame (the MP, C2/BE79)
   uint16_t menuTechShown[3][2] = {{0}};                      // the HP/MP C2/BEDC last drew into the party panels
   int menuTechShownMp = -1;                                  // ... and the caster panel's MP (C2/BA2F)
+  int menuTechShownHp = -1;                                  // ... and its HP, the same draw's
   int menuTechPopCurve = -1, menuTechPopPool = 0;            // C2/9016's FF/CEBA index and pool (1 HP / 2 MP)
   int menuTechPopAmt[3][2];                                  // C2/8E82's numbers per party slot (-1 = none)
   unsigned menuRngCur = 0;      // $7E:0D00 -- +1 every menu frame, for the whole menu
@@ -15654,6 +15727,7 @@ int main(int argc, char** argv) {
                   menuTechShown[k][1] = (uint16_t)(s7[0x2607 + pid * 0x50] | (s7[0x2608 + pid * 0x50] << 8));
                 }
                 menuTechShownMp = s7[0x2607 + (menuStatChar & 7) * 0x50] | (s7[0x2608 + (menuStatChar & 7) * 0x50] << 8);
+                menuTechShownHp = s7[0x2603 + (menuStatChar & 7) * 0x50] | (s7[0x2604 + (menuStatChar & 7) * 0x50] << 8);
               } else if (menuTechPre > 0) {
                 // C2/B4F9 JSR C2/822B with A = 10: ten frames of sleep, block 7 on its cast pose; then C2/8F55 -- the
                 // heal lands on the sheets now (C2/8E2D), and C2/9016's chime and number start.
@@ -16690,6 +16764,7 @@ int main(int argc, char** argv) {
             else if (menuStatSub == 2 && !menuTechOvFirst)                      // the target overlay (C2/BE79)
                                   CtMenuRenderTechTarget(&mh, fb, menuStatChar, menuTechTab, menuTechRow,
                                                          menuTechTgt, (const uint16_t (*)[2])menuTechShown, menuTechShownMp,
+                                                         menuTechShownHp,
                                                          (s7[0x19D1] & 0x80) ? s7[0x19E1] : -1,
                                                          menuTechPopCurve, menuTechPopPool,
                                                          (const int (*)[2])menuTechPopAmt, s7[0x0D77], g_strX, bn);
@@ -19931,15 +20006,19 @@ int main(int argc, char** argv) {
     fieldBgWindowRows(f.vm ? CtWramSys(fieldWram()) : NULL);
     if (g_bgWinOn && !battlePhase) fillWinRowsHold(g_bgWinL, g_bgWinR, fillHold);   // (the mod's held origin: the rows move with the map)
     fieldHdmaTmRows((f.vm && !battlePhase) ? CtWramSys(fieldWram()) : NULL);   // the box text's BG3 lines (drawTbSlots)
+    g_bgWinLayOn = 0;
     if (g_bgWinOn && f.sd) {
-      int bw = 0, bh = 0;
-      uint8_t* b3 = CtFieldSceneBakeLayersOff(f.sd, 0x03, &bw, &bh);
+      int bw = 0, bh = 0; uint8_t* c3 = NULL;
+      uint8_t* b3 = CtFieldSceneBakeLayersOffCov(f.sd, 0x03, &bw, &bh, &c3);
       if (b3 && bw == f.W && bh == f.H)
         for (int y = 0; y < ch; y++)
           for (int x = g_bgWinL[y] + g_fx; x <= g_bgWinR[y] + g_fx && x < cw; x++) {
-            memcpy(fb + ((size_t)y * g_fw + x) * 3, b3 + fieldBaseAt(&f, camx + x, camy + y) * 3, 3);
+            if (x < 0) continue;
+            const size_t bi = fieldBaseAt(&f, camx + x, camy + y);
+            memcpy(fb + ((size_t)y * g_fw + x) * 3, b3 + bi * 3, 3);
+            if (c3 && y < CAMH && x < FIELD_WMAX) { g_bgWinLay[(size_t)y * g_fw + x] = c3[bi]; g_bgWinLayOn = 1; }
             CtMotTag(mot, x, y, CT_MOT_BG3); }   // (BG1 and BG2 windowed off: BG3 or the backdrop)
-      free(b3);
+      free(b3); free(c3);
     }
     // The colour window (fieldColWindowRows): its math needs each pixel's main layer, so while it is up the sprites stamp
     // their OBJ palette (plot's g_bObjPalMask) and the foreground pass below unstamps what it paints back.
@@ -20820,11 +20899,14 @@ int main(int argc, char** argv) {
       CtBattleFxObjPrio(NULL);
       { int cvW = 0, cvH = 0; const uint8_t* cvs = f.sd ? CtFieldSceneCoverage(f.sd, &cvW, &cvH) : NULL;
         if (cvs && !defeatHold) {
-          for (int y = 0; y < CAMH; y++)
+          for (int y = 0; y < CAMH; y++) {                         // (the row's battle scroll, as the arena is drawn below)
+            const int ry = y + bRaise < CAMH ? y + bRaise : CAMH - 1;
             for (int x = 0; x < CAMW; x++) {
-              int sx = camx + x, sy = bcamy + y;
+              int sx = camx + x + arenaD[ry * 4], sy = bcamy + y + arenaD[ry * 4 + 1];
+              if (cvW == f.W && cvH == f.H) { cvwin[y * CAMW + x] = cvs[fieldBaseAt(&f, sx, sy)]; continue; }
               cvwin[y * CAMW + x] = (sx >= 0 && sy >= 0 && sx < cvW && sy < cvH) ? cvs[(size_t)sy * cvW + sx] : 0;
             }
+          }
           CtBattleFxLayerCompose(fb, CAMW, CAMH, cvwin, bmem, &liveHost);   // BG3 through the windows + colour math
           memcpy(fxFrontFb, fb, sizeof fxFrontFb); fxFrontOn = 1;   // BG3's priority pixels come back after the sprites
         } }
@@ -20937,6 +21019,15 @@ int main(int argc, char** argv) {
       //  the one of the frame before the picture's; the first is the band's arm frame's.)
       g_bFieldOam = (battlePhase && g_battleObjSaved
                      && (bOam ? g_bOamHost.frames : liveHost.frames) < CtBattleBootArmFrame(&liveHost)) ? bmem : NULL;
+      g_bCellMode = 0; g_bCellN = 0;
+      if (battlePhase && g_fw == CAMW && !(g_bFieldOam && g_bootHave && fieldOamRenderOn() && f.vm)) {
+        void* const km = g_mot; uint8_t* const kp = g_bObjPrioMask;   // (THE LINE LIMITS: the entries' list, plot's note)
+        g_mot = NULL; g_bObjPrioMask = NULL; g_bCellMode = 1;
+        battleCombatantsRender(fb, bOam ? bOamMem : bmem, bOam ? &g_bOamHost : &liveHost);
+        if (!defeatHold) { battleFxCloudRender(fb, &liveHost); battleBracketRender(fb, bmem, &liveHost); battleTargetCursorRender(fb, bmem, &liveHost); }
+        g_mot = km; g_bObjPrioMask = kp; g_motOwn = CT_MOT_FIXED; g_bObjPalCur = -1; g_bObjSubPrio = -1;
+        battleObjCellLimits(); g_bCellMode = 2; g_bCellSeq = 0;
+      }
       if (g_bFieldOam && g_bootHave && fieldOamRenderOn() && f.vm && g_fw == CAMW) {   // (fieldOamDraw: the boot's pictures)
         g_oamOvOam = g_bootOam; g_oamOvVram = g_bootVram; g_oamOvCgram = g_bootCgram; g_oamOvBattle = 1;
         fieldOamDraw(f.vm, fb, NULL, 0, -1, 0, NULL, bMot ? mot : NULL);
@@ -21013,6 +21104,7 @@ int main(int argc, char** argv) {
       if (!defeatHold) battleFxCloudRender(fb, &liveHost);            // a program's sprite cloud (CD/2BFC), OAM 4-19
       if (!defeatHold) battleBracketRender(fb, bmem, &liveHost);      // active-PC selection bracket ($9609==0; battle_stance.md ADD6)
       if (!defeatHold) battleTargetCursorRender(fb, bmem, &liveHost); // target hand over the enemy (replaces bracket, $9609==1, P5/A6.4)
+      g_bCellMode = 0; g_bCellKeep = NULL;
       CtBattleFxObjPrio(objPrio);                     // (the sprites' priorities, now that they are drawn)
       if (fxFrontOn)                                  // mode 1 + $2105 bit 3 (ppu.c actMode 8): BG3's priority tiles are
         CtBattleFxFrontApply(fb, CAMW, CAMH, fxFrontFb, cvwin, objPal);   // in front of every OBJ and BG1/BG2 priority tile --

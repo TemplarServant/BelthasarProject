@@ -31,6 +31,9 @@ CASES = {
     # the pack's VWF table began at C2:5FE6, so without the dump the pointer read 0 and the name came from $7E:0000 --
     # a stray glyph and the line pushed right and wrapped (GitHub issue #11, v0.26.0).
     'reward-names': dict(leg='51_security', at=[10100, 10300]),
+    # The Tech screen's target overlay (playthrough leg 155): HDMA channel 2's TM lines are the record FF/BBDA (the pack's
+    # 'tech screen TM lines'); without it no line would hide the caster's top rows above line 16.
+    'tech-screen-tm-lines': dict(leg='155_omen_circuit_k', at=[28800]),
 }
 
 

@@ -1428,3 +1428,16 @@ Found by the picture audit of the ending's legs on the cartridge's clock (three 
   where two members' sprites overlap the lower character id covers the higher.
 
 Pins: the route's branch legs `130b_tech_list_stars` and `130c_tech_target_low_hp` (tools/playthrough/route.txt).
+
+
+## The screen's TM lines: no OBJ above line 16 (2026-11-27)
+
+HDMA channel 2 hands $212C (TM) a byte a band from $7E:9100. The menu's bank-FF copier C2/F362 (`LDX $5B / LDA $0000,X
+/ DEC A / INX / LDY $61 / MVN $7E,$FF`) fills it with the record at FF/BBDA: length 0B, body `10 02 | 70 17 | 20 17 |
+30 06 | 10 02 | 00` -- [lines, TM] pairs of a direct table. TM is 02 (BG2 alone) on lines 1-16, 17 to line 160, 06
+(BG2 + BG3) to line 208 and 02 below. MEASURED on the rule's cartridge, playthrough leg 155: the Tech screen is entered
+on f28555 (`$9100..$910A` written by C2:F376) and `--hdma` on f28800 reads those bands. The target overlay's caster is
+block 7 in his cast pose, OAM 93 at (16,8) for Marle's `Heal`: the six rows of her hair above line 16 are not on the
+picture. The port plotted them (20 px; leg 143 f55500, 16 px). menu.c mTechObjRows reads the record through the ROM
+view (the pack's table `tech screen TM lines`) and CtMenuRenderTechTarget plots its sprites on the rows whose TM has
+bit 4. The record after it, FF/BBE6 (`18 02 | 70 17 | 10 17 | 38 06 | 10 02 | 00`), is another screen's and not read.

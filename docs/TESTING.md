@@ -3784,6 +3784,16 @@ Legs 138-160 take the route from the summit to "The End". `playthrough-legs-on-t
 (`playthrough-legs-vs-rule-cartridge`, 138 of 166 on the port's own clock: the 28 others are the SPC lattice's timing
 class, disasm/notes/playthrough_leg_ledger.md). Six more checks pin what the end's legs found:
 
+* `field-picture-fallen-pose-is-the-action-closes-vs-cartridge` (leg 154 f24300): a felled PC takes the fallen pose at the action close (C1/414E), not at the HP write.
+* `field-picture-tech-caster-panel-keeps-its-drawn-hp-vs-cartridge` (leg 141 f50100): the Tech overlay's caster panel keeps the HP it was drawn with while the heal's number rises.
+* `rom-free-picture-tech-screen-tm-lines` (leg 155 f28800): the Tech screen's TM record FF/BBDA comes from the pack
+  without the dump (the port with and without it: 0 px).
+* `field-picture-tech-screen-lines-without-obj-vs-cartridge` (leg 155 f28800): the Tech screen's lines 1-16 carry no
+  OBJ (HDMA channel 2's TM record FF/BBDA): a cast pose's rows above the windows are not drawn.
+* `field-picture-effect-sub-backdrop-follows-the-arena-rows-vs-cartridge` (leg 150 f7500): the effect layer's sub-screen backdrop follows the arena's rows (Spekkio's sweep, the white rim).
+* `field-picture-orbit-depth-is-the-movers-on-its-own-picture-vs-cartridge` (leg 150 f27600): an orbiting effect object's depth is the mover's on its own picture (the flames round Magus).
+* `field-picture-fight-obj-line-limit-drops-the-front-slivers-vs-cartridge` (leg 153 f16200): a fight's line with more than 34 OBJ slivers loses the front entries' (two Synchrites and a smoke).
+* `field-picture-iris-backdrop-is-out-of-the-colour-math-vs-cartridge` (leg 160 f10800): inside the Gate's iris the bare rim is the backdrop, outside the colour math.
 * `field-picture-corpse-packets-follow-the-cells-names-vs-cartridge` (leg 143 f12600): a corpse's dissolve level
   reaches each cell with the $400 packet its own VRAM tiles are in.
 * `field-picture-party-shudder-heading-is-the-whole-lists-vs-cartridge` (leg 158 f14700): op `85 hh` on the

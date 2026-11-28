@@ -397,6 +397,8 @@ def menu_tables(rom):
     t('item screen party ($C2:B045, 3 words)', C2 + 0xB045, C2 + 0xB045 + 6)
     t('tech screen partners ($C2:BB1A, 3)', C2 + 0xBB1A, C2 + 0xBB1A + 3)
     t('tech target party ($C2:BF2F, 3 words)', C2 + 0xBF2F, C2 + 0xBF2F + 6)
+    # the Tech screen's TM lines: the record C2/F362 copies to $7E:9100 (HDMA channel 2 -> $212C), its length first
+    t('tech screen TM lines ($FF:BBDA)', FF + 0xBBDA, FF + 0xBBDA + 1 + rom[FF + 0xBBDA])
     t('Tab stat bytes ($C2:B315, X 0-6)', C2 + 0xB315, C2 + 0xB315 + 7)
     t('gear slot labels ($C2:A3BA, 4 x 10)', C2 + 0xA3BA, C2 + 0xA3BA + 40)
     t('item classes ($C2:88A7)', C2 + 0x88A7, C2 + 0x88A7 + 5)

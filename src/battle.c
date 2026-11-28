@@ -7788,7 +7788,12 @@ static void battleApplyHpED1A(CtBattleHost* h, int tgt, int dmg) {
     curHP = 0;
     s[tb + 0x1D] |= 0x80;                                        // dead flag block+0x1D bit7 (C1/ED04 ORA #80)
     if (battleIsPc(tgt)) {
-      CtBattlePcLadderFallen(h, tgt);   // D1/5F42[cid*4+facing], published once and held
+      // (No pose here: C1/ECDB-ED15 sets the dead flag and nothing else. The fallen pose D1:5F42[cid * 4 + facing] has
+      //  three readers in the ROM, C1/4163 / 4184 / 41A5 -- the action close's walk of the doomed seats (C1/414E-41AC,
+      //  below: CtBattlePcLadderFallen at the close). MEASURED on the rule's cartridge, playthrough leg 154 (Marle felled
+      //  in Spekkio's fight): `$9907` 4E by C1:1C69 on f24304, the close's; the port published it with the HP write on
+      //  f24281 and drew her down 22 pictures early (531 px on f24300; her scythe's tip 17 px on f25200, a pose apart
+      //  from there).)
       // (The fallen PC's gauge goes empty in the dead-flag sweep's PC arm, C1/B392 `$9F22 = $99DD = $AFAB = $B158` --
       //  battleDeadFlagOne -- which runs in the ATB handler's tail right after the action that killed him, C1/8626; a
       //  lifeline revive takes that arm's place and leaves the gauge alone.)
@@ -13202,6 +13207,12 @@ static void battleEffectMoverFrame(CtBattleHost* h) {
     if (mode == 5) {                                                        // CF/F7FC: the depth against combatant $AB4F,
       int X = (y * 11 + s[0xAB4F + y]) & 0xFF;                              //   decided on the angle before this tick's step
       s[0xA3DF + X] = (uint8_t)((s[0xA3DF + X] & 0x3F) | (s[0xAAA5 + y] < 0x80 ? 0x80 : 0x40));
+      // The compose that follows in the same IRQ chain reads this byte as the mover just left it, like the point it
+      // moves (the tick's head latched the matrix before the movers). MEASURED on the rule's cartridge, playthrough leg
+      // 150 f27599-f27600 (two flames round Magus, objects 0 and 1): object 1's first step writes `$A3EB` = 41 and its
+      // OAM entry is behind Magus's cells on that picture (entry 13 at (111,63), after his 8-11; the picture before had
+      // it in front, entry 8 at (111,71)); the port drew it in front for one more picture (13 px).
+      if (!h->composeHeld && X < (int)sizeof h->fxObjMatCmp) h->fxObjMatCmp[X] = s[0xA3DF + X];   // (THE ORBIT'S DEPTH)
     }
     int r = s[0xAAF1 + y];                                                  // CF/F694 -> $00
     s[0xAAA5 + y] = (uint8_t)(s[0xAAA5 + y] + s[0xAADE + y]);               // CF/F699-F6A0 the angle += the step

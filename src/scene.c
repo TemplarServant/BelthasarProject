@@ -944,10 +944,15 @@ uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask) 
 // masks those layers on the main and the sub screen (TMW/TSW): the field's iris hands window 1 to BG1 and BG2 (W12SEL $22,
 // TMW = TSW = $17), and inside it the pixel is whatever the other layers make of it. Leaves the bake's coverage alone.
 uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH) {
+  return CtFieldSceneBakeLayersOffCov(h, layersOff, outW, outH, NULL);
+}
+// ...and, with `outCov`, that compose's own main-screen coverage (the caller's to free): the layer each of its pixels
+// is, 0 where it is the backdrop -- what the colour math asks of a pixel inside the window (field.c fieldColWindowApply).
+uint8_t* CtFieldSceneBakeLayersOffCov(void* h, int layersOff, int* outW, int* outH, uint8_t** outCov) {
   SceneData* sd = (SceneData*)h;
   if (!sd) return NULL;
   gSceneLayersOff = layersOff & 0x07;
-  uint8_t* out = CtComposeScene(sd, 1, 1, outW, outH, NULL, NULL);
+  uint8_t* out = CtComposeScene(sd, 1, 1, outW, outH, NULL, outCov);
   gSceneLayersOff = 0;
   return out;
 }

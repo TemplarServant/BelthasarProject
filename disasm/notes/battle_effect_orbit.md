@@ -501,3 +501,23 @@ priority 0) they are behind BG1's own low-priority tiles and not on the picture 
 BG2H > OBJ2 > BG1L > BG2L > OBJ1 > BG3H > OBJ0 > BG3L. field.c's foreground pass knew the priority tiles over OBJ 0-2
 only (337 px on f65380, 1822 on f65400); a second pass now hides a sprite of priority 0 / 1 wherever the main screen has
 a BG1 / BG2 pixel.
+
+
+## The sub screen's backdrop under the effect layer; the orbit's depth (2026-11-27)
+
+Two things the audit of legs 138-160 showed in Spekkio's fight (playthrough leg 150), both measured on the rule's
+cartridge:
+
+* **The backdrop of the sub screen is where the arena's own rows have no BG1 / BG2 pixel.** The sweep's lines are TM 17 /
+  TS 13, CGWSEL 02, CGADSUB C4 (BG3 less the sub screen, halved), window 1 inverted on BG3 (`$2124` 0B). Where the sub
+  screen is its backdrop the operand is the fixed colour and nothing is halved: past the room's diagonal edge the light
+  is white (31), over the floor grey (15). On f7500 row 172 the cartridge's VRAM has BG1 transparent from x 180 and the
+  picture is white from 180. The port's coverage under the view was read at the camera's place, without the row's line
+  records (the fight's scroll against the field's, arenaD): the edge stood two pixels on (82 px; 163 on f6000). The
+  coverage is read at the row's own scroll now, as the arena is drawn.
+* **Mover mode 5 writes the depth, and the compose of the same frame reads it.** CF/F7FC: `LDA $AAA5,Y / CMP #80` ->
+  the object's matrix byte `$A3DF + 11 * object + $AB4F,Y` takes 80 (in front) below, 40 (behind) from 80 up, before
+  the angle steps. The movers run in the IRQ chain ahead of the compose (CF/E750 -> CF/E8AF), so the picture that shows
+  a step's point shows its depth. f27600: object 1's first step, `$A3EB` = 41, OAM entry 13 at (111,63) behind Magus's
+  8-11; the picture before, entry 8 at (111,71) in front. The port latched the matrix at the tick's head: one more
+  picture in front (13 px). The mover writes the compose's copy too.

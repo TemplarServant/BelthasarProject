@@ -261,3 +261,20 @@ tiles whose pixels change are 3 5 7 19 21 23 24-27 31 on f12598, 34 36 37 39 40-
 18 20 24 28-31 on f12600, and so on. The port laid every corpse's cells in combatant 3's raster -- cell c at (c % 8) *
 2 + 0x20 * (c / 8) -- so cells 4-7 were whole in the first packet and a level ahead on the frame between the two
 (9-10 px a picture). field.c battleDissolveRender takes the tile from the cell's name now.
+
+
+## The PPU's line limits (2026-11-27)
+
+A fight's OBJ are under the PPU's per-line limits like the field's (snes/ppu.c ppu_evaluateSprites): the first 32
+entries in range from index 0, then their slivers from the last kept entry back to the first, at most 34. With every
+cell 16 px wide a line holds 17 cells; the eighteenth, counted from the back, is the front one's. MEASURED on the
+rule's cartridge, playthrough leg 153 f16200 (the Black Omen: two Synchrites, a smoke over Magus): lines 50-61 hold
+entries 12 15 16 19 | 24 27 28 31 | 36 37 | 40 41 44 45 48 49 | 54 55 -- 18 entries, 36 slivers -- and entry 12 (x 207,
+the front Synchrite's first cell) is not drawn there: the arena shows through its right leg, 53 px. Leg 139 f23100 is
+the same picture; f2700, 4 px of a sparkle.
+
+The painter draws back to front through five primitives (battleBlitCell, battleDissolveBlitCells, battleFxBlitTile,
+battleFxDrawOam, the target hand), one OAM entry a call. A first walk of the same calls lists the entries
+(battleObjCellBegin, mode 1; the list's last is OAM's first: the combatants' walk, then the cloud 4-19, then the bracket
+or the hand 0-3), battleObjCellLimits applies the rule and the drawing walk plots the slivers kept.
+`CT_BATTLE_OBJLINETRACE=1` prints the list. The WRAM render hosts (`CT_BATTLE_RENDERWRAM`) draw without it.

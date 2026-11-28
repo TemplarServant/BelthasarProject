@@ -287,7 +287,7 @@ int  CtMenuTechUse(uint8_t* mem, int casterCharId, int techId, int tab, int tgtS
 void CtMenuTechPay(uint8_t* mem, int casterCharId, int techId, int tab);
 // The target overlay (substate 4) as C2/BE79 / C2/BEDC build it; see menu.c.
 void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int row, int tgt,
-                            const uint16_t shown[3][2], int casterMp, int castPose,
+                            const uint16_t shown[3][2], int casterMp, int casterHp, int castPose,
                             int popCurve, int popPool, const int popAmt[3][2], int barId, int barX, int barN);
 
 // Decode single tech `techId`'s name from ROM $CC/15C4 + techId*11 (1 = Cyclone), with CtMenuItemName's decoder.

@@ -688,6 +688,28 @@ What the other samples are, by class:
   packets a level) -- FIXED: the cells' tiles are where their OAM names put them, so for a type 2 outside combatant 3
   cells 4-7's bottom halves are in the level's second packet (battle_enemy_cells.md; leg 143 f12598 / f12600: 9 / 10 px
   -> 0). `field-picture-corpse-packets-follow-the-cells-names`.
-* **Not triaged**: leg 139 f23100 (53 px), 141 f50100 (107), 144 f41700 (63), 145 f35700 (38), 150 f6000 / f7500 (163 /
-  82), 151 f13200 (78), 153 f16200 / f35100 (53 / 38), 154 f22800-f35100 (17-531), 155 f28800 (20), 159 f113400-f114300
-  (the fall to the fair, 102-1003 at port -2), 160 f10800 (82 at port -2).
+* **The PPU's line limits in a fight** (legs 139 f2700 / f23100, 145 f35700, 153 f16200: 4-53 px) -- FIXED: a line with
+  more than 34 OBJ slivers loses the front entries' (two Synchrites and a smoke over Magus: 36 on lines 50-61, the
+  front enemy's first cell gone). The painter lists its entries in a first walk and plots the slivers the rule keeps
+  (battle_enemy_cells.md). `field-picture-fight-obj-line-limit-drops-the-front-slivers`.
+* **The effect layer's sub-screen backdrop** (leg 150 f6000 / f7500, Spekkio's sweep: 163 / 82 px) -- FIXED: the
+  arena's coverage under the view is read at the row's own battle scroll (battle_effect_orbit.md).
+  `field-picture-effect-sub-backdrop-follows-the-arena-rows`.
+* **An orbit's depth** (leg 150 f27600, a flame round Magus: 13 px) -- FIXED: mover mode 5's matrix byte is the
+  compose's on the same picture. `field-picture-orbit-depth-is-the-movers-on-its-own-picture`.
+* **The iris's bare rim** (leg 160 f10800: 82 px at port -2; the first audit's legs 11 f3300 and 12 f2100, "the Gate's
+  window edge") -- FIXED: inside the window the backdrop is out of the colour math (field_iris_window.md sec. 11).
+  `field-picture-iris-backdrop-is-out-of-the-colour-math`.
+* **The Tech screen** (legs 141 f50100, 143 f55500, 155 f28800: 16-107 px) -- FIXED, two rules: HDMA channel 2's TM
+  record FF/BBDA has no OBJ on lines 1-16, so the caster's cast pose loses its top rows (menu2_tech_screen.md;
+  `field-picture-tech-screen-lines-without-obj`), and the caster panel keeps the HP C2/BA2F drew while the heal's number
+  rises (`field-picture-tech-caster-panel-keeps-its-drawn-hp`).
+* **A felled PC's pose** (leg 154 f24300-f26400: 17-531 px) -- FIXED: the fallen pose D1:5F42 is the action close's
+  (C1/414E-41AC, its only readers), not the HP write's (C1/ECDB-ED15 sets the dead flag alone).
+  `field-picture-fallen-pose-is-the-action-closes`.
+* **Leg 144 f41700** (63 px at port -3, a carpet's edge a colour step apart): the load-end class. The colour page
+  `$7E:2200` is the cartridge's on the same frame at every frame of f41690-f41704 (WRAM), and the room has no colour
+  math (`--hdma`: CGADSUB 00); the picture's best fit is a frame further than the field's usual -2 because the leg runs
+  on from its early load end (f34200-f35100 above), so the palette's 4-frame step is met a frame apart.
+* **Leg 151 f13200** (78 px): 0 px on the commit of the rules above (not traced to one of them).
+* **Not triaged**: leg 159 f113400-f114300 (the fall to the fair, 102-1003 px at port -2).

@@ -185,3 +185,14 @@ W34SEL with TMW), and what the words $1D8D-$1D92 drive (DP $1D00, the layer scro
 cartridge's entry 9 leaves the picture black but for BG3's pixels with the sub screen added; entry 7 rearranges the layers.
 Entries 0B / 0C (C0/260E / 264F, `FF 9B`, and `FF 9E`'s park in loc 0AC) are frame loops of their own (C0/264F waits in
 C0/00DE / C0/EC60; C0/260E ends in `JML C3:0000` with sequence 85): not ported.
+
+## 11. Inside the iris the backdrop is out of the colour math (2026-11-27)
+
+The Gate's rooms add a fixed colour to everything but the backdrop (loc 055, the fair at night: CGADSUB 17, CGWSEL 02,
+TS 00, COLDATA (0,0,18)). Inside window 1 BG1 and BG2 are off the main screen (W12SEL 22, TMW 17); what is left is the
+swirl's sprite, BG3, or CGRAM 0. The backdrop is layer 5 and CGADSUB bit 5 is clear: it stays black. MEASURED on the
+rule's cartridge, playthrough leg 160 f10800: the rim of the disc the sprite leaves bare is (0,0,0) -- rows 28-42 on
+the left, 44-82 on the right, 82 px -- where the port had (0,0,148): its colour pass asked the map's coverage, which has
+a BG1 / BG2 pixel there. The pass now takes the layer of the compose with BG1 / BG2 off
+(scene.c CtFieldSceneBakeLayersOffCov, field.c g_bgWinLay). Legs 11 f3300 and 12 f2100, "the Gate's window edge" of the
+first audit (3-31 px), are this rim: 0 px.

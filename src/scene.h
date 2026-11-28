@@ -23,7 +23,8 @@ uint8_t* CtRenderSceneFromAssets(const CtAssets* a, int index, int frame,
 void* CtFieldSceneOpen(const CtAssets* a, int index, int frame);
 void  CtFieldSceneClose(void* h);
 uint8_t* CtFieldSceneBake(void* h, int* outW, int* outH, uint8_t** outPrioMask);
-uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);   // the bake without BL1/BL2/BL3 bits (a window's)
+uint8_t* CtFieldSceneBakeLayersOff(void* h, int layersOff, int* outW, int* outH);
+uint8_t* CtFieldSceneBakeLayersOffCov(void* h, int layersOff, int* outW, int* outH, uint8_t** outCov);   // the bake without BL1/BL2/BL3 bits (a window's)
 uint8_t* CtFieldSceneBakeLayerAlone(void* h, int layer, int* outW, int* outH, uint8_t** outPrio, uint8_t** outCov);   // one layer, no math
 // The widescreen's still backdrop (a mod; field.c fieldWideStill): layers BL2 2 / BL3 4 held to the wide picture --
 // the 256 view's columns (canvas column vx on) drawn from canvas column vw -- and mirrored past them instead of

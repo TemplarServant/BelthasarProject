@@ -264,6 +264,28 @@ PICTURES = {
     # the shadow's attribute is the compose's, a frame behind the byte (battle_enemy_cells.md), on the cartridge's clock.
     # The picture stands still for four frames but for the shadow: graded at the port's own frame (`lag`).
     'shadow-attribute-is-the-composes': dict(leg='157_day_of_lavos_nine_fights', at=0, frames=4241, own=True, clock=True, lag=0),
+    # Leg 154 (Spekkio's fight, Marle felled): the fallen pose D1:5F42 is published by the action close's walk of the
+    # doomed seats (C1/414E-41AC), not by the HP write -- f24300 is a picture between the two.
+    'fallen-pose-is-the-action-closes': dict(leg='154_omen_restock_f', at=0, frames=24300, own=True, clock=True),
+    # Leg 141 (the Tech screen's target overlay, Marle's `Heal` on herself): the caster panel is C2/BA2F's, drawn with
+    # the overlay -- its HP stays what it was while the number rises (f50100). A still screen: `lag`.
+    'tech-caster-panel-keeps-its-drawn-hp': dict(leg='141_omen_circuit_b', at=0, frames=50100, own=True, clock=True, lag=-2),
+    # Leg 155 (the Tech screen's target overlay, Marle's `Heal`): HDMA channel 2 writes TM 02 on lines 1-16 -- no OBJ --
+    # so the rows of her cast pose above the windows are not on the picture. A still screen: `lag`.
+    'tech-screen-lines-without-obj': dict(leg='155_omen_circuit_k', at=0, frames=28800, own=True, clock=True, lag=-1),
+    # Leg 150 (Spekkio's fight at the End of Time): the sweep's light is BG3 less the sub screen, halved, and where the
+    # sub screen is its backdrop the fixed colour, not halved -- the arena's coverage under the view at the row's own
+    # battle scroll, as the arena is drawn (f7500: the white rim past the room's edge, 82 px two pixels narrow).
+    'effect-sub-backdrop-follows-the-arena-rows': dict(leg='150_omen_restock_e', at=0, frames=7500, own=True, clock=True),
+    # The same leg, f27600 (two flames round Magus, mover mode 5): the depth the orbit's mover writes is the compose's
+    # on the same picture, like the point it moves -- the second flame's first step is behind him.
+    'orbit-depth-is-the-movers-on-its-own-picture': dict(leg='150_omen_restock_e', at=0, frames=27600, own=True, clock=True),
+    # Leg 153 (the Black Omen, two Synchrites and a smoke over Magus): lines 50-61 hold 18 OBJ entries, 36 slivers; the
+    # PPU fetches 34, last entry first, so the front enemy's first cell (OAM 12, x 207) is not drawn on them.
+    'fight-obj-line-limit-drops-the-front-slivers': dict(leg='153_omen_circuit_j', at=0, frames=16200, own=True, clock=True),
+    # Leg 160 (the fair's Gate, loc 055): inside the iris BG1 / BG2 are windowed off, and a pixel the swirl's sprite and
+    # BG3 leave bare is the backdrop, which CGADSUB 17 keeps out of the math -- black, not black + the fixed colour.
+    'iris-backdrop-is-out-of-the-colour-math': dict(leg='160_fair_farewells_the_end', at=0, frames=10800, own=True, clock=True),
     # Leg 143 (the Black Omen's 135: a type-2 corpse at combatant 6): a dissolve level ships in two $400 packets, and the
     # cells' tiles are where their OAM names put them -- cells 4-7's bottom halves in the second packet (f12600, the
     # frame between the two).

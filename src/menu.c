@@ -1864,6 +1864,33 @@ void CtMenuWeaponPal(const CtMenuHost* h, int on) {
   }
   g_menuWpnOn = 1;
 }
+// THE TECH SCREEN'S LINES WITHOUT OBJ. HDMA channel 2 writes TM a band at a time from $7E:9100, which the menu's
+// copier C2/F362 (`MVN $7E,$FF`) fills with the record at FF/BBDA -- length 0B, body FF/BBDB: [lines, TM] pairs, 00 the
+// end: `10 02 | 70 17 | 20 17 | 30 06 | 10 02 | 00`. TM is 02 on lines 1-16, 17 to line 160, 06 to 208, 02 below -- a
+// sprite's rows above the windows or under the list are not on the main screen. MEASURED on the rule's cartridge,
+// playthrough leg 155 (the Tech screen entered on f28555, `$9100..$910A` written by C2:F376; `--hdma` on f28800 reads
+// those bands): the target overlay of Marle's `Heal`, her cast pose (block 7, OAM 93 at (16,8) attribute 24) -- the
+// six rows of her hair above line 16 are not on the picture (20 px the port drew).
+// mSprRowsOn = the rows a party sprite is plotted on (NULL: every row).
+#define ROM_TECH_TM_F 0x3FBBDAL
+static const uint8_t* mSprRowsOn;
+static const uint8_t* mTechObjRows(const CtMenuHost* h) {
+  static uint8_t on[MH]; static int built;
+  if (!h || !h->rom || h->romLen <= ROM_TECH_TM_F + 12) return NULL;
+  if (!built) {
+    const int n = CtRomByte(h->rom, 0x400000L, ROM_TECH_TM_F);
+    int y = 0;
+    for (int i = 0; i + 1 < n && y < MH; i += 2) {             // a direct table: `lines` of one byte
+      const int cnt = CtRomByte(h->rom, 0x400000L, ROM_TECH_TM_F + 1 + i), tm = CtRomByte(h->rom, 0x400000L, ROM_TECH_TM_F + 2 + i);
+      if (!cnt) break;
+      for (int k = 0; k < (cnt & 0x7F) && y < MH; k++) on[y++] = (uint8_t)((tm & 0x10) != 0);
+    }
+    const uint8_t last = y ? on[y - 1] : 1;                    // (past the end the register keeps its last byte)
+    while (y < MH) on[y++] = last;
+    built = 1;
+  }
+  return on;
+}
 static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY, int dim) {
   int w, hh, x0, y0;
   if (!mSprPlace(blob, cx, feetY, &x0, &y0, NULL, NULL, NULL, NULL)) return;
@@ -1875,6 +1902,7 @@ static void mBlitSprAnchored(uint8_t* fb, const uint8_t* blob, int cx, int feetY
       if (!s[3]) continue;
       int dx = x0 + i, dy = y0 + j;
       if (dx < 0 || dx >= MW || dy < 0 || dy >= MH) continue;
+      if (mSprRowsOn && !mSprRowsOn[dy]) continue;                // (a line whose TM has no OBJ: mTechObjRows)
       uint8_t* d = fb + ((size_t)dy * MW + dx) * 3;
       int idx = s[3] & 0x0F;
       if (mSprWpn && idx >= 13) {                                  // C2/F5ED's weapon colours (never dimmed)
@@ -3429,7 +3457,7 @@ void CtMenuRenderTech(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int
 // C2:B519[charId]); the popup = C2/9016's number at each member's anchor ($0F57 = the block's $180E = C2:BF2F[k])
 // minus FF/CEBA[popCurve].
 void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int tab, int row, int tgt,
-                            const uint16_t shown[3][2], int casterMp, int castPose,
+                            const uint16_t shown[3][2], int casterMp, int casterHp, int castPose,
                             int popCurve, int popPool, const int popAmt[3][2], int barId, int barX, int barN) {
   if (!h || !fb || !h->mem) return;
   if (tab < 0) tab = 0; else if (tab > 2) tab = 2;
@@ -3440,11 +3468,16 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
   CtMenuPanel pp;
   if (slot >= 0 && CtMenuPanelData(h->mem, slot, &pp)) {          // C2/BA2F: the caster, panel 0
     if (casterMp >= 0) pp.mp = casterMp;
+    // ...and his HP: the panel is C2/BA2F's, drawn when C2/BE79 builds the overlay and not on the frame the heal lands
+    // on the sheets. MEASURED on the rule's cartridge, playthrough leg 141 f50100 (Marle's `Heal` on herself, the number
+    // rising): her caster panel reads 541/682 like her row of the list, with 682 on the sheet (91 px the port drew).
+    if (casterHp >= 0) pp.hp = casterHp;                           // (THE CASTER'S HP AS LAST DRAWN)
     mCharPanel(h, fb, MP_X, 8, &pp, 24, 0);
     mTechMpUsedOne(h, fb, 0, (row >= 0 && row < n)
                    ? CtMenuTechMp(charId & 7, tids[row], tab, h->mem[0x2600 + (size_t)(charId & 7) * 0x50 + 0x2A]) : -1,
                    pp.mp);
   }
+  mSprRowsOn = mTechObjRows(h);                                    // (the screen's TM lines, for every sprite below)
   if (CtMenuSprChar7() == (charId & 7) && h->rom && h->romLen > 0x2BB1A + 3)   // block 7 at $19CE (0x1C, 0x38): its
     mBlitPartySprPose(h, fb, charId & 7, CtMenuSprShown7(), 0x1C, CtRomByte(h->rom, 0x400000L, (long)(0x2BB1A)), 0);   //   own animation (the cast's)
   (void)castPose;
@@ -3462,6 +3495,7 @@ void CtMenuRenderTechTarget(const CtMenuHost* h, uint8_t* fb, int charId, int ta
       int w = CtRomByte(h->rom, 0x400000L, (long)(0x2BF2F + 2 * k)) | (CtRomByte(h->rom, 0x400000L, (long)(0x2BF30 + 2 * k)) << 8);
       mBlitPartySpr(h, fb, p.charId, (w >> 8) & 0xFF, w & 0xFF, 0);
     }
+  mSprRowsOn = NULL;
   if (tgt >= 0 && tgt < 3 && h->rom && h->romLen > 0x3FB7A6L + 14 * 6)
     mHandCursor(h, fb, CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6)), CtRomByte(h->rom, 0x400000L, (long)(0x3FB7A6L + (8 + tgt) * 6 + 1)));
   if (popCurve >= 0 && popAmt && h->rom && h->romLen > 0x3FCEBA + 0x60) {   // C2/9016 at each anchor
